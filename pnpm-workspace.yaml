@@ -1,0 +1,6 @@
+packages:
+  - "packages/*"
+
+onlyBuiltDependencies:
+  - "@mark1russell7/cue"
+  - esbuild

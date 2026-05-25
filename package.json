@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json.schemastore.org/package",
+  "name": "template-monorepo",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "package": "tsx packages/cli/src/index.ts package",
+    "template": "tsx packages/cli/src/index.ts repo",
+    "test": "pnpm -r run test",
+    "typecheck": "pnpm -r run typecheck"
+  },
+  "devDependencies": {
+    "@mark1russell7/cue": "github:mark1russell7/cue",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
