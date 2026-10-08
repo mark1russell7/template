@@ -13,6 +13,10 @@ _db/
 !/CLAUDE.md
 !/README.md
 
+# Local ste-lint dictionaries. The ASD-STE100 dictionary is copyrighted: do not commit it.
+.ste/
+*.ste-dictionary.json
+
 # Tokens / API keys
 *.token
 *sensitive*
