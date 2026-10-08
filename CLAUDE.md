@@ -10,3 +10,9 @@ Write all prose of this repository in the style of ASD-STE100 Simplified Technic
 - Use the active voice. Start each sentence of a doc comment with its subject: "This function returns the value", not "Returns the value".
 - Put code, file names and commands in code font. The linter counts each code span as one word.
 - Add a word to the glossary in `ste.config.json` only if it is a real technical term of the project.
+
+## Packages
+
+- Make a new package with `pnpm package add <name> --preset=<preset>`. Do not write `package.json` or `tsconfig.json` by hand.
+- A package is a source package. Its `main` is `src/index.ts`, so other packages import its source.
+- Each package has a `tsconfig.test.json`. `pnpm typecheck` checks the source and the tests.

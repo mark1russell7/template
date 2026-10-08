@@ -40,6 +40,36 @@ const TSCONFIG_OPTIONS = [
 type TsconfigPreset = (typeof TSCONFIG_OPTIONS)[number]["value"];
 const PRESET_VALUES = TSCONFIG_OPTIONS.map((o) => o.value) as readonly string[];
 
+// The library presets emit declarations; the vite and react presets bundle and emit nothing.
+const LIBRARY_PRESETS: readonly TsconfigPreset[] = ["node", "node-cjs", "ts"];
+
+// A workspace package is a source package: "main" points at src/index.ts, so other packages import its source.
+// Such a package cannot be a composite project (TS6059, TS6307), so composite and incremental are off.
+// The library presets emit only declarations, because isolatedDeclarations is checked only when tsc emits them.
+function tsconfigOptions(preset: TsconfigPreset): Record<string, unknown> {
+  const shared = { allowImportingTsExtensions: true, composite: false, incremental: false };
+  if (LIBRARY_PRESETS.includes(preset)) return { noEmit: false, emitDeclarationOnly: true, ...shared };
+  return { noEmit: true, ...shared, isolatedDeclarations: false, declaration: false, declarationMap: false, types: ["vite/client"] };
+}
+
+// The base presets exclude *.test.ts, so tests get their own config, and "typecheck" checks both.
+function testTsconfig(preset: TsconfigPreset): Record<string, unknown> {
+  return {
+    $schema: "https://json.schemastore.org/tsconfig",
+    extends: "./tsconfig.json",
+    compilerOptions: {
+      noEmit: true,
+      emitDeclarationOnly: false,
+      declaration: false,
+      declarationMap: false,
+      isolatedDeclarations: false,
+      types: LIBRARY_PRESETS.includes(preset) ? ["node"] : ["vite/client", "node"],
+    },
+    include: ["src/**/*"],
+    exclude: [],
+  };
+}
+
 // The vite and react presets reference types (vite/client, react-jsx) that only these packages provide.
 const PRESET_PACKAGES: Partial<Record<TsconfigPreset, { dependencies: string[]; devDependencies: string[] }>> = {
   vite: { dependencies: [], devDependencies: ["vite"] },
@@ -120,7 +150,7 @@ export async function addPackage(args: string[]): Promise<void> {
     scripts: {
       test: "vitest run",
       "test:watch": "vitest",
-      typecheck: "tsc --noEmit",
+      typecheck: "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
     },
     devDependencies: await devDependencyVersions(),
   };
@@ -129,8 +159,10 @@ export async function addPackage(args: string[]): Promise<void> {
   const tsconfig = {
     $schema: "https://json.schemastore.org/tsconfig",
     extends: `@mark1russell7/cue/ts/config/${preset}.json`,
+    compilerOptions: tsconfigOptions(preset),
   };
   await writeFile(resolve(dir, "tsconfig.json"), JSON.stringify(tsconfig, null, 2) + "\n");
+  await writeFile(resolve(dir, "tsconfig.test.json"), JSON.stringify(testTsconfig(preset), null, 2) + "\n");
 
   await writeFile(resolve(dir, "src", "index.ts"), `export {};\n`);
 

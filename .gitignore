@@ -56,38 +56,18 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Python
+# Python (only Python names: a bare "build/", "lib/", "var/" or "env/" pattern also hides TypeScript folders)
 __pycache__/
 *.py[cod]
-*$py.class
 *.egg-info/
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg
 .venv/
 venv/
-env/
-ENV/
-.tox/
-.coverage
-.coverage.*
-.cache
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-htmlcov/
-.ipynb_checkpoints/
+
+# Build output
+dist/
 
 # Node / JS
 node_modules/
