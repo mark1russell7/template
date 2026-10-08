@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { execSync } from "node:child_process";
 import * as p from "@clack/prompts";
 import { packagesDir, repoRoot } from "../../paths.ts";
 
@@ -13,6 +14,21 @@ async function getScope(): Promise<string> {
 
 const NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
 
+const DEV_DEPENDENCIES = ["@mark1russell7/cue", "@types/node", "typescript", "vitest"] as const;
+
+// New packages get the versions packages/cli uses, so `pnpm up -r --latest` keeps the generator current.
+async function devDependencyVersions(): Promise<Record<string, string>> {
+  const raw = await readFile(resolve(packagesDir, "cli", "package.json"), "utf8");
+  const { devDependencies = {} } = JSON.parse(raw) as { devDependencies?: Record<string, string> };
+  const versions: Record<string, string> = {};
+  for (const dep of DEV_DEPENDENCIES) {
+    const version = devDependencies[dep];
+    if (!version) throw new Error(`packages/cli/package.json has no devDependency "${dep}".`);
+    versions[dep] = version;
+  }
+  return versions;
+}
+
 const TSCONFIG_OPTIONS = [
   { value: "node", label: "node — Node.js library/CLI (ESM, NodeNext)" },
   { value: "node-cjs", label: "node-cjs — Node.js library (CJS)" },
@@ -23,6 +39,15 @@ const TSCONFIG_OPTIONS = [
 
 type TsconfigPreset = (typeof TSCONFIG_OPTIONS)[number]["value"];
 const PRESET_VALUES = TSCONFIG_OPTIONS.map((o) => o.value) as readonly string[];
+
+// The vite and react presets reference types (vite/client, react-jsx) that only these packages provide.
+const PRESET_PACKAGES: Partial<Record<TsconfigPreset, { dependencies: string[]; devDependencies: string[] }>> = {
+  vite: { dependencies: [], devDependencies: ["vite"] },
+  react: {
+    dependencies: ["react", "react-dom"],
+    devDependencies: ["vite", "@vitejs/plugin-react", "@types/react", "@types/react-dom"],
+  },
+};
 
 function parseArgs(args: string[]): { name: string | undefined; preset: TsconfigPreset | undefined } {
   let name: string | undefined;
@@ -51,7 +76,7 @@ export async function addPackage(args: string[]): Promise<void> {
   if (!name) {
     const answer = await p.text({
       message: `Package name (will be @${scope}/<name>)?`,
-      validate: (v) => (NAME_RE.test(v) ? undefined : "lowercase letters, digits, hyphens; must start with letter/digit"),
+      validate: (v) => (NAME_RE.test(v ?? "") ? undefined : "lowercase letters, digits, hyphens; must start with letter/digit"),
     });
     if (p.isCancel(answer)) {
       p.cancel("Cancelled.");
@@ -97,12 +122,7 @@ export async function addPackage(args: string[]): Promise<void> {
       "test:watch": "vitest",
       typecheck: "tsc --noEmit",
     },
-    devDependencies: {
-      "@mark1russell7/cue": "github:mark1russell7/cue",
-      "@types/node": "^22.10.0",
-      typescript: "^5.7.2",
-      vitest: "^2.1.8",
-    },
+    devDependencies: await devDependencyVersions(),
   };
   await writeFile(resolve(dir, "package.json"), JSON.stringify(pkgJson, null, 2) + "\n");
 
@@ -116,9 +136,20 @@ export async function addPackage(args: string[]): Promise<void> {
 
   await writeFile(
     resolve(dir, "vitest.config.ts"),
-    `import { defineConfig } from "vitest/config";\n\nexport default defineConfig({\n  test: {\n    include: ["src/**/*.{test,spec}.ts"],\n  },\n});\n`,
+    `import { defineConfig } from "vitest/config";\n\nexport default defineConfig({\n  test: {\n    include: ["src/**/*.{test,spec}.{ts,tsx}"],\n    passWithNoTests: true,\n  },\n});\n`,
   );
 
   p.log.success(`Created packages/${name}/ extending cue ${preset}.json`);
-  p.log.info(`Run 'pnpm install' to wire up the new workspace package.`);
+
+  const presetPackages = PRESET_PACKAGES[preset];
+  if (!presetPackages) {
+    p.log.info(`Run 'pnpm install' to wire up the new workspace package.`);
+    return;
+  }
+  // `pnpm add` resolves the newest versions and installs the workspace.
+  const filter = `--filter=@${scope}/${name}`;
+  if (presetPackages.dependencies.length > 0) {
+    execSync(`pnpm add ${filter} ${presetPackages.dependencies.join(" ")}`, { cwd: repoRoot, stdio: "inherit" });
+  }
+  execSync(`pnpm add -D ${filter} ${presetPackages.devDependencies.join(" ")}`, { cwd: repoRoot, stdio: "inherit" });
 }

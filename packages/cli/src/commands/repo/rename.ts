@@ -139,7 +139,7 @@ export async function renameRepo(args: string[]): Promise<void> {
     const answer = await p.text({
       message: "Scope for this repo (will become @<scope>/<package>):",
       validate: (v) =>
-        SCOPE_RE.test(v)
+        SCOPE_RE.test(v ?? "")
           ? undefined
           : "lowercase letters, digits, hyphens; must start with letter/digit",
     });
