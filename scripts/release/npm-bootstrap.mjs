@@ -34,6 +34,8 @@
 //   --no-lock         Does not set "disallow tokens".
 //   --lock-only       Only sets "disallow tokens" on each package that exists.
 //   --dispatch        Starts the release workflow of each repository that got a new trust.
+//   --lock-all        After the repositories, also sets "disallow tokens" on each other package of
+//                     the npm user (from the npm search). Without a repository folder, only that.
 
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -53,7 +55,8 @@ const value = (name) => {
 };
 const valued = new Set(["--file", "--env", "--only", "--ref"]);
 const repos = argv.filter((arg, i) => !arg.startsWith("--") && !valued.has(argv[i - 1])).map((dir) => resolve(dir));
-if (repos.length === 0) repos.push(root);
+const lockAll = flag("--lock-all");
+if (repos.length === 0 && !lockAll) repos.push(root);
 
 const dryRun = flag("--dry-run");
 const workflow = value("--file") ?? "release.yml";
@@ -190,6 +193,7 @@ function trustIds(list) {
 }
 
 const summary = [];
+const handled = new Set();
 const trusted = new Set();
 
 async function bootstrapRepo(repo) {
@@ -207,6 +211,7 @@ async function bootstrapRepo(repo) {
 
   for (const { manifest } of packages) {
     const { name, version } = manifest;
+    handled.add(name);
     const data = await packument(name);
     const exists = data !== undefined;
     const pending = data === undefined || data.versions?.[version] === undefined;
@@ -282,6 +287,23 @@ async function bootstrapRepo(repo) {
   }
 }
 
+/** This function sets "disallow tokens" on each package of the npm user that the run did not handle. */
+async function lockOtherPackages() {
+  const user = dryRun ? "mark1russell7" : String(npmJson(["whoami"]).json ?? "").trim() || "mark1russell7";
+  const response = await fetch(`${REGISTRY}/-/v1/search?text=maintainer:${user}&size=250`);
+  if (!response.ok) throw new Error(`The npm search gave HTTP ${response.status}.`);
+  const names = (await response.json()).objects.map((o) => o.package.name).filter((name) => !handled.has(name)).sort();
+  console.log(`\nThe other packages of ${user}: ${names.length}`);
+  for (const name of names) {
+    if (dryRun) summary.push(`${name}: would set disallow tokens`);
+    else {
+      const r = await npmWrite(["access", "set", "mfa=publish", name]);
+      summary.push(`${name}: ${r.ok ? "disallows tokens" : `did not set disallow tokens: ${r.text.trim().split("\n")[0]}`}`);
+    }
+    console.log(`  ${summary.at(-1)}`);
+  }
+}
+
 let failure;
 try {
   if (!dryRun) {
@@ -290,6 +312,7 @@ try {
     console.log(`npm user: ${String(who.json ?? who.text).trim()}`);
   }
   for (const repo of repos) await bootstrapRepo(repo);
+  if (lockAll) await lockOtherPackages();
 } catch (error) {
   failure = error;
 }
