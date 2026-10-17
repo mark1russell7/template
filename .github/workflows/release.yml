@@ -58,7 +58,14 @@ jobs:
           node-version: 26
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile
-      - run: pnpm -r --if-present run build
+      # The build script of the root package.json, or else the build script of each package
+      - name: Build
+        run: |
+          if node -e 'process.exit(require("./package.json").scripts?.build ? 0 : 1)'; then
+            pnpm run build
+          else
+            pnpm -r --if-present run build
+          fi
       - run: node scripts/release/pack.mjs "$RUNNER_TEMP/release"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
