@@ -3,6 +3,7 @@
   "include": [
     "README.md",
     "CLAUDE.md",
+    "RELEASING.md",
     "packages/*/README.md",
     "packages/*/src/**/*.{ts,tsx}",
     "packages/*/*.config.{ts,mts}"
@@ -26,6 +27,10 @@
     "pnpm",
     "Simplified Technical English",
     "TSDoc",
-    "TypeScript"
+    "TypeScript",
+    "npm",
+    "OIDC",
+    "SemVer",
+    "Mark"
   ]
 }

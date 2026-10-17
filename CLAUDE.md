@@ -16,3 +16,10 @@ Write all prose of this repository in the style of ASD-STE100 Simplified Technic
 - Make a new package with `pnpm package add <name> --preset=<preset>`. Do not write `package.json` or `tsconfig.json` by hand.
 - A package is a source package. Its `main` is `src/index.ts`, so other packages import its source.
 - Each package has a `tsconfig.test.json`. `pnpm typecheck` checks the source and the tests.
+
+## npm releases
+
+- Do not publish to npm, and do not change npm settings. The owner and one named Claude session do all npm work.
+- Do not edit `.github/workflows/release.yml` or `scripts/release/`.
+- Is a package that is not on npm a block? Use `workspace:*`, or a `github:` specifier pinned to a commit.
+- `RELEASING.md` tells how a release and a new package work.
