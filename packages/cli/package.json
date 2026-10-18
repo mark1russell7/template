@@ -1,14 +1,46 @@
 {
   "$schema": "https://json.schemastore.org/package",
-  "name": "@template/cli",
+  "name": "@mark1russell7/template-cli",
   "version": "0.1.0",
-  "private": true,
+  "description": "The CLI of the template monorepos: it adds a source package with a preset of @mark1russell7/cue, and it renames a new repository.",
+  "keywords": [
+    "monorepo",
+    "pnpm",
+    "template",
+    "scaffold",
+    "cli",
+    "typescript",
+    "cue"
+  ],
+  "homepage": "https://github.com/mark1russell7/template/tree/main/packages/cli#readme",
+  "bugs": {
+    "url": "https://github.com/mark1russell7/template/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mark1russell7/template.git",
+    "directory": "packages/cli"
+  },
+  "license": "MIT",
+  "author": "Mark Russell (https://github.com/mark1russell7)",
   "type": "module",
-  "main": "./src/index.ts",
   "bin": {
     "template": "./src/index.ts"
   },
+  "files": [
+    "build"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "bin": {
+      "template": "./build/index.js"
+    }
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
   "scripts": {
+    "build": "tsdown",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
@@ -19,6 +51,7 @@
   "devDependencies": {
     "@mark1russell7/cue": "github:mark1russell7/cue",
     "@types/node": "^26.6.4",
+    "tsdown": "^0.23.1",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3"
   }

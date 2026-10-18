@@ -1,4 +1,4 @@
-#!/usr/bin/env -S npx tsx
+#!/usr/bin/env node
 import { commands } from "./commands/index.ts";
 import * as p from "@clack/prompts";
 

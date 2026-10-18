@@ -1,12 +1,12 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { execSync } from "node:child_process";
 import * as p from "@clack/prompts";
-import { packagesDir, repoRoot } from "../../paths.ts";
+import { cliManifest, packagesDir, repoRoot, type Manifest } from "../../paths.ts";
 
 async function getScope(): Promise<string> {
-  const raw = await readFile(resolve(repoRoot, "package.json"), "utf8");
+  const raw = await readFile(resolve(repoRoot(), "package.json"), "utf8");
   const pkg = JSON.parse(raw) as { name?: string };
   const name = pkg.name ?? "";
   return name.endsWith("-monorepo") ? name.slice(0, -"-monorepo".length) : name;
@@ -16,14 +16,30 @@ const NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 const DEV_DEPENDENCIES = ["@mark1russell7/cue", "@types/node", "typescript", "vitest"] as const;
 
-// New packages get the versions packages/cli uses, so `pnpm up -r --latest` keeps the generator current.
-async function devDependencyVersions(): Promise<Record<string, string>> {
-  const raw = await readFile(resolve(packagesDir, "cli", "package.json"), "utf8");
-  const { devDependencies = {} } = JSON.parse(raw) as { devDependencies?: Record<string, string> };
+/**
+ * This function gives the version range of each development dependency of a new package. The range
+ * comes from the repository: the root `package.json`, then the packages in name order. Thus
+ * `pnpm up -r --latest` in the repository also updates the ranges of its new packages. A dependency
+ * that the repository does not have gets the range of this CLI.
+ *
+ * @throws Error when neither the repository nor the CLI has a dependency
+ */
+export async function devDependencyVersions(root: string = repoRoot(), cli: Manifest = cliManifest()): Promise<Record<string, string>> {
+  const manifests: Manifest[] = [];
+  const read = async (file: string): Promise<void> => {
+    if (existsSync(file)) manifests.push(JSON.parse(await readFile(file, "utf8")) as Manifest);
+  };
+  await read(resolve(root, "package.json"));
+  const dir = resolve(root, "packages");
+  if (existsSync(dir)) {
+    const names = (await readdir(dir, { withFileTypes: true })).filter((e) => e.isDirectory()).map((e) => e.name).sort();
+    for (const name of names) await read(resolve(dir, name, "package.json"));
+  }
+  manifests.push(cli);
   const versions: Record<string, string> = {};
   for (const dep of DEV_DEPENDENCIES) {
-    const version = devDependencies[dep];
-    if (!version) throw new Error(`packages/cli/package.json has no devDependency "${dep}".`);
+    const version = manifests.map((m) => m.devDependencies?.[dep] ?? m.dependencies?.[dep]).find((v) => v !== undefined);
+    if (!version) throw new Error(`Neither the repository nor ${cli.name ?? "the CLI"} has the dependency "${dep}".`);
     versions[dep] = version;
   }
   return versions;
@@ -134,7 +150,7 @@ export async function addPackage(args: string[]): Promise<void> {
     preset = presetAnswer;
   }
 
-  const dir = resolve(packagesDir, name);
+  const dir = resolve(packagesDir(), name);
   if (existsSync(dir)) {
     throw new Error(`Package already exists: packages/${name}`);
   }
@@ -181,7 +197,7 @@ export async function addPackage(args: string[]): Promise<void> {
   // `pnpm add` resolves the newest versions and installs the workspace.
   const filter = `--filter=@${scope}/${name}`;
   if (presetPackages.dependencies.length > 0) {
-    execSync(`pnpm add ${filter} ${presetPackages.dependencies.join(" ")}`, { cwd: repoRoot, stdio: "inherit" });
+    execSync(`pnpm add ${filter} ${presetPackages.dependencies.join(" ")}`, { cwd: repoRoot(), stdio: "inherit" });
   }
-  execSync(`pnpm add -D ${filter} ${presetPackages.devDependencies.join(" ")}`, { cwd: repoRoot, stdio: "inherit" });
+  execSync(`pnpm add -D ${filter} ${presetPackages.devDependencies.join(" ")}`, { cwd: repoRoot(), stdio: "inherit" });
 }

@@ -17,6 +17,7 @@
   "devDependencies": {
     "@mark1russell7/cue": "github:mark1russell7/cue",
     "@mark1russell7/ste-lint": "github:mark1russell7/ste-lint",
+    "publint": "^0.3.25",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
