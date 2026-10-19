@@ -106,6 +106,8 @@ jobs:
       # npm limits the requests of one account (HTTP 429), and Sigstore can fail once (a 502, then
       # a 409 for the entry that it wrote). npm does not send a request again by itself here: the
       # step waits, and then starts a new publish with a new signature.
+      # The query string of each request goes around the cache of the registry. Without it, a
+      # package that the owner bootstrapped some minutes before can still get a cached 404.
       - name: Publish
         shell: bash
         run: |
@@ -113,7 +115,7 @@ jobs:
           new_packages=()
           while read -r name version file; do
             [ -n "$name" ] || continue
-            status=$(curl -sS -o packument.json -w '%{http_code}' "https://registry.npmjs.org/${name//\//%2f}")
+            status=$(curl -sS -o packument.json -w '%{http_code}' "https://registry.npmjs.org/${name//\//%2f}?t=$(date +%s%N)")
             if [ "$status" = "404" ]; then
               new_packages+=("$name")
               continue
