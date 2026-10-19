@@ -51,16 +51,16 @@ function rewriteSourceFile(raw: string, fromScope: string, toScope: string): str
 async function collectPackageJsonChanges(fromScope: string, toScope: string): Promise<FileChange[]> {
   const changes: FileChange[] = [];
 
-  const rootPath = resolve(repoRoot, "package.json");
+  const rootPath = resolve(repoRoot(), "package.json");
   const rootRaw = await readFile(rootPath, "utf8");
   const rootUpdated = rewritePackageJson(rootRaw, fromScope, toScope);
   if (rootUpdated !== rootRaw) changes.push({ path: rootPath, before: rootRaw, after: rootUpdated });
 
-  if (!existsSync(packagesDir)) return changes;
-  const entries = await readdir(packagesDir, { withFileTypes: true });
+  if (!existsSync(packagesDir())) return changes;
+  const entries = await readdir(packagesDir(), { withFileTypes: true });
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const pkgPath = resolve(packagesDir, entry.name, "package.json");
+    const pkgPath = resolve(packagesDir(), entry.name, "package.json");
     if (!existsSync(pkgPath)) continue;
     const raw = await readFile(pkgPath, "utf8");
     const updated = rewritePackageJson(raw, fromScope, toScope);
@@ -71,11 +71,11 @@ async function collectPackageJsonChanges(fromScope: string, toScope: string): Pr
 
 async function collectSourceFileChanges(fromScope: string, toScope: string): Promise<FileChange[]> {
   const changes: FileChange[] = [];
-  if (!existsSync(packagesDir)) return changes;
-  const entries = await readdir(packagesDir, { withFileTypes: true });
+  if (!existsSync(packagesDir())) return changes;
+  const entries = await readdir(packagesDir(), { withFileTypes: true });
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const srcDir = resolve(packagesDir, entry.name, "src");
+    const srcDir = resolve(packagesDir(), entry.name, "src");
     if (!existsSync(srcDir)) continue;
     await walkSourceDir(srcDir, fromScope, toScope, changes);
   }
@@ -98,7 +98,7 @@ async function walkSourceDir(dir: string, fromScope: string, toScope: string, ou
 }
 
 async function reinitGit(): Promise<void> {
-  const gitDir = resolve(repoRoot, ".git");
+  const gitDir = resolve(repoRoot(), ".git");
   if (existsSync(gitDir)) {
     const ok = await p.confirm({
       message: "About to delete .git and reinitialize. This wipes all history. Continue?",
@@ -110,14 +110,14 @@ async function reinitGit(): Promise<void> {
     }
     await rm(gitDir, { recursive: true, force: true });
   }
-  execSync("git init", { cwd: repoRoot, stdio: "inherit" });
+  execSync("git init", { cwd: repoRoot(), stdio: "inherit" });
   p.log.success("Initialized fresh git repository.");
 }
 
 export async function renameRepo(args: string[]): Promise<void> {
   const { scope: rawScope, dryRun, reinitGit: reinit, force } = parseArgs(args);
 
-  const rootPath = resolve(repoRoot, "package.json");
+  const rootPath = resolve(repoRoot(), "package.json");
   const rootRaw = await readFile(rootPath, "utf8");
   const rootPkg = JSON.parse(rootRaw) as { name?: string };
   const currentName = rootPkg.name ?? "";
@@ -165,11 +165,11 @@ export async function renameRepo(args: string[]): Promise<void> {
     p.log.warn(`No files reference "@${currentScope}/" or "${currentScope}-monorepo".`);
   } else if (dryRun) {
     p.log.info(`(dry-run) Would rewrite "@${currentScope}/" → "@${scope}/" in ${allChanges.length} file(s):`);
-    for (const c of allChanges) p.log.info(`  ${relative(repoRoot, c.path)}`);
+    for (const c of allChanges) p.log.info(`  ${relative(repoRoot(), c.path)}`);
   } else {
     await Promise.all(allChanges.map((c) => writeFile(c.path, c.after)));
     p.log.success(`Rewrote ${allChanges.length} file(s): "@${currentScope}/" → "@${scope}/"`);
-    for (const c of allChanges) p.log.info(`  ${relative(repoRoot, c.path)}`);
+    for (const c of allChanges) p.log.info(`  ${relative(repoRoot(), c.path)}`);
   }
 
   if (reinit) {

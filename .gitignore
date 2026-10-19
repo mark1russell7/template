@@ -70,6 +70,9 @@ venv/
 # Build output
 dist/
 
+# The npm build of each package (tsdown): release.yml builds it, and git does not keep it
+build/
+
 # Node / JS
 node_modules/
 .npm
