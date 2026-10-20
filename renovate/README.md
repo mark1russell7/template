@@ -39,7 +39,17 @@ Add the rules of a repository after `extends` in its `renovate.json`. For exampl
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["github>mark1russell7/template//renovate/default"],
-  "ignorePaths": ["**/node_modules/**", "packages/harness/image/**"],
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/bower_components/**",
+    "**/vendor/**",
+    "**/examples/**",
+    "**/__tests__/**",
+    "**/test/**",
+    "**/tests/**",
+    "**/__fixtures__/**",
+    "packages/harness/image/**"
+  ],
   "packageRules": [
     {
       "description": "This package has a pnpm patch for its exact version: update it by hand.",
@@ -50,7 +60,8 @@ Add the rules of a repository after `extends` in its `renovate.json`. For exampl
 }
 ```
 
-- `ignorePaths` in a repository replaces the list of `config:recommended`. Thus put `**/node_modules/**` in the list too. The release files stay out, because a package rule (not `ignorePaths`) excludes them.
+- Leave `ignorePaths` out, unless the repository has paths of its own to ignore. Renovate does not merge `ignorePaths`: the list of a repository replaces the default list of `config:recommended`. Thus a repository list repeats the eight default paths of the example, and then adds its own paths.
+- The release files stay out in all cases, because a package rule (not `ignorePaths`) excludes them.
 - Renovate adds the `packageRules` of a repository after the rules of the preset, so a rule of the repository wins.
 
 ## Move a repository to the preset
