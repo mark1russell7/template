@@ -5,7 +5,7 @@ These composite actions give each site of mark1russell7 a Releases page and a St
 | Action | What it does |
 |---|---|
 | `site-pages` | Writes `releases/index.html`, `status/index.html`, `data/releases.json` and `data/status.json` into the built site. |
-| `green-main` | Gives the newest commit of `main` that passed CI. A scheduled build uses it, so that it never deploys code that CI did not test. |
+| `green-main` | Gives the commit for a scheduled build: the newest commit of `main`, or the newest commit that passed CI when the newest one failed. The site never gets a red commit, and never steps back behind a push deploy. `pending: green` waits for CI in place of the newest commit. |
 
 ## Add the pages to a site
 
@@ -31,7 +31,7 @@ jobs:
       checks: read
       statuses: read
     steps:
-      # A scheduled build takes the newest commit of main that passed CI
+      # A scheduled build takes the newest commit of main, or the newest green one if CI failed on it
       - id: green
         if: github.event_name == 'schedule'
         uses: mark1russell7/template/.github/actions/green-main@main
