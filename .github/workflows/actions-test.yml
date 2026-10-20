@@ -1,0 +1,59 @@
+# Tests the composite actions of .github/actions on this repository: green-main finds a commit,
+# and site-pages writes the two pages and their JSON. The output is an artifact, for a look.
+# new-repo.ps1 does not copy this workflow or the actions: a repository uses them from GitHub.
+name: Actions test
+
+on:
+  push:
+    branches: [main]
+    paths: [".github/actions/**", ".github/workflows/actions-test.yml"]
+  pull_request:
+    paths: [".github/actions/**", ".github/workflows/actions-test.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # green-main reads the Actions runs. site-pages reads the pull requests, the issues and their checks.
+      actions: read
+      issues: read
+      pull-requests: read
+      checks: read
+      statuses: read
+    steps:
+      # The actions of this commit, not of main: a checkout first, then the local paths
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: green-local
+        uses: ./.github/actions/green-main
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+      - uses: ./.github/actions/site-pages
+        with:
+          out: ${{ runner.temp }}/site
+          packages: "@mark1russell7/template-cli,@mark1russell7/site-pages"
+      - name: The pages and the data exist
+        env:
+          OUT: ${{ runner.temp }}/site
+          SHA: ${{ steps.green-local.outputs.sha }}
+        run: |
+          echo "green-main: $SHA"
+          [ -n "$SHA" ]
+          for f in data/releases.json data/status.json releases/index.html status/index.html; do
+            test -s "$OUT/$f" || { echo "::error::$f is missing"; exit 1; }
+            echo "ok $f ($(wc -c < "$OUT/$f") bytes)"
+          done
+          node -e 'const s = require(process.argv[1]); if (!s.github?.available) { console.error("::error::the GitHub part is not available:", s.github?.reason); process.exit(1); } console.log("github:", s.pullRequests.length, "open PRs,", s.issues.length, "open issues")' "$OUT/data/status.json"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: site-pages
+          path: ${{ runner.temp }}/site

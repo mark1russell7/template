@@ -1,0 +1,35 @@
+name: green-main
+description: Gives the newest commit of a branch whose CI workflow passed, so that a scheduled build never deploys code that CI did not test.
+inputs:
+  workflow:
+    description: The file name of the CI workflow.
+    default: ci.yml
+  branch:
+    description: The branch.
+    default: main
+  token:
+    description: A GitHub token that can read the Actions runs of the repository (permission "actions read").
+    default: ${{ github.token }}
+outputs:
+  sha:
+    description: The commit hash.
+    value: ${{ steps.find.outputs.sha }}
+runs:
+  using: composite
+  steps:
+    - id: find
+      name: The newest commit that passed CI
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        WORKFLOW: ${{ inputs.workflow }}
+        BRANCH: ${{ inputs.branch }}
+      run: |
+        sha=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WORKFLOW" --branch "$BRANCH" \
+          --event push --status success --limit 1 --json headSha --jq '.[0].headSha // empty')
+        if [ -z "$sha" ]; then
+          echo "::error::$WORKFLOW has no passed run on $BRANCH."
+          exit 1
+        fi
+        echo "The newest commit of $BRANCH that passed $WORKFLOW: $sha"
+        echo "sha=$sha" >> "$GITHUB_OUTPUT"
