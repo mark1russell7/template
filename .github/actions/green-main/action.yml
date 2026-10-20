@@ -1,5 +1,5 @@
 name: green-main
-description: Gives the newest commit of a branch whose CI workflow passed, so that a scheduled build never deploys code that CI did not test.
+description: Gives the commit that a scheduled build of a branch deploys, so that it never deploys a commit that failed CI and never steps back behind a push deploy.
 inputs:
   workflow:
     description: The file name of the CI workflow.
@@ -7,29 +7,49 @@ inputs:
   branch:
     description: The branch.
     default: main
+  pending:
+    description: >-
+      What to build while CI of the newest commit has not finished. "head" builds the newest commit, as a
+      push deploy does, so the site never steps back. "green" builds the newest commit that passed CI.
+    default: head
   token:
-    description: A GitHub token that can read the Actions runs of the repository (permission "actions read").
+    description: A GitHub token that can read the Actions runs and the commits of the repository (permission "actions read").
     default: ${{ github.token }}
 outputs:
   sha:
     description: The commit hash.
     value: ${{ steps.find.outputs.sha }}
+  state:
+    description: The CI state of the newest commit of the branch (green, running, none or red).
+    value: ${{ steps.find.outputs.state }}
 runs:
   using: composite
   steps:
     - id: find
-      name: The newest commit that passed CI
+      name: The commit to build
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
         WORKFLOW: ${{ inputs.workflow }}
         BRANCH: ${{ inputs.branch }}
+        PENDING: ${{ inputs.pending }}
       run: |
-        sha=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WORKFLOW" --branch "$BRANCH" \
-          --event push --status success --limit 1 --json headSha --jq '.[0].headSha // empty')
+        head=$(gh api "repos/$GITHUB_REPOSITORY/commits/$BRANCH" --jq .sha)
+        state=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WORKFLOW" --commit "$head" --event push \
+          --json status,conclusion \
+          --jq 'if length == 0 then "none" elif any(.status != "completed") then "running" elif all(.conclusion == "success") then "green" else "red" end')
+        # The newest commit when its CI passed, or when its CI has not finished and "pending" is "head".
+        # Else (a red CI, or "pending" is "green") the newest commit that passed CI.
+        if [ "$state" = green ] || { [ "$PENDING" = head ] && { [ "$state" = running ] || [ "$state" = none ]; }; }; then
+          sha=$head
+        else
+          sha=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WORKFLOW" --branch "$BRANCH" \
+            --event push --status success --limit 1 --json headSha --jq '.[0].headSha // empty')
+        fi
         if [ -z "$sha" ]; then
           echo "::error::$WORKFLOW has no passed run on $BRANCH."
           exit 1
         fi
-        echo "The newest commit of $BRANCH that passed $WORKFLOW: $sha"
+        echo "The newest commit of $BRANCH is $head (CI: $state). The build takes $sha."
         echo "sha=$sha" >> "$GITHUB_OUTPUT"
+        echo "state=$state" >> "$GITHUB_OUTPUT"
