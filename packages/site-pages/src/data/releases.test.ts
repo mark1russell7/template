@@ -269,6 +269,58 @@ describe("the merge of the releases", () => {
   });
 });
 
+describe("the releases from npm only (0.1.3)", () => {
+  const TIMES = [
+    { name: "@acme/service", version: "0.0.0-bootstrap.0", date: "2026-10-01T00:00:00Z" },
+    { name: "@acme/service", version: "0.4.0", date: "2026-10-02T00:00:00Z" },
+    { name: "@acme/service", version: "0.4.1", date: "2026-10-03T00:00:00Z" },
+    { name: "@acme/service", version: "0.5.0", date: "2026-10-05T00:00:00Z" },
+    { name: "@acme/service", version: "1.0.0", date: "2026-10-07T00:00:00Z" },
+    { name: "@acme/algebra", version: "0.2.0", date: "2026-10-04T00:00:00Z" },
+    { name: "@acme/algebra", version: "0.2.1-rc.1", date: "2026-10-05T12:00:00Z" },
+    { name: "@acme/algebra", version: "0.2.1", date: "2026-10-06T00:00:00Z" },
+  ];
+
+  it("gives each npm version of each package, the newest first, when no changelog and no GitHub release names a version", () => {
+    const releases = mergeReleases({ npm: TIMES, repository: "acme/systems" });
+    expect(releases.map((release) => [release.version, release.kind, release.date])).toEqual([
+      ["service@1.0.0", "major", "2026-10-07T00:00:00Z"],
+      ["algebra@0.2.1", "patch", "2026-10-06T00:00:00Z"],
+      ["service@0.5.0", "minor", "2026-10-05T00:00:00Z"],
+      ["algebra@0.2.0", "first", "2026-10-04T00:00:00Z"],
+      ["service@0.4.1", "patch", "2026-10-03T00:00:00Z"],
+      ["service@0.4.0", "first", "2026-10-02T00:00:00Z"],
+    ]);
+    expect(releases[0]!.changes).toEqual([{ commit: null, text: "Version 1.0.0 of `@acme/service` on npm.", packages: ["@acme/service"] }]);
+    expect(releases[0]!.links).toEqual([{ label: "npm", url: "https://www.npmjs.com/package/@acme/service/v/1.0.0" }]);
+  });
+
+  it("gives the plain version for one package, and only the group with a group", () => {
+    const one = mergeReleases({ npm: TIMES.filter((time) => time.name === "@acme/algebra") });
+    expect(one.map((release) => [release.version, release.kind])).toEqual([
+      ["0.2.1", "patch"],
+      ["0.2.0", "first"],
+    ]);
+    expect(mergeReleases({ npm: TIMES, group: "@acme/algebra" }).map((release) => release.version)).toEqual(["0.2.1", "0.2.0"]);
+  });
+
+  it("keeps the full names when two scopes have one short name", () => {
+    const releases = mergeReleases({
+      npm: [
+        { name: "@a/core", version: "1.0.0", date: "2026-10-01T00:00:00Z" },
+        { name: "@b/core", version: "1.0.0", date: "2026-10-02T00:00:00Z" },
+      ],
+    });
+    expect(releases.map((release) => release.version)).toEqual(["@b/core@1.0.0", "@a/core@1.0.0"]);
+  });
+
+  it("does not use npm when a changelog gives the versions", () => {
+    const changelog = { name: "@acme/service", file: "CHANGELOG.md", markdown: "# @acme/service\n\n## 1.0.0\n\n- The first.\n" };
+    const releases = mergeReleases({ changelogs: [changelog], npm: TIMES });
+    expect(releases.map((release) => release.version)).toEqual(["1.0.0"]);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // GitHub and npm, with a fake fetch
 // ---------------------------------------------------------------------------
