@@ -76,6 +76,10 @@ The kind of a version:
 
 ## The status
 
+The command reads two forms of a roadmap file. It reads both forms in one file, and it keeps the items in the order of the file.
+
+### The tables
+
 The command reads each Markdown table of the roadmap file with an `ID` column and a `Status` column. Each row is one item, and the heading above the table is its section. The header names match without case.
 
 | Column | Use |
@@ -95,9 +99,28 @@ The classes, in the sequence of the page:
 | `progress` | in progress, active, ongoing, started, wip |
 | `open` | not started, to do, and a status without a keyword |
 | `later` | later, deferred, postponed, someday |
-| `done` | done, shipped, merged, fixed, released, complete, closed |
+| `done` | done, shipped, merged, fixed, released, complete, closed, dropped, cancelled, wontfix, and the word in `## Never` |
 
 A row whose cells do not match the header stops the build with the file and the line. Thus the page does not lose an item without a message.
+
+### The item headings
+
+The command also reads each heading `` ### `id`: Title `` under a `##` heading. The `##` heading is the section and the status of its items, for example `## Waiting on Mark`, `## Later` or `## Shipped`. A dash can replace the colon.
+
+```md
+## Waiting on Mark
+
+### `eval-b`: Eval, part B
+
+- Area: Site and growth
+- Waits for: `eval`
+- [crawler #22](https://github.com/acme/crawler/pull/22)
+```
+
+- The list items `Area:`, `Owner:` and `Waits for:` give the optional fields.
+- The other list items give the links: Markdown links, `#12`, `PR #12` and commit hashes in code spans.
+- A `###` heading without an ID in a code span is not an item. The text of an item is not read.
+- A roadmap without a table and without an item heading stops the build.
 
 The GitHub part comes from one GraphQL request: the 50 open pull requests and the 50 open issues that changed last, with the totals.
 

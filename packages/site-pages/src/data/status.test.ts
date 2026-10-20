@@ -106,6 +106,86 @@ describe("the roadmap items", () => {
   });
 });
 
+const HEADINGS = `# Roadmap
+
+The text of the file.
+
+### \`orphan\`: A heading before each section is not an item
+
+## Waiting on Mark
+
+### \`eval-b\`: Eval, part B
+
+Run the claims through Claude Code.
+
+- Area: Site and growth
+- Waits for: \`eval\`
+- What Mark does: Say go in the hub.
+
+## In progress
+
+### \`hybrid\` – Hybrid search
+
+- Owner: The crawler session
+- [crawler PR #22](https://github.com/acme/crawler/pull/22)
+- The commit \`abc1234\` and #23
+
+#### A sub heading is part of the item
+
+### Notes without an id
+
+## Shipped
+
+### \`rel021\`: Release 0.2.1
+
+- Area: Release and CI
+- Waits for: —
+- [Release v0.2.1](https://github.com/acme/crawler/releases/tag/v0.2.1)
+
+\`\`\`md
+### \`fenced\`: In fenced code
+\`\`\`
+
+## Never
+
+### \`dropped\`: An idea that did not ship
+`;
+
+describe("the item headings", () => {
+  const items = roadmapItems(HEADINGS, { file: "docs/ROADMAP.md", repository: "acme/crawler" });
+
+  it("read each heading with a code-span id under a section, with the section as the status", () => {
+    expect(items.map((item) => [item.id, item.status, item.statusClass, item.line])).toEqual([
+      ["eval-b", "Waiting on Mark", "waiting", 9],
+      ["hybrid", "In progress", "progress", 19],
+      ["rel021", "Shipped", "done", 31],
+      ["dropped", "Never", "done", 43],
+    ]);
+    expect(items.map((item) => item.title)).toEqual(["Eval, part B", "Hybrid search", "Release 0.2.1", "An idea that did not ship"]);
+  });
+
+  it("take the fields Area, Owner and Waits for, and the links of the other list items", () => {
+    expect(items[0]).toMatchObject({ area: "Site and growth", needs: "`eval`", links: [] });
+    expect(items[1]!.owner).toBe("The crawler session");
+    expect(items[1]!.links).toEqual([
+      { label: "crawler PR #22", url: "https://github.com/acme/crawler/pull/22" },
+      { label: "abc1234", url: "https://github.com/acme/crawler/commit/abc1234" },
+      { label: "#23", url: "https://github.com/acme/crawler/issues/23" },
+    ]);
+    // A dash is no value
+    expect(items[2]).not.toHaveProperty("needs");
+    expect(items[2]!.links).toEqual([{ label: "Release v0.2.1", url: "https://github.com/acme/crawler/releases/tag/v0.2.1" }]);
+  });
+
+  it("go with the tables in the order of the file", () => {
+    const both = roadmapItems(`## Open work\n\n| ID | Status |\n|---|---|\n| T1 | open |\n\n## Later\n\n### \`h1\`: After the table\n`);
+    expect(both.map((item) => [item.id, item.statusClass])).toEqual([
+      ["T1", "open"],
+      ["h1", "later"],
+    ]);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // GitHub
 // ---------------------------------------------------------------------------
@@ -292,10 +372,16 @@ describe("the board", () => {
     expect(without.source).toEqual({ roadmap: null, github: "acme/widgets" });
   });
 
-  it("stops at a roadmap without an item table", async () => {
+  it("stops at a roadmap without an item table and without an item heading", async () => {
     writeFileSync(join(dir, "EMPTY.md"), "# Nothing\n");
     await expect(readStatusBoard({ repoDir: dir, roadmap: "EMPTY.md", owner: "a", repo: "b", token: "" })).rejects.toThrow(
-      /EMPTY\.md: no table with an ID column/,
+      /EMPTY\.md: no table with an ID column and a Status column, and no heading/,
     );
+  });
+
+  it("reads a roadmap of item headings", async () => {
+    writeFileSync(join(dir, "HEADINGS.md"), HEADINGS);
+    const board = await readStatusBoard({ repoDir: dir, roadmap: "HEADINGS.md", owner: "acme", repo: "crawler", token: "" });
+    expect(board.items.map((item) => item.id)).toEqual(["eval-b", "hybrid", "rel021", "dropped"]);
   });
 });
