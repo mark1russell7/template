@@ -107,7 +107,9 @@ jobs:
       # a 409 for the entry that it wrote). npm does not send a request again by itself here: the
       # step waits, and then starts a new publish with a new signature.
       # The query string of each request goes around the cache of the registry. Without it, a
-      # package that the owner bootstrapped some minutes before can still get a cached 404.
+      # package that the owner bootstrapped some minutes before can still get a cached 404. The
+      # registry itself can also need some minutes for a new package, so a 404 gets 5 more tries,
+      # 30 seconds apart, before the step counts the package as new.
       - name: Publish
         shell: bash
         run: |
@@ -115,7 +117,12 @@ jobs:
           new_packages=()
           while read -r name version file; do
             [ -n "$name" ] || continue
-            status=$(curl -sS -o packument.json -w '%{http_code}' "https://registry.npmjs.org/${name//\//%2f}?t=$(date +%s%N)")
+            for try in 1 2 3 4 5 6; do
+              status=$(curl -sS -o packument.json -w '%{http_code}' "https://registry.npmjs.org/${name//\//%2f}?t=$(date +%s%N)")
+              [ "$status" = "404" ] && [ "$try" != 6 ] || break
+              echo "The registry gives 404 for $name. The next look starts in 30 seconds."
+              sleep 30
+            done
             if [ "$status" = "404" ]; then
               new_packages+=("$name")
               continue
