@@ -1,0 +1,5 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "The shared Renovate settings of mark1russell7, with the automerge rules.",
+  "extends": ["github>mark1russell7/template//renovate/base", "github>mark1russell7/template//renovate/automerge"]
+}

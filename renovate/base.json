@@ -1,0 +1,77 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "The shared Renovate settings of mark1russell7, with no automerge. Extend renovate/default for the automerge rules too.",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigestsToSemver"],
+  "timezone": "America/New_York",
+  "schedule": ["before 6am on monday"],
+  "prConcurrentLimit": 5,
+  "rangeStrategy": "update-lockfile",
+  "minimumReleaseAge": "3 days",
+  "labels": ["dependencies"],
+  "vulnerabilityAlerts": {
+    "schedule": ["at any time"],
+    "minimumReleaseAge": null
+  },
+  "packageRules": [
+    {
+      "description": "One weekly PR for the patch updates of npm packages.",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["patch"],
+      "groupName": "npm patch updates",
+      "groupSlug": "npm-patch"
+    },
+    {
+      "description": "One weekly PR for the minor updates of the runtime dependencies. A person reviews it.",
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["dependencies", "optionalDependencies"],
+      "matchUpdateTypes": ["minor"],
+      "groupName": "npm dependencies (minor)",
+      "groupSlug": "npm-minor"
+    },
+    {
+      "description": "One weekly PR for the minor updates of the development dependencies.",
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["minor"],
+      "groupName": "npm dev dependencies (minor)",
+      "groupSlug": "npm-dev-minor"
+    },
+    {
+      "description": "Before 1.0.0, a minor update can break (SemVer). These updates get a PR of their own, and a person reviews it.",
+      "matchManagers": ["npm"],
+      "matchCurrentVersion": "/^[~^]?0[.]/",
+      "matchUpdateTypes": ["minor"],
+      "groupName": "npm 0.x minor updates (can break)",
+      "groupSlug": "npm-zero-minor"
+    },
+    {
+      "description": "A peer dependency range is a promise to the users. Change it by hand.",
+      "matchDepTypes": ["peerDependencies"],
+      "enabled": false
+    },
+    {
+      "description": "pnpm installs the packages of mark1russell7 after 1 day, so Renovate waits 1 day for them too.",
+      "matchPackageNames": ["@procedures/**", "@mark1russell7/**"],
+      "minimumReleaseAge": "1 day"
+    },
+    {
+      "description": "One weekly PR for the minor, patch and digest updates of the GitHub Actions.",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch", "digest", "pinDigest"],
+      "groupName": "GitHub Actions",
+      "groupSlug": "github-actions"
+    },
+    {
+      "description": "A major update of a GitHub Action gets a PR of its own, and a person reviews it.",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["major"],
+      "groupName": "GitHub Actions (major)",
+      "groupSlug": "github-actions-major"
+    },
+    {
+      "description": "The release session owns the release workflow and its scripts. They change only from ~/git/template (RELEASING.md).",
+      "matchFileNames": [".github/workflows/release.yml", "scripts/release/**"],
+      "enabled": false
+    }
+  ]
+}

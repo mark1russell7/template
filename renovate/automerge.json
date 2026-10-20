@@ -1,0 +1,33 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "The automerge rules of mark1russell7: Renovate merges the low-risk groups when CI passes.",
+  "platformAutomerge": false,
+  "packageRules": [
+    {
+      "description": "Renovate merges the npm patch updates when CI passes.",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["patch"],
+      "automerge": true
+    },
+    {
+      "description": "Renovate merges the minor updates of the development dependencies when CI passes.",
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["minor"],
+      "automerge": true
+    },
+    {
+      "description": "Before 1.0.0, a minor update can break (SemVer): Renovate never merges it.",
+      "matchManagers": ["npm"],
+      "matchCurrentVersion": "/^[~^]?0[.]/",
+      "matchUpdateTypes": ["minor"],
+      "automerge": false
+    },
+    {
+      "description": "Renovate merges the minor, patch and digest updates of the GitHub Actions when CI passes.",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch", "digest", "pinDigest"],
+      "automerge": true
+    }
+  ]
+}
