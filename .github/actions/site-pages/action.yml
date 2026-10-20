@@ -1,0 +1,64 @@
+name: site-pages
+description: Writes the Releases page, the Status page and their JSON data into a built site, with @mark1russell7/site-pages.
+inputs:
+  out:
+    description: The built output folder of the site, for example packages/site/dist.
+    required: true
+  version:
+    description: The version range of @mark1russell7/site-pages.
+    default: "^0.1.0"
+  roadmap:
+    description: The roadmap file. Without it, the Status page has only the open pull requests and issues.
+    default: ""
+  base:
+    description: The path of the site home. The default of the CLI is "/<repository name>/".
+    default: ""
+  packages:
+    description: npm names or a @scope, separated by commas, for the npm dates of the releases.
+    default: ""
+  changesets:
+    description: The changelog files, as a glob. The default of the CLI is packages/*/CHANGELOG.md, else CHANGELOG.md.
+    default: ""
+  group:
+    description: The npm name of the package whose changelog gives the versions of a fixed group.
+    default: ""
+  css:
+    description: A CSS file for the pages, after the default CSS.
+    default: ""
+  site-name:
+    description: The name of the site in the page titles.
+    default: ""
+  data-only:
+    description: "true: write only data/releases.json and data/status.json, for a site with its own pages."
+    default: "false"
+  token:
+    description: A GitHub token that can read the pull requests, the issues and the checks of the repository.
+    default: ${{ github.token }}
+runs:
+  using: composite
+  steps:
+    - name: Releases and Status pages
+      shell: bash
+      env:
+        SP_VERSION: ${{ inputs.version }}
+        SP_OUT: ${{ inputs.out }}
+        SP_ROADMAP: ${{ inputs.roadmap }}
+        SP_BASE: ${{ inputs.base }}
+        SP_PACKAGES: ${{ inputs.packages }}
+        SP_CHANGESETS: ${{ inputs.changesets }}
+        SP_GROUP: ${{ inputs.group }}
+        SP_CSS: ${{ inputs.css }}
+        SP_SITE_NAME: ${{ inputs.site-name }}
+        SP_DATA_ONLY: ${{ inputs.data-only }}
+        GITHUB_TOKEN: ${{ inputs.token }}
+      run: |
+        args=(build --out "$SP_OUT" --repo "$GITHUB_REPOSITORY")
+        [ -z "$SP_ROADMAP" ] || args+=(--roadmap "$SP_ROADMAP")
+        [ -z "$SP_BASE" ] || args+=(--base "$SP_BASE")
+        [ -z "$SP_PACKAGES" ] || args+=(--packages "$SP_PACKAGES")
+        [ -z "$SP_CHANGESETS" ] || args+=(--changesets "$SP_CHANGESETS")
+        [ -z "$SP_GROUP" ] || args+=(--group "$SP_GROUP")
+        [ -z "$SP_CSS" ] || args+=(--css "$SP_CSS")
+        [ -z "$SP_SITE_NAME" ] || args+=(--site-name "$SP_SITE_NAME")
+        [ "$SP_DATA_ONLY" != "true" ] || args+=(--data-only)
+        npx --yes "@mark1russell7/site-pages@$SP_VERSION" "${args[@]}"
