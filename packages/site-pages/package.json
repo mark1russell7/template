@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json.schemastore.org/package",
+  "name": "@mark1russell7/site-pages",
+  "version": "0.1.0",
+  "description": "A release timeline page and a live status page for the site of a GitHub repository: JSON data and standalone HTML, made at deploy time.",
+  "keywords": [
+    "github-pages",
+    "releases",
+    "changelog",
+    "changesets",
+    "status",
+    "roadmap",
+    "static-site",
+    "cli"
+  ],
+  "homepage": "https://github.com/mark1russell7/template/tree/main/packages/site-pages#readme",
+  "bugs": {
+    "url": "https://github.com/mark1russell7/template/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mark1russell7/template.git",
+    "directory": "packages/site-pages"
+  },
+  "license": "MIT",
+  "author": "Mark Russell (https://github.com/mark1russell7)",
+  "type": "module",
+  "main": "./src/index.ts",
+  "bin": {
+    "site-pages": "./src/cli.ts"
+  },
+  "files": [
+    "build"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "main": "./build/index.js",
+    "types": "./build/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./build/index.d.ts",
+        "import": "./build/index.js"
+      },
+      "./package.json": "./package.json"
+    },
+    "bin": {
+      "site-pages": "./build/cli.js"
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json"
+  },
+  "devDependencies": {
+    "@mark1russell7/cue": "github:mark1russell7/cue",
+    "@types/node": "^26.6.4",
+    "tsdown": "^0.23.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}
