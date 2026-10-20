@@ -10,8 +10,8 @@ import { gitTagDates, headingDate, isShallow, type TagDate } from "./git.ts";
 import { githubReleases } from "./github.ts";
 import { globFiles } from "./glob.ts";
 import { npmPublishTimes } from "./npm.ts";
-import type { GitHubRelease, Link, NpmVersionTime, Release, ReleaseChange } from "./types.ts";
-import { compareVersions, kindOf, versionOfTag } from "./versions.ts";
+import type { GitHubRelease, Link, NpmVersionTime, Release, ReleaseChange, ReleaseKind } from "./types.ts";
+import { compareVersions, kindOf, parseVersion, versionOfTag } from "./versions.ts";
 
 /** An error in the release sources, for example a group without a changelog. */
 export class ReleaseDataError extends Error {}
@@ -78,12 +78,70 @@ function refPath(ref: string): string {
   return encodeURI(ref).replace(/#/g, "%23").replace(/\?/g, "%3F");
 }
 
+/** The kind of a version from the step after the previous version of its package. */
+function stepKind(version: string, previous: string | undefined): ReleaseKind {
+  if (previous === undefined) return "first";
+  const now = parseVersion(version);
+  const before = parseVersion(previous);
+  if (!now || !before) return kindOf(version, false);
+  if (now.major !== before.major) return "major";
+  return now.minor !== before.minor ? "minor" : "patch";
+}
+
+/**
+ * This function gives the releases of the npm versions of some packages, for a repository without
+ * a changelog and without GitHub releases (version 0.1.3). Each version of each package is one
+ * release.
+ *
+ * - The label is the version when the times name one package. Else it is the name without its
+ *   scope and the version, for example `service@0.5.8`.
+ * - The kind comes from the step after the previous version of the same package. The first
+ *   version of a package is the kind `first`.
+ * - A version with a prerelease part is not a release. npm also keeps the placeholder
+ *   `0.0.0-bootstrap.0` of a new package.
+ */
+function npmReleases(times: readonly NpmVersionTime[], group: string | undefined): Release[] {
+  const stable = times.filter((time) => (!group || time.name === group) && parseVersion(time.version)?.prerelease.length === 0);
+  const byPackage = new Map<string, NpmVersionTime[]>();
+  for (const time of stable) {
+    const list = byPackage.get(time.name) ?? [];
+    if (!list.some((each) => each.version === time.version)) list.push(time);
+    byPackage.set(time.name, list);
+  }
+  const shortNames = new Map<string, string>();
+  const shortCount = new Map<string, number>();
+  for (const name of byPackage.keys()) {
+    const short = name.replace(/^@[^/]+\//, "");
+    shortNames.set(name, short);
+    shortCount.set(short, (shortCount.get(short) ?? 0) + 1);
+  }
+  const several = byPackage.size > 1;
+  const releases: Release[] = [];
+  for (const [name, list] of byPackage) {
+    list.sort((a, b) => compareVersions(a.version, b.version));
+    const short = shortNames.get(name) ?? name;
+    // Two scopes with one short name keep the full names
+    const label = (shortCount.get(short) ?? 0) > 1 ? name : short;
+    list.forEach((time, index) => {
+      releases.push({
+        version: several ? `${label}@${time.version}` : time.version,
+        date: time.date,
+        kind: stepKind(time.version, list[index - 1]?.version),
+        changes: [{ commit: null, text: `Version ${time.version} of \`${name}\` on npm.`, packages: [name] }],
+        links: [{ label: "npm", url: `https://www.npmjs.com/package/${name}/v/${time.version}` }],
+      });
+    });
+  }
+  return releases.sort((a, b) => Date.parse(b.date) - Date.parse(a.date) || a.version.localeCompare(b.version));
+}
+
 /**
  * This function merges the release sources into one entry for each version, the newest first.
  *
  * - The versions: the changelog of `group`, or else each changelog version and each GitHub release.
  * - The date: the git tag, else the GitHub release, else npm, else the commit of the changelog heading.
  * - The changes: the changelog entries, else the list items of the GitHub release text.
+ * - Without a changelog version and without a GitHub release, each npm version of each package is a release.
  *
  * @throws ReleaseDataError when `group` has no changelog and other changelogs exist
  */
@@ -118,7 +176,8 @@ export function mergeReleases(sources: ReleaseSources): Release[] {
     for (const [version, list] of githubByVersion) if (list.some((entry) => inGroup(entry.package))) versions.add(version);
   }
   const ordered = [...versions].sort((a, b) => compareVersions(b, a));
-  if (ordered.length === 0) return [];
+  // No changelog and no GitHub release names a version: the versions on npm are the releases
+  if (ordered.length === 0) return npmReleases(sources.npm ?? [], group);
 
   // The changes and the changelog section of each version
   const changelogChanges = new Map<string, ChangeMap>();

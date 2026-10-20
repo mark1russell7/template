@@ -65,6 +65,13 @@ The pipeline needs the full history for the tags and the commits. Use `fetch-dep
 
 For a monorepo with one version for all its packages, give `--group` and the name of one package. Then only its changelog gives the versions, and the dates come from its tags. Without `--group`, each version of each source is a version.
 
+A repository can have no changelog and no GitHub release. Then each npm version of each package of `--packages` is a release:
+
+- The label is the version when there is one package. With more packages, the label is the name without its scope and the version, for example `service@0.5.8`.
+- The kind comes from the step after the previous version of the same package. The first version of each package has the kind `first`.
+- A version with a prerelease part is not a release. npm also keeps the placeholder `0.0.0-bootstrap.0` of a new package.
+- The change of a release names its package, and the link goes to the version on npm.
+
 The kind of a version:
 
 | Kind | Rule |
