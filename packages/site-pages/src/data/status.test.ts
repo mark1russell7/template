@@ -186,6 +186,62 @@ describe("the item headings", () => {
   });
 });
 
+const DOT_HEADINGS = `# The roadmap
+
+### S0 · Before each section, with a status field
+
+- **Status:** done
+
+## The slices of the program
+
+### S1 · Detection and divergence in Docker
+
+- **Status:** in progress
+- **Area:** program
+- **Depends on:** S0
+- **Started:** 2026-10-08
+- **Shipped:**
+- **Links:** [The results](https://example.com/results/), PR #16
+
+### SYS-2 · Probes on their own port
+
+- **Status**: waiting on Mark
+- **Waiting on Mark:** a choice
+
+### X · A heading without a status field takes the section
+
+## Notes
+
+### Not an item · it has no single-word ID
+`;
+
+describe("the item headings with a dot and a status field", () => {
+  const items = roadmapItems(DOT_HEADINGS, { file: "docs/ROADMAP.md", repository: "acme/systems" });
+
+  it("take the ID before the middle dot, and the status from the Status field before the section", () => {
+    expect(items.map((item) => [item.id, item.title, item.status, item.statusClass, item.section])).toEqual([
+      ["S0", "Before each section, with a status field", "done", "done", ""],
+      ["S1", "Detection and divergence in Docker", "in progress", "progress", "The slices of the program"],
+      ["SYS-2", "Probes on their own port", "waiting on Mark", "waiting", "The slices of the program"],
+      ["X", "A heading without a status field takes the section", "The slices of the program", "open", "The slices of the program"],
+    ]);
+  });
+
+  it("read the bold labels, the empty fields and the Links field", () => {
+    expect(items[1]).toMatchObject({ area: "program", needs: "S0" });
+    expect(items[1]!.links).toEqual([
+      { label: "The results", url: "https://example.com/results/" },
+      { label: "#16", url: "https://github.com/acme/systems/pull/16" },
+    ]);
+    expect(items[2]).not.toHaveProperty("area");
+    expect(items[2]!.links).toEqual([]);
+  });
+
+  it("drop a heading that has no status: no section and no Status field", () => {
+    expect(roadmapItems("### `alone`: Without a section\n\nText.\n")).toEqual([]);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // GitHub
 // ---------------------------------------------------------------------------

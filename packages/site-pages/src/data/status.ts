@@ -204,8 +204,13 @@ export function linksOf(cell: string | null | undefined, options: LinkOptions = 
 
 /** The heading of an item: "### `id`: Title". A dash can take the place of the colon. */
 const ITEM_HEADING = /^###\s+`([^`]+)`\s*[:–—-]\s*(.*?)\s*#*\s*$/;
-/** A field of an item heading: "- Area: Docs". The label matches without case. */
-const ITEM_FIELD = /^\s*[-*]\s+([A-Za-z][A-Za-z ]*?):\s*(.*)$/;
+/** The other heading of an item: "### S1 · Title". The ID is one word before the middle dot. */
+const ITEM_HEADING_DOT = /^###\s+([A-Za-z0-9][\w.-]*)\s+·\s+(.*?)\s*#*\s*$/;
+/**
+ * A field of an item heading: "- Area: Docs", "- **Area:** Docs" or "- **Area**: Docs". The label
+ * matches without case.
+ */
+const ITEM_FIELD = /^\s*[-*]\s+(\*\*|__)?([A-Za-z][A-Za-z ]*?)(?::\1|\1:)\s*(.*)$/;
 /** The fields of an item heading that give the optional fields of an item. */
 const ITEM_FIELDS: Readonly<Record<string, "area" | "owner" | "needs">> = {
   area: "area",
@@ -216,10 +221,13 @@ const ITEM_FIELDS: Readonly<Record<string, "area" | "owner" | "needs">> = {
 };
 
 /**
- * This function gives the items of the second form of a roadmap: each heading "### `id`: Title"
- * under a "##" heading. The "##" heading gives the status, for example "Waiting on Mark", "Later" or
- * "Shipped". In the text of the item, the list items "Area:", "Owner:" and "Waits for:" give the
- * optional fields, and the other list items give the links. Fenced code is not read.
+ * This function gives the items of the second form of a roadmap: each heading "### `id`: Title" or
+ * "### id · Title". The list item "Status:" gives the status. Without it, the "##" heading above
+ * the item gives the status, for example "Waiting on Mark", "Later" or "Shipped". A heading without
+ * a status is not an item.
+ *
+ * The list items "Area:", "Owner:" and "Waits for:" give the optional fields. The list item
+ * "Links:" and the other list items give the links. Fenced code is not read.
  */
 function headingItems(markdown: string, options: LinkOptions & { file: string }): BoardItem[] {
   const lines = String(markdown).split(/\r?\n/);
@@ -244,24 +252,33 @@ function headingItems(markdown: string, options: LinkOptions & { file: string })
       if (level === 2) section = plainText(heading[2]);
       if (level === 1) section = "";
       if (level !== 3) continue;
-      const item = ITEM_HEADING.exec(line);
+      const item = ITEM_HEADING.exec(line) ?? ITEM_HEADING_DOT.exec(line);
       const id = plainText(item?.[1]);
-      if (!item || isEmpty(id) || section === "") continue;
+      if (!item || isEmpty(id)) continue;
       current = { id, title: item[2] ?? "", status: section, statusClass: statusClassOf(section), section, line: index + 1, links: [] };
       items.push(current);
       continue;
     }
     if (!current) continue;
     const field = ITEM_FIELD.exec(line);
-    const key = field ? ITEM_FIELDS[(field[1] ?? "").trim().toLowerCase()] : undefined;
-    if (field && key !== undefined) {
-      if (!isEmpty(field[2])) current[key] = (field[2] ?? "").trim();
+    const label = (field?.[2] ?? "").trim().toLowerCase();
+    const value = (field?.[3] ?? "").trim();
+    const key = field ? ITEM_FIELDS[label] : undefined;
+    if (field && label === "status") {
+      // The field of the item wins over the section
+      if (!isEmpty(value)) {
+        current.status = value;
+        current.statusClass = statusClassOf(plainText(value));
+      }
+    } else if (field && key !== undefined) {
+      if (!isEmpty(value)) current[key] = value;
     } else if (/^\s*[-*]\s+/.test(line)) {
       const seen = new Set(current.links.map((link) => link.url));
       for (const link of linksOf(line, options)) if (!seen.has(link.url)) current.links.push(link);
     }
   }
-  return items;
+  // A heading without a section and without a "Status:" field has no status: it is not an item
+  return items.filter((item) => item.status !== "");
 }
 
 /**
@@ -270,8 +287,9 @@ function headingItems(markdown: string, options: LinkOptions & { file: string })
  * - Each row of each table with an `ID` column and a `Status` column. The header names match without
  *   case. The title comes from `Item`, else from `Title`. `Owner`, `Area` and `Needs` are optional.
  *   `Where`, `Commit` and `Links` give the links.
- * - Each heading "### `id`: Title" under a "##" heading that gives the status. The list items
- *   "Area:", "Owner:" and "Waits for:" give the optional fields, and the other list items give the links.
+ * - Each heading "### `id`: Title" or "### id · Title". The list item "Status:", else the "##"
+ *   heading above it, gives the status. The list items "Area:", "Owner:" and "Waits for:" give the
+ *   optional fields, and "Links:" and the other list items give the links.
  *
  * @throws RoadmapParseError when the cells of a row do not match the header
  */

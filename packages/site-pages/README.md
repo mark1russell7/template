@@ -117,9 +117,20 @@ The command also reads each heading `` ### `id`: Title `` under a `##` heading. 
 - [crawler #22](https://github.com/acme/crawler/pull/22)
 ```
 
-- The list items `Area:`, `Owner:` and `Waits for:` give the optional fields.
-- The other list items give the links: Markdown links, `#12`, `PR #12` and commit hashes in code spans.
-- A `###` heading without an ID in a code span is not an item. The text of an item is not read.
+The command also reads the heading `### S1 · Title`: the ID is one word before the middle dot. A list item `Status:` gives the status of its item, and it wins over the `##` heading.
+
+```md
+### S1 · Detection and divergence in Docker
+
+- **Status:** in progress
+- **Area:** program
+- **Depends on:** S0
+- **Links:** [The results](https://example.com/results/)
+```
+
+- The list items `Area:`, `Owner:` and `Waits for:` (or `Depends on:`) give the optional fields. A label can be bold.
+- The list item `Links:` and the other list items give the links: Markdown links, `#12`, `PR #12` and commit hashes in code spans.
+- A `###` heading without an ID is not an item. A heading without a `##` heading above it and without a `Status:` item is not an item either. The text of an item is not read.
 - A roadmap without a table and without an item heading stops the build.
 
 The GitHub part comes from one GraphQL request: the 50 open pull requests and the 50 open issues that changed last, with the totals.
