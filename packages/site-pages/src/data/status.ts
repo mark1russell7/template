@@ -2,8 +2,10 @@
  * The status data: the open work of a roadmap file, and the open pull requests and issues of a
  * GitHub repository. The build reads both, so the page shows the state at the time of the build.
  *
- * @remarks The roadmap parser reads each Markdown table with an `ID` column and a `Status` column.
- * It is strict: a row whose cells do not match the header stops the build with the file and the line.
+ * @remarks The roadmap parser reads two forms. The first form is each Markdown table with an `ID`
+ * column and a `Status` column. The second form is each heading "### `id`: Title" under a "##" heading
+ * that gives the status. The parser is strict: a row whose cells do not match the header stops the
+ * build with the file and the line.
  */
 
 import { readFileSync } from "node:fs";
@@ -25,7 +27,8 @@ export class RoadmapParseError extends Error {}
 // word after it does not count.
 const STATUS_KEYWORDS: ReadonlyArray<[StatusClass, RegExp]> = [
   ["open", /\bnot\s+(?:yet\s+)?(?:started|done|fixed|merged|shipped|released)\b|\bto[ -]?do\b/],
-  ["done", /\b(?:done|shipped|merged|fixed|released|complete|completed|closed)\b/],
+  // A closed item that did not ship ("never", "dropped") is not open work either
+  ["done", /\b(?:done|shipped|merged|fixed|released|complete|completed|closed|never|dropped|cancell?ed|wontfix)\b|\bwon't do\b/],
   ["progress", /\bin[ -]progress\b|\b(?:active|ongoing|started|wip)\b/],
   ["waiting", /\b(?:waiting|waits|awaiting|needs)\b/],
   ["blocked", /\bblocked\b/],
@@ -199,12 +202,77 @@ export function linksOf(cell: string | null | undefined, options: LinkOptions = 
   return links;
 }
 
+/** The heading of an item: "### `id`: Title". A dash can take the place of the colon. */
+const ITEM_HEADING = /^###\s+`([^`]+)`\s*[:–—-]\s*(.*?)\s*#*\s*$/;
+/** A field of an item heading: "- Area: Docs". The label matches without case. */
+const ITEM_FIELD = /^\s*[-*]\s+([A-Za-z][A-Za-z ]*?):\s*(.*)$/;
+/** The fields of an item heading that give the optional fields of an item. */
+const ITEM_FIELDS: Readonly<Record<string, "area" | "owner" | "needs">> = {
+  area: "area",
+  owner: "owner",
+  "waits for": "needs",
+  needs: "needs",
+  "depends on": "needs",
+};
+
 /**
- * This function gives the items of a roadmap file: one item for each row of each table with an `ID`
- * column and a `Status` column. The header names match without case.
+ * This function gives the items of the second form of a roadmap: each heading "### `id`: Title"
+ * under a "##" heading. The "##" heading gives the status, for example "Waiting on Mark", "Later" or
+ * "Shipped". In the text of the item, the list items "Area:", "Owner:" and "Waits for:" give the
+ * optional fields, and the other list items give the links. Fenced code is not read.
+ */
+function headingItems(markdown: string, options: LinkOptions & { file: string }): BoardItem[] {
+  const lines = String(markdown).split(/\r?\n/);
+  const items: BoardItem[] = [];
+  let section = "";
+  let current: BoardItem | undefined;
+  let fence: string | null = null;
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index] ?? "";
+    const fenceMark = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
+    if (fenceMark !== undefined) {
+      if (fence === null) fence = fenceMark[0] ?? null;
+      else if (fenceMark[0] === fence) fence = null;
+      continue;
+    }
+    if (fence !== null) continue;
+    const heading = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line);
+    if (heading) {
+      const level = heading[1]?.length ?? 0;
+      if (level > 3) continue;
+      current = undefined;
+      if (level === 2) section = plainText(heading[2]);
+      if (level === 1) section = "";
+      if (level !== 3) continue;
+      const item = ITEM_HEADING.exec(line);
+      const id = plainText(item?.[1]);
+      if (!item || isEmpty(id) || section === "") continue;
+      current = { id, title: item[2] ?? "", status: section, statusClass: statusClassOf(section), section, line: index + 1, links: [] };
+      items.push(current);
+      continue;
+    }
+    if (!current) continue;
+    const field = ITEM_FIELD.exec(line);
+    const key = field ? ITEM_FIELDS[(field[1] ?? "").trim().toLowerCase()] : undefined;
+    if (field && key !== undefined) {
+      if (!isEmpty(field[2])) current[key] = (field[2] ?? "").trim();
+    } else if (/^\s*[-*]\s+/.test(line)) {
+      const seen = new Set(current.links.map((link) => link.url));
+      for (const link of linksOf(line, options)) if (!seen.has(link.url)) current.links.push(link);
+    }
+  }
+  return items;
+}
+
+/**
+ * This function gives the items of a roadmap file in the order of the file. It reads two forms:
  *
- * @remarks The title comes from `Item`, else from `Title`. `Owner`, `Area` and `Needs` are optional.
- * `Where`, `Commit` and `Links` give the links.
+ * - Each row of each table with an `ID` column and a `Status` column. The header names match without
+ *   case. The title comes from `Item`, else from `Title`. `Owner`, `Area` and `Needs` are optional.
+ *   `Where`, `Commit` and `Links` give the links.
+ * - Each heading "### `id`: Title" under a "##" heading that gives the status. The list items
+ *   "Area:", "Owner:" and "Waits for:" give the optional fields, and the other list items give the links.
+ *
  * @throws RoadmapParseError when the cells of a row do not match the header
  */
 export function roadmapItems(markdown: string, options: LinkOptions = {}): BoardItem[] {
@@ -246,7 +314,8 @@ export function roadmapItems(markdown: string, options: LinkOptions = {}): Board
       items.push(item);
     }
   }
-  return items;
+  const headings = headingItems(markdown, { ...options, file });
+  return headings.length === 0 ? items : [...items, ...headings].sort((a, b) => a.line - b.line);
 }
 
 // ---------------------------------------------------------------------------
@@ -297,7 +366,8 @@ export interface ReadStatusBoardOptions {
 /**
  * This function reads the board of a repository on disk: the roadmap file, and the open work on GitHub.
  *
- * @throws RoadmapParseError when the roadmap has an incorrect row, or no table with an ID and a Status column
+ * @throws RoadmapParseError when the roadmap has an incorrect row, or no item: no table with an ID
+ * and a Status column, and no item heading
  */
 export async function readStatusBoard(options: ReadStatusBoardOptions): Promise<StatusBoardData> {
   const { repoDir, roadmap = null, owner, repo, token, commit = null } = options;
@@ -306,7 +376,7 @@ export async function readStatusBoard(options: ReadStatusBoardOptions): Promise<
   if (roadmap) {
     const markdown = readFileSync(join(repoDir, ...roadmap.split("/")), "utf8");
     items = roadmapItems(markdown, { file: roadmap, repository, ref: commit ?? "HEAD" });
-    if (items.length === 0) throw new RoadmapParseError(`${roadmap}: no table with an ID column and a Status column`);
+    if (items.length === 0) throw new RoadmapParseError(`${roadmap}: no table with an ID column and a Status column, and no heading "### \`id\`: Title"`);
   }
   const github = await githubOpenWork({ owner, repo, token, ...(options.fetch ? { fetch: options.fetch } : {}) });
   return buildStatusBoard({
