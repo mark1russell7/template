@@ -7,12 +7,14 @@
 #   pages-check     The pages and their JSON are in the artifact.
 #   release-build   reusable-release-build.yml packs the packages of this repository. Only a run on
 #                   main checks that the commit is on main (the input require-main). The input
-#                   after-pack tests the tarballs, writes an output, and adds a title and the
-#                   tarballs to each entry of the plan.
+#                   after-pack tests the tarballs, writes an output, adds a title and the
+#                   tarballs to each entry of the plan, and sets "latest" on one entry.
 #   release-publish The npm-publish action examines the tarballs with "dry-run": it publishes nothing.
 #                   The job has no "id-token: write", so npm cannot accept a publish. A step reads
 #                   the output of after-pack.
 #   release-tag     reusable-release-tag.yml examines the plan, the tarballs and the tags with "dry-run".
+#                   Its log shows the flags of each release: --latest for the entry with "latest",
+#                   and --latest=false for the others.
 #
 # ci.yml tests reusable-ci.yml on each push and pull request. new-repo.ps1 does not copy this
 # workflow, the actions or the shared workflows: a repository uses them from GitHub.
@@ -114,14 +116,16 @@ jobs:
       # release for it. Thus that step runs only in a run on main, which also tests it.
       require-main: ${{ github.ref == 'refs/heads/main' }}
       # The test of after-pack: each tarball of packages.txt exists, the output "packages" for
-      # release-publish, and the optional fields "title" and "tarballs" of the plan for release-tag.
+      # release-publish, and the optional fields "title", "tarballs" and "latest" of the plan for
+      # release-tag. "latest" goes on the first entry that is not a prerelease.
       after-pack: |
         while read -r name version file; do
           [ -n "$name" ] || continue
           test -s "$RELEASE_DIR/$file"
           echo "ok $name $version $file"
         done < "$RELEASE_DIR/packages.txt"
-        jq '[.[] | .title = "\(.name) \(.version)" | .tarballs = [.name]]' "$TAGS_FILE" > "$RUNNER_TEMP/plan.json"
+        jq '[.[] | .title = "\(.name) \(.version)" | .tarballs = [.name]]
+          | (map(.prerelease) | index(false)) as $i | if $i == null then . else .[$i].latest = true end' "$TAGS_FILE" > "$RUNNER_TEMP/plan.json"
         mv "$RUNNER_TEMP/plan.json" "$TAGS_FILE"
         echo "packages=$(grep -c . "$RELEASE_DIR/packages.txt")" >> "$GITHUB_OUTPUT"
 

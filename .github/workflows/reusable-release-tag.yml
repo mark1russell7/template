@@ -17,12 +17,16 @@
 # The job has no "permissions" key: it gets the permissions of the caller job. The release.yml of a
 # repository gives it "contents: write", and only this job of the release holds that permission.
 #
-# Each entry of the plan (tags.json) has name, version, tag, prerelease and notes. Two fields are
+# Each entry of the plan (tags.json) has name, version, tag, prerelease and notes. Three fields are
 # optional. The tags.mjs of the template does not write them, but the tags.mjs of a repository or
 # the input after-pack of reusable-release-build.yml can add them:
 #   title     The title of the GitHub release. The default is the tag.
 #   tarballs  An array of package names. The release gets the tarball of each one as a file, from
 #             the artifact "release" (packages.txt names the file).
+#   latest    true: the release of this entry becomes the latest release of the repository
+#             (gh release create --latest), and each other release of the run gets --latest=false.
+#             At most one entry sets it. A prerelease is never the latest: with "latest" it gets a
+#             warning. When no entry sets it, the job gives no --latest flag, the same as before.
 name: Reusable release tag
 
 on:
@@ -99,12 +103,24 @@ jobs:
           }
           plan=tags/tags.json
           count=$(jq length "$plan")
+          # The optional field "latest" is true or false, and at most one entry is true. The check
+          # comes before the first release, so a wrong plan makes no release.
+          if ! jq -e 'all(.[]; .latest | . == null or type == "boolean")' "$plan" > /dev/null; then
+            echo "::error::\"latest\" of each entry of the plan must be true or false."
+            exit 1
+          fi
+          latest_count=$(jq '[.[] | select(.latest == true)] | length' "$plan")
+          if [ "$latest_count" -gt 1 ]; then
+            echo "::error::$latest_count entries of the plan set \"latest\". At most one entry can set it."
+            exit 1
+          fi
           failed=0
           for ((i = 0; i < count; i++)); do
             name=$(jq -r ".[$i].name" "$plan")
             version=$(jq -r ".[$i].version" "$plan")
             tag=$(jq -r ".[$i].tag" "$plan")
             prerelease=$(jq -r ".[$i].prerelease" "$plan")
+            latest=$(jq -r ".[$i].latest // false" "$plan")
             title=$(jq -r ".[$i].title // .[$i].tag" "$plan")
             jq -r ".[$i].notes" "$plan" > notes.md
             # Only the characters of an npm name and a version, and no hyphen at the start (a flag of gh)
@@ -131,6 +147,22 @@ jobs:
               fi
               files+=("release/$file")
             done < <(jq -r ".[$i].tarballs // [] | .[]" "$plan")
+            # The latest release: a prerelease is never the latest. With an entry that sets "latest",
+            # each other release gets --latest=false. With no such entry, no flag (as before).
+            flags=()
+            if [ "$prerelease" = true ]; then
+              flags=(--prerelease --latest=false)
+              if [ "$latest" = true ]; then
+                echo "::warning::$tag is a prerelease, so it does not become the latest release (\"latest\" of the plan)."
+              fi
+            elif [ "$latest" = true ]; then
+              flags=(--latest)
+            elif [ "$latest_count" -gt 0 ]; then
+              flags=(--latest=false)
+            fi
+            if [ "$DRY_RUN" = true ]; then
+              echo "Dry run: the flags of $tag are \"${flags[*]}\"."
+            fi
             if response=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" 2>&1); then
               echo "The tag $tag exists."
               continue
@@ -160,8 +192,6 @@ jobs:
               echo "::error::The commit \"$target\" of $tag is not a full SHA."
               exit 1
             fi
-            flags=()
-            if [ "$prerelease" = true ]; then flags=(--prerelease --latest=false); fi
             if [ "$DRY_RUN" = true ]; then
               echo "Dry run: gh release create $tag ${files[*]} --target $target --title \"$title\" ${flags[*]}"
               continue

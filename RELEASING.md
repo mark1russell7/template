@@ -64,6 +64,8 @@ After the publish, the job `tag` of `release.yml` makes a git tag and a GitHub r
 - In a repository with more published packages, the tag is `<name>@<version>`, for example `@mark1russell7/vex@0.9.0`. Changesets uses the same tags.
 - The text of the release is the section of the version in the `CHANGELOG.md` of the package. Without a section, the text is one line with a link to npm.
 - A version with a hyphen is a prerelease on GitHub. GitHub does not show it as the latest release.
+- The field `latest` of the plan selects the latest release of a run. That release gets `--latest`, and the other releases get `--latest=false` (`CI.md`).
+- When no entry sets `latest`, the job gives no `--latest` flag.
 - The Releases page of `@mark1russell7/site-pages` reads these releases.
 
 The build job writes the plan of the tags and the release texts (`scripts/release/tags.mjs`). The job `tag` has only the permission `contents: write`. It starts no code of the repository. `gh release create` makes each tag on GitHub, at the commit of the release.
@@ -118,6 +120,21 @@ Without the bootstrap, the release publishes the other packages and then fails w
 npm asks for the 2FA. The script opens the npm page in the browser. Confirm with the security key. Select the option to skip the 2FA for 5 minutes.
 
 npm asks for each change. In those 5 minutes, the page confirms without a new key tap. The script accepts more than one repository folder.
+
+## A publish that npm refuses
+
+The action `npm-publish` gives a hint for two failures of the trusted publisher. The hints do not change the result of the step.
+
+- The OIDC token exchange gives "package not found" or a 404 ([npm/cli#9969](https://github.com/npm/cli/issues/9969)). The cause is a trusted publisher that names a GitHub environment. npm cannot match it for a repository with the immutable OIDC subject. The trust must name no environment.
+- `ENEEDAUTH`: npm got no token. The trusted publisher is missing, or it expired. A new trust expires when no publish uses it in 2 days.
+
+For the two failures, the owner makes the trust again, and then starts the release:
+
+```sh
+node scripts/release/npm-bootstrap.mjs --replace-trust --dispatch
+```
+
+The script removes a trust that does not agree with `release.yml`, for example a trust with an environment. Then it adds a trust with no environment, because `release.yml` names none.
 
 ## Limits of npm
 

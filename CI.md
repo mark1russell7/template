@@ -114,10 +114,13 @@ The command `after-pack` operates in the build job, with `contents: read` only:
 - Each line `name=value` that it writes to `GITHUB_OUTPUT` goes into the output `after-pack` of the workflow. This output is a JSON object.
 - A later job reads a value with `fromJSON(needs.build.outputs.after-pack).<name>`.
 
-Each entry of the plan of the tags has `name`, `version`, `tag`, `prerelease` and `notes`. The job `tag` also reads two optional fields:
+Each entry of the plan of the tags has `name`, `version`, `tag`, `prerelease` and `notes`. The job `tag` also reads three optional fields:
 
 - `title`: the title of the GitHub release. The default is the tag.
 - `tarballs`: an array of package names. The release gets the tarball of each package as a file.
+- `latest`: `true` makes the release of this entry the latest release of the repository (`--latest`). The other releases of the run get `--latest=false`.
+
+At most one entry sets `latest`. A prerelease does not become the latest release. When no entry sets `latest`, the job gives no `--latest` flag, the same as before.
 
 The `tags.mjs` of the template does not write these fields. The `tags.mjs` of a repository can write them. The command `after-pack` can also add them.
 
