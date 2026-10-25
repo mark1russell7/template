@@ -1,0 +1,53 @@
+# TEMPORARY: a dry run of the tag step of release.yml on the pull request. Removed before the merge.
+name: Tag dry run
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: jq --version && yq --version && gh --version
+      - run: mkdir tags && node scripts/release/tags.mjs tags/tags.json && cat tags/tags.json
+      - name: The step of release.yml, with "echo" before "gh release create"
+        run: |
+          yq '.jobs.tag.steps[1].run' .github/workflows/release.yml | sed 's/^\( *\)gh release create/\1echo DRY gh release create/' > tag.sh
+          grep -n "DRY" tag.sh
+      - name: No version published in this run (the provenance path)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISHED: ""
+          REPOSITORY_ID: ${{ github.repository_id }}
+        run: bash -eo pipefail tag.sh
+      - name: site-pages published in this run
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISHED: "@mark1russell7/site-pages@0.1.3"
+          REPOSITORY_ID: ${{ github.repository_id }}
+        run: bash -eo pipefail tag.sh
+      - name: A different repository ID (no tag from the provenance path)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISHED: ""
+          REPOSITORY_ID: "1"
+        run: bash -eo pipefail tag.sh
+      - name: An existing tag is skipped (Vex)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISHED: "@mark1russell7/vex-testkit@0.8.0"
+          REPOSITORY_ID: "1"
+        run: |
+          echo '[{"name":"@mark1russell7/vex-testkit","version":"0.8.0","tag":"@mark1russell7/vex-testkit@0.8.0","prerelease":false,"notes":"x"},{"name":"x","version":"1.0.0-rc.1","tag":"-x","prerelease":true,"notes":"x"}]' > tags/tags.json
+          GITHUB_REPOSITORY=mark1russell7/Vex bash -eo pipefail tag.sh && exit 1 || echo "The bad tag stopped the step, as expected."
