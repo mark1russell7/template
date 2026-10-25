@@ -104,7 +104,8 @@ jobs:
 
       - name: Check out the pull request
         if: steps.gate.outputs.run == 'true'
-        uses: actions/checkout@v7
+        # A full commit SHA: some repositories allow only actions that are pinned to one
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The head commit, so that the line numbers of the files agree with the diff
           ref: ${{ github.event.pull_request.head.sha }}
