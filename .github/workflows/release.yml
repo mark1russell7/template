@@ -79,8 +79,14 @@ jobs:
       # The action of the template, pinned to a commit. It runs in this job, so the OIDC token names
       # this repository and release.yml. It downloads the artifact "release" and publishes each
       # version that npm does not have, with provenance (.github/actions/npm-publish of the template).
+      #
+      # Also in the template, the pin stays remote, not "uses: ./.github/actions/npm-publish". A
+      # local action needs a checkout first. This job holds "id-token: write" and checks out no code
+      # on purpose, so it runs only the pinned commit of main. new-repo.ps1 copies this file with
+      # the pin. Renovate does not move it: the release session moves it at a quiet time, because a
+      # workflow change between a version merge and its tag job makes GitHub refuse the tag (HTTP 403).
       - id: publish
-        uses: mark1russell7/template/.github/actions/npm-publish@94e66824bbacee6bdd8445d774dbab23dcf3208d # main
+        uses: mark1russell7/template/.github/actions/npm-publish@40b0fbd09ca4c07c451a5f9ca72d40eb62128d99 # main
 
   tag:
     name: Git tag and GitHub release
