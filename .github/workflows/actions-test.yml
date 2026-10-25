@@ -5,7 +5,8 @@
 #   pages           reusable-pages.yml builds a test site with the Releases page and the Status page,
 #                   and uploads the Pages artifact, with no deploy.
 #   pages-check     The pages and their JSON are in the artifact.
-#   release-build   reusable-release-build.yml packs the packages of this repository.
+#   release-build   reusable-release-build.yml packs the packages of this repository. Only a run on
+#                   main checks that the commit is on main (the input require-main).
 #   release-publish The npm-publish action examines the tarballs with "dry-run": it publishes nothing.
 #                   The job has no "id-token: write", so npm cannot accept a publish.
 #   release-tag     reusable-release-tag.yml examines the plan and the tags with "dry-run".
@@ -105,6 +106,10 @@ jobs:
     uses: ./.github/workflows/reusable-release-build.yml
     permissions:
       contents: read
+    with:
+      # The commit of a pull request is not on main yet, and the step "The commit is on main" stops a
+      # release for it. Thus that step runs only in a run on main, which also tests it.
+      require-main: ${{ github.ref == 'refs/heads/main' }}
 
   release-publish:
     needs: release-build
