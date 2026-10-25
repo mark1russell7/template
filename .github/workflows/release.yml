@@ -198,11 +198,17 @@ jobs:
       # The commit of a tag never comes from that data:
       #   - A version that this run published gets the commit of this run.
       #   - A different version gets a tag only when npm has it with a provenance statement of this
-      #     repository (the repository ID), for example after a run that stopped before its tags, or
-      #     in the first run after a repository copies this workflow. The tag goes on the commit
-      #     that the statement names: the commit that the version came from.
+      #     repository (the repository ID), for example after a run that stopped before its tags.
+      #     The tag goes on the commit that the statement names: the commit that the version came from.
       #   - A version without such a statement (a publish by hand) gets no tag.
       # A tag that exists is skipped, so a second run does no harm. gh creates the tag on GitHub.
+      #
+      # GitHub refuses (HTTP 403) a tag from the workflow token on a commit whose workflow files differ
+      # from the workflow files of each branch: that token cannot change workflows. Thus an old commit
+      # gets no tag after a change of a workflow, for example after a repository copies this file.
+      # For a version of this run, the job then fails. For a different version, it gives a warning.
+      # Each time, the summary of the run has the gh command that makes the release with the token of
+      # the owner.
       - name: Tag and release
         shell: bash
         env:
@@ -226,6 +232,7 @@ jobs:
           }
           plan=tags/tags.json
           count=$(jq length "$plan")
+          failed=0
           for ((i = 0; i < count; i++)); do
             name=$(jq -r ".[$i].name" "$plan")
             version=$(jq -r ".[$i].version" "$plan")
@@ -247,6 +254,7 @@ jobs:
             case " $PUBLISHED " in
               *" $name@$version "*)
                 target=$GITHUB_SHA
+                ours=true
                 ;;
               *)
                 if ! target=$(provenance_commit "$name" "$version"); then
@@ -258,6 +266,7 @@ jobs:
                   continue
                 fi
                 echo "$name $version: npm has it from the commit $target of this repository, and it has no tag."
+                ours=false
                 ;;
             esac
             if ! [[ "$target" =~ ^[0-9a-f]{40}$ ]]; then
@@ -266,5 +275,32 @@ jobs:
             fi
             flags=()
             if [ "$prerelease" = true ]; then flags=(--prerelease --latest=false); fi
-            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$target" --title "$tag" --notes-file notes.md "${flags[@]}"
+            if output=$(gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$target" --title "$tag" --notes-file notes.md "${flags[@]}" 2>&1); then
+              echo "$output"
+              continue
+            fi
+            if ! grep -q "HTTP 403" <<<"$output"; then
+              echo "::error::gh did not make the release $tag: $output"
+              exit 1
+            fi
+            # The workflow token cannot tag this commit. The summary gives the command for the owner.
+            message="GitHub refused the tag $tag on $target (HTTP 403): the workflow files of that commit differ from those of each branch. The summary of the run has the command for the owner."
+            if [ "$ours" = true ]; then
+              echo "::error::$message"
+              failed=1
+            else
+              echo "::warning::$message"
+            fi
+            {
+              echo "### GitHub refused the tag \`$tag\`"
+              echo
+              echo "The workflow token cannot tag $target. Start this command with your own token:"
+              echo
+              echo '~~~~sh'
+              echo "gh release create '$tag' --repo $GITHUB_REPOSITORY --target $target --title '$tag'${flags[*]:+ ${flags[*]}} --notes-file - <<'NOTES'"
+              cat notes.md
+              echo 'NOTES'
+              echo '~~~~'
+            } >> "$GITHUB_STEP_SUMMARY"
           done
+          exit "$failed"
