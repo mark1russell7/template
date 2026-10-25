@@ -9,6 +9,7 @@ The template holds the CI, the release and the Pages workflows of the repositori
 | `.github/actions/npm-publish` | Action | Publishes the tarballs to npm with trusted publishing (OIDC) and provenance. |
 | `.github/workflows/reusable-release-tag.yml` | Workflow | Makes a git tag and a GitHub release for each published version. |
 | `.github/workflows/reusable-pages.yml` | Workflow | Builds a site, adds the Releases page and the Status page, and deploys it to GitHub Pages. |
+| `.github/workflows/reusable-security.yml` | Workflow | Scans the dependencies and the code with the dependency review, osv-scanner and CodeQL. |
 
 ## CI
 
@@ -174,6 +175,61 @@ jobs:
 - `github-token: true` gives the build `GITHUB_TOKEN`, with the read permissions of the build job.
 - The workflow gets the actions of the same template commit as the workflow file. A second checkout gets them.
 
+## Security
+
+`reusable-security.yml` has three jobs. On a pull request, a job fails only for a new finding at or above `fail-on-severity`. On a push, a schedule or a manual run, the jobs upload their findings to code scanning. Then they do not fail. Thus the Security tab shows the old findings, and the old findings do not block a pull request.
+
+| Job | On a pull request | On a push, a schedule or a manual run |
+|---|---|---|
+| `dependency-review` | GitHub compares the dependencies of the base and of the pull request. The job fails for a new dependency with a known vulnerability. | The job does not start. |
+| `osv-scanner` | The job scans the lockfiles of the base and of the pull request. It fails for a vulnerability that only the pull request has. | The job scans all the lockfiles and uploads the results. |
+| `codeql` | CodeQL analyzes the source with no build. The job fails for an alert on a line that the pull request adds or changes. | CodeQL analyzes the source and uploads the results. |
+
+The caller job gives the permissions. The workflow gives each job only the permissions that it needs:
+
+```yaml
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security:
+    uses: mark1russell7/template/.github/workflows/reusable-security.yml@<commit> # main
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+```
+
+| Input | Default | What it sets |
+|---|---|---|
+| `fail-on-severity` | `high` | A pull request fails for a new finding at or above this severity: `low`, `moderate`, `high` or `critical`. |
+| `dependency-review` | `true` | The job `dependency-review`. |
+| `dependency-review-scopes` | `runtime, development, unknown` | The scopes of the dependencies that the dependency review examines. |
+| `osv` | `true` | The job `osv-scanner`. |
+| `osv-lockfile` | (empty) | The lockfiles of osv-scanner, separated by spaces. Empty scans each lockfile of the repository. |
+| `codeql` | `true` | The job `codeql`. |
+| `codeql-languages` | `javascript-typescript,actions` | The CodeQL languages. The job skips a language with no files in the repository. |
+| `codeql-build-mode` | `none` | The CodeQL build mode. |
+| `timeout-minutes` | `30` | The time limit of the jobs `osv-scanner` and `codeql`. |
+
+- The job `dependency-review` gets `contents: read`. The jobs `osv-scanner` and `codeql` also get `security-events: write` for the upload and `actions: read`.
+- No job installs or starts the code of the repository.
+- The severity of a finding is its CVSS score or its CodeQL `security-severity`. `high` is 7.0 or more, and `critical` is 9.0 or more.
+- A file `osv-scanner.toml` next to a lockfile tells osv-scanner which vulnerabilities to ignore.
+- A repository with the default setup of code scanning sets `codeql: false`, because the default setup refuses the results of a CodeQL workflow.
+- CodeQL in a private repository needs GitHub Advanced Security. Thus only the public repositories use this workflow.
+
 ## Pins and Renovate
 
 A repository pins each shared workflow and action to a commit of `main`:
@@ -191,6 +247,7 @@ uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<full commit SHA>
 The workflows of the template call the shared workflows and actions by a local path, for example `./.github/workflows/reusable-ci.yml`. Thus each pull request of the template tests them:
 
 - `ci.yml` tests `reusable-ci.yml`.
+- `security.yml` tests `reusable-security.yml`.
 - `actions-test.yml` tests the actions, `reusable-pages.yml` and the release workflows, with `dry-run`. It publishes nothing. On a pull request, it sets the input `require-main` of the release build to `false`.
 
 The job `publish` of `release.yml` uses the pinned form of `npm-publish`, also in the template. A local action needs a checkout, and that job does no checkout.
