@@ -62,10 +62,11 @@
       "groupSlug": "github-actions"
     },
     {
-      "description": "The shared workflows and actions of the template follow main (@<commit> # main). A commit of main has no release date, so the pin moves with no wait.",
+      "description": "The shared workflows and actions of the template follow main (@<commit> # main): one weekly PR for all the pins of a repository. The manager github-actions reads '# main' as a branch (Renovate 43.84.0 or later). A commit of main has no release date, so the pin moves with no wait. The schedule stays the quiet Monday window also when a repository changes its own schedule: a workflow change during a release makes the tag job fail (HTTP 403, RELEASING.md).",
       "matchManagers": ["github-actions"],
       "matchPackageNames": ["mark1russell7/template"],
       "minimumReleaseAge": null,
+      "schedule": ["before 6am on monday"],
       "groupName": "template workflows and actions",
       "groupSlug": "template-workflows"
     },
@@ -77,9 +78,28 @@
       "groupSlug": "github-actions-major"
     },
     {
+      "description": "The Claude Code CLI of a workflow (CLAUDE_CODE_VERSION, reusable-ai-review.yml): a PR of its own. It changes the program that runs with the API key, so a person reviews it, and Renovate never merges it (renovate/automerge).",
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["@anthropic-ai/claude-code"],
+      "groupName": "Claude Code CLI",
+      "groupSlug": "claude-code-cli",
+      "automerge": false
+    },
+    {
       "description": "The release session owns the release workflow and its scripts. They change only from ~/git/template (RELEASING.md).",
       "matchFileNames": [".github/workflows/release.yml", "scripts/release/**"],
       "enabled": false
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "The version of the Claude Code CLI that a workflow installs from npm: 'CLAUDE_CODE_VERSION: <x.y.z>' (reusable-ai-review.yml).",
+      "managerFilePatterns": ["/(^|/)\\.github/workflows/[^/]+\\.ya?ml$/"],
+      "matchStrings": ["CLAUDE_CODE_VERSION:\\s*[\"']?(?<currentValue>\\d+\\.\\d+\\.\\d+)[\"']?"],
+      "depNameTemplate": "@anthropic-ai/claude-code",
+      "datasourceTemplate": "npm",
+      "versioningTemplate": "npm"
     }
   ]
 }
