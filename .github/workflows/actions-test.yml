@@ -6,10 +6,13 @@
 #                   and uploads the Pages artifact, with no deploy.
 #   pages-check     The pages and their JSON are in the artifact.
 #   release-build   reusable-release-build.yml packs the packages of this repository. Only a run on
-#                   main checks that the commit is on main (the input require-main).
+#                   main checks that the commit is on main (the input require-main). The input
+#                   after-pack tests the tarballs, writes an output, and adds a title and the
+#                   tarballs to each entry of the plan.
 #   release-publish The npm-publish action examines the tarballs with "dry-run": it publishes nothing.
-#                   The job has no "id-token: write", so npm cannot accept a publish.
-#   release-tag     reusable-release-tag.yml examines the plan and the tags with "dry-run".
+#                   The job has no "id-token: write", so npm cannot accept a publish. A step reads
+#                   the output of after-pack.
+#   release-tag     reusable-release-tag.yml examines the plan, the tarballs and the tags with "dry-run".
 #
 # ci.yml tests reusable-ci.yml on each push and pull request. new-repo.ps1 does not copy this
 # workflow, the actions or the shared workflows: a repository uses them from GitHub.
@@ -110,6 +113,17 @@ jobs:
       # The commit of a pull request is not on main yet, and the step "The commit is on main" stops a
       # release for it. Thus that step runs only in a run on main, which also tests it.
       require-main: ${{ github.ref == 'refs/heads/main' }}
+      # The test of after-pack: each tarball of packages.txt exists, the output "packages" for
+      # release-publish, and the optional fields "title" and "tarballs" of the plan for release-tag.
+      after-pack: |
+        while read -r name version file; do
+          [ -n "$name" ] || continue
+          test -s "$RELEASE_DIR/$file"
+          echo "ok $name $version $file"
+        done < "$RELEASE_DIR/packages.txt"
+        jq '[.[] | .title = "\(.name) \(.version)" | .tarballs = [.name]]' "$TAGS_FILE" > "$RUNNER_TEMP/plan.json"
+        mv "$RUNNER_TEMP/plan.json" "$TAGS_FILE"
+        echo "packages=$(grep -c . "$RELEASE_DIR/packages.txt")" >> "$GITHUB_OUTPUT"
 
   release-publish:
     needs: release-build
@@ -133,6 +147,12 @@ jobs:
         run: |
           echo "published: \"$PUBLISHED\""
           [ -z "$PUBLISHED" ]
+      - name: The output of after-pack gets to a later job
+        env:
+          PACKAGES: ${{ fromJSON(needs.release-build.outputs.after-pack).packages }}
+        run: |
+          echo "after-pack: $PACKAGES packages"
+          [ "$PACKAGES" -gt 0 ]
 
   release-tag:
     needs: [release-build, release-publish]

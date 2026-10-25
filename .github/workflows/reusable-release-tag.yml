@@ -16,6 +16,13 @@
 #
 # The job has no "permissions" key: it gets the permissions of the caller job. The release.yml of a
 # repository gives it "contents: write", and only this job of the release holds that permission.
+#
+# Each entry of the plan (tags.json) has name, version, tag, prerelease and notes. Two fields are
+# optional. The tags.mjs of the template does not write them, but the tags.mjs of a repository or
+# the input after-pack of reusable-release-build.yml can add them:
+#   title     The title of the GitHub release. The default is the tag.
+#   tarballs  An array of package names. The release gets the tarball of each one as a file, from
+#             the artifact "release" (packages.txt names the file).
 name: Reusable release tag
 
 on:
@@ -40,6 +47,18 @@ jobs:
         with:
           name: tags
           path: tags
+      # Only a plan with "tarballs" needs the artifact "release" of the build job.
+      - name: The plan attaches tarballs
+        id: plan
+        shell: bash
+        run: |
+          tarballs=$(jq 'any(.[]; (.tarballs // []) | length > 0)' tags/tags.json)
+          echo "tarballs=$tarballs" >> "$GITHUB_OUTPUT"
+      - if: steps.plan.outputs.tarballs == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release
+          path: release
       # tags.json comes from the build job: the name, version, tag, prerelease flag and release text
       # of each published package. This step gives that data to gh and jq only as arguments and files.
       # The commit of a tag never comes from that data:
@@ -86,12 +105,32 @@ jobs:
             version=$(jq -r ".[$i].version" "$plan")
             tag=$(jq -r ".[$i].tag" "$plan")
             prerelease=$(jq -r ".[$i].prerelease" "$plan")
+            title=$(jq -r ".[$i].title // .[$i].tag" "$plan")
             jq -r ".[$i].notes" "$plan" > notes.md
             # Only the characters of an npm name and a version, and no hyphen at the start (a flag of gh)
             if ! [[ "$tag" =~ ^[A-Za-z0-9@][A-Za-z0-9@._/+-]*$ ]]; then
               echo "::error::The tag \"$tag\" of $name has a character that is not correct."
               exit 1
             fi
+            if [ -z "$title" ] || [[ "$title" == *$'\n'* ]]; then
+              echo "::error::The title of $tag must be one line of text."
+              exit 1
+            fi
+            # The files of the release: the tarball of each package in "tarballs". packages.txt of the
+            # artifact "release" has the lines "name version file".
+            if ! jq -e ".[$i].tarballs // [] | type == \"array\" and all(type == \"string\")" "$plan" > /dev/null; then
+              echo "::error::\"tarballs\" of $tag must be an array of package names."
+              exit 1
+            fi
+            files=()
+            while IFS= read -r package; do
+              file=$(awk -v name="$package" '$1 == name { print $3 }' release/packages.txt)
+              if ! [[ "$file" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.tgz$ ]] || [ ! -f "release/$file" ]; then
+                echo "::error::The artifact \"release\" has no tarball of \"$package\" for $tag."
+                exit 1
+              fi
+              files+=("release/$file")
+            done < <(jq -r ".[$i].tarballs // [] | .[]" "$plan")
             if response=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" 2>&1); then
               echo "The tag $tag exists."
               continue
@@ -124,10 +163,10 @@ jobs:
             flags=()
             if [ "$prerelease" = true ]; then flags=(--prerelease --latest=false); fi
             if [ "$DRY_RUN" = true ]; then
-              echo "Dry run: gh release create $tag --target $target --title $tag ${flags[*]}"
+              echo "Dry run: gh release create $tag ${files[*]} --target $target --title \"$title\" ${flags[*]}"
               continue
             fi
-            if output=$(gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$target" --title "$tag" --notes-file notes.md "${flags[@]}" 2>&1); then
+            if output=$(gh release create "$tag" "${files[@]}" --repo "$GITHUB_REPOSITORY" --target "$target" --title "$title" --notes-file notes.md "${flags[@]}" 2>&1); then
               echo "$output"
               continue
             fi
@@ -143,13 +182,18 @@ jobs:
             else
               echo "::warning::$message"
             fi
+            printf -v quoted_title '%q' "$title"
             {
               echo "### GitHub refused the tag \`$tag\`"
               echo
               echo "The workflow token cannot tag $target. Start this command with your own token:"
+              if [ ${#files[@]} -gt 0 ]; then
+                echo
+                echo "First download the tarballs: \`gh run download $GITHUB_RUN_ID --repo $GITHUB_REPOSITORY --name release --dir release\`"
+              fi
               echo
               echo '~~~~sh'
-              echo "gh release create '$tag' --repo $GITHUB_REPOSITORY --target $target --title '$tag'${flags[*]:+ ${flags[*]}} --notes-file - <<'NOTES'"
+              echo "gh release create '$tag'${files[*]:+ ${files[*]}} --repo $GITHUB_REPOSITORY --target $target --title $quoted_title${flags[*]:+ ${flags[*]}} --notes-file - <<'NOTES'"
               cat notes.md
               echo 'NOTES'
               echo '~~~~'

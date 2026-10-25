@@ -91,6 +91,43 @@ Thus the job that holds `id-token: write` stays in `release.yml`, and only its s
 - The job `tag` holds `contents: write`, from its caller job. It starts no code of the repository.
 - Renovate does not change `release.yml`. The release session moves its pins (`RELEASING.md`).
 
+### Inputs of the release
+
+Most repositories need no inputs. A repository with more release steps uses these inputs. Each default keeps the standard release.
+
+| Workflow or action | Input | Default | What it sets |
+|---|---|---|---|
+| `reusable-release-build.yml` | `require-main` | `true` | The check that the commit is on `main`. Only `actions-test.yml` sets `false`. |
+| `reusable-release-build.yml` | `node-version` | `26` | The Node.js version of the build. |
+| `reusable-release-build.yml` | `node-version-file` | (empty) | A file with the Node.js version, for example `.nvmrc`. It replaces `node-version`. |
+| `reusable-release-build.yml` | `build` | (empty) | The build command. Empty starts the `build` script. |
+| `reusable-release-build.yml` | `after-pack` | (empty) | A command after `pack.mjs` and `tags.mjs`, before the upload of the artifacts. |
+| `npm-publish` | `new-packages` | `error` | `warning`: a package that is not on npm gives a warning, and the step does not fail. |
+| `npm-publish` | `node-version` | `26` | The Node.js version of npm. |
+| `reusable-release-tag.yml` | `published` | (empty) | The versions that the job `publish` published. |
+
+The command `after-pack` operates in the build job, with `contents: read` only:
+
+- `RELEASE_DIR` is the folder of `packages.txt` and the tarballs. `TAGS_FILE` is the plan of the tags.
+- The command can test the tarballs, add files to the artifact `release`, and change the plan.
+- Each line `name=value` that it writes to `GITHUB_OUTPUT` goes into the output `after-pack` of the workflow. This output is a JSON object.
+- A later job reads a value with `fromJSON(needs.build.outputs.after-pack).<name>`.
+
+Each entry of the plan of the tags has `name`, `version`, `tag`, `prerelease` and `notes`. The job `tag` also reads two optional fields:
+
+- `title`: the title of the GitHub release. The default is the tag.
+- `tarballs`: an array of package names. The release gets the tarball of each package as a file.
+
+The `tags.mjs` of the template does not write these fields. The `tags.mjs` of a repository can write them. The command `after-pack` can also add them.
+
+### More jobs in `release.yml`
+
+A step that needs `id-token: write` stays in `release.yml`, for example a publish to the MCP registry. It does not go into a shared workflow:
+
+- Put it in a job after the job `publish`, with only the permissions that it needs.
+- The job does no checkout and no install. It reads its files from the artifact `release`.
+- The output `published` of the job `publish` and the output `after-pack` of the job `build` tell the job when to operate.
+
 ## Pages
 
 `reusable-pages.yml` has two jobs. The job `build` installs, builds the site, adds the pages of `site-pages` and uploads the Pages artifact. It gets only read permissions. The job `deploy` deploys the artifact. It starts no code of the repository.
