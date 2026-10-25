@@ -68,6 +68,19 @@ describe("the HTML helpers", () => {
     expect(safeUrl("../data/x.json")).toBe("../data/x.json");
   });
 
+  it("refuse a scheme that control characters, tabs or backslashes hide, as the URL parser of a browser reads it", () => {
+    // The URL parser removes the C0 controls and spaces at the two ends, and each tab and line break
+    for (const url of ["\x01javascript:alert(1)", "\x00\x1fjavascript:alert(1)", "java\tscript:alert(1)", "jav\nascript:alert(1)", "javascript:alert(1)\x7f\x01"]) {
+      expect(safeUrl(url), JSON.stringify(url)).toBeNull();
+    }
+    expect(inlineMarkdown("[x](\x01javascript:void0) y")).toBe("x y");
+    // A browser reads "\" as "/", so these go to a different host
+    expect(safeUrl("\\\\evil.test")).toBeNull();
+    expect(safeUrl("/\\evil.test")).toBeNull();
+    expect(safeUrl("\x01https://e.test/a")).toBe("https://e.test/a");
+    expect(safeUrl(" ../data/x.json\x1f")).toBe("../data/x.json");
+  });
+
   it("give the dates in UTC", () => {
     expect(shortDate("2026-10-18T23:30:00-04:00")).toBe("Oct 19");
     expect(longDate("2026-10-18T15:34:06-04:00")).toBe("Oct 18, 2026, 19:34 UTC");
@@ -199,6 +212,18 @@ describe("the releases page", () => {
   it("has an inline module that the browser can parse", () => {
     expect(html).toContain(`<script type="module">${RELEASES_SCRIPT}</script>`);
     expect(() => new Function(RELEASES_SCRIPT)).not.toThrow();
+  });
+
+  it("has an inline module that a malformed hash in the URL does not stop", () => {
+    for (const hash of ["#%E0", "#100%", "#v0.3.1"]) {
+      const listeners: string[] = [];
+      const document = { querySelectorAll: () => [], querySelector: () => null, addEventListener: () => undefined };
+      const window = { matchMedia: () => ({ matches: false }), addEventListener: (name: string) => listeners.push(name) };
+      const start = new Function("document", "window", "location", "history", RELEASES_SCRIPT);
+      expect(() => start(document, window, { hash }, { replaceState: () => undefined }), hash).not.toThrow();
+      // The last statement of the module adds the resize listener
+      expect(listeners, hash).toEqual(["resize"]);
+    }
   });
 
   it("says that the repository has no release", () => {

@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { execSync } from "node:child_process";
@@ -191,10 +191,33 @@ export async function writePackage(root: string, name: string, presetName: Prese
   if (existsSync(dir)) {
     throw new Error(`Package already exists: packages/${name}`);
   }
-  await mkdir(resolve(dir, "src"), { recursive: true });
   const packageName = `@${scope}/${name}`;
-
+  // Resolve the ranges before the folder exists: a range that is not found must not leave a folder that blocks a retry
   const dependencies = preset.dependencies && preset.dependencies.length > 0 ? await dependencyVersions(preset.dependencies, root, cli) : undefined;
+  const devDependencies = await devDependencyVersions(root, cli);
+  await mkdir(resolve(dir, "src"), { recursive: true });
+  try {
+    return await writeFiles({ dir, name, scope, packageName, preset, dependencies, devDependencies });
+  } catch (error) {
+    // The folder is new (the check above), so a failed write removes it
+    await rm(dir, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+/** The data of a new package that `writeFiles` writes, after `writePackage` resolved it. */
+interface NewPackage {
+  readonly dir: string;
+  readonly name: string;
+  readonly scope: string;
+  readonly packageName: string;
+  readonly preset: Preset;
+  readonly dependencies: Record<string, string> | undefined;
+  readonly devDependencies: Record<string, string>;
+}
+
+/** This function writes the files of a new package in its new folder (`writePackage`). */
+async function writeFiles({ dir, name, scope, packageName, preset, dependencies, devDependencies }: NewPackage): Promise<WrittenPackage> {
   const pkgJson = {
     $schema: "https://json.schemastore.org/package",
     name: packageName,
@@ -209,7 +232,7 @@ export async function writePackage(root: string, name: string, presetName: Prese
       ...preset.scripts,
     },
     ...(dependencies ? { dependencies } : {}),
-    devDependencies: await devDependencyVersions(root, cli),
+    devDependencies,
   };
   await writeFile(resolve(dir, "package.json"), JSON.stringify(pkgJson, null, 2) + "\n");
 

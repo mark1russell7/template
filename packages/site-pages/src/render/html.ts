@@ -12,11 +12,16 @@ export function escapeHtml(text: string): string {
 /**
  * This function gives a URL that a link can hold, or null. It accepts `http:`, `https:` and
  * `mailto:` URLs, and relative URLs. It refuses each other scheme, for example `javascript:`.
+ *
+ * The URL parser of a browser removes each tab and line break, and the control characters and
+ * spaces at the two ends. This function removes them before the scheme check, as the browser does.
+ * Thus a control character before `javascript:` does not hide the scheme.
  */
 export function safeUrl(url: string): string | null {
-  const trimmed = url.trim();
+  const trimmed = url.trim().replace(/[\t\n\r]/g, "").replace(/^[\u0000- ]+|[\u0000- ]+$/g, "");
   if (/^(?:https?:|mailto:)/i.test(trimmed)) return trimmed;
-  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed) || trimmed.startsWith("//")) return null;
+  // A browser reads "\" as "/" in a URL of the page, so "\\host" and "/\host" go to a different host, as "//host" does
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed) || /^[/\\]{2}/.test(trimmed)) return null;
   return trimmed;
 }
 

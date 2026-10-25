@@ -248,7 +248,11 @@ document.addEventListener("click", (event) => {
   const label = button.querySelector("[data-sp-label]");
   if (label) label.textContent = open ? button.dataset.less : button.dataset.more;
 });
-const hashed = decodeURIComponent(location.hash.slice(1));
+// A malformed hash, for example "#100%", must not stop the module
+let hashed = "";
+try {
+  hashed = decodeURIComponent(location.hash.slice(1));
+} catch {}
 for (const [version, panel] of panels) if (panel.id === hashed) select(version, null);
 const revealAll = () => { for (const box of boxes) reveal(box, selected, false); };
 revealAll();
