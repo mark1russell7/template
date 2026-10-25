@@ -1,0 +1,37 @@
+# TEMPORARY probe: which commits can GITHUB_TOKEN (contents: write) tag? Not for merge.
+name: Tag probe
+on:
+  pull_request:
+permissions:
+  contents: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+          run=$GITHUB_RUN_ID
+          ref_probe() {
+            if out=$(gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/probe-$run-$1" -f "sha=$2" 2>&1); then
+              echo "REF $1 $2: OK"
+            else
+              echo "REF $1 $2: FAIL $out"
+            fi
+          }
+          ref_probe main fb3f690b32565cd57d4a6d466bdbf09473475fb2
+          ref_probe sitepages fc25647d49530d09235cac996a11ff9cf29348ae
+          ref_probe cli c514076ff2b207111f9028486419bc5aa849863c
+          ref_probe pr21 e95097e00000000000000000000000000000000 || true
+          ref_probe pr18 $(gh api "repos/$GITHUB_REPOSITORY/commits/7370860" --jq .sha)
+          ref_probe pr17 $(gh api "repos/$GITHUB_REPOSITORY/commits/dc79e4a" --jq .sha)
+          ref_probe pr19 $(gh api "repos/$GITHUB_REPOSITORY/commits/a13c7c7" --jq .sha)
+          ref_probe pr21b $(gh api "repos/$GITHUB_REPOSITORY/commits/e95097e" --jq .sha)
+          ref_probe prhead "${{ github.event.pull_request.head.sha }}"
+          if out=$(gh release create "probe-$run-rel-main" --repo "$GITHUB_REPOSITORY" --target fb3f690b32565cd57d4a6d466bdbf09473475fb2 --title probe --notes probe --draft 2>&1); then echo "REL main draft: OK $out"; else echo "REL main draft: FAIL $out"; fi
+          if out=$(gh release create "probe-$run-rel-sp" --repo "$GITHUB_REPOSITORY" --target fc25647d49530d09235cac996a11ff9cf29348ae --title probe --notes probe 2>&1); then echo "REL sitepages: OK $out"; else echo "REL sitepages: FAIL $out"; fi
+          gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/probe-$run" --jq '.[].ref'
