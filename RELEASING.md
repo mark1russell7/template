@@ -47,7 +47,7 @@ The script refuses a repository in these conditions:
 
 - An open pull request to `main` changes the `version` of a `package.json`. An example is the "Version the packages" pull request of Changesets.
 - An open pull request is on a branch `release/<version>` or `changeset-release/<branch>`.
-- A run of `release.yml` is queued, in progress or waiting.
+- A run of `release.yml` is queued, in progress or waiting. A repository without `release.yml` has no such run.
 - The script cannot do the check, for example after an error of GitHub.
 
 After a refusal, the script goes to the next repository. The exit code is 1 when a repository has a refusal or an error. Start the script again for that repository later.

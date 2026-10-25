@@ -227,9 +227,16 @@ export function resolveTarget(sha, run = gh) {
 
 /** This function gives the reasons that a release can start in a repository (step 3), with the open pull requests. */
 export function checkRepo(repository, { ownBranch } = {}, run = gh) {
-  const runs = jsonLines(
-    run(["api", `repos/${repository}/actions/workflows/release.yml/runs?per_page=30`, "--jq", '.workflow_runs[] | select(.status != "completed") | {status, url: .html_url}']),
-  );
+  let runs;
+  try {
+    runs = jsonLines(
+      run(["api", `repos/${repository}/actions/workflows/release.yml/runs?per_page=30`, "--jq", '.workflow_runs[] | select(.status != "completed") | {status, url: .html_url}']),
+    );
+  } catch (error) {
+    // A repository without release.yml (HTTP 404) has no release run. The version pull requests still count.
+    if (!/HTTP 404|Not Found/.test(firstLine(error))) throw error;
+    runs = [];
+  }
   const pulls = jsonLines(
     run(["api", "--paginate", `repos/${repository}/pulls?state=open&base=${BASE}&per_page=100`, "--jq", ".[] | {number, head: .head.ref, url: .html_url}"]),
   );

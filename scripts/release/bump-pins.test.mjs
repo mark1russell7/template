@@ -319,3 +319,15 @@ test("parseArgs() reads --file as the path of a workflow, and refuses a value th
   assert.match(parseArgs(["--file", "../x.yml", "vex"]).error, /not a workflow file/);
   assert.match(parseArgs(["--file"]).error, /needs a value/);
 });
+
+test("bumpRepo() counts no release run in a repository without release.yml, and still refuses a version pull request", () => {
+  const path = ".github/workflows/ai-review.yml";
+  const text = `jobs:\n  review:\n    uses: mark1russell7/template/.github/workflows/reusable-ai-review.yml@${OLD} # main\n`;
+  const noRelease = { "actions/workflows/release.yml": "gh: Not Found (HTTP 404)" };
+  assert.equal(bumpRepo(REPO, { target: TARGET, workflow: path }, github({ path, text, fail: noRelease }).run).result, "opened");
+  const gh = github({ path, text, fail: noRelease, pulls: [{ number: 9, head: "changeset-release/main", url: "pr-url" }] });
+  const result = bumpRepo(REPO, { target: TARGET, workflow: path }, gh.run);
+  assert.equal(result.result, "refused");
+  assert.match(result.text, /version branch changeset-release\/main/);
+  assert.deepEqual(gh.writes(), []);
+});
