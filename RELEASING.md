@@ -47,6 +47,15 @@ The push to `main` starts `release.yml`. The workflow starts the CI gates, build
 
 To publish again after a failure, start the workflow by hand: `gh workflow run release.yml --ref main`. It skips each version that is on npm.
 
+## Only a commit on main
+
+A release publishes only a commit that is on `main`. The first step of the build job compares the commit of the run with `main`, with the GitHub compare API. The commit must be the head of `main` or an older commit of `main`. For a different commit, the step fails. Then the run publishes nothing and makes no tag.
+
+- A manual run on the branch of a pull request does not publish the code of that branch. Merge the pull request first.
+- A temporary branch `release/<version>` at a version commit of `main` is correct. Use it to publish the version of an older commit when `main` has newer changes: `gh workflow run release.yml --ref release/<version>`.
+- For a new package, merge the pull request of the version first. Then start the release on `main` ("A new package").
+- The input `require-main` of `reusable-release-build.yml` turns on the check. Its default is `true`. Only `actions-test.yml` of the template sets `false`, for the commits of pull requests.
+
 ## Git tags and GitHub releases
 
 After the publish, the job `tag` of `release.yml` makes a git tag and a GitHub release for each version that the run published.
@@ -93,7 +102,14 @@ node scripts/release/npm-bootstrap.mjs --dry-run
 node scripts/release/npm-bootstrap.mjs --dispatch
 ```
 
-The script reads the packages of `origin/main`. For each new package, it publishes a placeholder version `0.0.0-bootstrap.0` with the dist-tag `bootstrap`. Then it connects the package to `release.yml` (`npm trust github`) and sets "Require two-factor authentication and disallow tokens" (`npm access set mfa=publish`). With `--dispatch`, it starts `release.yml`, which publishes the real version.
+The script reads the packages of `origin/main`. For each new package, it publishes a placeholder version `0.0.0-bootstrap.0` with the dist-tag `bootstrap`. Then it connects the package to `release.yml` (`npm trust github`) and sets "Require two-factor authentication and disallow tokens" (`npm access set mfa=publish`). With `--dispatch`, it starts `release.yml` on `main`, which publishes the real version.
+
+The release publishes only a commit on `main`. Thus merge the pull request of the version before the bootstrap. `--dispatch` starts the release only in these two conditions:
+
+- The bootstrap had no failure.
+- The commit of `--ref` is on `main`. One `gh api` call to the compare API examines it.
+
+Else the script shows the reason and the command `gh workflow run release.yml --repo <owner/repo> --ref main`. Start that command after the merge, in the 2 days of the trust.
 
 npm asks for the 2FA. The script opens the npm page in the browser. Confirm with the security key. Select the option to skip the 2FA for 5 minutes.
 

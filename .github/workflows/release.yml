@@ -1,9 +1,9 @@
 # The standard npm release of a repository made from mark1russell7/template (RELEASING.md, CI.md).
 #
 #   verify    The gates of ci.yml.
-#   build     reusable-release-build.yml: builds and packs each published package
-#             (scripts/release/pack.mjs), and writes the plan of the git tags and the GitHub releases
-#             (scripts/release/tags.mjs).
+#   build     reusable-release-build.yml: stops when the commit is not on main, builds and packs
+#             each published package (scripts/release/pack.mjs), and writes the plan of the git tags
+#             and the GitHub releases (scripts/release/tags.mjs).
 #   publish   The npm-publish action of the template: publishes each tarball whose version npm does
 #             not have. Only this job holds "id-token: write", and it runs no code of the
 #             repository: no checkout, no install.
@@ -20,7 +20,8 @@
 #
 # A release: change the version in a package.json and merge it to main. The workflow also starts
 # by hand (workflow_dispatch), for example to publish again after a failure. It skips each
-# version that is already on npm.
+# version that is already on npm. A release publishes only a commit on main: the first step of the
+# build job stops a run on a commit that main does not have (RELEASING.md).
 #
 # npm trusted publishing uses the OIDC token of GitHub Actions: no npm token, and each version
 # gets a provenance statement. The trusted publisher of each package names this repository and

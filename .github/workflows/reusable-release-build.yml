@@ -8,11 +8,20 @@
 #
 # The job installs and runs the code of the repository, so it gets only "contents: read". It has no
 # OIDC token: the publish job of release.yml does the publish (the npm-publish action).
+#
+# A release publishes only a commit on main (RELEASING.md). The first step of the job stops the run
+# when the commit is not the head of main or an older commit of main, for example a manual run
+# (workflow_dispatch) on the branch of a pull request. Then the publish job and the tag job do not
+# start. A temporary branch release/<version> at a version commit of main passes the check.
 name: Reusable release build
 
 on:
   workflow_call:
     inputs:
+      require-main:
+        description: true stops the job when the commit of the run is not on main. Only actions-test.yml of the template sets false, for the commit of a pull request.
+        type: boolean
+        default: true
       node-version:
         description: The Node.js version of the build.
         type: string
@@ -30,6 +39,24 @@ jobs:
     permissions:
       contents: read
     steps:
+      # The first step, before the checkout: a release publishes only a commit on main. The GitHub
+      # compare API (main...<commit>) gives "identical" for the head of main and "behind" for an
+      # older commit of main. "ahead" and "diverged" are commits that main does not have.
+      - name: The commit is on main
+        if: inputs.require-main
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! status=$(gh api "repos/$GITHUB_REPOSITORY/compare/main...$GITHUB_SHA" --jq .status); then
+            echo "::error::GitHub did not compare the commit $GITHUB_SHA with main. Start the run again."
+            exit 1
+          fi
+          echo "The commit $GITHUB_SHA ($GITHUB_REF) compared with main: $status"
+          if [ "$status" != identical ] && [ "$status" != behind ]; then
+            echo "::error::A release runs only for a commit that is on main. The commit $GITHUB_SHA of $GITHUB_REF is not on main (status: $status). Merge it to main, then start the release on main."
+            exit 1
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false

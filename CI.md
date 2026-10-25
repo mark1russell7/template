@@ -86,6 +86,7 @@ Thus the job that holds `id-token: write` stays in `release.yml`, and only its s
 
 - `release.yml` starts with `permissions: {}`. Each job gets only the permissions that it needs.
 - The jobs `build` and `verify` run the code of the repository with `contents: read` only.
+- The first step of the job `build` stops the run when the commit is not on `main`. Thus a manual run on a different branch publishes nothing (`RELEASING.md`).
 - The job `publish` holds `id-token: write`. It does no checkout and no install. It starts only the pinned action.
 - The job `tag` holds `contents: write`, from its caller job. It starts no code of the repository.
 - Renovate does not change `release.yml`. The release session moves its pins (`RELEASING.md`).
@@ -153,7 +154,7 @@ uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<full commit SHA>
 The workflows of the template call the shared workflows and actions by a local path, for example `./.github/workflows/reusable-ci.yml`. Thus each pull request of the template tests them:
 
 - `ci.yml` tests `reusable-ci.yml`.
-- `actions-test.yml` tests the actions, `reusable-pages.yml` and the release workflows, with `dry-run`. It publishes nothing.
+- `actions-test.yml` tests the actions, `reusable-pages.yml` and the release workflows, with `dry-run`. It publishes nothing. On a pull request, it sets the input `require-main` of the release build to `false`.
 
 The job `publish` of `release.yml` uses the pinned form of `npm-publish`, also in the template. A local action needs a checkout, and that job does no checkout.
 
