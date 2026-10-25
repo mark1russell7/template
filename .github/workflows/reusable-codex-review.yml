@@ -1,0 +1,223 @@
+# A second AI review of a pull request, by an OpenAI model. It only writes comments, and it never fails the pull request.
+# CODEX-REVIEW.md tells what it does, its cost guards, why it does not use openai/codex-action, and how to call it.
+#
+#   review  Examines the cost guards, reads the pull request and its diff, and sends them to the OpenAI
+#           Responses API. It holds the API key and a read-only job token. The request has no tools:
+#           the model cannot start commands, read files or write. A JSON schema controls its result.
+#   post    Posts the result as one review of the pull request. It holds the job token with
+#           "pull-requests: write", and no API key.
+#
+# Both jobs run scripts/ai-review/codex-review.mjs of the same template commit as this file: a sparse
+# checkout gets it (job.workflow_repository and job.workflow_sha). No job checks out the code of the
+# pull request.
+name: AI second opinion (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      model:
+        description: The OpenAI model that reviews the pull request
+        type: string
+        default: gpt-6.1-sol
+      reasoning-effort:
+        description: "The reasoning effort of the model: low, medium, high, xhigh or max. Empty uses the default of the model."
+        type: string
+        default: medium
+      max-output-tokens:
+        description: The maximum number of output tokens, with the reasoning tokens (a cost limit)
+        type: number
+        default: 25000
+      max-changed-lines:
+        description: The review stops before it starts when the pull request changes more lines (additions plus deletions)
+        type: number
+        default: 1500
+      max-diff-bytes:
+        description: The review stops before it starts when the diff has more bytes (a cost limit for long lines)
+        type: number
+        default: 200000
+      label:
+        description: The label that starts a new review
+        type: string
+        default: ai-review
+      extra-prompt:
+        description: Notes for the reviewer about the repository
+        type: string
+        default: ""
+    secrets:
+      OPENAI_API_KEY:
+        description: The OpenAI API key. Without it, the review stops with a note in the job summary.
+        required: false
+
+# Each job sets its own permissions
+permissions: {}
+
+jobs:
+  review:
+    # Of the label events, only the review label starts a review
+    if: >-
+      github.event_name == 'pull_request' &&
+      (github.event.action != 'labeled' || github.event.label.name == inputs.label)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    concurrency:
+      group: codex-review-${{ github.repository }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    outputs:
+      run: ${{ steps.gate.outputs.run }}
+      outcome: ${{ steps.review.outcome }}
+      result: ${{ steps.review.outputs.result }}
+    steps:
+      - name: Check the cost guards
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # A secret cannot go in an "if". A fork pull request gets no secrets, so it stops here too.
+          HAS_KEY: ${{ secrets.OPENAI_API_KEY != '' }}
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          ACTION: ${{ github.event.action }}
+          ACTOR: ${{ github.actor }}
+          LABEL: ${{ inputs.label }}
+          MAX_LINES: ${{ inputs.max-changed-lines }}
+          MAX_BYTES: ${{ inputs.max-diff-bytes }}
+          MODEL: ${{ inputs.model }}
+        run: |
+          skip() {
+            echo "AI second opinion skipped: $1" >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=AI second opinion skipped::$1"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+          if [ "$HAS_KEY" != "true" ]; then
+            skip "the repository has no OPENAI_API_KEY secret, or the pull request comes from a fork."
+          fi
+          # Without these values, the checkout of the script gets the caller repository, not the template
+          if [ -z "$WORKFLOW_REPOSITORY" ] || ! [[ "$WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            skip "job.workflow_repository or job.workflow_sha is not available."
+          fi
+          case "$ACTOR" in
+            *"[bot]") skip "the event comes from the bot $ACTOR." ;;
+          esac
+          dir="$RUNNER_TEMP/codex-review"
+          mkdir -p "$dir"
+          # One API call gives the current state and size of the pull request
+          if ! gh api "repos/$REPO/pulls/$PR" > "$dir/pr.json"; then
+            skip "the pull request could not be read."
+          fi
+          draft=$(jq -r '.draft' "$dir/pr.json")
+          author=$(jq -r '.user.login' "$dir/pr.json")
+          author_type=$(jq -r '.user.type' "$dir/pr.json")
+          changed=$(jq -r '.additions + .deletions' "$dir/pr.json")
+          # The review label is a request by a person: it also reviews a draft or a bot pull request
+          if [ "$ACTION" != "labeled" ]; then
+            if [ "$draft" = "true" ]; then
+              skip "the pull request is a draft. Add the $LABEL label for a review."
+            fi
+            case "$author" in
+              renovate | dependabot | github-actions | *"[bot]")
+                skip "the author $author is a bot." ;;
+            esac
+            if [ "$author_type" = "Bot" ]; then
+              skip "the author $author is a bot."
+            fi
+          fi
+          if [ "$changed" -gt "$MAX_LINES" ]; then
+            skip "the pull request changes $changed lines, more than the limit of $MAX_LINES."
+          fi
+          jq -r '"# " + .title + "\n\n" + (.body // "")' "$dir/pr.json" > "$dir/pr.md"
+          rm "$dir/pr.json"
+          if ! gh pr diff "$PR" --repo "$REPO" > "$dir/pr.diff"; then
+            skip "the diff of the pull request could not be read."
+          fi
+          bytes=$(wc -c < "$dir/pr.diff")
+          if [ "$bytes" -gt "$MAX_BYTES" ]; then
+            skip "the diff has $bytes bytes, more than the limit of $MAX_BYTES."
+          fi
+          echo "AI second opinion of $changed changed lines with $MODEL" >> "$GITHUB_STEP_SUMMARY"
+          echo "run=true" >> "$GITHUB_OUTPUT"
+
+      # Only the script of the template, at the commit of this file
+      - name: Get the review script
+        if: steps.gate.outputs.run == 'true'
+        # A full commit SHA: some repositories allow only actions that are pinned to one
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .codex-review
+          sparse-checkout: scripts/ai-review
+          persist-credentials: false
+
+      # The OpenAI Responses API directly, not openai/codex-action: in each protected mode, that action
+      # gives Codex a shell and refuses the options that remove it (CODEX-REVIEW.md).
+      - name: Review
+        id: review
+        if: steps.gate.outputs.run == 'true'
+        # Comment only: a crash, a timeout, or a quota or billing error does not fail the pull request
+        continue-on-error: true
+        timeout-minutes: 8
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          MODEL: ${{ inputs.model }}
+          EFFORT: ${{ inputs.reasoning-effort }}
+          MAX_OUTPUT_TOKENS: ${{ inputs.max-output-tokens }}
+          EXTRA_PROMPT: ${{ inputs.extra-prompt }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          REVIEW_DIR: ${{ runner.temp }}/codex-review
+        run: node .codex-review/scripts/ai-review/codex-review.mjs review
+
+  post:
+    needs: review
+    # The label goes away also when the review job failed, so that the label can start one more review
+    if: >-
+      always() &&
+      ((needs.review.result == 'success' && needs.review.outputs.run == 'true') ||
+      (needs.review.result != 'skipped' && github.event.action == 'labeled'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Get the post script
+        if: needs.review.result == 'success' && needs.review.outputs.run == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .codex-review
+          sparse-checkout: scripts/ai-review
+          persist-credentials: false
+
+      - name: Post the review
+        if: needs.review.result == 'success' && needs.review.outputs.run == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MODEL: ${{ inputs.model }}
+          LABEL: ${{ inputs.label }}
+          RESULT: ${{ needs.review.outputs.result }}
+          OUTCOME: ${{ needs.review.outputs.outcome }}
+        run: node .codex-review/scripts/ai-review/codex-review.mjs post
+
+      - name: Remove the review label
+        if: always() && github.event.action == 'labeled'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          LABEL: ${{ inputs.label }}
+        run: |
+          # The Claude review can remove the same label first: then GitHub answers 404
+          label=$(jq -rn --arg label "$LABEL" '$label | @uri')
+          gh api -X DELETE "repos/$REPO/issues/$PR/labels/$label" --silent || echo "The label $LABEL is not on the pull request."

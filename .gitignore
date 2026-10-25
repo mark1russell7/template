@@ -11,6 +11,7 @@ _db/
 # repo root, add an explicit allowlist line here.
 /*.md
 !/AI-REVIEW.md
+!/CODEX-REVIEW.md
 !/CLAUDE.md
 !/README.md
 !/RELEASING.md

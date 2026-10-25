@@ -2,6 +2,8 @@
 
 The workflow `reusable-ai-review.yml` gives a pull request one review by Claude. The review only writes comments. It does not fail a pull request.
 
+A second review by an OpenAI model is also available. `CODEX-REVIEW.md` tells how it operates.
+
 ## What the review does
 
 1. A pull request opens, opens again or becomes ready for review. The workflow starts.
@@ -40,6 +42,7 @@ The action `anthropics/claude-code-action` sends each request with its own entry
 
 1. Add the label `ai-review` to the pull request.
 2. The workflow removes the label after the review. Add the label again for one more review.
+
 ## Add the review to a repository
 
 Put this file in `.github/workflows/ai-review.yml`:
