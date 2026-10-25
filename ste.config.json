@@ -5,6 +5,7 @@
     "AI-REVIEW.md",
     "CLAUDE.md",
     "RELEASING.md",
+    "CI.md",
     "packages/*/README.md",
     "packages/*/src/**/*.{ts,tsx}",
     "packages/*/*.config.{ts,mts}"

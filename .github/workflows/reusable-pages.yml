@@ -1,0 +1,236 @@
+# The shared GitHub Pages deployment of the sites of mark1russell7 (CI.md).
+#
+#   build   Installs, builds the site, adds the Releases page and the Status page (the site-pages
+#           action), and uploads the Pages artifact. It runs the code of the repository, so it gets
+#           only read permissions.
+#   deploy  Deploys the artifact to GitHub Pages. It runs no code of the repository. It has no
+#           "permissions" key: it gets "pages: write" and "id-token: write" from the caller job.
+#
+# The caller starts it on "push" (each push to main), on "workflow_run" (after a CI run of a push
+# to main passed), on "schedule" and on "workflow_dispatch". A "workflow_run" for a failed CI run
+# or for a pull request builds nothing. A scheduled build takes the commit of the green-main
+# action: the newest commit of main, or the newest commit that passed CI.
+#
+# The job uses the actions green-main and site-pages of the same commit of the template as this
+# file: a second checkout gets them (job.workflow_repository and job.workflow_sha).
+name: Reusable Pages
+
+on:
+  workflow_call:
+    inputs:
+      build:
+        description: The bash command that builds the site, after the install. It can have more lines.
+        type: string
+        required: true
+      out:
+        description: The built output folder of the site, relative to the root of the repository, for example packages/site/dist.
+        type: string
+        required: true
+      env:
+        description: Environment variables for the install and the build, as a JSON object.
+        type: string
+        default: "{}"
+      github-token:
+        description: "true: the build gets GITHUB_TOKEN in its environment, with the read permissions of the build job."
+        type: boolean
+        default: false
+      node-version:
+        description: The Node.js version.
+        type: string
+        default: "26"
+      node-version-file:
+        description: A file with the Node.js version, for example .nvmrc. It replaces node-version.
+        type: string
+        default: ""
+      fetch-depth:
+        description: The number of commits that the checkout gets. 0 (the default) gets the whole history, for the dates of the tags and of the pages.
+        type: number
+        default: 0
+      ci-workflow:
+        description: The file name of the CI workflow, for green-main.
+        type: string
+        default: ci.yml
+      pending:
+        description: What a scheduled build takes while CI of the newest commit runs, "head" or "green" (the input of green-main).
+        type: string
+        default: head
+      site-pages:
+        description: "true: add the Releases page and the Status page with the site-pages action."
+        type: boolean
+        default: true
+      site-pages-version:
+        description: The version range of @mark1russell7/site-pages. Empty gives the default range of the site-pages action.
+        type: string
+        default: ""
+      roadmap:
+        description: The roadmap file for the Status page (the input of site-pages).
+        type: string
+        default: ""
+      base:
+        description: The path of the site home (the input of site-pages).
+        type: string
+        default: ""
+      packages:
+        description: npm names or a @scope, separated by commas (the input of site-pages).
+        type: string
+        default: ""
+      changesets:
+        description: The changelog files, as a glob (the input of site-pages).
+        type: string
+        default: ""
+      group:
+        description: The npm name of the package that gives the versions of a fixed group (the input of site-pages).
+        type: string
+        default: ""
+      css:
+        description: A CSS file for the pages (the input of site-pages).
+        type: string
+        default: ""
+      site-name:
+        description: The name of the site in the page titles (the input of site-pages).
+        type: string
+        default: ""
+      data-only:
+        description: "true: write only the JSON data of the pages (the input of site-pages)."
+        type: boolean
+        default: false
+      deploy:
+        description: "false: build and upload the artifact, but do not deploy it."
+        type: boolean
+        default: true
+      timeout-minutes:
+        description: The time limit of the build job.
+        type: number
+        default: 20
+    outputs:
+      page-url:
+        description: The URL of the deployed site.
+        value: ${{ jobs.deploy.outputs.page-url }}
+
+jobs:
+  build:
+    # A CI run for a pull request or a failed CI run does not deploy.
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+      # green-main reads the Actions runs. site-pages reads the pull requests, the issues and their checks.
+      actions: read
+      issues: read
+      pull-requests: read
+      checks: read
+      statuses: read
+    steps:
+      # Without these values, the checkouts below get the caller repository, not the template.
+      - name: The commit of this workflow file
+        shell: bash
+        env:
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          echo "This workflow file is from $WORKFLOW_REPOSITORY at $WORKFLOW_SHA."
+          if [ -z "$WORKFLOW_REPOSITORY" ] || ! [[ "$WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::job.workflow_repository or job.workflow_sha is not available."
+            exit 1
+          fi
+      # The actions of the template, at the commit of this file. The checkout of the repository below
+      # removes this folder, so the step before site-pages gets them again.
+      - name: Shared actions (green-main)
+        if: github.event_name == 'schedule'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .shared-actions
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      # A scheduled build takes the newest commit of main, or the newest green one if CI failed on it
+      - id: green
+        if: github.event_name == 'schedule'
+        uses: ./.shared-actions/.github/actions/green-main
+        with:
+          workflow: ${{ inputs.ci-workflow }}
+          pending: ${{ inputs.pending }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The commit of green-main, else the commit that CI examined, else the commit of the event
+          ref: ${{ steps.green.outputs.sha || github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: ${{ inputs.fetch-depth }}
+          persist-credentials: false
+      # The pnpm version comes from "packageManager" in package.json
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ inputs.node-version-file == '' && inputs.node-version || '' }}
+          node-version-file: ${{ inputs.node-version-file }}
+          cache: pnpm
+      - name: Environment variables
+        if: inputs.env != '{}' && inputs.env != ''
+        shell: bash
+        env:
+          ENV_JSON: ${{ inputs.env }}
+        run: |
+          node -e '
+            const { appendFileSync } = require("node:fs");
+            const { randomBytes } = require("node:crypto");
+            const env = JSON.parse(process.env.ENV_JSON);
+            if (env === null || typeof env !== "object" || Array.isArray(env)) throw new Error("The input env must be a JSON object.");
+            for (const [name, value] of Object.entries(env)) {
+              if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw new Error(`"${name}" is not a name of an environment variable.`);
+              const end = `END_${randomBytes(8).toString("hex")}`;
+              appendFileSync(process.env.GITHUB_ENV, `${name}<<${end}\n${value}\n${end}\n`);
+              console.log(`${name} is set.`);
+            }
+          '
+      - run: pnpm install --frozen-lockfile
+      - name: Build
+        shell: bash
+        env:
+          COMMAND: ${{ inputs.build }}
+          # Empty when the input github-token is false
+          TOKEN: ${{ inputs.github-token && github.token || '' }}
+        run: |
+          if [ -n "$TOKEN" ]; then export GITHUB_TOKEN="$TOKEN"; fi
+          unset TOKEN
+          eval "$COMMAND"
+      - name: Shared actions (site-pages)
+        if: inputs.site-pages
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .shared-actions
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      # The Releases page and the Status page (releases/, status/ and their data/*.json), at deploy time
+      - if: inputs.site-pages
+        uses: ./.shared-actions/.github/actions/site-pages
+        with:
+          out: ${{ inputs.out }}
+          version: ${{ inputs.site-pages-version }}
+          roadmap: ${{ inputs.roadmap }}
+          base: ${{ inputs.base }}
+          packages: ${{ inputs.packages }}
+          changesets: ${{ inputs.changesets }}
+          group: ${{ inputs.group }}
+          css: ${{ inputs.css }}
+          site-name: ${{ inputs.site-name }}
+          data-only: ${{ inputs.data-only }}
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: ${{ inputs.out }}
+
+  deploy:
+    needs: build
+    if: inputs.deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page-url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

@@ -2,6 +2,25 @@
 
 The workflow `.github/workflows/release.yml` publishes the packages of this repository to npm. It uses npm trusted publishing (OIDC), so it needs no npm token. Each version gets a provenance statement.
 
+## The workflow files
+
+`release.yml` is short. Its jobs use the shared release workflows and the action `npm-publish` of the template (`CI.md`):
+
+| Job | What it uses |
+|---|---|
+| `verify` | The `ci.yml` of the repository. |
+| `build` | `reusable-release-build.yml` of the template, with `scripts/release/pack.mjs` and `scripts/release/tags.mjs` of the repository. |
+| `publish` | A job of `release.yml`. Its step is the action `npm-publish` of the template. |
+| `tag` | `reusable-release-tag.yml` of the template. |
+
+The job `publish` stays in `release.yml`. The trusted publisher of each package names this repository and `release.yml`. A composite action operates in the job that uses it, so npm sees the same workflow as before. `CI.md` tells the reasons.
+
+Each `uses:` of the template has a pin to a commit of `main`. Renovate does not change `release.yml`. The release session moves the pins:
+
+1. Merge the change of the template.
+2. In each repository, change the commit of each `mark1russell7/template/...@<commit> # main` line of `release.yml` to the new commit.
+3. Merge that change. The next release uses it.
+
 ## Who publishes
 
 The owner (Mark) and one Claude session that the owner names are responsible for all npm publishes. Other Claude sessions obey these rules:

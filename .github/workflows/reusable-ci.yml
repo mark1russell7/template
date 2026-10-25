@@ -1,0 +1,168 @@
+# The shared CI of the repositories of mark1russell7 (CI.md).
+#
+# The job installs with pnpm (the version comes from "packageManager" in package.json) and runs
+# each script of the "scripts" input that package.json has. It skips each script that package.json
+# does not have, so most repositories need no inputs. A script of "recursive-scripts" that the root
+# package.json does not have runs in each package of the workspace that has it.
+#
+# The job runs all the scripts, also after a failure, and then fails with the list of the failed
+# scripts. The summary of the run has a table of the scripts.
+#
+# A repository calls it from its ci.yml:
+#
+#   jobs:
+#     ci:
+#       uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<commit> # main
+#
+# The template itself calls it by the local path, so each pull request of the template tests it.
+name: Reusable CI
+
+on:
+  workflow_call:
+    inputs:
+      scripts:
+        description: The package.json scripts to run, in this sequence, separated by spaces. A script that package.json does not have is skipped.
+        type: string
+        default: format:check typecheck lint test build lint:ste
+      recursive-scripts:
+        description: The scripts that run in each package of the workspace (pnpm -r --if-present) when the root package.json does not have them.
+        type: string
+        default: build
+      node-versions:
+        description: The Node.js versions of the matrix, as a JSON array.
+        type: string
+        default: '["26"]'
+      os:
+        description: The runners of the matrix, as a JSON array.
+        type: string
+        default: '["ubuntu-latest"]'
+      setup:
+        description: A bash command after the install and before the scripts, for example the install of a Playwright browser.
+        type: string
+        default: ""
+      run:
+        description: A bash command after the scripts, for example "npm pack --dry-run".
+        type: string
+        default: ""
+      env:
+        description: Environment variables for the install, the scripts and the commands, as a JSON object.
+        type: string
+        default: "{}"
+      working-directory:
+        description: The folder of the package.json, relative to the root of the repository.
+        type: string
+        default: "."
+      fetch-depth:
+        description: The number of commits that the checkout gets. 0 gets the whole history.
+        type: number
+        default: 1
+      timeout-minutes:
+        description: The time limit of each job of the matrix.
+        type: number
+        default: 15
+
+jobs:
+  checks:
+    name: checks (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    # The job installs and runs the code of the repository, so it gets only read permissions.
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(inputs.os) }}
+        node: ${{ fromJSON(inputs.node-versions) }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: ${{ inputs.fetch-depth }}
+      # The pnpm version comes from "packageManager" in package.json
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: ${{ inputs.working-directory }}/package.json
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+          cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
+      - name: Environment variables
+        if: inputs.env != '{}' && inputs.env != ''
+        env:
+          ENV_JSON: ${{ inputs.env }}
+        run: |
+          node -e '
+            const { appendFileSync } = require("node:fs");
+            const { randomBytes } = require("node:crypto");
+            const env = JSON.parse(process.env.ENV_JSON);
+            if (env === null || typeof env !== "object" || Array.isArray(env)) throw new Error("The input env must be a JSON object.");
+            for (const [name, value] of Object.entries(env)) {
+              if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw new Error(`"${name}" is not a name of an environment variable.`);
+              const end = `END_${randomBytes(8).toString("hex")}`;
+              appendFileSync(process.env.GITHUB_ENV, `${name}<<${end}\n${value}\n${end}\n`);
+              console.log(`${name} is set.`);
+            }
+          '
+      - run: pnpm install --frozen-lockfile
+      - name: Setup command
+        if: inputs.setup != ''
+        env:
+          COMMAND: ${{ inputs.setup }}
+        run: eval "$COMMAND"
+      - name: Scripts
+        env:
+          SCRIPTS: ${{ inputs.scripts }}
+          RECURSIVE: ${{ inputs.recursive-scripts }}
+          CELL: ${{ matrix.os }}, node ${{ matrix.node }}
+        run: |
+          set +e
+          failed=()
+          rows=()
+          for script in $SCRIPTS; do
+            if ! [[ "$script" =~ ^[A-Za-z0-9][A-Za-z0-9:._-]*$ ]]; then
+              echo "::error::\"$script\" is not a name of a script."
+              exit 1
+            fi
+            if node -e 'process.exit(require("./package.json").scripts?.[process.argv[1]] ? 0 : 1)' "$script"; then
+              command=(pnpm run "$script")
+            elif [[ " $RECURSIVE " == *" $script "* ]]; then
+              command=(pnpm -r --if-present run "$script")
+            else
+              echo "package.json has no script \"$script\". The job skips it."
+              rows+=("| \`$script\` | skipped |")
+              continue
+            fi
+            echo "::group::${command[*]}"
+            "${command[@]}"
+            status=$?
+            echo "::endgroup::"
+            if [ "$status" -eq 0 ]; then
+              rows+=("| \`$script\` | passed |")
+            else
+              echo "::error::${command[*]} failed (exit code $status)."
+              rows+=("| \`$script\` | failed |")
+              failed+=("$script")
+            fi
+          done
+          {
+            echo "### Scripts ($CELL)"
+            echo
+            echo "| Script | Result |"
+            echo "|---|---|"
+            printf '%s\n' "${rows[@]}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ ${#failed[@]} -gt 0 ]; then
+            echo "::error::These scripts failed: ${failed[*]}"
+            exit 1
+          fi
+      - name: Extra command
+        if: inputs.run != ''
+        env:
+          COMMAND: ${{ inputs.run }}
+        run: eval "$COMMAND"
