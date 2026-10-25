@@ -10,6 +10,7 @@ _db/
 # accidentally get committed via `git add .`. If a future doc legitimately belongs at
 # repo root, add an explicit allowlist line here.
 /*.md
+!/AI-REVIEW.md
 !/CLAUDE.md
 !/README.md
 !/RELEASING.md
