@@ -124,6 +124,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           # Post inline comments at once, with no second model call that sorts them
           classify_inline_comments: "false"
+          show_full_output: "true"
           prompt: |
             You review pull request #${{ github.event.pull_request.number }} of the repository ${{ github.repository }}. You only write comments. You cannot change code or run commands.
 
@@ -152,6 +153,18 @@ jobs:
             --allowedTools mcp__github_inline_comment__create_inline_comment
             --disallowedTools Bash Edit Write MultiEdit NotebookEdit WebFetch WebSearch Task Agent TodoWrite "Read(./.git/**)"
             --json-schema '{"type":"object","properties":{"verdict":{"type":"string","enum":["findings","no-blocking-findings"]},"summary":{"type":"string"}},"required":["verdict","summary"],"additionalProperties":false}'
+            --debug-file ${{ runner.temp }}/claude-debug.log
+
+      - name: Debug log (temporary)
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        run: |
+          echo "== settings"; cat ~/.claude/settings.json || true
+          echo "== env names"; env | cut -d= -f1 | grep -E '^(ANTHROPIC|CLAUDE)' | sort || true
+          f="$RUNNER_TEMP/claude-debug.log"
+          echo "== debug log: $(wc -l < "$f" 2>/dev/null) lines"
+          grep -i -E 'api|beta|model|error|credit|billing|tier|speed|header|request|status|context|1m|fast|retry|auth|source|url|400|429' "$f" \
+            | grep -v -i -E 'x-api-key|authorization|sk-ant|bearer' | cut -c1-500 | head -200 || true
 
       - name: Post the summary comment
         if: steps.gate.outputs.run == 'true'
