@@ -50,9 +50,10 @@
       "enabled": false
     },
     {
-      "description": "pnpm installs the packages of mark1russell7 after 1 day, so Renovate waits 1 day for them too.",
+      "description": "The release train updates the npm packages of mark1russell7 (@mark1russell7 and @procedures), with no wait. Renovate updates only the third-party npm packages.",
+      "matchManagers": ["npm"],
       "matchPackageNames": ["@procedures/**", "@mark1russell7/**"],
-      "minimumReleaseAge": "1 day"
+      "enabled": false
     },
     {
       "description": "One weekly PR for the minor, patch and digest updates of the GitHub Actions.",

@@ -12,7 +12,8 @@ These presets hold the shared Renovate settings of the repositories of mark1russ
 
 - Renovate opens pull requests on Monday before 06:00 (New York time), with 5 open pull requests at most.
 - `rangeStrategy` is `update-lockfile`: Renovate changes the lockfile, and the ranges of a published package stay the same.
-- Renovate waits 3 days after a release. For `@procedures/*` and `@mark1russell7/*` it waits 1 day, the same as the age gate of pnpm.
+- Renovate waits 3 days after a release.
+- Renovate does not update the npm packages `@procedures/*` and `@mark1russell7/*`. The release train (mark1russell7/release-train) updates them, with no wait. `pnpm-workspace.yaml` excludes them from the age gate of pnpm.
 - A security update comes at any time, with no wait.
 - The groups:
   - The npm patch updates: one pull request.
