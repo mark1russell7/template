@@ -57,6 +57,7 @@ Then add the links `releases/` and `status/` to the navigation of the site.
 - `roadmap` is optional. The parser reads each Markdown table with an `ID` column and a `Status` column.
 - A site with its own pages sets `data-only: "true"` and reads the two JSON files.
 - A monorepo with one version for a fixed group sets `group` to the npm name of one package of the group.
+- The standard `release.yml` makes a git tag and a GitHub release for each version that it publishes (`RELEASING.md`). The Releases page reads them.
 - The inputs of `site-pages` and their defaults are in `site-pages/action.yml`. The options of the CLI are in the README of `packages/site-pages`.
 
 ## Test

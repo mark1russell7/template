@@ -10,7 +10,8 @@
   "scripts": {
     "package": "tsx packages/cli/src/index.ts package",
     "template": "tsx packages/cli/src/index.ts repo",
-    "test": "pnpm -r run test",
+    "test": "pnpm -r run test && pnpm run test:release",
+    "test:release": "node --test \"scripts/release/*.test.mjs\"",
     "typecheck": "pnpm -r run typecheck",
     "lint:ste": "ste-lint"
   },
