@@ -13,6 +13,7 @@ import {
   releaseBlockers,
   replacePins,
   resolveTarget,
+  workflowPath,
 } from "./bump-pins.mjs";
 
 const OLD = "1111111111111111111111111111111111111111";
@@ -39,10 +40,11 @@ const workflow = (build = OLD, publish = OLD, tag = OLD) =>
 
 /**
  * This function gives a mock of gh for one repository on GitHub, and records each call. `state` sets the
- * workflow text, the open pull requests, their package.json files, the active runs and the compare status.
+ * workflow path and text, the open pull requests, their package.json files, the active runs and the compare status.
  */
 function github(state = {}) {
   const {
+    path: file = ".github/workflows/release.yml",
     text = workflow(),
     pulls = [],
     files = {},
@@ -61,7 +63,7 @@ function github(state = {}) {
     const key = `${method} ${path}`;
     for (const [pattern, error] of Object.entries(fail)) if (key.includes(pattern)) throw new Error(error);
     if (key === `GET repos/${REPO}/git/ref/heads/main`) return `${HEAD}\n`;
-    if (key === `GET repos/${REPO}/contents/.github/workflows/release.yml?ref=${HEAD}`) {
+    if (key === `GET repos/${REPO}/contents/${file}?ref=${HEAD}`) {
       return JSON.stringify({ sha: BLOB, encoding: "base64", content: Buffer.from(text).toString("base64").replace(/(.{60})/g, "$1\n") });
     }
     if (key.startsWith("GET repos/mark1russell7/template/compare/")) return JSON.stringify({ status: compare, commits });
@@ -70,7 +72,7 @@ function github(state = {}) {
     const filesMatch = /^GET repos\/owner\/repo\/pulls\/(\d+)\/files/.exec(key);
     if (filesMatch) return (files[filesMatch[1]] ?? []).map((f) => JSON.stringify(f)).join("\n");
     if (key === `POST repos/${REPO}/git/refs`) return `${call.input.ref}\n`;
-    if (key === `PUT repos/${REPO}/contents/.github/workflows/release.yml`) return "5555555\n";
+    if (key === `PUT repos/${REPO}/contents/${file}`) return "5555555\n";
     if (key === `POST repos/${REPO}/pulls`) return "https://github.com/owner/repo/pull/7\n";
     if (key.startsWith("DELETE ")) return "";
     throw new Error(`unexpected gh call: ${args.join(" ")}`);
@@ -269,4 +271,63 @@ test("parseArgs() reads the options, and gives the owner of the template to a ba
   assert.match(parseArgs([]).error, /no repository/);
   assert.match(parseArgs(["--sha"]).error, /needs a value/);
   assert.match(parseArgs(["--force", "vex"]).error, /unknown option/);
+});
+
+test("workflowPath() gives the path of a workflow file for --file, and refuses other values", () => {
+  assert.equal(workflowPath("ai-review.yml"), ".github/workflows/ai-review.yml");
+  assert.equal(workflowPath(".github/workflows/ci.yaml"), ".github/workflows/ci.yaml");
+  for (const bad of ["../release.yml", "a/b.yml", "ai-review", ".hidden.yml", ".github/workflows/x/y.yml", ""]) assert.equal(workflowPath(bad), undefined, bad);
+});
+
+test("branchName() and prTitle() keep the names of release.yml, and name a different workflow", () => {
+  assert.equal(branchName(TARGET), "ci/template-release-pins-40b0fbd");
+  assert.equal(prTitle(TARGET), "ci: move the template release pins to 40b0fbd");
+  assert.equal(branchName(TARGET, ".github/workflows/ai-review.yml"), "ci/template-ai-review-pins-40b0fbd");
+  assert.equal(prTitle(TARGET, ".github/workflows/ai-review.yml"), "ci: move the template ai-review pins to 40b0fbd");
+});
+
+test("bumpRepo() with a workflow moves the pins of that file, and does the release check", () => {
+  const path = ".github/workflows/ai-review.yml";
+  const text = `jobs:\n  review:\n    uses: mark1russell7/template/.github/workflows/reusable-ai-review.yml@${OLD} # main\n`;
+  const gh = github({ path, text });
+  const result = bumpRepo(REPO, { target: TARGET, workflow: path, coAuthor: "A <a@b.c>" }, gh.run);
+  assert.equal(result.result, "opened");
+  assert.match(result.text, /^1 of 1 pins from 1111111 to 40b0fbd/);
+  assert.ok(gh.calls.some(({ args }) => args.includes(`repos/${REPO}/actions/workflows/release.yml/runs?per_page=30`)));
+  const [ref, put, pull] = gh.writes();
+  assert.equal(ref.input.ref, `refs/heads/ci/template-ai-review-pins-40b0fbd`);
+  assert.equal(put.args[3], `repos/${REPO}/contents/${path}`);
+  assert.equal(put.input.branch, "ci/template-ai-review-pins-40b0fbd");
+  assert.equal(Buffer.from(put.input.content, "base64").toString("utf8"), text.replace(OLD, TARGET));
+  assert.match(put.input.message, /^ci: move the template ai-review pins to 40b0fbd\n\nThe pins of mark1russell7\/template in ai-review\.yml go from 1111111/);
+  assert.equal(pull.input.title, "ci: move the template ai-review pins to 40b0fbd");
+  assert.equal(pull.input.head, "ci/template-ai-review-pins-40b0fbd");
+  assert.match(pull.input.body, /in `\.github\/workflows\/ai-review\.yml`/);
+  assert.match(pull.input.body, /Renovate also moves these pins/);
+  assert.doesNotMatch(pull.input.body, /Renovate does not change/);
+
+  const missing = github({ path, fail: { "contents/": "gh: Not Found (HTTP 404)" } });
+  const skipped = bumpRepo(REPO, { target: TARGET, workflow: path }, missing.run);
+  assert.deepEqual([skipped.result, skipped.text], ["skipped", `no ${path} on main`]);
+});
+
+test("parseArgs() reads --file as the path of a workflow, and refuses a value that is not a workflow file", () => {
+  assert.deepEqual(parseArgs(["--file", "ai-review.yml", "--dry-run", "vex"]), {
+    repositories: ["mark1russell7/vex"],
+    options: { dryRun: true, check: false, workflow: ".github/workflows/ai-review.yml" },
+  });
+  assert.match(parseArgs(["--file", "../x.yml", "vex"]).error, /not a workflow file/);
+  assert.match(parseArgs(["--file"]).error, /needs a value/);
+});
+
+test("bumpRepo() counts no release run in a repository without release.yml, and still refuses a version pull request", () => {
+  const path = ".github/workflows/ai-review.yml";
+  const text = `jobs:\n  review:\n    uses: mark1russell7/template/.github/workflows/reusable-ai-review.yml@${OLD} # main\n`;
+  const noRelease = { "actions/workflows/release.yml": "gh: Not Found (HTTP 404)" };
+  assert.equal(bumpRepo(REPO, { target: TARGET, workflow: path }, github({ path, text, fail: noRelease }).run).result, "opened");
+  const gh = github({ path, text, fail: noRelease, pulls: [{ number: 9, head: "changeset-release/main", url: "pr-url" }] });
+  const result = bumpRepo(REPO, { target: TARGET, workflow: path }, gh.run);
+  assert.equal(result.result, "refused");
+  assert.match(result.text, /version branch changeset-release\/main/);
+  assert.deepEqual(gh.writes(), []);
 });
