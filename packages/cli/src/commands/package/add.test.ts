@@ -74,6 +74,14 @@ describe("writePackage", () => {
     await expect(writePackage(root, "lib", "ts", cli)).rejects.toThrow(/already exists/);
     await expect(writePackage(root, "Lib", "ts", cli)).rejects.toThrow(/Invalid package name/);
   });
+
+  it("leaves no folder when a range is not found, so a second attempt operates", async () => {
+    const root = repo();
+    const { "@mark1russell7/service": _, ...withoutService } = cli.devDependencies;
+    await expect(writePackage(root, "api", "service", { ...cli, devDependencies: withoutService })).rejects.toThrow(/@mark1russell7\/service/);
+    expect(existsSync(join(root, "packages", "api"))).toBe(false);
+    await expect(writePackage(root, "api", "service", cli)).resolves.toMatchObject({ name: "@demo/api" });
+  });
 });
 
 describe("the presets in CI", () => {

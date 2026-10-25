@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package",
   "name": "@mark1russell7/template-cli",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "The CLI of the template monorepos: it adds a source package with a preset of @mark1russell7/cue, a server on @mark1russell7/service too, and it renames a new repository.",
   "keywords": [
     "monorepo",
