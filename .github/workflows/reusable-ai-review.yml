@@ -162,6 +162,28 @@ jobs:
             --json-schema '{"type":"object","properties":{"verdict":{"type":"string","enum":["findings","no-blocking-findings"]},"summary":{"type":"string"}},"required":["verdict","summary"],"additionalProperties":false}'
             --debug-file ${{ runner.temp }}/claude-debug.log
 
+      - name: Diagnose the key (temporary)
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          k="$ANTHROPIC_API_KEY"
+          echo "key: length ${#k}, api-key prefix $([[ $k == sk-ant-api* ]] && echo yes || echo no), whitespace $([[ $k =~ [[:space:]] ]] && echo yes || echo no)"
+          for m in claude-haiku-5-5 claude-sonnet-5-5; do
+            code=$(curl -sS -o "$RUNNER_TEMP/r.json" -w '%{http_code}' https://api.anthropic.com/v1/messages \
+              -H "x-api-key: $k" -H "anthropic-version: 2023-06-01" -H "content-type: application/json" \
+              -d "{\"model\":\"$m\",\"max_tokens\":16,\"messages\":[{\"role\":\"user\",\"content\":\"Say OK\"}]}")
+            echo "curl $m: HTTP $code $(jq -c '{error: .error.type, msg: .error.message, out: .usage.output_tokens}' "$RUNNER_TEMP/r.json")"
+          done
+          C="$HOME/.local/bin/claude"
+          "$C" --version
+          for mode in bare default; do
+            flag=""; [ "$mode" = bare ] && flag="--bare"
+            echo "claude -p $mode: $(timeout 90 "$C" -p $flag --model claude-haiku-5-5 --max-turns 1 --output-format json "Say OK" | jq -c '{is_error, result, total_cost_usd}')"
+          done
+          echo "claude -p entrypoint: $(CLAUDE_CODE_ENTRYPOINT=claude-code-github-action timeout 90 "$C" -p --model claude-haiku-5-5 --max-turns 1 --output-format json "Say OK" | jq -c '{is_error, result, total_cost_usd}')"
+
       - name: Debug log (temporary)
         if: steps.gate.outputs.run == 'true'
         continue-on-error: true
