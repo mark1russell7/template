@@ -10,9 +10,10 @@
   "scripts": {
     "package": "tsx packages/cli/src/index.ts package",
     "template": "tsx packages/cli/src/index.ts repo",
-    "test": "pnpm -r run test && pnpm run test:release && pnpm run test:ai-review",
+    "test": "pnpm -r run test && pnpm run test:release && pnpm run test:ai-review && pnpm run test:workflows",
     "test:release": "node --test \"scripts/release/*.test.mjs\"",
     "test:ai-review": "node --test \"scripts/ai-review/*.test.mjs\"",
+    "test:workflows": "node --test \"scripts/workflows/*.test.mjs\"",
     "typecheck": "pnpm -r run typecheck",
     "lint:ste": "ste-lint"
   },
