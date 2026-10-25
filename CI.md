@@ -155,4 +155,6 @@ The workflows of the template call the shared workflows and actions by a local p
 - `ci.yml` tests `reusable-ci.yml`.
 - `actions-test.yml` tests the actions, `reusable-pages.yml` and the release workflows, with `dry-run`. It publishes nothing.
 
-`new-repo.ps1` does not copy the shared workflows, the actions or `actions-test.yml`. It changes each local path to the pinned form, with the commit of the template.
+The job `publish` of `release.yml` uses the pinned form of `npm-publish`, also in the template. A local action needs a checkout, and that job does no checkout.
+
+`new-repo.ps1` does not copy the shared workflows, the actions or `actions-test.yml`. It changes each local path and each pin of the template to the pinned form, with the commit of the template that it copies.

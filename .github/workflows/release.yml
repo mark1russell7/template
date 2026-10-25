@@ -4,16 +4,19 @@
 #   build     reusable-release-build.yml: builds and packs each published package
 #             (scripts/release/pack.mjs), and writes the plan of the git tags and the GitHub releases
 #             (scripts/release/tags.mjs).
-#   publish   Publishes each tarball whose version npm does not have. Only this job holds
-#             "id-token: write", and it runs no code of the repository: no checkout, no install.
+#   publish   The npm-publish action of the template: publishes each tarball whose version npm does
+#             not have. Only this job holds "id-token: write", and it runs no code of the
+#             repository: no checkout, no install.
 #   tag       reusable-release-tag.yml: makes a git tag and a GitHub release for each version that
 #             publish published. Only this job holds "contents: write", and it also runs no code of
 #             the repository: gh creates each tag on GitHub, from the data of the plan.
 #
-# The publish job stays in this file, and does not go into a shared workflow. npm trusted publishing
-# matches the OIDC token of the run to the trusted publisher of each package: this repository and the
-# workflow file release.yml. A shared workflow of a different repository can change what npm sees
-# (CI.md). The other jobs need no OIDC token, so they are shared workflows of the template.
+# The publish job stays in this file. Only its steps are shared (the npm-publish action). npm
+# trusted publishing matches the OIDC token of the run to the trusted publisher of each package:
+# this repository and the workflow file release.yml. A shared workflow of a different repository can
+# change what npm sees (CI.md). A composite action runs in this job, so npm sees this file. The other
+# jobs need no OIDC token, so they are shared workflows of the template. Renovate does not change
+# this file: the release session moves its pins (RELEASING.md).
 #
 # A release: change the version in a package.json and merge it to main. The workflow also starts
 # by hand (workflow_dispatch), for example to publish again after a failure. It skips each
@@ -72,83 +75,11 @@ jobs:
       # The versions that this run published, "name@version" with a space between them
       published: ${{ steps.publish.outputs.published }}
     steps:
-      # No registry-url: with it, setup-node writes `_authToken=${NODE_AUTH_TOKEN}` to an .npmrc,
-      # and that empty token can stop the OIDC exchange. The default registry is npmjs.org.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 26
-          package-manager-cache: false
-      - name: npm is 11.5.1 or later
-        run: |
-          npm_version="$(npm --version)"
-          if ! node -e 'const [a, b, c] = process.argv[1].split(".").map(Number); process.exit(a > 11 || (a === 11 && (b > 5 || (b === 5 && c >= 1))) ? 0 : 1)' "$npm_version"; then
-            echo "::error::npm $npm_version cannot do trusted publishing. It must be 11.5.1 or later."
-            exit 1
-          fi
-          echo "npm $npm_version"
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: release
-          path: release
-      # packages.txt has one line for each tarball, "name version file", in the sequence of their
-      # dependencies. npm publishes each tarball as it is, with no package scripts. The path starts
-      # with ./ because npm reads "release/x.tgz" as a GitHub repository (user/repo).
-      # npm limits the requests of one account (HTTP 429), and Sigstore can fail once (a 502, then
-      # a 409 for the entry that it wrote). npm does not send a request again by itself here: the
-      # step waits, and then starts a new publish with a new signature.
-      # The query string of each request goes around the cache of the registry. Without it, a
-      # package that the owner bootstrapped some minutes before can still get a cached 404. The
-      # registry itself can also need some minutes for a new package, so a 404 gets 5 more tries,
-      # 30 seconds apart, before the step counts the package as new.
-      # The output "published" tells the tag job which versions this run published. The trap writes
-      # it also when the step stops with an error after some publishes.
-      - name: Publish
-        id: publish
-        shell: bash
-        run: |
-          set -o pipefail
-          published=()
-          trap 'echo "published=${published[*]}" >> "$GITHUB_OUTPUT"' EXIT
-          new_packages=()
-          while read -r name version file; do
-            [ -n "$name" ] || continue
-            for try in 1 2 3 4 5 6; do
-              status=$(curl -sS -o packument.json -w '%{http_code}' "https://registry.npmjs.org/${name//\//%2f}?t=$(date +%s%N)")
-              [ "$status" = "404" ] && [ "$try" != 6 ] || break
-              echo "The registry gives 404 for $name. The next look starts in 30 seconds."
-              sleep 30
-            done
-            if [ "$status" = "404" ]; then
-              new_packages+=("$name")
-              continue
-            elif [ "$status" != "200" ]; then
-              echo "::error::The registry gave HTTP $status for $name."
-              exit 1
-            fi
-            if node -e 'process.exit(require("./packument.json").versions?.[process.argv[1]] ? 0 : 1)' "$version"; then
-              echo "$name $version is on npm."
-              continue
-            fi
-            tag=latest
-            case "$version" in *-*) tag=next ;; esac
-            for attempt in 1 2 3; do
-              if npm publish "./release/$file" --access public --provenance --tag "$tag" --fetch-retries 0 2>&1 | tee publish.log; then
-                break
-              fi
-              if ! grep -qE "E429|E5[0-9][0-9]|TLOG_CREATE_ENTRY_ERROR|ETIMEDOUT|ECONNRESET" publish.log || [ "$attempt" = 3 ]; then
-                echo "::error::npm did not publish $name $version."
-                exit 1
-              fi
-              echo "npm or Sigstore gave a temporary error (429, 5xx, or a transparency-log conflict). The next try starts in $((attempt * 60)) seconds."
-              sleep $((attempt * 60))
-            done
-            published+=("$name@$version")
-          done < release/packages.txt
-          if [ ${#new_packages[@]} -gt 0 ]; then
-            echo "::error::These packages are not on npm: ${new_packages[*]}. The owner bootstraps each new package once (RELEASING.md), then starts this workflow again."
-            exit 1
-          fi
-
+      # The action of the template, pinned to a commit. It runs in this job, so the OIDC token names
+      # this repository and release.yml. It downloads the artifact "release" and publishes each
+      # version that npm does not have, with provenance (.github/actions/npm-publish of the template).
+      - id: publish
+        uses: mark1russell7/template/.github/actions/npm-publish@94e66824bbacee6bdd8445d774dbab23dcf3208d # main
 
   tag:
     name: Git tag and GitHub release
