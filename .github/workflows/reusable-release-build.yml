@@ -1,7 +1,8 @@
 # The build job of the standard npm release (RELEASING.md, CI.md). The release.yml of a repository
 # calls it after its CI gates.
 #
-# The job builds and packs each published package (scripts/release/pack.mjs of the repository), and
+# The job builds and packs each published package (scripts/release/pack.mjs of the template commit of
+# this file, so a repository needs no copy of scripts/release), and
 # writes the plan of the git tags and the GitHub releases (scripts/release/tags.mjs). It uploads two
 # artifacts of the run: "release" (packages.txt and the tarballs) for the publish job, and "tags"
 # (tags.json) for reusable-release-tag.yml.
@@ -100,9 +101,22 @@ jobs:
           else
             pnpm -r --if-present run build
           fi
-      - run: node scripts/release/pack.mjs "$RUNNER_TEMP/release"
+      # The release scripts of the same template commit as this file, not a copy in the repository
+      - name: Get the release scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .release-template
+          sparse-checkout: scripts/release
+          persist-credentials: false
+      - run: node .release-template/scripts/release/pack.mjs "$RUNNER_TEMP/release"
+        env:
+          RELEASE_REPO: ${{ github.workspace }}
       # The tag, the prerelease flag and the release text of each published package, for the tag job
-      - run: node scripts/release/tags.mjs "$RUNNER_TEMP/tags.json"
+      - run: node .release-template/scripts/release/tags.mjs "$RUNNER_TEMP/tags.json"
+        env:
+          RELEASE_REPO: ${{ github.workspace }}
       # The input after-pack. It can test the tarballs, add files to the artifact "release", and
       # change the plan, for example add "title" or "tarballs" (reusable-release-tag.yml). Each line
       # name=value that it writes to GITHUB_OUTPUT goes to the output after-pack of this workflow.

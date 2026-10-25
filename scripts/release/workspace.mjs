@@ -5,9 +5,11 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
-export const root = join(import.meta.dirname, "..", "..");
+// RELEASE_REPO names the repository when the scripts run from another folder: the release build
+// runs the scripts of the template commit of its workflow for the repository of the caller.
+export const root = process.env.RELEASE_REPO ? resolve(process.env.RELEASE_REPO) : join(import.meta.dirname, "..", "..");
 
 /** This function gives the text of a file of a repository: from the disk, or from a git ref. */
 export function readRepoFile(repo, path, ref) {

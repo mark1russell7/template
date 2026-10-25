@@ -9,7 +9,7 @@ The workflow `.github/workflows/release.yml` publishes the packages of this repo
 | Job | What it uses |
 |---|---|
 | `verify` | The `ci.yml` of the repository. |
-| `build` | `reusable-release-build.yml` of the template, with `scripts/release/pack.mjs` and `scripts/release/tags.mjs` of the repository. |
+| `build` | `reusable-release-build.yml` of the template, with `scripts/release/pack.mjs` and `scripts/release/tags.mjs` of the same template commit. |
 | `publish` | A job of `release.yml`. Its step is the action `npm-publish` of the template. |
 | `tag` | `reusable-release-tag.yml` of the template. |
 
@@ -146,6 +146,8 @@ npm trusts a workflow only for a package that exists. A new trust expires when n
 node scripts/release/npm-bootstrap.mjs --dry-run
 node scripts/release/npm-bootstrap.mjs --dispatch
 ```
+
+A repository does not need its own copy of `scripts/release/`. Start the scripts of `~/git/template` with the path of the repository, for example `node ~/git/template/scripts/release/npm-bootstrap.mjs --dry-run ~/git/<repo>`. The variable `RELEASE_REPO` also names the repository for the other scripts.
 
 The script reads the packages of `origin/main`. For each new package, it publishes a placeholder version `0.0.0-bootstrap.0` with the dist-tag `bootstrap`. Then it connects the package to `release.yml` (`npm trust github`) and sets "Require two-factor authentication and disallow tokens" (`npm access set mfa=publish`). With `--dispatch`, it starts `release.yml` on `main`, which publishes the real version.
 
