@@ -15,11 +15,50 @@ The workflow `.github/workflows/release.yml` publishes the packages of this repo
 
 The job `publish` stays in `release.yml`. The trusted publisher of each package names this repository and `release.yml`. A composite action operates in the job that uses it, so npm sees the same workflow as before. `CI.md` tells the reasons.
 
-Each `uses:` of the template has a pin to a commit of `main`. Renovate does not change `release.yml`. The release session moves the pins:
+Each `uses:` of the template has a pin to a commit of `main`. Renovate does not change `release.yml`. The release session moves the pins ("Move the release pins").
 
-1. Merge the change of the template.
-2. In each repository, change the commit of each `mark1russell7/template/...@<commit> # main` line of `release.yml` to the new commit.
-3. Merge that change. The next release uses it.
+## Move the release pins
+
+A workflow change between the merge of a version and its release run makes the tag job fail with HTTP 403 ("A tag that GitHub refuses"). Thus Renovate does not change `release.yml` or `scripts/release/`. The release session moves the pins of `release.yml` each week, at a quiet time.
+
+```sh
+node scripts/release/bump-pins.mjs --dry-run <owner/repo> ...
+node scripts/release/bump-pins.mjs --notes "<what the new commits bring>" <owner/repo> ...
+```
+
+The target is the head of `main` of the template. `--sha <commit>` sets a different commit of `main`. A name without an owner, for example `vex`, gets the owner `mark1russell7`.
+
+For each repository, the script does these steps with the GitHub API (`gh api`). It makes no clone.
+
+1. It reads `.github/workflows/release.yml` of `main`.
+2. It finds each `mark1russell7/template/...@<commit> # main` pin.
+3. It skips the repository when it has no pin, or when each pin is at the target.
+4. It refuses the repository when a release can start (the check below).
+5. It makes a branch, commits the new `release.yml` on it, and opens a pull request.
+6. It shows the address of the pull request.
+
+The text of the pull request lists the new commits of the template. `--notes` adds a paragraph. `--co-author` adds a `Co-Authored-By` line to the commit message. `--footer` adds a last line to the text of the pull request.
+
+### The release check
+
+The script refuses a repository in these conditions:
+
+- An open pull request to `main` changes the `version` of a `package.json`. An example is the "Version the packages" pull request of Changesets.
+- An open pull request is on a branch `release/<version>` or `changeset-release/<branch>`.
+- A run of `release.yml` is queued, in progress or waiting.
+- The script cannot do the check, for example after an error of GitHub.
+
+After a refusal, the script goes to the next repository. The exit code is 1 when a repository has a refusal or an error. Start the script again for that repository later.
+
+### The merge
+
+A version pull request can open after the script made its pull request. Thus do the check again immediately before each merge:
+
+```sh
+node scripts/release/bump-pins.mjs --check <owner/repo> ...
+```
+
+When the result is `quiet`, merge the pull request with a squash merge after its checks pass. The next release uses the new pins.
 
 ## Who publishes
 
