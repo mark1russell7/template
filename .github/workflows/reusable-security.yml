@@ -1,0 +1,459 @@
+# The shared security scans of the repositories of mark1russell7 (CI.md).
+#
+# The workflow has three jobs. On a pull request, a job fails only for a new finding at or above the
+# severity of the input fail-on-severity. On a push, a schedule or a manual run, the jobs upload their
+# findings to code scanning and do not fail on findings. Thus the Security tab shows the old
+# findings, and the old findings do not block a pull request.
+#
+# - dependency-review (pull requests only): GitHub compares the dependencies of the base and of the
+#   pull request. The job fails for a new dependency with a known vulnerability.
+# - osv-scanner: on a pull request, it scans the lockfiles of the base and of the pull request. It
+#   fails for a vulnerability that only the pull request has. On the other events, it scans all the
+#   lockfiles and uploads the results.
+# - codeql: CodeQL analyzes the source with no build. On a pull request, the job fails for an alert on
+#   a line that the pull request adds or changes. On the other events, it uploads the results.
+#
+# No job installs or runs the code of the repository.
+#
+# A repository calls it from its security.yml. The caller job gives the permissions:
+#
+#   permissions: {}
+#   jobs:
+#     security:
+#       uses: mark1russell7/template/.github/workflows/reusable-security.yml@<commit> # main
+#       permissions:
+#         contents: read
+#         security-events: write
+#         actions: read
+#
+# The template itself calls it by the local path, so each pull request of the template tests it.
+name: Reusable security
+
+on:
+  workflow_call:
+    inputs:
+      fail-on-severity:
+        description: The lowest severity of a new finding that fails a pull request. One of low, moderate, high or critical.
+        type: string
+        default: high
+      dependency-review:
+        description: Run the dependency review on pull requests.
+        type: boolean
+        default: true
+      dependency-review-scopes:
+        description: The scopes of the dependencies that the dependency review examines, separated by commas. The scopes are runtime, development and unknown.
+        type: string
+        default: runtime, development, unknown
+      osv:
+        description: Run osv-scanner.
+        type: boolean
+        default: true
+      osv-lockfile:
+        description: The lockfiles that osv-scanner scans, separated by spaces. Empty scans each lockfile that osv-scanner finds in the repository.
+        type: string
+        default: ""
+      codeql:
+        description: Run CodeQL. Set false in a repository that uses the default setup of code scanning, because the two conflict.
+        type: boolean
+        default: true
+      codeql-languages:
+        description: The CodeQL languages, separated by commas. The job skips a language that has no files in the repository.
+        type: string
+        default: javascript-typescript,actions
+      codeql-build-mode:
+        description: The CodeQL build mode. "none" analyzes the source with no build.
+        type: string
+        default: none
+      timeout-minutes:
+        description: The time limit of the jobs osv-scanner and codeql.
+        type: number
+        default: 30
+
+jobs:
+  dependency-review:
+    if: inputs.dependency-review && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The action reads the dependency graph through the API. It does not check out the code.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: ${{ inputs.fail-on-severity }}
+          fail-on-scopes: ${{ inputs.dependency-review-scopes }}
+          # A comment on the pull request needs pull-requests: write. The summary of the run has the report.
+          comment-summary-in-pr: never
+
+  osv-scanner:
+    if: inputs.osv
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    # osv-scanner reads the lockfiles. It does not install or run code.
+    # security-events: write uploads the results (not on a pull request).
+    # actions: read lets the upload read the run in a private repository.
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    defaults:
+      run:
+        shell: bash
+    env:
+      SEVERITY: ${{ inputs.fail-on-severity }}
+      # The CVSS score of fail-on-severity. It is empty for an incorrect value.
+      MIN_SCORE: ${{ fromJSON('{"low":0.1,"moderate":4,"high":7,"critical":9}')[inputs.fail-on-severity] }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # On a pull request, the checkout is the merge commit. Its first parent is the base.
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 1 }}
+
+      - name: Arguments of osv-scanner
+        id: args
+        env:
+          LOCKFILES: ${{ inputs.osv-lockfile }}
+        run: |
+          if [ -z "$LOCKFILES" ]; then
+            args=$'--recursive\n--allow-no-lockfiles\n./'
+          else
+            args=""
+            for file in $LOCKFILES; do
+              args+="--lockfile=$file"$'\n'
+            done
+          fi
+          {
+            echo "args<<END_OF_ARGS"
+            printf '%s\n' "$args"
+            echo "END_OF_ARGS"
+          } >> "$GITHUB_OUTPUT"
+
+      # A pull request: scan the base, scan the pull request, and compare the two results
+      - name: Check out the base
+        if: github.event_name == 'pull_request'
+        run: git checkout --quiet --detach HEAD^1
+
+      - name: Scan the base
+        if: github.event_name == 'pull_request'
+        # osv-scanner fails when it finds a vulnerability. The step "Compare" reads the results.
+        continue-on-error: true
+        uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
+        with:
+          scan-args: |-
+            --format=json
+            --output=osv-base.json
+            ${{ steps.args.outputs.args }}
+
+      - name: Check out the pull request
+        if: github.event_name == 'pull_request'
+        run: git checkout --quiet --force --detach "$GITHUB_SHA"
+
+      - name: Scan the pull request
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
+        with:
+          scan-args: |-
+            --format=json
+            --output=osv-head.json
+            ${{ steps.args.outputs.args }}
+
+      - name: Compare
+        if: github.event_name == 'pull_request'
+        run: |
+          node - <<'JS'
+          const fs = require("node:fs");
+          const min = Number(process.env.MIN_SCORE);
+          if (!(min > 0)) {
+            console.log(`::error::"${process.env.SEVERITY}" is not a severity. Use low, moderate, high or critical.`);
+            process.exit(1);
+          }
+          const read = (file) => {
+            try {
+              const text = fs.readFileSync(file, "utf8");
+              return text.trim() === "" ? null : JSON.parse(text);
+            } catch {
+              return null;
+            }
+          };
+          const head = read("osv-head.json");
+          if (head === null) {
+            console.log('::error::osv-scanner wrote no results for the pull request. The log of the step "Scan the pull request" tells why.');
+            process.exit(1);
+          }
+          let base = read("osv-base.json");
+          if (base === null) {
+            console.log("::warning::osv-scanner wrote no results for the base. The job compares the pull request with an empty list.");
+            base = { results: [] };
+          }
+          // The GitHub Advisory severity, when the advisory has no CVSS score
+          const levels = { CRITICAL: 9, HIGH: 7, MODERATE: 4, MEDIUM: 4, LOW: 0.1 };
+          // One entry for each vulnerability (a group of aliases) of each package
+          const entries = (report) =>
+            (report.results ?? []).flatMap((result) =>
+              (result.packages ?? []).flatMap((pkg) =>
+                (pkg.groups ?? []).map((group) => {
+                  const ids = group.aliases ?? group.ids ?? [];
+                  const vulns = (pkg.vulnerabilities ?? []).filter((vuln) => ids.includes(vuln.id));
+                  let score = Number.parseFloat(group.max_severity);
+                  if (Number.isNaN(score)) {
+                    const known = vulns
+                      .map((vuln) => levels[String(vuln.database_specific?.severity ?? "").toUpperCase()])
+                      .filter((value) => value !== undefined);
+                    score = known.length > 0 ? Math.max(...known) : Number.NaN;
+                  }
+                  return {
+                    lockfile: String(result.source?.path ?? "").replace(/^\/github\/workspace\//, ""),
+                    ecosystem: pkg.package?.ecosystem ?? "",
+                    name: pkg.package?.name ?? "",
+                    version: pkg.package?.version ?? "",
+                    id: (group.ids ?? ids)[0] ?? "",
+                    ids,
+                    score,
+                    summary: vulns.find((vuln) => vuln.summary)?.summary ?? "",
+                  };
+                }),
+              ),
+            );
+          const key = (entry, id) => `${entry.ecosystem}|${entry.name}|${id}`;
+          const old = new Set(entries(base).flatMap((entry) => entry.ids.map((id) => key(entry, id))));
+          const added = entries(head).filter((entry) => !entry.ids.some((id) => old.has(key(entry, id))));
+          const property = (text) => String(text).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A").replace(/:/g, "%3A").replace(/,/g, "%2C");
+          const data = (text) => String(text).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
+          const rows = [];
+          let failed = 0;
+          for (const entry of added) {
+            const fails = entry.score >= min;
+            const score = Number.isNaN(entry.score) ? "unknown" : entry.score.toFixed(1);
+            const level = fails ? "error" : "warning";
+            const limit = fails ? "" : ", below the limit";
+            const title = `osv-scanner: ${entry.id} (severity ${score}${limit})`;
+            console.log(`::${level} file=${property(entry.lockfile)},title=${property(title)}::${data(`${entry.name} ${entry.version} (${entry.ecosystem}): ${entry.summary}`)}`);
+            rows.push(`| ${entry.id} | ${entry.name} ${entry.version} | ${score} | \`${entry.lockfile}\` | ${fails ? "fails" : "below the limit"} |`);
+            if (fails) failed += 1;
+          }
+          const summary = [`### osv-scanner: new vulnerabilities of this pull request`, ""];
+          if (rows.length === 0) {
+            summary.push("The pull request adds no vulnerability.");
+          } else {
+            summary.push("| Vulnerability | Package | CVSS | Lockfile | Result |", "|---|---|---|---|---|", ...rows);
+          }
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary.join("\n") + "\n");
+          if (failed > 0) {
+            console.log(`::error::The pull request adds ${failed} vulnerabilities at or above ${process.env.SEVERITY}.`);
+            process.exit(1);
+          }
+          JS
+
+      # A push, a schedule or a manual run: scan everything and upload the results
+      - name: Scan
+        if: github.event_name != 'pull_request'
+        # osv-scanner fails when it finds a vulnerability. These findings go to the Security tab.
+        continue-on-error: true
+        uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
+        with:
+          scan-args: |-
+            --format=sarif
+            --output=osv.sarif
+            ${{ steps.args.outputs.args }}
+
+      - name: Check the scan
+        if: github.event_name != 'pull_request'
+        run: |
+          if [ ! -s osv.sarif ]; then
+            echo "::error::osv-scanner wrote no results. The log of the step \"Scan\" tells why."
+            exit 1
+          fi
+          count=$(node -e 'const s = JSON.parse(require("node:fs").readFileSync("osv.sarif", "utf8")); console.log((s.runs ?? []).reduce((n, run) => n + (run.results ?? []).length, 0));')
+          echo "osv-scanner found $count vulnerable packages. The Security tab shows them." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the results to code scanning
+        if: github.event_name != 'pull_request'
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: osv.sarif
+          category: osv-scanner
+
+  codeql:
+    if: inputs.codeql
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    # CodeQL reads the source with no build (build-mode none). The job runs no code of the repository.
+    # security-events: write uploads the results (not on a pull request).
+    # actions: read lets CodeQL read the run in a private repository.
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    defaults:
+      run:
+        shell: bash
+    env:
+      SEVERITY: ${{ inputs.fail-on-severity }}
+      # The CodeQL security-severity of fail-on-severity. It is empty for an incorrect value.
+      MIN_SCORE: ${{ fromJSON('{"low":0.1,"moderate":4,"high":7,"critical":9}')[inputs.fail-on-severity] }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # On a pull request, the checkout is the merge commit. Its first parent is the base.
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 1 }}
+
+      # CodeQL fails for a language with no source files, so the job skips such a language
+      - name: Languages
+        id: languages
+        env:
+          LANGUAGES: ${{ inputs.codeql-languages }}
+        run: |
+          declare -A patterns=(
+            [javascript-typescript]='\.(js|jsx|mjs|cjs|ts|tsx|mts|cts|vue)$'
+            [javascript]='\.(js|jsx|mjs|cjs|ts|tsx|mts|cts|vue)$'
+            [typescript]='\.(js|jsx|mjs|cjs|ts|tsx|mts|cts|vue)$'
+            [actions]='(^|/)action\.ya?ml$|^\.github/workflows/[^/]+\.ya?ml$'
+            [python]='\.py$'
+            [go]='\.go$'
+            [ruby]='\.rb$'
+            [java-kotlin]='\.(java|kt|kts)$'
+            [csharp]='\.(cs|cshtml|razor)$'
+            [c-cpp]='\.(c|cc|cpp|cxx|h|hh|hpp|hxx)$'
+            [rust]='\.rs$'
+            [swift]='\.swift$'
+          )
+          files=$(git ls-files)
+          keep=()
+          for language in ${LANGUAGES//,/ }; do
+            pattern=${patterns[$language]:-}
+            # CodeQL itself checks a language that this list does not know
+            if [ -z "$pattern" ] || grep -qE "$pattern" <<< "$files"; then
+              keep+=("$language")
+            else
+              echo "::notice title=CodeQL::The repository has no files of the language $language. The job skips it."
+            fi
+          done
+          joined=$(IFS=,; echo "${keep[*]}")
+          echo "CodeQL languages: ${joined:-none}" >> "$GITHUB_STEP_SUMMARY"
+          echo "languages=$joined" >> "$GITHUB_OUTPUT"
+
+      - name: Initialize CodeQL
+        if: steps.languages.outputs.languages != ''
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          languages: ${{ steps.languages.outputs.languages }}
+          build-mode: ${{ inputs.codeql-build-mode }}
+
+      - name: Analyze
+        if: steps.languages.outputs.languages != ''
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          # A pull request uploads nothing. The step "Fail on new alerts" examines its results.
+          upload: ${{ github.event_name == 'pull_request' && 'never' || 'always' }}
+          output: ${{ runner.temp }}/codeql-results
+
+      - name: Fail on new alerts
+        if: github.event_name == 'pull_request' && steps.languages.outputs.languages != ''
+        env:
+          RESULTS: ${{ runner.temp }}/codeql-results
+          DIFF: ${{ runner.temp }}/pull-request.diff
+        run: |
+          # The changes of the pull request: the merge commit compared with its first parent, the base
+          git -c core.quotePath=false diff --unified=0 --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ HEAD^1 HEAD > "$DIFF"
+          node - <<'JS'
+          const fs = require("node:fs");
+          const path = require("node:path");
+          const min = Number(process.env.MIN_SCORE);
+          if (!(min > 0)) {
+            console.log(`::error::"${process.env.SEVERITY}" is not a severity. Use low, moderate, high or critical.`);
+            process.exit(1);
+          }
+          // The lines that the pull request adds or changes, for each file
+          const changed = new Map();
+          let file = null;
+          let header = false;
+          for (const line of fs.readFileSync(process.env.DIFF, "utf8").split("\n")) {
+            if (line.startsWith("diff --git ")) {
+              header = true;
+              file = null;
+              continue;
+            }
+            if (header && line.startsWith("+++ ")) {
+              // git adds a tab after a path with a space
+              file = line === "+++ /dev/null" ? null : line.slice("+++ b/".length).replace(/\t$/, "");
+              continue;
+            }
+            const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
+            if (hunk === null) continue;
+            header = false;
+            const start = Number(hunk[1]);
+            const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
+            if (file !== null && count > 0) {
+              if (!changed.has(file)) changed.set(file, []);
+              changed.get(file).push([start, start + count - 1]);
+            }
+          }
+          const touches = (loc) => (changed.get(loc.file) ?? []).some(([first, last]) => first <= loc.end && last >= loc.start);
+          const decode = (uri) => {
+            try {
+              return decodeURIComponent(uri);
+            } catch {
+              return uri;
+            }
+          };
+          const found = [];
+          let total = 0;
+          for (const name of fs.readdirSync(process.env.RESULTS).filter((entry) => entry.endsWith(".sarif"))) {
+            const sarif = JSON.parse(fs.readFileSync(path.join(process.env.RESULTS, name), "utf8"));
+            for (const run of sarif.runs ?? []) {
+              // The security-severity of each rule
+              const severity = new Map();
+              for (const component of [run.tool?.driver, ...(run.tool?.extensions ?? [])]) {
+                for (const rule of component?.rules ?? []) {
+                  const score = Number.parseFloat(rule.properties?.["security-severity"]);
+                  if (!Number.isNaN(score)) severity.set(rule.id, score);
+                }
+              }
+              for (const result of run.results ?? []) {
+                total += 1;
+                if ((result.suppressions ?? []).length > 0) continue;
+                const rule = result.ruleId ?? result.rule?.id;
+                const score = severity.get(rule);
+                if (score === undefined || score < min) continue;
+                // The alert location and each step of its data flow
+                const locations = [
+                  ...(result.locations ?? []),
+                  ...(result.codeFlows ?? []).flatMap((flow) =>
+                    (flow.threadFlows ?? []).flatMap((thread) => (thread.locations ?? []).map((step) => step.location)),
+                  ),
+                ]
+                  .map((loc) => loc?.physicalLocation)
+                  .filter((loc) => loc?.artifactLocation?.uri)
+                  .map((loc) => ({
+                    file: decode(loc.artifactLocation.uri),
+                    start: loc.region?.startLine ?? 1,
+                    end: loc.region?.endLine ?? loc.region?.startLine ?? 1,
+                  }));
+                if (locations.length === 0 || !locations.some(touches)) continue;
+                const message = String(result.message?.text ?? "").replace(/\s+/g, " ");
+                found.push({ rule, score, file: locations[0].file, line: locations[0].start, message });
+              }
+            }
+          }
+          const property = (text) => String(text).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A").replace(/:/g, "%3A").replace(/,/g, "%2C");
+          const data = (text) => String(text).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
+          for (const alert of found) {
+            const title = `CodeQL: ${alert.rule} (security-severity ${alert.score.toFixed(1)})`;
+            console.log(`::error file=${property(alert.file)},line=${alert.line},title=${property(title)}::${data(alert.message)}`);
+          }
+          const summary = [`### CodeQL: new alerts of this pull request`, ""];
+          if (found.length === 0) {
+            summary.push(`CodeQL found ${total} results in the repository. None is at or above ${process.env.SEVERITY} on a line that the pull request changes.`);
+          } else {
+            summary.push("| Rule | Security-severity | File | Line |", "|---|---|---|---|");
+            for (const alert of found) summary.push(`| ${alert.rule} | ${alert.score.toFixed(1)} | \`${alert.file}\` | ${alert.line} |`);
+          }
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary.join("\n") + "\n");
+          if (found.length > 0) {
+            console.log(`::error::The pull request adds ${found.length} CodeQL alerts at or above ${process.env.SEVERITY}.`);
+            process.exit(1);
+          }
+          JS
