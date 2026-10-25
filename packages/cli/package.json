@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package",
   "name": "@mark1russell7/template-cli",
-  "version": "0.1.0",
-  "description": "The CLI of the template monorepos: it adds a source package with a preset of @mark1russell7/cue, and it renames a new repository.",
+  "version": "0.1.1",
+  "description": "The CLI of the template monorepos: it adds a source package with a preset of @mark1russell7/cue, a server on @mark1russell7/service too, and it renames a new repository.",
   "keywords": [
     "monorepo",
     "pnpm",
@@ -28,7 +28,8 @@
     "template": "./src/index.ts"
   },
   "files": [
-    "build"
+    "build",
+    "src/presets"
   ],
   "publishConfig": {
     "access": "public",
@@ -50,6 +51,7 @@
   },
   "devDependencies": {
     "@mark1russell7/cue": "github:mark1russell7/cue",
+    "@mark1russell7/service": "^0.5.8",
     "@types/node": "^26.6.4",
     "tsdown": "^0.23.1",
     "typescript": "^7.0.2",

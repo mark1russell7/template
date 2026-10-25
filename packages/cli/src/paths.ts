@@ -39,20 +39,36 @@ export interface Manifest {
 }
 
 /**
- * This function gives the `package.json` of this CLI: the nearest one with the name of the CLI, from
- * the folder of this module up. It is the same file for the source in the workspace and for the
- * build in `node_modules`.
+ * This function gives the folder of this CLI: the nearest folder with the `package.json` of the CLI,
+ * from the folder of this module up. It is the same folder for the source in the workspace and for
+ * the build in `node_modules`.
  */
-export function cliManifest(): Manifest {
+export function cliRoot(): string | undefined {
   let dir = dirname(fileURLToPath(import.meta.url));
   for (;;) {
     const file = resolve(dir, "package.json");
-    if (existsSync(file)) {
-      const manifest = JSON.parse(readFileSync(file, "utf8")) as Manifest;
-      if (manifest.name === CLI_NAME) return manifest;
-    }
+    if (existsSync(file) && (JSON.parse(readFileSync(file, "utf8")) as Manifest).name === CLI_NAME) return dir;
     const parent = dirname(dir);
-    if (parent === dir) return {};
+    if (parent === dir) return undefined;
     dir = parent;
   }
+}
+
+/** This function gives the `package.json` of this CLI, from the folder of the CLI (`cliRoot`). */
+export function cliManifest(): Manifest {
+  const root = cliRoot();
+  return root === undefined ? {} : (JSON.parse(readFileSync(resolve(root, "package.json"), "utf8")) as Manifest);
+}
+
+/**
+ * This function gives the folder of the files of a preset: `src/presets/<folder>` in the folder of the CLI.
+ * The npm package of the CLI has the same folder.
+ *
+ * @throws Error when the folder of the CLI or of the preset is not found
+ */
+export function presetDir(folder: string): string {
+  const root = cliRoot();
+  const dir = root === undefined ? undefined : resolve(root, "src", "presets", folder);
+  if (dir === undefined || !existsSync(dir)) throw new Error(`The files of the preset "${folder}" are not in ${CLI_NAME}.`);
+  return dir;
 }
