@@ -42,6 +42,13 @@ jobs:
     concurrency:
       group: ai-review-${{ github.repository }}-${{ github.event.pull_request.number }}
       cancel-in-progress: true
+    env:
+      # With the attribution header of the action (cc_entrypoint=claude-code-github-action), the API
+      # refuses each request of this account with "Your credit balance is too low". Without it, the
+      # same key works, as in claude -p.
+      CLAUDE_CODE_ATTRIBUTION_HEADER: "0"
+      # No server-side advisor: it adds Opus calls to each review
+      CLAUDE_CODE_DISABLE_ADVISOR_TOOL: "1"
     steps:
       - name: Check the cost guards
         id: gate
