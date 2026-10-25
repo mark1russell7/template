@@ -10,7 +10,7 @@ The template holds the CI, the release and the Pages workflows of the repositori
 | `.github/workflows/reusable-release-tag.yml` | Workflow | Makes a git tag and a GitHub release for each published version. |
 | `.github/workflows/reusable-pages.yml` | Workflow | Builds a site, adds the Releases page and the Status page, and deploys it to GitHub Pages. |
 | `.github/workflows/reusable-security.yml` | Workflow | Scans the dependencies and the code with the dependency review, osv-scanner and CodeQL. |
-| `.github/workflows/reusable-ai-review.yml` | Workflow | Gives a pull request a review by Claude, comment only (`AI-REVIEW.md`). |
+| `.github/workflows/reusable-ai-review.yml` | Workflow | Gives a pull request a review by Claude on request (the `ai-review` label), comment only (`AI-REVIEW.md`). |
 | `.github/workflows/reusable-codex-review.yml` | Workflow | Gives a pull request a second review by an OpenAI model, comment only (`CODEX-REVIEW.md`). |
 
 ## CI

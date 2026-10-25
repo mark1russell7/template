@@ -1,4 +1,6 @@
-# An AI review of a pull request by Claude. It only writes comments, and it never fails the pull request.
+# An AI review of a pull request by Claude, on request: the ai-review label starts it. It only writes
+# comments, and it never fails the pull request. The automatic review (input auto, or the repository
+# variable AI_REVIEW_AUTO) also reviews a pull request when it opens.
 # AI-REVIEW.md tells what it does, its cost guards and how to call it from a repository.
 name: AI review (reusable)
 
@@ -21,6 +23,16 @@ on:
         description: Notes for the reviewer about the repository
         type: string
         default: ""
+      label:
+        description: The label that starts a review. The workflow removes it after the review.
+        type: string
+        default: ai-review
+      auto:
+        description: >-
+          The automatic review: a pull request also gets a review when it opens, opens again or becomes
+          ready for review. The repository variable AI_REVIEW_AUTO with the value "true" does the same.
+        type: boolean
+        default: false
     secrets:
       ANTHROPIC_API_KEY:
         description: The Anthropic API key. Without it, the review stops with a note in the job summary.
@@ -33,14 +45,17 @@ permissions:
 
 jobs:
   review:
-    # Of the label events, only the ai-review label starts a review
+    # Of the label events, only the review label starts a review. The other events start a review only
+    # with the automatic review. Without it, the first step stops the job with a notice and no API call.
     if: >-
       github.event_name == 'pull_request' &&
-      (github.event.action != 'labeled' || github.event.label.name == 'ai-review')
+      (github.event.action != 'labeled' || github.event.label.name == inputs.label)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
-      group: ai-review-${{ github.repository }}-${{ github.event.pull_request.number }}
+      # A run that gives only the notice has a group of its own. Thus the "opened" run of a pull request
+      # that opens with the label does not cancel the review of the "labeled" run.
+      group: ai-review-${{ github.repository }}-${{ github.event.pull_request.number }}-${{ (github.event.action == 'labeled' || inputs.auto || vars.AI_REVIEW_AUTO == 'true') && 'review' || github.run_id }}
       cancel-in-progress: true
     env:
       # No server-side advisor: it adds Opus calls to each review
@@ -58,6 +73,9 @@ jobs:
           ACTOR: ${{ github.actor }}
           MAX_LINES: ${{ inputs.max-changed-lines }}
           MODEL: ${{ inputs.model }}
+          LABEL: ${{ inputs.label }}
+          # In a called workflow, vars has the variables of the caller repository (AI-REVIEW.md)
+          AUTO: ${{ inputs.auto || vars.AI_REVIEW_AUTO == 'true' }}
         run: |
           skip() {
             echo "AI review skipped: $1" >> "$GITHUB_STEP_SUMMARY"
@@ -65,6 +83,10 @@ jobs:
             echo "run=false" >> "$GITHUB_OUTPUT"
             exit 0
           }
+          # The review is on request: without the automatic review, only the label starts it
+          if [ "$ACTION" != "labeled" ] && [ "$AUTO" != "true" ]; then
+            skip "the review is on request. Add the $LABEL label for a review (AI-REVIEW.md)."
+          fi
           if [ "$HAS_KEY" != "true" ]; then
             skip "the repository has no ANTHROPIC_API_KEY secret, or the pull request comes from a fork."
           fi
@@ -81,10 +103,10 @@ jobs:
           author=$(jq -r '.user.login' "$dir/pr.json")
           author_type=$(jq -r '.user.type' "$dir/pr.json")
           changed=$(jq -r '.additions + .deletions' "$dir/pr.json")
-          # The ai-review label is a request by a person: it also reviews a draft or a bot pull request
+          # The label is a request by a person: it also reviews a draft or a bot pull request
           if [ "$ACTION" != "labeled" ]; then
             if [ "$draft" = "true" ]; then
-              skip "the pull request is a draft. Add the ai-review label for a review."
+              skip "the pull request is a draft. Add the $LABEL label for a review."
             fi
             case "$author" in
               renovate | dependabot | github-actions | *"[bot]")
@@ -180,6 +202,7 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           MODEL: ${{ inputs.model }}
+          LABEL: ${{ inputs.label }}
           OUTCOME: ${{ steps.review.outcome || steps.install.outcome }}
           # Only to remove the key from the text that goes out
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -214,7 +237,7 @@ jobs:
           fi
           summary=$(jq -r "$result | .summary" "$file" | redact)
           comments=$(jq -c "[($result | .comments // [])[0:5][] | {path, line, side: \"RIGHT\", body}]" "$file" | redact)
-          footer="<sub>$MODEL · $usage · Comment only. Add the \`ai-review\` label for a new review.</sub>"
+          footer="<sub>$MODEL · $usage · Comment only. Add the \`$LABEL\` label for a new review.</sub>"
           body=$(printf '### AI review\n\n%s\n\n%s' "$summary" "$footer")
           # One review: the summary and the inline comments
           jq -n --arg sha "$HEAD_SHA" --arg body "$body" --argjson comments "$comments" \
@@ -229,7 +252,7 @@ jobs:
             echo "AI review: the review could not be posted." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: Remove the ai-review label
+      - name: Remove the review label
         # The label can then start one more review
         if: always() && github.event.action == 'labeled'
         continue-on-error: true
@@ -237,4 +260,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
-        run: gh api -X DELETE "repos/$REPO/issues/$PR/labels/ai-review" --silent
+          LABEL: ${{ inputs.label }}
+        run: gh api -X DELETE "repos/$REPO/issues/$PR/labels/$(jq -rn --arg label "$LABEL" '$label | @uri')" --silent
