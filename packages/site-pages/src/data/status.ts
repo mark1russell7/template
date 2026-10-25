@@ -74,10 +74,78 @@ export function splitRow(line: string): string[] {
   return cells;
 }
 
+/** A whitespace character, as `\s` of a regular expression and `String.prototype.trim` read it. */
+const SPACE = /\s/;
+/** A character that `.` of a regular expression does not match. */
+const LINE_TERMINATOR = /[\n\r\u2028\u2029]/;
+/** The first whitespace character at or after `lastIndex`. */
+const NEXT_SPACE = /\s/g;
+
+/**
+ * This function replaces each Markdown link `[label](target)` of a text with the result of
+ * `replace`. The label ends at the first `]`, and the target ends at the first `)`. In `strict`
+ * mode, the label and the target are not empty, and the target has no whitespace.
+ *
+ * @remarks The function reads the text one time. A regular expression for these links can
+ * backtrack (CodeQL `js/polynomial-redos`). For a long text with many `[` characters, its time
+ * grows with the square of the length.
+ */
+function replaceLinks(text: string, strict: boolean, replace: (label: string, target: string) => string): string {
+  let result = "";
+  let copied = 0;
+  // The first "]" after the current "[", the first ")" after its "](", and the first whitespace
+  // after its "](". The values only increase, so each search starts where the last one stopped.
+  let close = -1;
+  let end = -1;
+  let space = -1;
+  for (let open = text.indexOf("["); open !== -1; open = text.indexOf("[", open + 1)) {
+    if (close <= open) close = text.indexOf("]", open + 1);
+    if (close === -1) break;
+    if (text[close + 1] !== "(" || (strict && close === open + 1)) continue;
+    const start = close + 2;
+    if (end < start) end = text.indexOf(")", start);
+    if (end === -1) break;
+    if (strict) {
+      if (space !== Infinity && space < start) {
+        NEXT_SPACE.lastIndex = start;
+        space = NEXT_SPACE.exec(text)?.index ?? Infinity;
+      }
+      if (end === start || space < end) continue;
+    }
+    result += text.slice(copied, open) + replace(text.slice(open + 1, close), text.slice(start, end));
+    copied = end + 1;
+    open = end;
+  }
+  return result + text.slice(copied);
+}
+
+/**
+ * This function gives the text of an ATX heading without its closing sequence: the whitespace,
+ * then the `#` characters, then the whitespace at the end. It gives null when the rest has a line
+ * terminator, as the regular expression `(.*?)\s*#*\s*$` does.
+ */
+function closeHeading(text: string): string | null {
+  let end = text.length;
+  while (end > 0 && SPACE.test(text[end - 1] ?? "")) end--;
+  while (end > 0 && text[end - 1] === "#") end--;
+  while (end > 0 && SPACE.test(text[end - 1] ?? "")) end--;
+  const rest = text.slice(0, end);
+  return LINE_TERMINATOR.test(rest) ? null : rest;
+}
+
+/** The start of an ATX heading. The text after the whitespace goes to `closeHeading`. */
+const HEADING = /^(#{1,6})\s+(\S[\s\S]*)?$/;
+
+/** This function gives the level and the text of an ATX heading line, or null for another line. */
+function headingOf(line: string): { level: number; text: string } | null {
+  const match = HEADING.exec(line);
+  const text = match ? closeHeading(match[2] ?? "") : null;
+  return match && text !== null ? { level: match[1]?.length ?? 0, text } : null;
+}
+
 /** This function gives the plain text of inline Markdown: no code marks, no emphasis, the text of each link. */
 export function plainText(markdown: string | null | undefined): string {
-  return String(markdown ?? "")
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+  return replaceLinks(String(markdown ?? ""), false, (label) => label)
     .replace(/[`*_]/g, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -85,7 +153,7 @@ export function plainText(markdown: string | null | undefined): string {
 
 /** A cell with no value: empty, or a dash. */
 function isEmpty(cell: string | undefined): boolean {
-  return cell === undefined || /^\s*(?:[-–—]|n\/a)?\s*$/i.test(cell);
+  return cell === undefined || /^(?:[-–—]|n\/a)?$/i.test(cell.trim());
 }
 
 /** A table of a Markdown file. */
@@ -117,14 +185,14 @@ export function markdownTables(markdown: string): MarkdownTable[] {
       continue;
     }
     if (fence !== null) continue;
-    const heading = /^#{1,6}\s+(.*?)\s*#*\s*$/.exec(line);
+    const heading = headingOf(line);
     if (heading) {
-      section = plainText(heading[1]);
+      section = plainText(heading.text);
       continue;
     }
     if (!line.trim().startsWith("|")) continue;
     const separator = lines[index + 1] ?? "";
-    if (!/^\s*\|?\s*:?-{3,}/.test(separator)) continue;
+    if (!/^\s*(?:\|\s*)?:?-{3,}/.test(separator)) continue;
     const header = splitRow(line).map((name) => plainText(name).toLowerCase());
     const rows: MarkdownTable["rows"] = [];
     let next = index + 2;
@@ -165,6 +233,21 @@ function linkUrl(target: string, { file = "", repository = "", ref = "HEAD" }: L
 }
 
 /**
+ * This function gives the word right before the whitespace that ends `text.slice(0, end)`, as the
+ * regular expression `([A-Za-z][\w.-]*)\s+$` does. The word starts with a letter. The function
+ * reads only the characters of the word and of the whitespace.
+ */
+function wordBefore(text: string, end: number): string | undefined {
+  let stop = end;
+  while (stop > 0 && SPACE.test(text[stop - 1] ?? "")) stop--;
+  if (stop === end) return undefined;
+  let start = stop;
+  while (start > 0 && /[\w.-]/.test(text[start - 1] ?? "")) start--;
+  while (start < stop && !/[A-Za-z]/.test(text[start] ?? "")) start++;
+  return start < stop ? text.slice(start, stop) : undefined;
+}
+
+/**
  * This function gives the links of a cell: each Markdown link, then each bare reference in the rest
  * of the text. A reference is a pull request ("PR #12", "#12") or a commit hash in a code span.
  *
@@ -180,7 +263,7 @@ export function linksOf(cell: string | null | undefined, options: LinkOptions = 
     seen.add(url);
     links.push({ label, url });
   };
-  const rest = String(cell ?? "").replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_match, label: string, target: string) => {
+  const rest = replaceLinks(String(cell ?? ""), true, (label, target) => {
     add(plainText(label), linkUrl(target, options));
     return " ";
   });
@@ -191,7 +274,7 @@ export function linksOf(cell: string | null | undefined, options: LinkOptions = 
   let pulls = false;
   const reference = /\bPRs?\s*#(\d+)|(?<![\w/&])#(\d+)\b|`([0-9a-f]{7,40})`/g;
   for (let match = reference.exec(rest); match; match = reference.exec(rest)) {
-    const word = /([A-Za-z][\w.-]*)\s+$/.exec(rest.slice(0, match.index))?.[1];
+    const word = wordBefore(rest, match.index);
     if (word && !NOT_REPOSITORIES.has(word.toLowerCase())) current = word;
     const prefix = current === defaultRepo ? "" : `${current} `;
     if (match[1] !== undefined) pulls = true;
@@ -202,15 +285,29 @@ export function linksOf(cell: string | null | undefined, options: LinkOptions = 
   return links;
 }
 
-/** The heading of an item: "### `id`: Title". A dash can take the place of the colon. */
-const ITEM_HEADING = /^###\s+`([^`]+)`\s*[:–—-]\s*(.*?)\s*#*\s*$/;
+/**
+ * The heading of an item: "### `id`: Title". A dash can take the place of the colon. The title goes
+ * to `closeHeading`.
+ */
+const ITEM_HEADING = /^###\s+`([^`]+)`\s*[:–—-]\s*(\S[\s\S]*)?$/;
 /** The other heading of an item: "### S1 · Title". The ID is one word before the middle dot. */
-const ITEM_HEADING_DOT = /^###\s+([A-Za-z0-9][\w.-]*)\s+·\s+(.*?)\s*#*\s*$/;
+const ITEM_HEADING_DOT = /^###\s+([A-Za-z0-9][\w.-]*)\s+·\s+(\S[\s\S]*)?$/;
+
+/** This function gives the ID and the title of an item heading, or null for another line. */
+function itemHeadingOf(line: string): { id: string; title: string } | null {
+  for (const pattern of [ITEM_HEADING, ITEM_HEADING_DOT]) {
+    const match = pattern.exec(line);
+    const title = match ? closeHeading(match[2] ?? "") : null;
+    if (match && title !== null) return { id: match[1] ?? "", title };
+  }
+  return null;
+}
+
 /**
  * A field of an item heading: "- Area: Docs", "- **Area:** Docs" or "- **Area**: Docs". The label
  * matches without case.
  */
-const ITEM_FIELD = /^\s*[-*]\s+(\*\*|__)?([A-Za-z][A-Za-z ]*?)(?::\1|\1:)\s*(.*)$/;
+const ITEM_FIELD = /^\s*[-*]\s+(\*\*|__)?([A-Za-z][A-Za-z ]*?)(?::\1|\1:)\s*(\S.*)?$/;
 /** The fields of an item heading that give the optional fields of an item. */
 const ITEM_FIELDS: Readonly<Record<string, "area" | "owner" | "needs">> = {
   area: "area",
@@ -244,18 +341,18 @@ function headingItems(markdown: string, options: LinkOptions & { file: string })
       continue;
     }
     if (fence !== null) continue;
-    const heading = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line);
+    const heading = headingOf(line);
     if (heading) {
-      const level = heading[1]?.length ?? 0;
+      const { level } = heading;
       if (level > 3) continue;
       current = undefined;
-      if (level === 2) section = plainText(heading[2]);
+      if (level === 2) section = plainText(heading.text);
       if (level === 1) section = "";
       if (level !== 3) continue;
-      const item = ITEM_HEADING.exec(line) ?? ITEM_HEADING_DOT.exec(line);
-      const id = plainText(item?.[1]);
+      const item = itemHeadingOf(line);
+      const id = plainText(item?.id);
       if (!item || isEmpty(id)) continue;
-      current = { id, title: item[2] ?? "", status: section, statusClass: statusClassOf(section), section, line: index + 1, links: [] };
+      current = { id, title: item.title, status: section, statusClass: statusClassOf(section), section, line: index + 1, links: [] };
       items.push(current);
       continue;
     }

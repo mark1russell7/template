@@ -25,8 +25,10 @@ const VERSION_HEADING = /^##\s+\[?v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)\]?(?:\s.
 const COMMIT_ENTRY = /^([0-9a-f]{7,40}):\s+([\s\S]*)$/;
 // The lines of Changesets for a new version of a dependency: no change of the package itself
 const DEPENDENCY_ENTRY = /^(?:Updated dependencies\b|@?[\w.-]+(?:\/[\w.-]+)?@\S+\s*$)/;
-// The generated release notes of GitHub: "Fix it by @ann in https://github.com/o/r/pull/12"
-const GENERATED_NOTE = /\s+by\s+@[\w-]+(?:\[bot\])?\s+in\s+(https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/(\d+))\s*$/;
+// The generated release notes of GitHub: "Fix it by @ann in https://github.com/o/r/pull/12". The
+// pattern starts with one whitespace character, not "\s+": with "\s+", each space of a long run is
+// a start, and the time grows with the square of the length. entryOf removes the rest of the run.
+const GENERATED_NOTE = /\sby\s+@[\w-]+(?:\[bot\])?\s+in\s+(https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/(\d+))\s*$/;
 const FIRST_CONTRIBUTION = /\bmade their first contribution\b/;
 
 /**
@@ -67,7 +69,8 @@ function entryOf(lines: readonly string[]): ChangelogEntry | null {
   const commit = COMMIT_ENTRY.exec(text);
   let body = (commit ? commit[2] : text) ?? "";
   if (body.trim() === "" || DEPENDENCY_ENTRY.test(body.trim()) || FIRST_CONTRIBUTION.test(body)) return null;
-  body = body.replace(GENERATED_NOTE, (_match, url: string, number: string) => ` ([#${number}](${url}))`);
+  const note = GENERATED_NOTE.exec(body);
+  if (note) body = `${body.slice(0, note.index).trimEnd()} ([#${note[2] ?? ""}](${note[1] ?? ""}))`;
   return { commit: commit?.[1] ?? null, text: firstSentence(body) };
 }
 
@@ -135,10 +138,11 @@ export function releaseBodyEntries(body: string): ChangelogEntry[] {
       continue;
     }
     if (fence !== null) continue;
-    const item = /^[-*+]\s+(.*)$/.exec(line);
-    if (item?.[1] !== undefined) {
+    // "\s+(\S.*)?" and not "\s+(.*)": the two parts cannot share a space, so a failed match does not backtrack
+    const item = /^[-*+]\s+(\S.*)?$/.exec(line);
+    if (item) {
       close();
-      entry = [item[1]];
+      entry = [item[1] ?? ""];
     } else if (entry && (line.trim() === "" || /^\s/.test(line))) {
       (entry as string[]).push(line);
     } else {

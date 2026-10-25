@@ -82,6 +82,18 @@ const changelogs: ChangelogSource[] = [
 ];
 
 describe("the changelog parser", () => {
+  // Before 0.1.5, the regular expressions backtracked on these inputs (CodeQL js/polynomial-redos). The
+  // time grew with the square of the length. Now each call takes a few milliseconds.
+  it("reads a long run of spaces in linear time", () => {
+    const spaces = " ".repeat(100_000);
+    const start = performance.now();
+    expect(releaseBodyEntries(`* Fix it${spaces}by @ann in https://github.com/o/r/pull/12`)).toEqual([
+      { commit: null, text: "Fix it ([#12](https://github.com/o/r/pull/12))" },
+    ]);
+    expect(releaseBodyEntries(`*${spaces}x${String.fromCharCode(0x2028)}y`)).toEqual([]);
+    expect(performance.now() - start).toBeLessThan(1000);
+  });
+
   it("reads the entries of each version, and skips the lines of new dependency versions", () => {
     const sections = parseChangelog(CLIENT);
     expect(sections.map((section) => section.version)).toEqual(["0.3.1", "0.3.0", "0.2.0", "0.1.0"]);

@@ -68,6 +68,17 @@ describe("the HTML helpers", () => {
     expect(safeUrl("../data/x.json")).toBe("../data/x.json");
   });
 
+  // Before 0.1.5, the regular expressions backtracked on these inputs (CodeQL js/polynomial-redos). The
+  // time grew with the square of the length. Now each call takes a few milliseconds.
+  it("read a long run of control characters or hyphens in linear time", () => {
+    const run = String.fromCharCode(1).repeat(100_000);
+    const start = performance.now();
+    expect(safeUrl(`${run}javascript:alert(1)${run}`)).toBeNull();
+    expect(safeUrl(`${run}x${run}y${run}`)).toBe(`x${run}y`);
+    expect(slugOf(`-a${"-".repeat(100_000)}b-`)).toBe("a-b");
+    expect(performance.now() - start).toBeLessThan(1000);
+  });
+
   it("refuse a scheme that control characters, tabs or backslashes hide, as the URL parser of a browser reads it", () => {
     // The URL parser removes the C0 controls and spaces at the two ends, and each tab and line break
     for (const url of ["\x01javascript:alert(1)", "\x00\x1fjavascript:alert(1)", "java\tscript:alert(1)", "jav\nascript:alert(1)", "javascript:alert(1)\x7f\x01"]) {

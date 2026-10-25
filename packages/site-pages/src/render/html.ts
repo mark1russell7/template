@@ -10,6 +10,19 @@ export function escapeHtml(text: string): string {
 }
 
 /**
+ * This function removes the control characters and the spaces (U+0000 to U+0020) at the two ends
+ * of a text. A loop does it, because the regular expression `[\u0000- ]+$` backtracks. For a long
+ * run of these characters, its time grows with the square of the length.
+ */
+function trimControl(text: string): string {
+  let start = 0;
+  let end = text.length;
+  while (start < end && text.charCodeAt(start) <= 0x20) start++;
+  while (end > start && text.charCodeAt(end - 1) <= 0x20) end--;
+  return text.slice(start, end);
+}
+
+/**
  * This function gives a URL that a link can hold, or null. It accepts `http:`, `https:` and
  * `mailto:` URLs, and relative URLs. It refuses each other scheme, for example `javascript:`.
  *
@@ -18,7 +31,7 @@ export function escapeHtml(text: string): string {
  * Thus a control character before `javascript:` does not hide the scheme.
  */
 export function safeUrl(url: string): string | null {
-  const trimmed = url.trim().replace(/[\t\n\r]/g, "").replace(/^[\u0000- ]+|[\u0000- ]+$/g, "");
+  const trimmed = trimControl(url.trim().replace(/[\t\n\r]/g, ""));
   if (/^(?:https?:|mailto:)/i.test(trimmed)) return trimmed;
   // A browser reads "\" as "/" in a URL of the page, so "\\host" and "/\host" go to a different host, as "//host" does
   if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed) || /^[/\\]{2}/.test(trimmed)) return null;
