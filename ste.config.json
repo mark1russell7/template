@@ -2,6 +2,7 @@
   "$schema": "./node_modules/@mark1russell7/ste-lint/ste.config.schema.json",
   "include": [
     "README.md",
+    "AI-REVIEW.md",
     "CLAUDE.md",
     "RELEASING.md",
     "packages/*/README.md",
