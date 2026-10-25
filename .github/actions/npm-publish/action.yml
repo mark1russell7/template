@@ -15,6 +15,11 @@ inputs:
   dry-run:
     description: '"true": find the versions to publish, but publish none (the test of actions-test.yml).'
     default: "false"
+  new-packages:
+    description: >-
+      What a package that is not on npm gives, after the publish of the other packages. "error": the step fails.
+      "warning": the step gives a warning and does not fail.
+    default: error
 outputs:
   published:
     description: The versions that this step published, "name@version" with a space between them.
@@ -59,8 +64,13 @@ runs:
       working-directory: ${{ runner.temp }}/npm-publish
       env:
         DRY_RUN: ${{ inputs.dry-run }}
+        NEW_PACKAGES: ${{ inputs.new-packages }}
       run: |
         set -o pipefail
+        if [ "$NEW_PACKAGES" != error ] && [ "$NEW_PACKAGES" != warning ]; then
+          echo "::error::The input new-packages is \"$NEW_PACKAGES\". It must be \"error\" or \"warning\"."
+          exit 1
+        fi
         published=()
         trap 'echo "published=${published[*]}" >> "$GITHUB_OUTPUT"' EXIT
         new_packages=()
@@ -102,7 +112,9 @@ runs:
           done
           published+=("$name@$version")
         done < release/packages.txt
-        if [ ${#new_packages[@]} -gt 0 ]; then
+        if [ ${#new_packages[@]} -gt 0 ] && [ "$NEW_PACKAGES" = warning ]; then
+          echo "::warning::These packages are not on npm, and this run did not publish them: ${new_packages[*]}. The owner bootstraps each new package once (RELEASING.md)."
+        elif [ ${#new_packages[@]} -gt 0 ]; then
           echo "::error::These packages are not on npm: ${new_packages[*]}. The owner bootstraps each new package once (RELEASING.md), then starts this workflow again."
           exit 1
         fi

@@ -70,6 +70,8 @@ The build job writes the plan of the tags and the release texts (`scripts/releas
 
 When a repository gets a second published package, the next tags use `<name>@<version>`.
 
+A repository with its own `tags.mjs` can change the plan. For example, it can give each release a title and the tarballs as files (`CI.md`).
+
 ### A second run
 
 The job skips each tag that exists. Thus a second run of the workflow does no harm.
@@ -110,6 +112,8 @@ The release publishes only a commit on `main`. Thus merge the pull request of th
 - The commit of `--ref` is on `main`. One `gh api` call to the compare API examines it.
 
 Else the script shows the reason and the command `gh workflow run release.yml --repo <owner/repo> --ref main`. Start that command after the merge, in the 2 days of the trust.
+
+Without the bootstrap, the release publishes the other packages and then fails with the names of the new packages. With the input `new-packages: warning` of the action `npm-publish`, the release gives a warning and does not fail.
 
 npm asks for the 2FA. The script opens the npm page in the browser. Confirm with the security key. Select the option to skip the 2FA for 5 minutes.
 

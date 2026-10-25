@@ -13,6 +13,10 @@
 # when the commit is not the head of main or an older commit of main, for example a manual run
 # (workflow_dispatch) on the branch of a pull request. Then the publish job and the tag job do not
 # start. A temporary branch release/<version> at a version commit of main passes the check.
+#
+# The input after-pack is a command of the repository after the pack and the plan, for example a
+# test of the tarballs. It runs in this job, with "contents: read" only. Its outputs go to the
+# output after-pack, for a later job of release.yml, for example a publish to a second registry.
 name: Reusable release build
 
 on:
@@ -26,10 +30,22 @@ on:
         description: The Node.js version of the build.
         type: string
         default: "26"
+      node-version-file:
+        description: A file with the Node.js version of the build, for example .nvmrc. It replaces node-version.
+        type: string
+        default: ""
       build:
         description: A bash command that builds the packages. Empty runs the build script of the root package.json, or else the build script of each package.
         type: string
         default: ""
+      after-pack:
+        description: A bash command after pack.mjs and tags.mjs, before the uploads. RELEASE_DIR is the folder of packages.txt and the tarballs. TAGS_FILE is the plan of the tags. Empty runs no command.
+        type: string
+        default: ""
+    outputs:
+      after-pack:
+        description: Each name=value that the after-pack command wrote to GITHUB_OUTPUT, as a JSON object. Without the command, "{}".
+        value: ${{ jobs.pack.outputs.after-pack }}
 
 jobs:
   pack:
@@ -38,6 +54,8 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+    outputs:
+      after-pack: ${{ toJSON(steps.after-pack.outputs) }}
     steps:
       # The first step, before the checkout: a release publishes only a commit on main. The GitHub
       # compare API (main...<commit>) gives "identical" for the head of main and "behind" for an
@@ -65,7 +83,8 @@ jobs:
       # No dependency cache: a release installs from the registry and the lockfile only.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: ${{ inputs.node-version }}
+          node-version: ${{ inputs.node-version-file == '' && inputs.node-version || '' }}
+          node-version-file: ${{ inputs.node-version-file }}
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile
       # The build input, or the build script of the root package.json, or else the build script of each package
@@ -82,14 +101,26 @@ jobs:
             pnpm -r --if-present run build
           fi
       - run: node scripts/release/pack.mjs "$RUNNER_TEMP/release"
+      # The tag, the prerelease flag and the release text of each published package, for the tag job
+      - run: node scripts/release/tags.mjs "$RUNNER_TEMP/tags.json"
+      # The input after-pack. It can test the tarballs, add files to the artifact "release", and
+      # change the plan, for example add "title" or "tarballs" (reusable-release-tag.yml). Each line
+      # name=value that it writes to GITHUB_OUTPUT goes to the output after-pack of this workflow.
+      - name: After the pack
+        id: after-pack
+        if: inputs.after-pack != ''
+        shell: bash
+        env:
+          COMMAND: ${{ inputs.after-pack }}
+          RELEASE_DIR: ${{ runner.temp }}/release
+          TAGS_FILE: ${{ runner.temp }}/tags.json
+        run: eval "$COMMAND"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release
           path: ${{ runner.temp }}/release/
           if-no-files-found: error
           retention-days: 30
-      # The tag, the prerelease flag and the release text of each published package, for the tag job
-      - run: node scripts/release/tags.mjs "$RUNNER_TEMP/tags.json"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: tags
