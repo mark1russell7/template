@@ -58,6 +58,14 @@ runs:
     # a new package, so a 404 gets 5 more tries, 30 seconds apart, before the step counts the package as new.
     # The output "published" tells the tag job which versions this run published. The trap writes it also when the
     # step stops with an error after some publishes.
+    # When npm refuses a publish, trust_hints tells the cause of the two known failures of the trusted publisher. The
+    # debug log of npm (--logs-dir) has the verbose lines of the OIDC exchange, which the output of npm does not show.
+    # The action has no registry-url, so after a failed exchange npm has no token and stops with ENEEDAUTH.
+    #   - "OIDC token exchange error - package not found", or a 404: npm/cli#9969. npm does not match a trusted
+    #     publisher that names a GitHub environment for a repository with the immutable OIDC subject of GitHub.
+    #   - ENEEDAUTH: npm got no token. The trusted publisher is missing, or it expired: a new trust expires when no
+    #     publish uses it in 2 days.
+    # The hints do not change the result of the step.
     - name: Publish
       id: publish
       shell: bash
@@ -73,6 +81,14 @@ runs:
         fi
         published=()
         trap 'echo "published=${published[*]}" >> "$GITHUB_OUTPUT"' EXIT
+        trust_hints() {
+          if grep -qsE "OIDC token exchange error - package not found|POST 404 [^ ]*/-/npm/v1/oidc/token/exchange/|code E404" publish.log npm-logs/*.log; then
+            echo "::error::npm refused the OIDC token exchange for $1 (\"package not found\" or 404, npm/cli#9969). For a repository with the immutable OIDC subject of GitHub, the trusted publisher must name no GitHub environment. RELEASING.md tells how to correct it."
+          fi
+          if grep -qs "ENEEDAUTH" publish.log; then
+            echo "::error::npm got no token for $1 (ENEEDAUTH): the trusted publisher is missing or expired. A new trust expires when no publish uses it in 2 days. The owner starts scripts/release/npm-bootstrap.mjs --replace-trust again, then this workflow (RELEASING.md)."
+          fi
+        }
         new_packages=()
         while read -r name version file; do
           [ -n "$name" ] || continue
@@ -100,11 +116,13 @@ runs:
             continue
           fi
           for attempt in 1 2 3; do
-            if npm publish "./release/$file" --access public --provenance --tag "$tag" --fetch-retries 0 2>&1 | tee publish.log; then
+            rm -rf npm-logs
+            if npm publish "./release/$file" --access public --provenance --tag "$tag" --fetch-retries 0 --logs-dir "$PWD/npm-logs" 2>&1 | tee publish.log; then
               break
             fi
             if ! grep -qE "E429|E5[0-9][0-9]|TLOG_CREATE_ENTRY_ERROR|ETIMEDOUT|ECONNRESET" publish.log || [ "$attempt" = 3 ]; then
               echo "::error::npm did not publish $name $version."
+              trust_hints "$name"
               exit 1
             fi
             echo "npm or Sigstore gave a temporary error (429, 5xx, or a transparency-log conflict). The next try starts in $((attempt * 60)) seconds."
