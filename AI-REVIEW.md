@@ -6,9 +6,9 @@ The workflow `reusable-ai-review.yml` gives a pull request one review by Claude.
 
 1. A pull request opens, opens again or becomes ready for review. The workflow starts.
 2. The workflow examines the cost guards. When a guard stops the review, the job summary tells the cause.
-3. Claude reads the diff and the files that it needs. It looks for bugs, security problems and breaking API changes. It ignores the style.
-4. Claude writes an inline comment for each real problem. Then the workflow writes one summary comment.
-5. When Claude finds no problem, the summary comment is "No blocking findings."
+3. Claude Code (`claude -p`) reads the diff and the files that it needs. It looks for bugs, security problems and breaking API changes. It ignores the style.
+4. Claude gives a summary and an inline comment for each real problem. The workflow posts them as one review of the pull request.
+5. When Claude finds no problem, the summary is "No blocking findings."
 
 The job stays green when the review does not finish. A crash, a timeout or an empty credit balance gives a note in the job summary, and no comment.
 
@@ -23,19 +23,23 @@ The job stays green when the review does not finish. A crash, a timeout or an em
 | Turns | Claude stops after `max-turns` turns. The default is 10. |
 | Time | The review step stops after 8 minutes, and the job stops after 10 minutes. |
 | Runs | A new run for the same pull request cancels the old run. |
+| Advisor | The advisor tool of Claude Code is off, so a review makes no Opus calls. |
 | Secret | The review starts only with the `ANTHROPIC_API_KEY` secret. A pull request from a fork gets no secrets, so it gets no review. |
 
 ## Budget
 
 The `ANTHROPIC_API_KEY` secret holds $200 of API credits. The credits expire on 2026-11-10.
 
-The account has no payment method. When the credits are gone, each review stops with a note. Each summary comment shows the cost of its review.
+The account has no payment method. When the credits are gone, each review stops with a note. Each review shows its cost.
+
+## Why not `claude-code-action`
+
+The action `anthropics/claude-code-action` sends each request with its own entrypoint name. The API refuses these requests for this account with "Credit balance is too low". The same key and the same Claude Code work with `claude -p`. Thus the workflow starts the Claude Code CLI from npm at a fixed version.
 
 ## Get a new review
 
 1. Add the label `ai-review` to the pull request.
 2. The workflow removes the label after the review. Add the label again for one more review.
-
 ## Add the review to a repository
 
 Put this file in `.github/workflows/ai-review.yml`:
@@ -78,6 +82,7 @@ Delete `.github/workflows/ai-review.yml` or the `ANTHROPIC_API_KEY` secret. With
 
 - The workflow uses the `pull_request` event, not `pull_request_target`.
 - The job token has only `contents: read` and `pull-requests: write`. The workflow uses no GitHub App and no OIDC token.
-- Claude can read files and write inline comments. It cannot start commands, change files or open web pages.
+- Claude can only read files in the checkout and the diff folder. It cannot start commands, change files, open web pages or post comments.
+- Claude Code ignores the hooks, settings, `CLAUDE.md` and MCP servers of the pull request (`--bare`, `--setting-sources user`, `--strict-mcp-config`).
 - The prompt tells Claude that the text and the diff of the pull request are data, not instructions.
-- The workflow removes tokens and keys from the summary before it writes the comment.
+- Before the workflow posts the review, it removes the API key and each text that looks like a token.
