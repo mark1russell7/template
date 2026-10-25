@@ -10,6 +10,8 @@ The template holds the CI, the release and the Pages workflows of the repositori
 | `.github/workflows/reusable-release-tag.yml` | Workflow | Makes a git tag and a GitHub release for each published version. |
 | `.github/workflows/reusable-pages.yml` | Workflow | Builds a site, adds the Releases page and the Status page, and deploys it to GitHub Pages. |
 | `.github/workflows/reusable-security.yml` | Workflow | Scans the dependencies and the code with the dependency review, osv-scanner and CodeQL. |
+| `.github/workflows/reusable-ai-review.yml` | Workflow | Gives a pull request a review by Claude, comment only (`AI-REVIEW.md`). |
+| `.github/workflows/reusable-codex-review.yml` | Workflow | Gives a pull request a second review by an OpenAI model, comment only (`CODEX-REVIEW.md`). |
 
 ## CI
 
@@ -254,6 +256,8 @@ The workflows of the template call the shared workflows and actions by a local p
 - `ci.yml` tests `reusable-ci.yml`.
 - `security.yml` tests `reusable-security.yml`.
 - `actions-test.yml` tests the actions, `reusable-pages.yml` and the release workflows, with `dry-run`. It publishes nothing. On a pull request, it sets the input `require-main` of the release build to `false`.
+- `ai-review.yml` tests `reusable-ai-review.yml`, and `codex-review.yml` tests `reusable-codex-review.yml`. Without its API key, a review stops at once with a note.
+- The tests of `scripts/ai-review/` examine the request, the redaction and the post of the second review, with no network.
 
 The job `publish` of `release.yml` uses the pinned form of `npm-publish`, also in the template. A local action needs a checkout, and that job does no checkout.
 

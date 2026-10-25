@@ -3,6 +3,7 @@
   "include": [
     "README.md",
     "AI-REVIEW.md",
+    "CODEX-REVIEW.md",
     "CLAUDE.md",
     "RELEASING.md",
     "CI.md",
