@@ -14,6 +14,7 @@ Write all prose of this repository in the style of ASD-STE100 Simplified Technic
 ## Packages
 
 - Make a new package with `pnpm package add <name> --preset=<preset>`. Do not write `package.json` or `tsconfig.json` by hand.
+- Make a server package with `--preset=service`. Only its entry `src/main.ts` uses `run()` of `@mark1russell7/service`.
 - A package is a source package. Its `main` is `src/index.ts`, so other packages import its source.
 - Each package has a `tsconfig.test.json`. `pnpm typecheck` checks the source and the tests.
 
