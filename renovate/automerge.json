@@ -28,6 +28,11 @@
       "matchManagers": ["github-actions"],
       "matchUpdateTypes": ["minor", "patch", "digest", "pinDigest"],
       "automerge": true
+    },
+    {
+      "description": "Renovate never merges an update of the Claude Code CLI: it changes the program that runs with the API key. A person reviews it.",
+      "matchPackageNames": ["@anthropic-ai/claude-code"],
+      "automerge": false
     }
   ]
 }
