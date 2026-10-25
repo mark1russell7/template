@@ -18,6 +18,11 @@ Write all prose of this repository in the style of ASD-STE100 Simplified Technic
 - A package is a source package. Its `main` is `src/index.ts`, so other packages import its source.
 - Each package has a `tsconfig.test.json`. `pnpm typecheck` checks the source and the tests.
 
+## CI
+
+- The workflows use the shared workflows and actions of the template. `CI.md` tells their inputs.
+- Change a shared workflow only in `~/git/template`. A repository changes only the inputs of its callers.
+
 ## npm releases
 
 - Do not publish to npm, and do not change npm settings. The owner and one named Claude session do all npm work.

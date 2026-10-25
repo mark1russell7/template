@@ -62,6 +62,14 @@
       "groupSlug": "github-actions"
     },
     {
+      "description": "The shared workflows and actions of the template follow main (@<commit> # main). A commit of main has no release date, so the pin moves with no wait.",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["mark1russell7/template"],
+      "minimumReleaseAge": null,
+      "groupName": "template workflows and actions",
+      "groupSlug": "template-workflows"
+    },
+    {
       "description": "A major update of a GitHub Action gets a PR of its own, and a person reviews it.",
       "matchManagers": ["github-actions"],
       "matchUpdateTypes": ["major"],

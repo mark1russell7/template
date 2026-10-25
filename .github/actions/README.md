@@ -1,15 +1,16 @@
 # Shared actions
 
-These composite actions give each site of mark1russell7 a Releases page and a Status page (`@mark1russell7/site-pages`). A repository uses them from GitHub. `new-repo.ps1` does not copy them.
+These composite actions are shared by the repositories of mark1russell7. A repository uses them from GitHub. `new-repo.ps1` does not copy them. `CI.md` tells about the shared workflows that use them.
 
 | Action | What it does |
 |---|---|
-| `site-pages` | Writes `releases/index.html`, `status/index.html`, `data/releases.json` and `data/status.json` into the built site. |
-| `green-main` | Gives the commit for a scheduled build: the newest commit of `main`, or the newest commit that passed CI when the newest one failed. The site never gets a red commit, and never steps back behind a push deploy. `pending: green` waits for CI in place of the newest commit. |
+| `site-pages` | Writes `releases/index.html`, `status/index.html`, `data/releases.json` and `data/status.json` into the built site (`@mark1russell7/site-pages`). |
+| `green-main` | Gives the commit for a scheduled build: the newest commit of `main`, or the newest commit that passed CI when the newest one failed. The site does not get a red commit at any time. It does not step back behind a push deploy at any time. `pending: green` waits for CI in place of the newest commit. |
+| `npm-publish` | Publishes the tarballs of the release build to npm, with trusted publishing (OIDC) and provenance. The publish job of `release.yml` uses it (`RELEASING.md`). |
 
 ## Add the pages to a site
 
-Make these changes in the `pages.yml` of the repository:
+The shared workflow `reusable-pages.yml` uses `green-main` and `site-pages` (`CI.md`). Replace the `pages.yml` of the repository with a caller of that workflow:
 
 ```yaml
 on:
@@ -20,8 +21,15 @@ on:
     - cron: "17 */3 * * *"
   workflow_dispatch:
 
+permissions: {}
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
 jobs:
-  build:
+  pages:
+    uses: mark1russell7/template/.github/workflows/reusable-pages.yml@<commit> # main
     permissions:
       contents: read
       # green-main reads the Actions runs. site-pages reads the pull requests, the issues and their checks.
@@ -30,36 +38,26 @@ jobs:
       pull-requests: read
       checks: read
       statuses: read
-    steps:
-      # A scheduled build takes the newest commit of main, or the newest green one if CI failed on it
-      - id: green
-        if: github.event_name == 'schedule'
-        uses: mark1russell7/template/.github/actions/green-main@main
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ steps.green.outputs.sha || github.sha }}
-          # The whole history: site-pages reads the dates of the tags
-          fetch-depth: 0
-          persist-credentials: false
-      # (the build of the site)
-      - uses: mark1russell7/template/.github/actions/site-pages@main
-        with:
-          out: packages/site/dist
-          roadmap: docs/ROADMAP.md
-      - uses: actions/upload-pages-artifact@v5
-        with:
-          path: packages/site/dist
+      # Only the deploy job uses these two
+      pages: write
+      id-token: write
+    with:
+      build: pnpm --filter @my/site run build
+      out: packages/site/dist
+      roadmap: docs/ROADMAP.md
 ```
 
 Then add the links `releases/` and `status/` to the navigation of the site.
 
-- Pin each action to a commit, as for the other actions (`@<commit> # main`). Renovate updates the pin.
+- Pin the workflow to a commit, as for the other actions (`@<commit> # main`). Renovate updates the pin.
 - `roadmap` is optional. The parser reads each Markdown table with an `ID` column and a `Status` column.
-- A site with its own pages sets `data-only: "true"` and reads the two JSON files.
+- A site with its own pages sets `data-only: true` and reads the two JSON files.
 - A monorepo with one version for a fixed group sets `group` to the npm name of one package of the group.
 - The standard `release.yml` makes a git tag and a GitHub release for each version that it publishes (`RELEASING.md`). The Releases page reads them.
 - The inputs of `site-pages` and their defaults are in `site-pages/action.yml`. The options of the CLI are in the README of `packages/site-pages`.
 
+A workflow with its own build job can also use the two actions directly, as steps. Pin each one to a commit: `mark1russell7/template/.github/actions/site-pages@<commit> # main`.
+
 ## Test
 
-The workflow `actions-test.yml` runs both actions on this repository, and keeps the pages as an artifact.
+The workflow `actions-test.yml` tests the three actions and the shared workflows on this repository. It keeps the pages as an artifact. The test of `npm-publish` uses `dry-run: "true"` and publishes nothing.

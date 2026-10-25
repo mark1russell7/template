@@ -5,8 +5,8 @@ inputs:
     description: The built output folder of the site, for example packages/site/dist.
     required: true
   version:
-    description: The version range of @mark1russell7/site-pages.
-    default: "^0.1.0"
+    description: The version range of @mark1russell7/site-pages. Empty gives the default range, ^0.1.0.
+    default: ""
   roadmap:
     description: The roadmap file. Without it, the Status page has only the open pull requests and issues.
     default: ""
@@ -61,4 +61,5 @@ runs:
         [ -z "$SP_CSS" ] || args+=(--css "$SP_CSS")
         [ -z "$SP_SITE_NAME" ] || args+=(--site-name "$SP_SITE_NAME")
         [ "$SP_DATA_ONLY" != "true" ] || args+=(--data-only)
-        npx --yes "@mark1russell7/site-pages@$SP_VERSION" "${args[@]}"
+        # The default range is here, so that an empty input (from reusable-pages.yml) also gets it
+        npx --yes "@mark1russell7/site-pages@${SP_VERSION:-^0.1.0}" "${args[@]}"

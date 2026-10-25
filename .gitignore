@@ -13,6 +13,7 @@ _db/
 !/CLAUDE.md
 !/README.md
 !/RELEASING.md
+!/CI.md
 
 # Local ste-lint dictionaries. The ASD-STE100 dictionary is copyrighted: do not commit it.
 .ste/

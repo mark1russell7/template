@@ -1,59 +1,139 @@
-# Tests the composite actions of .github/actions on this repository: green-main finds a commit,
-# and site-pages writes the two pages and their JSON. The output is an artifact, for a look.
-# new-repo.ps1 does not copy this workflow or the actions: a repository uses them from GitHub.
+# Tests the shared actions (.github/actions) and the shared workflows of the Pages and of the release
+# (CI.md) on this repository, with the files of this commit:
+#
+#   green-main      The action finds a commit.
+#   pages           reusable-pages.yml builds a test site with the Releases page and the Status page,
+#                   and uploads the Pages artifact, with no deploy.
+#   pages-check     The pages and their JSON are in the artifact.
+#   release-build   reusable-release-build.yml packs the packages of this repository.
+#   release-publish The npm-publish action examines the tarballs with "dry-run": it publishes nothing.
+#                   The job has no "id-token: write", so npm cannot accept a publish.
+#   release-tag     reusable-release-tag.yml examines the plan and the tags with "dry-run".
+#
+# ci.yml tests reusable-ci.yml on each push and pull request. new-repo.ps1 does not copy this
+# workflow, the actions or the shared workflows: a repository uses them from GitHub.
 name: Actions test
 
 on:
   push:
     branches: [main]
-    paths: [".github/actions/**", ".github/workflows/actions-test.yml"]
+    paths:
+      - ".github/actions/**"
+      - ".github/workflows/actions-test.yml"
+      - ".github/workflows/reusable-pages.yml"
+      - ".github/workflows/reusable-release-*.yml"
+      - "scripts/release/**"
   pull_request:
-    paths: [".github/actions/**", ".github/workflows/actions-test.yml"]
+    paths:
+      - ".github/actions/**"
+      - ".github/workflows/actions-test.yml"
+      - ".github/workflows/reusable-pages.yml"
+      - ".github/workflows/reusable-release-*.yml"
+      - "scripts/release/**"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  actions:
+  green-main:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     permissions:
       contents: read
-      # green-main reads the Actions runs. site-pages reads the pull requests, the issues and their checks.
+      actions: read
+    steps:
+      # The actions of this commit, not of main: a checkout first, then the local paths
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      - id: green-local
+        uses: ./.github/actions/green-main
+      - name: green-main gives a commit
+        env:
+          SHA: ${{ steps.green-local.outputs.sha }}
+          STATE: ${{ steps.green-local.outputs.state }}
+        run: |
+          echo "green-main: $SHA (CI of the newest commit: $STATE)"
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]
+
+  pages:
+    uses: ./.github/workflows/reusable-pages.yml
+    permissions:
+      contents: read
       actions: read
       issues: read
       pull-requests: read
       checks: read
       statuses: read
+    with:
+      # The env input gets to the build command
+      build: |
+        test "$TEST_SITE" = actions-test
+        mkdir -p test-site
+        echo '<!doctype html><title>Test site</title><p>The test site of actions-test.yml.</p>' > test-site/index.html
+      out: test-site
+      env: '{"TEST_SITE": "actions-test"}'
+      packages: "@mark1russell7/template-cli,@mark1russell7/site-pages"
+      deploy: false
+
+  pages-check:
+    needs: pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
     steps:
-      # The actions of this commit, not of main: a checkout first, then the local paths
-      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          fetch-depth: 0
-          persist-credentials: false
-      - id: green-local
-        uses: ./.github/actions/green-main
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26
-      - uses: ./.github/actions/site-pages
-        with:
-          out: ${{ runner.temp }}/site
-          packages: "@mark1russell7/template-cli,@mark1russell7/site-pages"
+          name: github-pages
+          path: ${{ runner.temp }}/artifact
       - name: The pages and the data exist
         env:
           OUT: ${{ runner.temp }}/site
-          SHA: ${{ steps.green-local.outputs.sha }}
+          ARTIFACT: ${{ runner.temp }}/artifact
         run: |
-          echo "green-main: $SHA"
-          [ -n "$SHA" ]
-          for f in data/releases.json data/status.json releases/index.html status/index.html; do
+          mkdir -p "$OUT"
+          tar -xf "$ARTIFACT/artifact.tar" -C "$OUT"
+          for f in index.html data/releases.json data/status.json releases/index.html status/index.html; do
             test -s "$OUT/$f" || { echo "::error::$f is missing"; exit 1; }
             echo "ok $f ($(wc -c < "$OUT/$f") bytes)"
           done
           node -e 'const s = require(process.argv[1]); if (!s.github?.available) { console.error("::error::the GitHub part is not available:", s.github?.reason); process.exit(1); } console.log("github:", s.pullRequests.length, "open PRs,", s.issues.length, "open issues")' "$OUT/data/status.json"
-      - uses: actions/upload-artifact@v7
+
+  release-build:
+    uses: ./.github/workflows/reusable-release-build.yml
+    permissions:
+      contents: read
+
+  release-publish:
+    needs: release-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # No "id-token: write": npm cannot accept a publish from this job.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          name: site-pages
-          path: ${{ runner.temp }}/site
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      - id: publish
+        uses: ./.github/actions/npm-publish
+        with:
+          dry-run: "true"
+      - name: The dry run published nothing
+        env:
+          PUBLISHED: ${{ steps.publish.outputs.published }}
+        run: |
+          echo "published: \"$PUBLISHED\""
+          [ -z "$PUBLISHED" ]
+
+  release-tag:
+    needs: [release-build, release-publish]
+    uses: ./.github/workflows/reusable-release-tag.yml
+    permissions:
+      contents: read
+    with:
+      published: ""
+      dry-run: true
