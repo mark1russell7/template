@@ -203,7 +203,7 @@ jobs:
             stop "The log of the Review step tells why."
           fi
           # The cost and the token use of the run, for the budget
-          usage=$(jq -r '"\(.num_turns) turns, $\((.total_cost_usd // 0) * 1000 | round / 1000), tokens: \(.usage.input_tokens // 0) in, \(.usage.cache_creation_input_tokens // 0) cache write, \(.usage.cache_read_input_tokens // 0) cache read, \(.usage.output_tokens // 0) out"' "$file")
+          usage=$(jq -r '"\(.num_turns) turns, $\((.total_cost_usd // 0) * 1000 | round / 1000), tokens: \(.usage.input_tokens // 0) in, \(.usage.cache_creation_input_tokens // 0) cache write, \(.usage.cache_read_input_tokens // 0) cache read, \(.usage.output_tokens // 0) out, \((.permission_denials // []) | length) tool calls denied"' "$file")
           echo "AI review usage: $usage" >> "$GITHUB_STEP_SUMMARY"
           result='(.structured_output // (.result | fromjson? // null))'
           if ! jq -e "$result | .summary | type == \"string\"" "$file" > /dev/null 2>&1; then
