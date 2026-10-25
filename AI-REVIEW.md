@@ -61,6 +61,7 @@ jobs:
 - Pin the workflow to a commit of the template (`@<commit> # main`). Renovate updates the pin.
 - Write notes about the repository in the `extra-prompt` input, under `with:`.
 - The repository needs the `ANTHROPIC_API_KEY` secret.
+- Make the label one time with `gh label create ai-review`.
 
 | Input | Default | Function |
 |---|---|---|

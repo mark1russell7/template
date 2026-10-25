@@ -164,20 +164,27 @@ jobs:
           EXECUTION_FILE: ${{ steps.review.outputs.execution_file }}
         run: |
           file="${EXECUTION_FILE:-$RUNNER_TEMP/claude-execution-output.json}"
+          # Remove anything that looks like a token or a key from text that goes out
+          redact() {
+            sed -E 's/(gh[opsur]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,})/[REDACTED]/g'
+          }
           usage=""
+          reason=""
           if [ -f "$file" ]; then
             # The cost and the token use of the run, for the budget
             usage=$(jq -r '[.[] | select(.type == "result")] | last // empty
               | "\(.num_turns) turns, $\((.total_cost_usd // 0) * 1000 | round / 1000), tokens: \(.usage.input_tokens // 0) in, \(.usage.cache_creation_input_tokens // 0) cache write, \(.usage.cache_read_input_tokens // 0) cache read, \(.usage.output_tokens // 0) out"' "$file" 2>/dev/null || true)
+            # The error text of a failed run, for example a credit or billing error
+            reason=$(jq -r '[.[] | select(.type == "result")] | last // empty | select(.is_error == true or .subtype != "success")
+              | ((.result // "") + " " + ((.errors // []) | join(", ")) + " (" + .subtype + ")")' "$file" 2>/dev/null \
+              | tr '\n' ' ' | cut -c1-300 | redact || true)
           fi
           echo "AI review usage: ${usage:-unknown}" >> "$GITHUB_STEP_SUMMARY"
           if [ -z "$RESULT" ]; then
-            echo "AI review skipped: the review did not finish (outcome: $OUTCOME). The log of the Review step tells why." >> "$GITHUB_STEP_SUMMARY"
+            echo "AI review skipped: the review did not finish (outcome: $OUTCOME). ${reason:-The log of the Review step tells why.}" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          # Remove anything that looks like a token or a key before the comment goes out
-          summary=$(jq -r '.summary' <<< "$RESULT" \
-            | sed -E 's/(gh[opsur]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,})/[REDACTED]/g')
+          summary=$(jq -r '.summary' <<< "$RESULT" | redact)
           {
             echo "### AI review"
             echo
