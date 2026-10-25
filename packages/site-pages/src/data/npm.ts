@@ -69,7 +69,7 @@ export async function npmPublishTimes(options: NpmOptions): Promise<NpmPublishTi
   const worker = async (): Promise<void> => {
     for (let name = queue.shift(); name !== undefined; name = queue.shift()) {
       try {
-        const packument = object(await get(`${registry}/${name.replace("/", "%2f")}`));
+        const packument = object(await get(`${registry}/${name.replaceAll("/", "%2f")}`));
         const published = object(packument["versions"]);
         for (const [version, date] of Object.entries(object(packument["time"]))) {
           if (version === "created" || version === "modified" || typeof date !== "string") continue;

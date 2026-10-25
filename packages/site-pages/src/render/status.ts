@@ -49,7 +49,8 @@ export function slugOf(text: string): string {
     text
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "other"
+      // After the line above, no two hyphens are next to each other. "-+$" backtracks, and "-$" does not.
+      .replace(/^-|-$/g, "") || "other"
   );
 }
 

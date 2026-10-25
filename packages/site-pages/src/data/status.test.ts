@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { checkStateOf, githubOpenWork } from "./github.ts";
-import { buildStatusBoard, linksOf, markdownTables, readStatusBoard, RoadmapParseError, roadmapItems, statusClassOf } from "./status.ts";
+import { buildStatusBoard, linksOf, markdownTables, plainText, readStatusBoard, RoadmapParseError, roadmapItems, statusClassOf } from "./status.ts";
 import type { GitHubOpenWork, StatusBoardData } from "./types.ts";
 
 const ROADMAP = `# Roadmap
@@ -307,6 +307,47 @@ function fakeFetch(answer: () => Promise<Response>): { fetch: typeof fetch; call
     }) as typeof fetch,
   };
 }
+
+/**
+ * This function gives the result of `fn`, and fails when `fn` takes one second or more. The parsers
+ * read each long input of the tests in a few milliseconds.
+ */
+function fast<T>(fn: () => T): T {
+  const start = performance.now();
+  const result = fn();
+  expect(performance.now() - start).toBeLessThan(1000);
+  return result;
+}
+
+// The regular expressions before 0.1.5 backtracked on these inputs (CodeQL js/polynomial-redos). Their
+// time grew with the square of the length: from seconds to many minutes for each input.
+describe("a long input", () => {
+  const N = 100_000;
+  const spaces = " ".repeat(N);
+  const lineSeparator = String.fromCharCode(0x2028);
+
+  it("with many brackets", () => {
+    expect(fast(() => plainText(`[${"[\\".repeat(N)}`))).toBe(`[${"[\\".repeat(N)}`);
+    expect(fast(() => plainText("[](".repeat(N)))).toBe("[](".repeat(N));
+    expect(fast(() => plainText(`${"[a](b) ".repeat(N)}`))).toBe("a ".repeat(N).trim());
+    expect(fast(() => linksOf(`[\\](${"[!](!".repeat(N)}`, { repository: "o/r" }))).toEqual([]);
+  });
+
+  it("with long runs of whitespace in headings, item fields and table separators", () => {
+    const roadmap = `## Later${spaces}#\n### \`a\`:${spaces}Title${spaces}#${spaces}\n- Area:${spaces}Docs${spaces}\n- Owner:${spaces}x${lineSeparator}y\n`;
+    expect(fast(() => roadmapItems(roadmap))).toEqual([
+      { id: "a", title: "Title", status: "Later", statusClass: "later", section: "Later", line: 2, links: [], area: "Docs" },
+    ]);
+    expect(fast(() => roadmapItems(`## Later\n### 0 ·${spaces}x${lineSeparator}y\n### \`b\`-${spaces}x${lineSeparator}y\n`))).toEqual([]);
+    const tables = fast(() => markdownTables(`# A${spaces}#${spaces}\n| ID | Status |\n${spaces}|${spaces}---|---|\n| R1 | done |\n`));
+    expect(tables).toEqual([{ section: "A", line: 2, header: ["id", "status"], rows: [{ line: 4, cells: ["R1", "done"] }] }]);
+  });
+
+  it("with a long word before a reference", () => {
+    const word = "a".repeat(N);
+    expect(fast(() => linksOf(`${word} #1`, { repository: "o/r" }))).toEqual([{ label: `${word} #1`, url: `https://github.com/o/${word}/issues/1` }]);
+  });
+});
 
 describe("the GitHub step", () => {
   it("reads the open pull requests and issues with one GraphQL request", async () => {
