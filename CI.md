@@ -172,7 +172,7 @@ jobs:
       packages: polite-crawler,polite-crawler-mcp
 ```
 
-- A caller on `workflow_run` after CI is also correct. A failed CI run or a CI run of a pull request builds nothing.
+- A caller on `workflow_run` after CI is also correct. A failed CI run, a CI run of a pull request and a CI run of a push to a different branch build nothing. The job `build` examines the branch, so the filter `branches: [main]` of the caller is not necessary.
 - A scheduled build uses the commit of `green-main`. The input `pending` goes to that action.
 - The inputs of `site-pages` go to the action: `site-pages-version`, `roadmap`, `base`, `packages`, `changesets`, `group`, `css`, `site-name` and `data-only`.
 - `site-pages: false` builds the site without the Releases page and the Status page.

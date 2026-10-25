@@ -260,7 +260,8 @@ jobs:
   build:
     if: >-
       github.event_name != 'workflow_run' ||
-      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == github.event.repository.default_branch)
     runs-on: ubuntu-latest
     # Read access only: the status page reads the pull requests, the issues and their checks.
     # A scheduled run reads the runs of CI to find the newest commit that passed.

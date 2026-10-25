@@ -7,8 +7,9 @@
 #           "permissions" key: it gets "pages: write" and "id-token: write" from the caller job.
 #
 # The caller starts it on "push" (each push to main), on "workflow_run" (after a CI run of a push
-# to main passed), on "schedule" and on "workflow_dispatch". A "workflow_run" for a failed CI run
-# or for a pull request builds nothing. A scheduled build takes the commit of the green-main
+# to main passed), on "schedule" and on "workflow_dispatch". A "workflow_run" for a failed CI run,
+# for a pull request or for a push to a different branch builds nothing. The job build examines
+# the branch, so a caller without "branches: [main]" does not deploy a different branch. A scheduled build takes the commit of the green-main
 # action: the newest commit of main, or the newest commit that passed CI.
 #
 # The job uses the actions green-main and site-pages of the same commit of the template as this
@@ -109,8 +110,9 @@ on:
 
 jobs:
   build:
-    # A CI run for a pull request or a failed CI run does not deploy.
-    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    # A failed CI run, a CI run for a pull request and a CI run for a push to a different branch do not
+    # deploy (scripts/workflows/pages-guard.test.mjs).
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == github.event.repository.default_branch)
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout-minutes }}
     permissions:
