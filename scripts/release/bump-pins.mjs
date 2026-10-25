@@ -1,6 +1,7 @@
 // Moves the pins of the template in the release.yml of other repositories: one pull request each.
+// With --file, it moves the pins of a different workflow, for example ai-review.yml.
 //
-//   node scripts/release/bump-pins.mjs [--sha <commit>] [--dry-run] <owner/repo> ...
+//   node scripts/release/bump-pins.mjs [--sha <commit>] [--file <workflow>] [--dry-run] <owner/repo> ...
 //
 // A repository pins each shared release workflow and action of the template to a commit of main:
 //
@@ -9,13 +10,13 @@
 // Renovate does not change release.yml (renovate/README.md). A workflow change between the merge of
 // a version and its release run makes the tag job fail with HTTP 403 (RELEASING.md). Thus the release
 // session moves these pins itself, at a quiet time. For each repository, the script:
-//   1. Reads .github/workflows/release.yml of main with the GitHub API.
+//   1. Reads .github/workflows/release.yml (or the --file workflow) of main with the GitHub API.
 //   2. Finds the pins of the template. It skips the repository when it has no pin, or when each pin
 //      is at the target commit. It refuses a target that is older than a pin.
 //   3. Refuses the repository when a release can start. An open pull request to main changes the
 //      "version" of a package.json, for example "Version the packages" of Changesets. Or a pull
 //      request is on a branch release/<version>. Or GitHub has a run of release.yml that is not complete.
-//   4. Makes a branch from main, commits the new release.yml on it (contents API) and opens a pull
+//   4. Makes a branch from main, commits the new workflow on it (contents API) and opens a pull
 //      request (pulls API). The script makes no clone.
 //   5. Shows the address of the pull request.
 //
@@ -25,6 +26,9 @@
 // Options:
 //   --sha <commit>       The target commit of the template (default: the head of main). It must be
 //                        on main, because each pin follows main ("# main").
+//   --file <workflow>    The workflow file in .github/workflows/ (default: release.yml), for example
+//                        ai-review.yml. Renovate moves these pins each week. The script moves them now,
+//                        with the same release check, when a change of the template must not wait.
 //   --dry-run            Shows the plan. It makes no branch, no commit and no pull request.
 //   --check              Only does the release check of step 3. It changes nothing. Do this check
 //                        immediately before the merge of a pull request of this script.
@@ -44,6 +48,9 @@ import { ON_MAIN, compareWithMain } from "./dispatch.mjs";
 export const TEMPLATE = "mark1russell7/template";
 export const WORKFLOW = ".github/workflows/release.yml";
 export const BASE = "main";
+
+/** The folder of the workflows. --file names a file in it. */
+export const WORKFLOWS = ".github/workflows/";
 
 /** The branches of a version: "Version the packages" of Changesets, and release/<version> (RELEASING.md). */
 export const VERSION_BRANCH = /^(changeset-release|release)\//;
@@ -78,6 +85,21 @@ const jsonLines = (text) =>
     .map((line) => JSON.parse(line));
 
 const short = (sha) => sha.slice(0, 7);
+
+/** This function gives the file name of a workflow path: "release.yml". */
+const fileName = (workflow) => workflow.slice(workflow.lastIndexOf("/") + 1);
+
+/** This function gives the name of a workflow without its extension: "release". */
+const stem = (workflow) => fileName(workflow).replace(/\.ya?ml$/, "");
+
+/**
+ * This function gives the path of the workflow for the option --file, or undefined for a value that is not
+ * a workflow file. It accepts "ai-review.yml" and ".github/workflows/ai-review.yml".
+ */
+export function workflowPath(file) {
+  const name = file.startsWith(WORKFLOWS) ? file.slice(WORKFLOWS.length) : file;
+  return /^[\w.-]+\.ya?ml$/.test(name) && !name.startsWith(".") ? `${WORKFLOWS}${name}` : undefined;
+}
 
 /** This function gives the first line of an error, for the output. */
 const firstLine = (error) => String(error?.message ?? error).trim().split("\n")[0];
@@ -120,11 +142,11 @@ export function releaseBlockers({ pulls, filesOf, runs, ownBranch }) {
   return reasons;
 }
 
-/** This function gives the branch of the pull request for a target commit. */
-export const branchName = (target) => `ci/template-release-pins-${short(target)}`;
+/** This function gives the branch of the pull request for a target commit and a workflow. */
+export const branchName = (target, workflow = WORKFLOW) => `ci/template-${stem(workflow)}-pins-${short(target)}`;
 
-/** This function gives the title of the pull request for a target commit. */
-export const prTitle = (target) => `ci: move the template release pins to ${short(target)}`;
+/** This function gives the title of the pull request for a target commit and a workflow. */
+export const prTitle = (target, workflow = WORKFLOW) => `ci: move the template ${stem(workflow)} pins to ${short(target)}`;
 
 /** This function makes the text of a commit subject safe for a pull request of a different repository. */
 export function commitSubject(message) {
@@ -142,11 +164,15 @@ export function commitSubject(message) {
  * This function gives the text of the pull request. `pins` has { path, sha } for each changed pin.
  * `commits` has { sha, message } for each new commit of the template, oldest first.
  */
-export function prBody({ repository, target, pins, commits, notes, footer }) {
+export function prBody({ repository, target, pins, commits, notes, footer, workflow = WORKFLOW }) {
   const link = (sha) => `[\`${short(sha)}\`](https://github.com/${TEMPLATE}/commit/${sha})`;
+  const renovate =
+    workflow === WORKFLOW
+      ? "Renovate does not change `release.yml` (`RELEASING.md` of the template)."
+      : "Renovate also moves these pins in its weekly group. This pull request moves them now.";
   const lines = [
-    `This pull request moves the pins of \`${TEMPLATE}\` in \`${WORKFLOW}\` to ${link(target)} of \`main\`. ` +
-      `\`scripts/release/bump-pins.mjs\` of the template opened it. Renovate does not change \`release.yml\` (\`RELEASING.md\` of the template).`,
+    `This pull request moves the pins of \`${TEMPLATE}\` in \`${workflow}\` to ${link(target)} of \`main\`. ` +
+      `\`scripts/release/bump-pins.mjs\` of the template opened it. ${renovate}`,
     "",
     "| Pin | From | To |",
     "|---|---|---|",
@@ -177,9 +203,13 @@ export function prBody({ repository, target, pins, commits, notes, footer }) {
 }
 
 /** This function gives the commit message. */
-export function commitMessage({ target, pins, coAuthor }) {
+export function commitMessage({ target, pins, coAuthor, workflow = WORKFLOW }) {
   const from = [...new Set(pins.map(({ sha }) => short(sha)))].join(", ");
-  const lines = [prTitle(target), "", `The pins of ${TEMPLATE} in release.yml go from ${from} to ${short(target)} (scripts/release/bump-pins.mjs of the template).`];
+  const lines = [
+    prTitle(target, workflow),
+    "",
+    `The pins of ${TEMPLATE} in ${fileName(workflow)} go from ${from} to ${short(target)} (scripts/release/bump-pins.mjs of the template).`,
+  ];
   if (coAuthor) lines.push("", `Co-Authored-By: ${coAuthor}`);
   return lines.join("\n");
 }
@@ -221,22 +251,22 @@ export function checkRepo(repository, { ownBranch } = {}, run = gh) {
  * result is "opened", "planned", "skipped", "refused" or "error". `compareCache` keeps the compare of
  * each old pin, for the next repositories.
  */
-export function bumpRepo(repository, { target, dryRun = false, notes, coAuthor, footer, compareCache = new Map() }, run = gh) {
+export function bumpRepo(repository, { target, workflow = WORKFLOW, dryRun = false, notes, coAuthor, footer, compareCache = new Map() }, run = gh) {
   const done = (result, text, url) => ({ repository, result, text, url });
-  const branch = branchName(target);
+  const branch = branchName(target, workflow);
 
   let head;
   let file;
   try {
     head = run(["api", `repos/${repository}/git/ref/heads/${BASE}`, "--jq", ".object.sha"]).trim();
-    file = JSON.parse(run(["api", `repos/${repository}/contents/${WORKFLOW}?ref=${head}`]));
+    file = JSON.parse(run(["api", `repos/${repository}/contents/${workflow}?ref=${head}`]));
   } catch (error) {
-    if (/HTTP 404|Not Found/.test(firstLine(error))) return done("skipped", `no ${WORKFLOW} on ${BASE}`);
-    return done("error", `GitHub did not give ${WORKFLOW}: ${firstLine(error)}`);
+    if (/HTTP 404|Not Found/.test(firstLine(error))) return done("skipped", `no ${workflow} on ${BASE}`);
+    return done("error", `GitHub did not give ${workflow}: ${firstLine(error)}`);
   }
   const text = Buffer.from(file.content, "base64").toString("utf8");
   const pins = findPins(text);
-  if (pins.length === 0) return done("skipped", `${WORKFLOW} has no pin of ${TEMPLATE} ("@<commit> # main")`);
+  if (pins.length === 0) return done("skipped", `${workflow} has no pin of ${TEMPLATE} ("@<commit> # main")`);
   const old = pins.filter(({ sha }) => sha !== target);
   if (old.length === 0) return done("skipped", `each pin is at ${short(target)}`);
 
@@ -284,9 +314,9 @@ export function bumpRepo(repository, { target, dryRun = false, notes, coAuthor, 
   }
   try {
     run(
-      ["api", "-X", "PUT", `repos/${repository}/contents/${WORKFLOW}`, "--input", "-", "--jq", ".commit.sha"],
+      ["api", "-X", "PUT", `repos/${repository}/contents/${workflow}`, "--input", "-", "--jq", ".commit.sha"],
       JSON.stringify({
-        message: commitMessage({ target, pins: changed, coAuthor }),
+        message: commitMessage({ target, pins: changed, coAuthor, workflow }),
         content: Buffer.from(replacePins(text, target), "utf8").toString("base64"),
         sha: file.sha,
         branch,
@@ -295,10 +325,10 @@ export function bumpRepo(repository, { target, dryRun = false, notes, coAuthor, 
     const url = run(
       ["api", "-X", "POST", `repos/${repository}/pulls`, "--input", "-", "--jq", ".html_url"],
       JSON.stringify({
-        title: prTitle(target),
+        title: prTitle(target, workflow),
         head: branch,
         base: BASE,
-        body: prBody({ repository, target, pins: changed, commits: [...commits.values()], notes, footer }),
+        body: prBody({ repository, target, pins: changed, commits: [...commits.values()], notes, footer, workflow }),
       }),
     ).trim();
     return done("opened", plan, url);
@@ -315,7 +345,7 @@ export function bumpRepo(repository, { target, dryRun = false, notes, coAuthor, 
 
 /** This function reads the arguments. It gives { repositories, options } or { error }. */
 export function parseArgs(argv) {
-  const valued = new Set(["--sha", "--notes", "--co-author", "--footer"]);
+  const valued = new Set(["--sha", "--file", "--notes", "--co-author", "--footer"]);
   const flags = new Set(["--dry-run", "--check"]);
   const options = { dryRun: false, check: false };
   const repositories = [];
@@ -331,6 +361,12 @@ export function parseArgs(argv) {
     else return { error: `not a repository: ${arg}` };
   }
   if (repositories.length === 0) return { error: "no repository" };
+  if (options.file !== undefined) {
+    const workflow = workflowPath(options.file);
+    if (workflow === undefined) return { error: `not a workflow file in ${WORKFLOWS}: ${options.file}` };
+    delete options.file;
+    options.workflow = workflow;
+  }
   return { repositories, options };
 }
 
@@ -339,7 +375,7 @@ if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathS
   const parsed = parseArgs(process.argv.slice(2));
   if (parsed.error !== undefined) {
     process.stderr.write(
-      `${parsed.error}\nusage: node scripts/release/bump-pins.mjs [--sha <commit>] [--dry-run | --check] [--notes <text>] [--co-author <name>] [--footer <text>] <owner/repo> ...\n`,
+      `${parsed.error}\nusage: node scripts/release/bump-pins.mjs [--sha <commit>] [--file <workflow>] [--dry-run | --check] [--notes <text>] [--co-author <name>] [--footer <text>] <owner/repo> ...\n`,
     );
     process.exit(2);
   }
@@ -364,7 +400,7 @@ if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathS
       process.stderr.write(`The target commit is not correct: ${firstLine(error)}\n`);
       process.exit(1);
     }
-    process.stdout.write(`Target: ${TEMPLATE}@${target}${options.dryRun ? " (dry run: no change)" : ""}\n`);
+    process.stdout.write(`Target: ${TEMPLATE}@${target}, file: ${options.workflow ?? WORKFLOW}${options.dryRun ? " (dry run: no change)" : ""}\n`);
     const compareCache = new Map();
     for (const repository of repositories) {
       const result = bumpRepo(repository, { ...options, target, compareCache });

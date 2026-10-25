@@ -39,6 +39,8 @@ For each repository, the script does these steps with the GitHub API (`gh api`).
 
 The text of the pull request lists the new commits of the template. `--notes` adds a paragraph. `--co-author` adds a `Co-Authored-By` line to the commit message. `--footer` adds a last line to the text of the pull request.
 
+`--file <workflow>` moves the pins of a different workflow in `.github/workflows/`, for example `--file ai-review.yml`. Renovate moves these pins each week. Use `--file` when a change of the template must not wait for Renovate. The release check stays the same.
+
 ### The release check
 
 The script refuses a repository in these conditions:

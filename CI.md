@@ -247,6 +247,7 @@ uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<full commit SHA>
 - These updates come in one group, "template workflows and actions", with no wait. Renovate merges them when CI passes.
 - The group comes on Monday before 06:00 (New York time). A workflow change during a release makes the tag job fail with HTTP 403 (`RELEASING.md`).
 - Renovate does not change `release.yml`. The release session moves the pins of `release.yml` with `scripts/release/bump-pins.mjs` (`RELEASING.md`).
+- A change of the template that must not wait for Renovate goes out with `bump-pins.mjs --file <workflow>` (`RELEASING.md`).
 - Renovate also moves `CLAUDE_CODE_VERSION` of `reusable-ai-review.yml` to the newest version on npm. A person reviews and merges that pull request.
 
 ## The template and new repositories
