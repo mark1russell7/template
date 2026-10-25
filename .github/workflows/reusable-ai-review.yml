@@ -43,10 +43,6 @@ jobs:
       group: ai-review-${{ github.repository }}-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     env:
-      # With the attribution header of the action (cc_entrypoint=claude-code-github-action), the API
-      # refuses each request of this account with "Your credit balance is too low". Without it, the
-      # same key works, as in claude -p.
-      CLAUDE_CODE_ATTRIBUTION_HEADER: "0"
       # No server-side advisor: it adds Opus calls to each review
       CLAUDE_CODE_DISABLE_ADVISOR_TOOL: "1"
     steps:
@@ -119,6 +115,26 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      # The action sets CLAUDE_CODE_ENTRYPOINT=claude-code-github-action, and no input changes it. The
+      # API refuses requests with that entrypoint for this account ("Credit balance is too low"), while
+      # the same key and the same Claude Code work with the entrypoint of the Agent SDK. So this step
+      # installs the Claude Code version of the action, and a wrapper sets the Agent SDK entrypoint.
+      - name: Install Claude Code
+        id: claude
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        env:
+          # The version that claude-code-action v1.0.257 installs. Change the two together.
+          CLAUDE_CODE_VERSION: 2.1.307
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash -s -- "$CLAUDE_CODE_VERSION"
+          wrapper="$RUNNER_TEMP/claude-wrapper/claude"
+          mkdir -p "$(dirname "$wrapper")"
+          printf '#!/bin/sh\nexport CLAUDE_CODE_ENTRYPOINT=sdk-ts\nexec "%s" "$@"\n' "$HOME/.local/bin/claude" > "$wrapper"
+          chmod +x "$wrapper"
+          "$wrapper" --version
+          echo "path=$wrapper" >> "$GITHUB_OUTPUT"
+
       - name: Review
         id: review
         if: steps.gate.outputs.run == 'true'
@@ -129,9 +145,9 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          path_to_claude_code_executable: ${{ steps.claude.outputs.path }}
           # Post inline comments at once, with no second model call that sorts them
           classify_inline_comments: "false"
-          show_full_output: "true"
           prompt: |
             You review pull request #${{ github.event.pull_request.number }} of the repository ${{ github.repository }}. You only write comments. You cannot change code or run commands.
 
@@ -160,40 +176,6 @@ jobs:
             --allowedTools mcp__github_inline_comment__create_inline_comment
             --disallowedTools Bash Edit Write MultiEdit NotebookEdit WebFetch WebSearch Task Agent TodoWrite "Read(./.git/**)"
             --json-schema '{"type":"object","properties":{"verdict":{"type":"string","enum":["findings","no-blocking-findings"]},"summary":{"type":"string"}},"required":["verdict","summary"],"additionalProperties":false}'
-            --debug-file ${{ runner.temp }}/claude-debug.log
-
-      - name: Diagnose the key (temporary)
-        if: steps.gate.outputs.run == 'true'
-        continue-on-error: true
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          k="$ANTHROPIC_API_KEY"
-          echo "key: length ${#k}, api-key prefix $([[ $k == sk-ant-api* ]] && echo yes || echo no), whitespace $([[ $k =~ [[:space:]] ]] && echo yes || echo no)"
-          for m in claude-haiku-5-5 claude-sonnet-5-5; do
-            code=$(curl -sS -o "$RUNNER_TEMP/r.json" -w '%{http_code}' https://api.anthropic.com/v1/messages \
-              -H "x-api-key: $k" -H "anthropic-version: 2023-06-01" -H "content-type: application/json" \
-              -d "{\"model\":\"$m\",\"max_tokens\":16,\"messages\":[{\"role\":\"user\",\"content\":\"Say OK\"}]}")
-            echo "curl $m: HTTP $code $(jq -c '{error: .error.type, msg: .error.message, out: .usage.output_tokens}' "$RUNNER_TEMP/r.json")"
-          done
-          C="$HOME/.local/bin/claude"
-          "$C" --version
-          for mode in bare default; do
-            flag=""; [ "$mode" = bare ] && flag="--bare"
-            echo "claude -p $mode: $(timeout 90 "$C" -p $flag --model claude-haiku-5-5 --max-turns 1 --output-format json "Say OK" | jq -c '{is_error, result, total_cost_usd}')"
-          done
-          echo "claude -p entrypoint: $(CLAUDE_CODE_ENTRYPOINT=claude-code-github-action timeout 90 "$C" -p --model claude-haiku-5-5 --max-turns 1 --output-format json "Say OK" | jq -c '{is_error, result, total_cost_usd}')"
-
-      - name: Debug log (temporary)
-        if: steps.gate.outputs.run == 'true'
-        continue-on-error: true
-        run: |
-          echo "== settings"; cat ~/.claude/settings.json || true
-          echo "== env names"; env | cut -d= -f1 | grep -E '^(ANTHROPIC|CLAUDE)' | sort || true
-          f="$RUNNER_TEMP/claude-debug.log"
-          echo "== debug log: $(wc -l < "$f" 2>/dev/null) lines"
-          grep -i -E 'api|beta|model|error|credit|billing|tier|speed|header|request|status|context|1m|fast|retry|auth|source|url|400|429' "$f" \
-            | grep -v -i -E 'x-api-key|authorization|sk-ant|bearer' | cut -c1-500 | head -200 || true
 
       - name: Post the summary comment
         if: steps.gate.outputs.run == 'true'
