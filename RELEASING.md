@@ -51,7 +51,15 @@ A run also tags a version that it did not publish, but only when these two condi
 - npm has the version with a provenance statement from this repository.
 - The repository has no tag for the version.
 
-The tag then goes on the commit that the provenance statement names. That commit is the source of the version. Thus a run after a failure adds the missing tags. After a repository copies this `release.yml`, the next start of the workflow also tags the current versions. A version without a provenance statement gets no tag, for example a version that a person published by hand.
+The tag then goes on the commit that the provenance statement names. That commit is the source of the version. Thus a run after a failure adds the missing tags. A version without a provenance statement gets no tag, for example a version that a person published by hand.
+
+### A tag that GitHub refuses
+
+The token of a workflow cannot change workflow files. Thus GitHub refuses a tag from the workflow (HTTP 403) when the workflow files of the commit differ from the workflow files of each branch.
+
+- An old commit gets no tag after a change to a workflow file. For example, the versions before a repository copies this `release.yml` get no tag from the workflow.
+- For a version that the run published, the job fails. For a different version, the job gives a warning.
+- For each refused tag, the summary of the run shows a `gh release create` command. Start it with your own GitHub token.
 
 ### Tag rulesets
 
