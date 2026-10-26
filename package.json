@@ -20,8 +20,8 @@
   },
   "devDependencies": {
     "@mark1russell7/boundaries": "workspace:*",
-    "@mark1russell7/cue": "github:mark1russell7/cue",
-    "@mark1russell7/ste-lint": "github:mark1russell7/ste-lint",
+    "@mark1russell7/cue": "^1.0.2",
+    "@mark1russell7/ste-lint": "^0.1.1",
     "@swc/core": "^1.15.0",
     "dependency-cruiser": "^18.7.0",
     "publint": "^0.3.25",
