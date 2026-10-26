@@ -15,11 +15,15 @@
     "test:ai-review": "node --test \"scripts/ai-review/*.test.mjs\"",
     "test:workflows": "node --test \"scripts/workflows/*.test.mjs\"",
     "typecheck": "pnpm -r run typecheck",
-    "lint:ste": "ste-lint"
+    "lint:ste": "ste-lint",
+    "check:boundaries": "depcruise --config .dependency-cruiser.mjs packages"
   },
   "devDependencies": {
+    "@mark1russell7/boundaries": "workspace:*",
     "@mark1russell7/cue": "github:mark1russell7/cue",
     "@mark1russell7/ste-lint": "github:mark1russell7/ste-lint",
+    "@swc/core": "^1.15.0",
+    "dependency-cruiser": "^18.7.0",
     "publint": "^0.3.25",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
