@@ -7,6 +7,16 @@ These composite actions are shared by the repositories of mark1russell7. A repos
 | `site-pages` | Writes `releases/index.html`, `status/index.html`, `data/releases.json` and `data/status.json` into the built site (`@mark1russell7/site-pages`). |
 | `green-main` | Gives the commit for a scheduled build: the newest commit of `main`, or the newest commit that passed CI when the newest one failed. The site does not get a red commit at any time. It does not step back behind a push deploy at any time. `pending: green` waits for CI in place of the newest commit. |
 | `npm-publish` | Publishes the tarballs of the release build to npm, with trusted publishing (OIDC) and provenance. The publish job of `release.yml` uses it (`RELEASING.md`). |
+| `setup-playwright` | Installs the Playwright browsers for a browser job. The browsers come from a cache with a key on the Playwright version. With a cache hit, only the system packages install. Each try has a time limit (8 minutes) and the install gets a second try, so a hung download stops in minutes and not at the job timeout. Use it in place of `playwright install --with-deps`. |
+
+A browser job uses `setup-playwright` after the install of its dependencies:
+
+```yaml
+      - uses: mark1russell7/template/.github/actions/setup-playwright@<commit> # main
+        with:
+          browsers: chromium firefox webkit
+          command: pnpm --filter @vex/site exec playwright
+```
 
 ## Add the pages to a site
 
