@@ -23,7 +23,7 @@ on:
       scripts:
         description: The package.json scripts to run, in this sequence, separated by spaces. A script that package.json does not have is skipped.
         type: string
-        default: format:check typecheck lint test build lint:ste
+        default: format:check typecheck lint test build check:boundaries lint:ste
       recursive-scripts:
         description: The scripts that run in each package of the workspace (pnpm -r --if-present) when the root package.json does not have them.
         type: string
