@@ -1,7 +1,7 @@
 /**
  * The import boundaries of a workspace, as a dependency-cruiser configuration. Each package is a
- * unit: another package imports it only through an entry of its package.json (`exports`, `main`,
- * `module`, `types`, `bin`), never by a relative path or a deep path into its folder.
+ * unit. Another package imports it only through an entry of its package.json (`exports`, `main`,
+ * `module`, `types`, `bin`). A relative path or a deep path into its folder is not an entry.
  *
  * A repository uses it from its `.dependency-cruiser.cjs`:
  *
@@ -62,16 +62,21 @@ const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\
 export function workspaceGlobs(yaml: string): string[] {
   const globs: string[] = [];
   let inList = false;
+  // String operations, not one large RegExp: a RegExp with nested whitespace groups can be slow on some input.
   for (const raw of yaml.split(/\r?\n/)) {
-    const line = raw.replace(/\s+#.*$/, "");
+    const hash = raw.indexOf(" #");
+    const line = (hash === -1 ? raw : raw.slice(0, hash)).trimEnd();
+    const trimmed = line.trimStart();
+    if (trimmed === "" || trimmed.startsWith("#")) continue;
     if (/^packages\s*:/.test(line)) {
       inList = true;
       continue;
     }
     if (!inList) continue;
-    const item = /^\s+-\s*["']?([^"']+?)["']?\s*$/.exec(line);
-    if (item?.[1]) globs.push(item[1]);
-    else if (/^\S/.test(line)) break;
+    if (trimmed === line) break;
+    if (!trimmed.startsWith("-")) continue;
+    const item = trimmed.slice(1).trim().replace(/^["']/, "").replace(/["']$/, "");
+    if (item) globs.push(item);
   }
   return globs;
 }
@@ -259,7 +264,7 @@ export function parserOptions(root?: string): Record<string, unknown> {
  * The default options: the source of the packages, with type-only imports, resolved as Node resolves
  * them. There is no `includeOnly`, because it also removes the imports that do not resolve, and the
  * rule not-a-declared-export needs them. The "types" condition is not used: it resolves to a
- * declaration file, and the analysis excludes declaration files, so a deep import would not show.
+ * declaration file, and the analysis excludes declaration files, so a deep import does not show.
  */
 export function defaultOptions(root?: string): Record<string, unknown> {
   return {
