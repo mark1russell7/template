@@ -193,7 +193,7 @@ importers:
         version: https://codeload.github.com/mark1russell7/cue/tar.gz/9c99ad65d51cefcba5a8b6dc89358d7a94758ca7
       '@mark1russell7/service':
         specifier: ^0.5.8
-        version: 0.5.16(zod@4.6.7)
+        version: 0.5.17(zod@4.6.7)
       '@types/node':
         specifier: ^26.6.4
         version: 26.6.4
@@ -441,8 +441,8 @@ packages:
       zod:
         optional: true
 
-  '@mark1russell7/service@0.5.16':
-    resolution: {integrity: sha512-TPHu5MMCt67Rja24eVVmLA9CJ5oAdlp1MQEPhy2cHX9W6EdWQ9wfCuZOnDOzqkZOyWOCmCN1NuvmXuqWtrc2cw==}
+  '@mark1russell7/service@0.5.17':
+    resolution: {integrity: sha512-ZNAjwTm5mVjcPmC8OJ8AybbZKwJQF9R391+uKA4a46bH1h1CHgWeaEwqrtFgNmUNs/Yx5UkbUuUN6bmm0gaURw==}
     engines: {node: '>=22.19'}
     peerDependencies:
       '@grpc/grpc-js': ^1.14.6
@@ -1383,7 +1383,7 @@ snapshots:
     optionalDependencies:
       zod: 4.6.7
 
-  '@mark1russell7/service@0.5.16(zod@4.6.7)':
+  '@mark1russell7/service@0.5.17(zod@4.6.7)':
     dependencies:
       '@mark1russell7/algebra': 0.7.4(zod@4.6.7)
       '@mark1russell7/quantity': 0.2.0(zod@4.6.7)
