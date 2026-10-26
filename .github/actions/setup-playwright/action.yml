@@ -1,7 +1,7 @@
 name: setup-playwright
 description: >-
-  Installs the Playwright browsers with a cache, a time limit and one more try, so that a hung download or apt step
-  fails in minutes and not at the job timeout.
+  Installs the Playwright browsers and their system packages from a cache, with a time limit and one more try, so
+  that a slow package mirror or a hung download does not hold the job until its timeout.
 inputs:
   browsers:
     description: The browsers, separated by spaces (for example "chromium firefox webkit").
@@ -16,7 +16,7 @@ inputs:
     default: .
   timeout-minutes:
     description: The time limit of each try of the install.
-    default: "8"
+    default: "12"
   attempts:
     description: The number of tries of the install.
     default: "2"
@@ -25,7 +25,7 @@ outputs:
     description: The Playwright version.
     value: ${{ steps.version.outputs.version }}
   cache-hit:
-    description: '"true" when the browsers came from the cache.'
+    description: '"true" when the browsers and the system packages came from the cache.'
     value: ${{ steps.cache.outputs.cache-hit }}
 runs:
   using: composite
@@ -44,11 +44,28 @@ runs:
         echo "PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/ms-playwright" >> "$GITHUB_ENV"
         echo "version=$version" >> "$GITHUB_OUTPUT"
         echo "browsers=$(echo $BROWSERS | tr ' ' '-')" >> "$GITHUB_OUTPUT"
+        echo "image=${ImageOS:-$RUNNER_OS}" >> "$GITHUB_OUTPUT"
+    - name: Keep the downloaded system packages for the cache
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        # apt keeps its .deb files in a folder that the cache can write, and waits for the dpkg lock in place of a
+        # failure at once.
+        mkdir -p "$HOME/.cache/apt-archives/partial"
+        printf '%s\n' \
+          "Dir::Cache::Archives \"$HOME/.cache/apt-archives\";" \
+          'APT::Keep-Downloaded-Packages "true";' \
+          'Binary::apt::APT::Keep-Downloaded-Packages "true";' \
+          'DPkg::Lock::Timeout "180";' \
+          'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/99-setup-playwright > /dev/null
+        sudo rm -f /etc/apt/apt.conf.d/docker-clean
     - id: cache
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: ~/.cache/ms-playwright
-        key: playwright-${{ runner.os }}-${{ steps.version.outputs.version }}-${{ steps.version.outputs.browsers }}
+        path: |
+          ~/.cache/ms-playwright
+          ~/.cache/apt-archives/*.deb
+        key: playwright-${{ runner.os }}-${{ steps.version.outputs.image }}-${{ steps.version.outputs.version }}-${{ steps.version.outputs.browsers }}
     - name: Install the browsers and their system packages
       shell: bash
       working-directory: ${{ inputs.working-directory }}
@@ -59,11 +76,28 @@ runs:
         MINUTES: ${{ inputs.timeout-minutes }}
         ATTEMPTS: ${{ inputs.attempts }}
       run: |
-        # With the browsers from the cache, only the system packages are missing.
+        # With the browsers from the cache, only the system packages are missing (and apt finds them in the cache).
         if [ "$HIT" = true ]; then step="install-deps $BROWSERS"; else step="install --with-deps $BROWSERS"; fi
+        # A stopped try can leave sudo apt-get running in its own session, with the dpkg lock. Stop it and repair
+        # dpkg before the next try.
+        clean_up() {
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo pkill -TERM -x apt-get 2>/dev/null || true
+            sudo pkill -TERM -x dpkg 2>/dev/null || true
+            sleep 5
+            sudo pkill -KILL -x apt-get 2>/dev/null || true
+            sudo dpkg --configure -a || true
+          fi
+        }
         for attempt in $(seq 1 "$ATTEMPTS"); do
-          if timeout --kill-after=30s "${MINUTES}m" $COMMAND $step; then exit 0; fi
+          setsid -w $COMMAND $step &
+          pid=$!
+          ( sleep "$((MINUTES * 60))"; kill -TERM -- "-$pid" 2>/dev/null; sleep 30; kill -KILL -- "-$pid" 2>/dev/null ) &
+          watch=$!
+          if wait "$pid"; then pkill -P "$watch" 2>/dev/null || true; kill "$watch" 2>/dev/null || true; exit 0; fi
+          pkill -P "$watch" 2>/dev/null || true; kill "$watch" 2>/dev/null || true
           echo "::warning::Try $attempt of $ATTEMPTS of \"playwright $step\" failed or took more than $MINUTES minutes."
+          clean_up
         done
         echo "::error::\"playwright $step\" failed $ATTEMPTS times."
         exit 1
