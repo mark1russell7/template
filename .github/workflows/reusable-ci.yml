@@ -60,8 +60,42 @@ on:
         description: The time limit of each job of the matrix.
         type: number
         default: 15
+      changesets:
+        description: >-
+          On a pull request, check that each published package that changes has a changeset, and that no changeset
+          makes a 0.x package into 1.0.0 (actions/changeset-check). A repository with no .changeset/config.json passes.
+        type: boolean
+        default: true
+      changeset-ignore:
+        description: More globs of files that need no changeset, separated by spaces.
+        type: string
+        default: ""
 
 jobs:
+  changesets:
+    if: github.event_name == 'pull_request' && inputs.changesets
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      # The whole history, so that git finds the merge base of the pull request
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      # The action comes from the commit of this workflow, as in reusable-pages.yml
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .shared-actions
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      - uses: ./.shared-actions/.github/actions/changeset-check
+        with:
+          ignore: ${{ inputs.changeset-ignore }}
+
   checks:
     name: checks (${{ matrix.os }}, node ${{ matrix.node }})
     runs-on: ${{ matrix.os }}

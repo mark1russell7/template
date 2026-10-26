@@ -1,0 +1,27 @@
+name: changeset-check
+description: >-
+  Fails a pull request when it changes a published package and has no changeset for it, or when a changeset
+  would make a 0.x package into 1.0.0. A repository with no .changeset/config.json passes.
+inputs:
+  ignore:
+    description: >-
+      More globs of files that need no changeset, separated by spaces (from the root or from the package folder).
+      Markdown, tests and fixtures are already ignored.
+    default: ""
+  changeset-dir:
+    description: The folder of the changesets.
+    default: .changeset
+runs:
+  using: composite
+  steps:
+    - name: Changesets
+      shell: bash
+      env:
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        IGNORE: ${{ inputs.ignore }}
+        CHANGESET_DIR: ${{ inputs.changeset-dir }}
+        CHECK: ${{ github.action_path }}/check.mjs
+      run: node "$CHECK"

@@ -37,6 +37,20 @@ The job starts all the scripts, also after a failure. Then it fails with the nam
 | `working-directory` | `.` | The folder of `package.json`. |
 | `fetch-depth` | `1` | The commits of the checkout. `0` gets the whole history. |
 | `timeout-minutes` | `15` | The time limit of each job of the matrix. |
+| `changesets` | `true` | The changeset check on a pull request (refer to the next section). |
+| `changeset-ignore` | (empty) | More globs of files that need no changeset. |
+
+### The changeset check
+
+On a pull request, the job `changesets` examines the changesets (`.github/actions/changeset-check`). A repository with no `.changeset/config.json` passes. The job fails in these cases:
+
+- A published package changes, and no changeset names it. Markdown, tests, fixtures and a change of only `devDependencies` or `scripts` in `package.json` need no changeset.
+- A changeset names a package that the repository does not have, or it does not parse.
+- A changeset gives `major` to a `0.x` package. changesets makes `1.0.0` from it. Before `1.0`, a breaking change is a `minor`. A decided `1.0` release adds the label `release-1.0`.
+
+In a fixed group, a changeset of one member sets the version of all members. The other members that change get a note, not an error. The summary shows each package, its changeset and the release of each fixed group. Before `1.0`, a `minor` of a group is a breaking change, and the note asks for a migration note.
+
+A change with no release has an empty changeset (`pnpm changeset --empty`) or the label `no-changeset`. The version pull request of changesets (`changeset-release/*`) is skipped.
 
 A repository with more checks adds its own jobs next to the job `ci`. An example with inputs:
 
