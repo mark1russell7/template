@@ -38,7 +38,15 @@ export interface WorkspacePackage {
   private: boolean;
   /** RegExp sources of the files that other packages can import. */
   entries: string[];
+  /** The names of the dependencies in package.json: dependencies, devDependencies, peerDependencies and optionalDependencies. */
+  dependencies?: string[];
 }
+
+/**
+ * The scopes of the rule unknown-workspace-package. A list replaces the scopes of the workspace
+ * packages. `add` and `remove` change that list. An empty list turns off the rule.
+ */
+export type ScopeOptions = string[] | { add?: string[]; remove?: string[] };
 
 export interface BoundaryOptions {
   /**
@@ -48,8 +56,18 @@ export interface BoundaryOptions {
   packages?: string[];
   /** The apps: the leaves of the graph, which no other package imports. "private" means each private package. */
   apps?: "private" | string[];
-  /** A text before each comment, for example the decision record of the rules. */
+  /** A text before each comment, for example the decision record of the rules. The comments of `forbidden` get it too. */
   reference?: string;
+  /**
+   * The scopes (for example "@x") in which an import that does not resolve must name a workspace
+   * package or a declared dependency. The default is the scopes of the workspace package names.
+   */
+  scopes?: ScopeOptions;
+  /**
+   * The build folders of each package, for example `["dist", "build"]` (the default). The analysis
+   * does not follow the imports of their files, and it does not start from them.
+   */
+  buildFolders?: string[];
   /** More rules, after the rules of the boundaries. */
   forbidden?: Rule[];
   /** More options of dependency-cruiser. They replace the default options with the same key. */
@@ -57,6 +75,31 @@ export interface BoundaryOptions {
 }
 
 const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** The default build folders of a package. */
+const BUILD_FOLDERS = ["dist", "build"];
+
+const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
+
+/** The names of the dependencies of a package.json, from each dependency field. */
+export function declaredDependencies(manifest: Record<string, unknown>): string[] {
+  const names = new Set<string>();
+  for (const field of DEPENDENCY_FIELDS) {
+    const value = manifest[field];
+    if (value && typeof value === "object" && !Array.isArray(value)) for (const name of Object.keys(value)) names.add(name);
+  }
+  return [...names].sort();
+}
+
+/** The scopes of the package names, for example "@x" for "@x/a", changed by the option `scopes`. A name with no scope gives no scope. */
+export function workspaceScopes(packages: Pick<WorkspacePackage, "name">[], opts: ScopeOptions = {}): string[] {
+  const normal = (scope: string): string => (scope.startsWith("@") ? scope : `@${scope}`).replace(/\/$/, "");
+  if (Array.isArray(opts)) return [...new Set(opts.map(normal))].sort();
+  const scopes = new Set(packages.filter((p) => p.name.startsWith("@") && p.name.includes("/")).map((p) => p.name.slice(0, p.name.indexOf("/"))));
+  for (const scope of opts.add ?? []) scopes.add(normal(scope));
+  for (const scope of opts.remove ?? []) scopes.delete(normal(scope));
+  return [...scopes].sort();
+}
 
 /** The `packages` list of a pnpm-workspace.yaml file. It reads only that list, with no YAML library. */
 export function workspaceGlobs(yaml: string): string[] {
@@ -174,13 +217,25 @@ export function workspacePackages(root: string, globs?: string[]): WorkspacePack
       continue;
     }
     if (typeof manifest["name"] !== "string") continue;
-    found.push({ name: manifest["name"], dir, private: manifest["private"] === true, entries: packageEntries(dir, manifest) });
+    found.push({
+      name: manifest["name"],
+      dir,
+      private: manifest["private"] === true,
+      entries: packageEntries(dir, manifest),
+      dependencies: declaredDependencies(manifest),
+    });
   }
   return found;
 }
 
+/** The options of `boundaryRules()`. */
+export interface RuleOptions extends Pick<BoundaryOptions, "apps" | "reference" | "scopes"> {
+  /** More declared dependencies, for example the dependencies of the root package.json. */
+  dependencies?: string[];
+}
+
 /** The rules of the boundaries for a list of packages. `boundaries()` reads the list from the workspace. */
-export function boundaryRules(packages: WorkspacePackage[], opts: Pick<BoundaryOptions, "apps" | "reference"> = {}): Rule[] {
+export function boundaryRules(packages: WorkspacePackage[], opts: RuleOptions = {}): Rule[] {
   const why = (text: string): string => (opts.reference ? `${opts.reference} ${text}` : text);
   const anyPackage = packages.map((p) => `^${escape(p.dir)}/`);
   const rules: Rule[] = [];
@@ -214,6 +269,21 @@ export function boundaryRules(packages: WorkspacePackage[], opts: Pick<BoundaryO
       comment: why("An import of a package of this workspace does not resolve. The path is not an entry of its exports, or the package is not built."),
       from: {},
       to: { path: `^(${names.join("|")})(/|$)`, couldNotResolve: true },
+    });
+  }
+  const scopes = workspaceScopes(packages, opts.scopes);
+  if (scopes.length > 0) {
+    const inScope = (name: string): boolean => scopes.some((scope) => name.startsWith(`${scope}/`));
+    const declared = [...packages.flatMap((p) => p.dependencies ?? []), ...(opts.dependencies ?? [])];
+    const known = [...new Set([...packages.map((p) => p.name), ...declared].filter(inScope))].sort().map(escape);
+    rules.push({
+      name: "unknown-workspace-package",
+      severity: "error",
+      comment: why(
+        `An import names a package of the scope ${scopes.join(", ")}, but the import does not resolve. The name is not a package of this workspace and not a declared dependency. Correct the name, or add the package.`,
+      ),
+      from: {},
+      to: { path: `^(${scopes.map(escape).join("|")})/`, ...(known.length > 0 ? { pathNot: `^(${known.join("|")})(/|$)` } : {}), couldNotResolve: true },
     });
   }
   const apps =
@@ -260,34 +330,68 @@ export function parserOptions(root?: string): Record<string, unknown> {
   return {};
 }
 
+/** The options of `defaultOptions()`. */
+export interface DefaultOptionsInput {
+  /** The packages of the workspace. The default is `workspacePackages(root)`. */
+  packages?: WorkspacePackage[];
+  /** The build folders of each package. The default is `["dist", "build"]`. */
+  buildFolders?: string[];
+}
+
+/** The RegExp sources of the paths that the analysis does not follow: node_modules and the build folders of each package. */
+export function doNotFollowPaths(packages: Pick<WorkspacePackage, "dir">[], buildFolders: string[] = BUILD_FOLDERS): string[] {
+  const paths = ["(^|/)node_modules/"];
+  const dirs = packages.map((p) => p.dir).filter((dir) => dir !== "" && dir !== ".");
+  const folders = buildFolders.map((folder) => folder.replace(/^\.\//, "").replace(/\/$/, "")).filter((folder) => folder !== "");
+  if (dirs.length > 0 && folders.length > 0) paths.push(`^(${dirs.map(escape).join("|")})/(${folders.map(escape).join("|")})/`);
+  return paths;
+}
+
 /**
  * The default options: the source of the packages, with type-only imports, resolved as Node resolves
- * them. There is no `includeOnly`, because it also removes the imports that do not resolve, and the
- * rule not-a-declared-export needs them. The "types" condition is not used: it resolves to a
- * declaration file, and the analysis excludes declaration files, so a deep import does not show.
+ * an ESM import. There is no `includeOnly`, because it also removes the imports that do not resolve,
+ * and the rule not-a-declared-export needs them. The analysis does not follow node_modules and the
+ * build folders of the packages: an import of a package stops at its entry. The "types" condition is
+ * not used: it resolves to a declaration file, and the analysis excludes declaration files, so a deep
+ * import does not show. The `require` condition is not used: an ESM import does not resolve to an
+ * entry that is only for `require`.
  */
-export function defaultOptions(root?: string): Record<string, unknown> {
+export function defaultOptions(root?: string, input: DefaultOptionsInput = {}): Record<string, unknown> {
+  const packages = input.packages ?? (root ? workspacePackages(root) : []);
   return {
     ...parserOptions(root),
     exclude: {
       path: ["(^|/)node_modules/", "\\.(test|spec|e2e)\\.[cm]?[jt]sx?$", "\\.d\\.[cm]?ts$", "/(test|tests|e2e|__tests__|fixtures)/"],
     },
-    doNotFollow: { path: ["(^|/)node_modules/"] },
+    doNotFollow: { path: doNotFollowPaths(packages, input.buildFolders) },
     enhancedResolveOptions: {
       exportsFields: ["exports"],
-      conditionNames: ["import", "require", "node", "default"],
+      conditionNames: ["import", "node", "default"],
       mainFields: ["module", "main"],
     },
     skipAnalysisNotInRules: true,
   };
 }
 
+/** A rule with the reference before its comment, when the comment does not start with it. */
+function withReference(rule: Rule, reference?: string): Rule {
+  if (!reference || rule.comment?.startsWith(reference)) return rule;
+  return { ...rule, comment: rule.comment ? `${reference} ${rule.comment}` : reference };
+}
+
 /** The dependency-cruiser configuration of the boundaries for the workspace in the folder `root`. */
 export function boundaries(root: string, opts: BoundaryOptions = {}): Config {
   const packages = workspacePackages(root, opts.packages);
-  const options = { ...defaultOptions(root), ...opts.options };
+  let rootManifest: Record<string, unknown> = {};
+  try {
+    rootManifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as Record<string, unknown>;
+  } catch {
+    // No package.json at the root
+  }
+  const options = { ...defaultOptions(root, { packages, ...(opts.buildFolders ? { buildFolders: opts.buildFolders } : {}) }), ...opts.options };
+  const rules = boundaryRules(packages, { ...opts, dependencies: declaredDependencies(rootManifest) });
   return {
-    forbidden: [...boundaryRules(packages, opts), ...(opts.forbidden ?? [])],
+    forbidden: [...rules, ...(opts.forbidden ?? []).map((rule) => withReference(rule, opts.reference))],
     options,
   };
 }

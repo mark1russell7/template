@@ -4,20 +4,26 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 12 names
+## . (build/index.d.ts): 18 names
 
 BoundaryOptions: build/index.d.ts#BoundaryOptions
 Config: build/index.d.ts#Config
+DefaultOptionsInput: build/index.d.ts#DefaultOptionsInput
 Rule: build/index.d.ts#Rule
+RuleOptions: build/index.d.ts#RuleOptions
+ScopeOptions: build/index.d.ts#ScopeOptions
 WorkspacePackage: build/index.d.ts#WorkspacePackage
 boundaries: build/index.d.ts#boundaries
 boundaryRules: build/index.d.ts#boundaryRules
+declaredDependencies: build/index.d.ts#declaredDependencies
 defaultOptions: build/index.d.ts#defaultOptions
+doNotFollowPaths: build/index.d.ts#doNotFollowPaths
 entryPattern: build/index.d.ts#entryPattern
 packageEntries: build/index.d.ts#packageEntries
 parserOptions: build/index.d.ts#parserOptions
 workspaceGlobs: build/index.d.ts#workspaceGlobs
 workspacePackages: build/index.d.ts#workspacePackages
+workspaceScopes: build/index.d.ts#workspaceScopes
 
 ## Declarations
 
@@ -26,6 +32,8 @@ export interface BoundaryOptions {
   packages?: string[];
   apps?: "private" | string[];
   reference?: string;
+  scopes?: ScopeOptions;
+  buildFolders?: string[];
   forbidden?: Rule[];
   options?: Record<string, unknown>;
 }
@@ -34,6 +42,12 @@ export interface BoundaryOptions {
 export interface Config {
   forbidden: Rule[];
   options: Record<string, unknown>;
+}
+
+### build/index.d.ts#DefaultOptionsInput
+export interface DefaultOptionsInput {
+  packages?: WorkspacePackage[];
+  buildFolders?: string[];
 }
 
 ### build/index.d.ts#Rule
@@ -45,22 +59,40 @@ export interface Rule {
   to: Record<string, unknown>;
 }
 
+### build/index.d.ts#RuleOptions
+export interface RuleOptions extends Pick<BoundaryOptions, "apps" | "reference" | "scopes"> {
+  dependencies?: string[];
+}
+
+### build/index.d.ts#ScopeOptions
+export type ScopeOptions = string[] | {
+  add?: string[];
+  remove?: string[];
+};
+
 ### build/index.d.ts#WorkspacePackage
 export interface WorkspacePackage {
   name: string;
   dir: string;
   private: boolean;
   entries: string[];
+  dependencies?: string[];
 }
 
 ### build/index.d.ts#boundaries
 export declare function boundaries(root: string, opts?: BoundaryOptions): Config;
 
 ### build/index.d.ts#boundaryRules
-export declare function boundaryRules(packages: WorkspacePackage[], opts?: Pick<BoundaryOptions, "apps" | "reference">): Rule[];
+export declare function boundaryRules(packages: WorkspacePackage[], opts?: RuleOptions): Rule[];
+
+### build/index.d.ts#declaredDependencies
+export declare function declaredDependencies(manifest: Record<string, unknown>): string[];
 
 ### build/index.d.ts#defaultOptions
-export declare function defaultOptions(root?: string): Record<string, unknown>;
+export declare function defaultOptions(root?: string, input?: DefaultOptionsInput): Record<string, unknown>;
+
+### build/index.d.ts#doNotFollowPaths
+export declare function doNotFollowPaths(packages: Pick<WorkspacePackage, "dir">[], buildFolders?: string[]): string[];
 
 ### build/index.d.ts#entryPattern
 export declare function entryPattern(dir: string, target: string): string;
@@ -76,3 +108,6 @@ export declare function workspaceGlobs(yaml: string): string[];
 
 ### build/index.d.ts#workspacePackages
 export declare function workspacePackages(root: string, globs?: string[]): WorkspacePackage[];
+
+### build/index.d.ts#workspaceScopes
+export declare function workspaceScopes(packages: Pick<WorkspacePackage, "name">[], opts?: ScopeOptions): string[];
