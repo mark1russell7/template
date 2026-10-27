@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { isGitSpecifier, isPinned, isSourcePath, parseJsonc, runChecks, type CheckOptions, type RuleResult } from "./index.ts";
+import { hasTests, isGitSpecifier, isPinned, isSourcePath, parseJsonc, runChecks, type CheckOptions, type RuleResult } from "./index.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-rules-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -174,6 +174,17 @@ describe("tsconfig-test", () => {
     expect(result.breaks[1]?.message).toMatch(/does not examine tsconfig\.test\.json/);
   });
 
+  it("skips a package with no test file in git, and knows the forms of a test file", () => {
+    const root = fixture({ "package.json": { name: "one" }, "tsconfig.json": {}, "src/index.ts": "export {};\n" });
+    commitAll(root);
+    expect(rule(root, "tsconfig-test").status).toBe("pass");
+    expect(hasTests(["packages/a/src/x.test.ts"], "packages/a")).toBe(true);
+    expect(hasTests(["src/__tests__/x.ts", "README.md"], "")).toBe(true);
+    expect(hasTests(["test/x.spec.mjs"], "")).toBe(true);
+    expect(hasTests(["packages/b/src/x.test.ts", "packages/a/src/x.ts"], "packages/a")).toBe(false);
+    expect(hasTests(["test/api/public-api.txt"], "")).toBe(false);
+  });
+
   it("examines the root of a repository of one package", () => {
     const root = fixture({ "package.json": { name: "one" }, "pnpm-workspace.yaml": "allowBuilds: {}\n", "tsconfig.json": {} });
     expect(rule(root, "tsconfig-test").breaks.map((item) => item.file)).toEqual(["tsconfig.test.json"]);
@@ -216,6 +227,17 @@ describe("cue-preset", () => {
       "packages/b/tsconfig.test.json: tsconfig.test.json turns off the strict option strictNullChecks.",
       "packages/b/tsconfig.test.json: tsconfig.test.json turns off the strict option noUncheckedIndexedAccess.",
     ]);
+  });
+
+  it("does not examine extends when the option extends is false, and still reports a strict option turned off", () => {
+    const root = workspace(
+      { conventions: { rules: { "cue-preset": { extends: false, reason: "the package publishes its own presets" } } } },
+      {
+        "packages/a/package.json": { name: "a" },
+        "packages/a/tsconfig.json": { extends: "./tsconfig/lib.json", compilerOptions: { strict: false } },
+      },
+    );
+    expect(rule(root, "cue-preset").breaks.map((item) => item.message)).toEqual(["tsconfig.json turns off the strict option strict."]);
   });
 
   it("reads JSON with comments and commas at the end", () => {

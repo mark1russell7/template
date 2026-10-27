@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 60 names
+## . (build/index.d.ts): 61 names
 
 type AuditSource: build/index.d.ts#AuditSource
 type Break: build/index.d.ts#Break
@@ -38,6 +38,7 @@ formatResult: build/index.d.ts#formatResult
 globFolders: build/index.d.ts#globFolders
 globToRegExp: build/index.d.ts#globToRegExp
 hasFile: build/index.d.ts#hasFile
+hasTests: build/index.d.ts#hasTests
 inFolder: build/index.d.ts#inFolder
 isGitSpecifier: build/index.d.ts#isGitSpecifier
 isPinned: build/index.d.ts#isPinned
@@ -235,6 +236,9 @@ export declare function globToRegExp(glob: string): RegExp;
 
 ### build/index.d.ts#hasFile
 export declare const hasFile: (dir: string, file: string) => boolean;
+
+### build/index.d.ts#hasTests
+export declare function hasTests(files: readonly string[], folder: string): boolean;
 
 ### build/index.d.ts#inFolder
 export declare const inFolder: (folder: string, file: string) => string;

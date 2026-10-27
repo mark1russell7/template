@@ -118,6 +118,11 @@ export const cuePreset: Rule = {
   ],
   options: {
     prefix: { type: "string", default: "@mark1russell7/cue/", description: "The start of the `extends` path of a preset." },
+    extends: {
+      type: "boolean",
+      default: true,
+      description: "When false, the rule does not examine `extends`. It still reports each strict option that a config turns off. For a package that publishes its own presets.",
+    },
   },
   check(context, options) {
     const prefix = typeof options["prefix"] === "string" ? options["prefix"] : "@mark1russell7/cue/";
@@ -133,7 +138,7 @@ export const cuePreset: Rule = {
           continue;
         }
         const config = asObject(value);
-        if (name === "tsconfig.json" && !extendsOf(config).some((base) => base.startsWith(prefix))) {
+        if (name === "tsconfig.json" && options["extends"] !== false && !extendsOf(config).some((base) => base.startsWith(prefix))) {
           const line = lineOf(readFileSync(path, "utf8"), '"extends"');
           breaks.push({ file, ...(line === undefined ? {} : { line }), message: `tsconfig.json does not extend a preset of ${prefix.replace(/\/$/, "")}.` });
         }
