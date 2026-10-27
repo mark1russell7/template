@@ -2,7 +2,7 @@
  * The rule `tsconfig-test`: each TypeScript package has a `tsconfig.test.json`, and its typecheck
  * examines it.
  */
-import { hasFile, inFolder, lineOf, type Break, type Rule } from "../rule.ts";
+import { codePackages, hasFile, inFolder, lineOf, type Break, type Rule } from "../rule.ts";
 
 export const tsconfigTest: Rule = {
   id: "tsconfig-test",
@@ -23,10 +23,9 @@ export const tsconfigTest: Rule = {
     file: { type: "string", default: "tsconfig.test.json", description: "The name of the config of the tests." },
   },
   check(context, options) {
-    if (context.packages.length === 0) return { skipped: "the repository has no workspace packages" };
     const file = typeof options["file"] === "string" ? options["file"] : "tsconfig.test.json";
     const breaks: Break[] = [];
-    for (const info of context.packages) {
+    for (const info of codePackages(context)) {
       if (!hasFile(info.dir, "tsconfig.json")) continue;
       if (!hasFile(info.dir, file)) {
         breaks.push({ file: inFolder(info.folder, file), message: `The package has a tsconfig.json and no ${file}.` });

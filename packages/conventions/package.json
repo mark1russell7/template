@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package",
   "name": "@mark1russell7/conventions",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "One check in CI for the conventions of a pnpm workspace that docs tell in prose: pinned git dependencies, source packages, tsconfig.test.json, no build output in git and more.",
   "keywords": [
     "conventions",

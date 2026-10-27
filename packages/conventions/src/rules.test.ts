@@ -143,8 +143,9 @@ describe("source-main", () => {
     ]);
   });
 
-  it("skips a repository with no workspace, and knows a source path", () => {
-    expect(rule(fixture({ "package.json": { name: "one", main: "build/index.js" } }), "source-main").status).toBe("skipped");
+  it("examines only the publishConfig of a repository of one package, and knows a source path", () => {
+    expect(rule(fixture({ "package.json": { name: "one", main: "build/index.js" } }), "source-main").status).toBe("pass");
+    expect(rule(fixture({ "package.json": { name: "one", main: "./src/index.ts" } }), "source-main").breaks.map((item) => item.file)).toEqual(["package.json"]);
     expect(isSourcePath("./src/x.css")).toBe(true);
     expect(isSourcePath("./lib/x.mts")).toBe(true);
     expect(isSourcePath("./build/x.d.ts")).toBe(false);
@@ -171,6 +172,12 @@ describe("tsconfig-test", () => {
     const result = rule(root, "tsconfig-test");
     expect(result.breaks.map((item) => item.file)).toEqual(["packages/b/tsconfig.test.json", "packages/c/package.json"]);
     expect(result.breaks[1]?.message).toMatch(/does not examine tsconfig\.test\.json/);
+  });
+
+  it("examines the root of a repository of one package", () => {
+    const root = fixture({ "package.json": { name: "one" }, "pnpm-workspace.yaml": "allowBuilds: {}\n", "tsconfig.json": {} });
+    expect(rule(root, "tsconfig-test").breaks.map((item) => item.file)).toEqual(["tsconfig.test.json"]);
+    expect(rule(root, "cue-preset").breaks.map((item) => item.file)).toEqual(["tsconfig.json"]);
   });
 });
 
@@ -273,6 +280,16 @@ describe("no-local-paths", () => {
     commitAll(root);
     const result = rule(root, "no-local-paths");
     expect(result.breaks.map((item) => `${item.file}:${item.line ?? 0}`)).toEqual(["data.json:1", "notes.md:1", "notes.md:2"]);
+  });
+
+  it("knows a Windows path in lower case, and not a home folder in the reason of an exception", () => {
+    const root = fixture({
+      "package.json": { name: "one", conventions: { rules: { "no-local-paths": { ignore: ["fixtures/**"], reason: `fixtures such as ${linux}`, patterns: ["secret-project"] } } } },
+      "notes.md": `${["c:", "users", "alice", "repo"].join("/")}\n`,
+      "fixtures/a.txt": linux,
+    });
+    commitAll(root);
+    expect(rule(root, "no-local-paths").breaks.map((item) => `${item.file}:${item.line ?? 0}`)).toEqual(["notes.md:1"]);
   });
 
   it("takes more allowed names and more patterns", () => {

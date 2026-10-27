@@ -12,6 +12,7 @@
 export { defaultOptions, parseConfig, type ConventionsConfig, type RuleConfig } from "./config.ts";
 export {
   cleanPath,
+  codePackages,
   DEPENDENCY_FIELDS,
   hasFile,
   inFolder,

@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 59 names
+## . (build/index.d.ts): 60 names
 
 type AuditSource: build/index.d.ts#AuditSource
 type Break: build/index.d.ts#Break
@@ -30,6 +30,7 @@ STRICT_OPTIONS: build/index.d.ts#STRICT_OPTIONS
 USAGE: build/index.d.ts#USAGE
 annotations: build/index.d.ts#annotations
 cleanPath: build/index.d.ts#cleanPath
+codePackages: build/index.d.ts#codePackages
 createContext: build/index.d.ts#createContext
 cuePreset: build/index.d.ts#cuePreset
 defaultOptions: build/index.d.ts#defaultOptions
@@ -210,6 +211,9 @@ export declare function annotations(result: CheckResult): string;
 
 ### build/index.d.ts#cleanPath
 export declare const cleanPath: (path: string) => string;
+
+### build/index.d.ts#codePackages
+export declare function codePackages(context: Pick<RuleContext, "rootPackage" | "packages">): readonly PackageInfo[];
 
 ### build/index.d.ts#createContext
 export declare function createContext(root: string, config: ConventionsConfig, options?: Pick<CheckOptions, "base" | "env">): RuleContext;
