@@ -27,7 +27,7 @@ The job starts all the scripts, also after a failure. Then it fails with the nam
 
 | Input | Default | What it sets |
 |---|---|---|
-| `scripts` | `format:check typecheck lint test build check:boundaries lint:ste` | The scripts, in sequence. `check:boundaries` is the import check of `@mark1russell7/boundaries`. |
+| `scripts` | `format:check typecheck lint test build check:boundaries check:api lint:ste` | The scripts, in sequence. `check:boundaries` is the import check of `@mark1russell7/boundaries`. `check:api` is the check of the public API of `@mark1russell7/api-report`. |
 | `recursive-scripts` | `build` | The scripts that run in each package when the root `package.json` does not have them. |
 | `node-versions` | `["26"]` | The Node.js versions of the matrix, as JSON. |
 | `os` | `["ubuntu-latest"]` | The runners of the matrix, as JSON. |
