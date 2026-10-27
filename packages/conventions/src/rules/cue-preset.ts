@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
-import { hasFile, inFolder, lineOf, readJsonc, type Break, type Rule } from "../rule.ts";
+import { codePackages, hasFile, inFolder, lineOf, readJsonc, type Break, type Rule } from "../rule.ts";
 
 /** The compiler options that make the type check strict. A package does not turn them off. */
 export const STRICT_OPTIONS = [
@@ -120,10 +120,9 @@ export const cuePreset: Rule = {
     prefix: { type: "string", default: "@mark1russell7/cue/", description: "The start of the `extends` path of a preset." },
   },
   check(context, options) {
-    if (context.packages.length === 0) return { skipped: "the repository has no workspace packages" };
     const prefix = typeof options["prefix"] === "string" ? options["prefix"] : "@mark1russell7/cue/";
     const breaks: Break[] = [];
-    for (const info of context.packages) {
+    for (const info of codePackages(context)) {
       if (!hasFile(info.dir, "tsconfig.json")) continue;
       for (const name of ["tsconfig.json", "tsconfig.test.json"]) {
         const path = join(info.dir, name);

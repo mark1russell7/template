@@ -20,7 +20,8 @@ export const DEFAULT_ALLOWED: readonly string[] = ["runner", "runneradmin", "use
 
 /** The forms of a home folder: Windows, macOS and Linux. The group `user` is the name of the user. */
 export const HOME_PATTERNS: readonly RegExp[] = [
-  /\b[A-Za-z]:(?:\\{1,2}|\/)Users(?:\\{1,2}|\/)(?<user>[^\\/\s"'`<>|:*?%$(){}[\],;]+)/g,
+  // A Windows path does not depend on case, so `c:/users/<name>` is the same folder
+  /\b[A-Za-z]:(?:\\{1,2}|\/)[Uu][Ss][Ee][Rr][Ss](?:\\{1,2}|\/)(?<user>[^\\/\s"'`<>|:*?%$(){}[\],;]+)/g,
   /(?<![\w.~-])\/Users\/(?<user>[^/\s"'`<>|:*?%$(){}[\],;]+)/g,
   /(?<![\w.~-])\/home\/(?<user>[^/\s"'`<>|:*?%$(){}[\],;]+)/g,
 ];
@@ -73,7 +74,9 @@ export const noLocalPaths: Rule = {
       const lines = text.split(/\r?\n/);
       for (let index = 0; index < lines.length; index++) {
         const line = lines[index] ?? "";
-        for (const pattern of HOME_PATTERNS) {
+        // The reason of an exception in the root package.json tells why a text is no home folder, so it can quote one. A private pattern still counts there
+        const isReason = file === rootFile && /^\s*"(?:reason|off)"\s*:/.test(line);
+        for (const pattern of isReason ? [] : HOME_PATTERNS) {
           for (const match of line.matchAll(pattern)) {
             const user = match.groups?.["user"] ?? "";
             // A name of one character is a placeholder of a test, not a person

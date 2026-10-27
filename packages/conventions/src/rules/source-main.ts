@@ -2,7 +2,7 @@
  * The rule `source-main`: a workspace package is a source package, and a public package moves its
  * entries to the build when it is published.
  */
-import { cleanPath, lineOf, type Break, type Manifest, type Rule } from "../rule.ts";
+import { cleanPath, codePackages, lineOf, type Break, type Manifest, type Rule } from "../rule.ts";
 
 /** The fields of `package.json` that name the entries of a package. */
 const ENTRY_FIELDS = ["main", "module", "types", "typings", "exports", "bin"] as const;
@@ -42,17 +42,20 @@ export const sourceMain: Rule = {
     publishConfig: { type: "boolean", default: true, description: "When false, the rule does not examine `publishConfig`." },
   },
   check(context, options) {
-    if (context.packages.length === 0) return { skipped: "the repository has no workspace packages" };
     const main = cleanPath(typeof options["main"] === "string" ? options["main"] : "src/index.ts");
     const breaks: Break[] = [];
-    for (const info of context.packages) {
+    for (const info of codePackages(context)) {
+      // The root of a repository of one package has no workspace that imports its source, so only its publishConfig counts
+      const single = info.folder === "";
       const manifest = info.manifest;
       const at = (field: string): { line?: number } => {
         const line = lineOf(info.text, `"${field}"`);
         return line === undefined ? {} : { line };
       };
       const value = manifest["main"];
-      if (typeof value === "string") {
+      if (single) {
+        // The root of a repository of one package can point main at its build
+      } else if (typeof value === "string") {
         if (cleanPath(value) !== main) breaks.push({ file: info.file, ...at("main"), message: `"main" is "${value}", not "./${main}".` });
       } else if (ENTRY_FIELDS.some((field) => manifest[field] !== undefined) || manifest["private"] !== true) {
         // A package with only a bin (a CLI) has no entry to import, and a private package with no entry is an app (a site)

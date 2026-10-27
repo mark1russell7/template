@@ -175,3 +175,11 @@ export function runGit(root: string, args: readonly string[]): string | undefine
 
 /** This function tells if `file` exists in the folder `dir`. */
 export const hasFile = (dir: string, file: string): boolean => existsSync(join(dir, file));
+
+/**
+ * This function gives the packages that hold code: the packages of the workspace, or the root
+ * package when the repository has no workspace packages (a repository of one package).
+ */
+export function codePackages(context: Pick<RuleContext, "rootPackage" | "packages">): readonly PackageInfo[] {
+  return context.packages.length > 0 ? context.packages : [context.rootPackage];
+}
