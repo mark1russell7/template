@@ -17,11 +17,13 @@
     "typecheck": "pnpm -r run typecheck",
     "lint:ste": "ste-lint",
     "check:boundaries": "depcruise --config .dependency-cruiser.mjs packages",
-    "check:api": "api-report check"
+    "check:api": "api-report check",
+    "check:conventions": "conventions check"
   },
   "devDependencies": {
     "@mark1russell7/api-report": "workspace:*",
     "@mark1russell7/boundaries": "workspace:*",
+    "@mark1russell7/conventions": "workspace:*",
     "@mark1russell7/cue": "^1.0.2",
     "@mark1russell7/ste-lint": "^0.1.1",
     "@swc/core": "^1.15.0",

@@ -23,7 +23,7 @@ on:
       scripts:
         description: The package.json scripts to run, in this sequence, separated by spaces. A script that package.json does not have is skipped.
         type: string
-        default: format:check typecheck lint test build check:boundaries check:api lint:ste
+        default: format:check typecheck lint check:conventions test build check:boundaries check:api lint:ste
       recursive-scripts:
         description: The scripts that run in each package of the workspace (pnpm -r --if-present) when the root package.json does not have them.
         type: string
@@ -53,9 +53,11 @@ on:
         type: string
         default: "."
       fetch-depth:
-        description: The number of commits that the checkout gets. 0 gets the whole history.
+        description: >-
+          The number of commits that the checkout gets. 0 gets the whole history. The default 2 gets the parents of the
+          merge commit of a pull request, so the rule release-files of check:conventions sees the change.
         type: number
-        default: 1
+        default: 2
       timeout-minutes:
         description: The time limit of each job of the matrix.
         type: number

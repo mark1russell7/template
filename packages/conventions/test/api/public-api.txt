@@ -1,0 +1,317 @@
+# The public API of @mark1russell7/conventions
+#
+# The names of each entry of the exports field, and the declaration of each name, without comments
+# and private members. The command `api-report check` compares this file with the built .d.ts files.
+# To accept a change of the API, start the build, then `api-report update`, and review the diff.
+
+## . (build/index.d.ts): 59 names
+
+type AuditSource: build/index.d.ts#AuditSource
+type Break: build/index.d.ts#Break
+type CheckOptions: build/index.d.ts#CheckOptions
+type CheckResult: build/index.d.ts#CheckResult
+type CliIo: build/index.d.ts#CliIo
+type ConventionsConfig: build/index.d.ts#ConventionsConfig
+DEFAULT_ALLOWED: build/index.d.ts#DEFAULT_ALLOWED
+DEPENDENCY_FIELDS: build/index.d.ts#DEPENDENCY_FIELDS
+HOME_PATTERNS: build/index.d.ts#HOME_PATTERNS
+type Manifest: build/index.d.ts#Manifest
+type OptionSpec: build/index.d.ts#OptionSpec
+type OptionValue: build/index.d.ts#OptionValue
+type Options: build/index.d.ts#Options
+type PackageInfo: build/index.d.ts#PackageInfo
+RULES: build/index.d.ts#RULES
+type Rule: build/index.d.ts#Rule
+type RuleConfig: build/index.d.ts#RuleConfig
+type RuleContext: build/index.d.ts#RuleContext
+type RuleOutcome: build/index.d.ts#RuleOutcome
+type RuleResult: build/index.d.ts#RuleResult
+STRICT_OPTIONS: build/index.d.ts#STRICT_OPTIONS
+USAGE: build/index.d.ts#USAGE
+annotations: build/index.d.ts#annotations
+cleanPath: build/index.d.ts#cleanPath
+createContext: build/index.d.ts#createContext
+cuePreset: build/index.d.ts#cuePreset
+defaultOptions: build/index.d.ts#defaultOptions
+formatResult: build/index.d.ts#formatResult
+globFolders: build/index.d.ts#globFolders
+globToRegExp: build/index.d.ts#globToRegExp
+hasFile: build/index.d.ts#hasFile
+inFolder: build/index.d.ts#inFolder
+isGitSpecifier: build/index.d.ts#isGitSpecifier
+isPinned: build/index.d.ts#isPinned
+isSourcePath: build/index.d.ts#isSourcePath
+keyLine: build/index.d.ts#keyLine
+lineOf: build/index.d.ts#lineOf
+listRules: build/index.d.ts#listRules
+matchesAny: build/index.d.ts#matchesAny
+noBuildOutput: build/index.d.ts#noBuildOutput
+noLocalPaths: build/index.d.ts#noLocalPaths
+packageFolders: build/index.d.ts#packageFolders
+parseConfig: build/index.d.ts#parseConfig
+parseJsonc: build/index.d.ts#parseJsonc
+pathsOf: build/index.d.ts#pathsOf
+pinnedGitDeps: build/index.d.ts#pinnedGitDeps
+readConfig: build/index.d.ts#readConfig
+readJsonc: build/index.d.ts#readJsonc
+releaseFiles: build/index.d.ts#releaseFiles
+requiredScripts: build/index.d.ts#requiredScripts
+runChecks: build/index.d.ts#runChecks
+runCli: build/index.d.ts#runCli
+runGit: build/index.d.ts#runGit
+sourceMain: build/index.d.ts#sourceMain
+specifiersOf: build/index.d.ts#specifiersOf
+summaryMarkdown: build/index.d.ts#summaryMarkdown
+tsconfigTest: build/index.d.ts#tsconfigTest
+workspaceGlobs: build/index.d.ts#workspaceGlobs
+workspaceProtocol: build/index.d.ts#workspaceProtocol
+
+## bin: 1 commands
+
+conventions: ./build/cli.js
+
+## Declarations
+
+### build/index.d.ts#AuditSource
+interface AuditSource {
+  readonly repo: string;
+  readonly rule: string;
+  readonly doc: string;
+}
+
+### build/index.d.ts#Break
+interface Break {
+  readonly file: string;
+  readonly line?: number;
+  readonly message: string;
+  readonly fix?: string;
+}
+
+### build/index.d.ts#CheckOptions
+interface CheckOptions {
+  readonly root: string;
+  readonly only?: readonly string[];
+  readonly base?: string;
+  readonly env?: Readonly<Record<string, string | undefined>>;
+  readonly rules?: readonly Rule[];
+}
+
+### build/index.d.ts#CheckResult
+interface CheckResult {
+  readonly rules: readonly RuleResult[];
+  readonly failed: boolean;
+}
+
+### build/index.d.ts#CliIo
+interface CliIo {
+  readonly cwd: string;
+  readonly env: Readonly<Record<string, string | undefined>>;
+  readonly stdout: (text: string) => void;
+  readonly stderr: (text: string) => void;
+}
+
+### build/index.d.ts#ConventionsConfig
+interface ConventionsConfig {
+  readonly packages?: readonly string[];
+  readonly rules: Readonly<Record<string, RuleConfig>>;
+}
+
+### build/index.d.ts#DEFAULT_ALLOWED
+export declare const DEFAULT_ALLOWED: readonly string[];
+
+### build/index.d.ts#DEPENDENCY_FIELDS
+export declare const DEPENDENCY_FIELDS: readonly ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
+
+### build/index.d.ts#HOME_PATTERNS
+export declare const HOME_PATTERNS: readonly RegExp[];
+
+### build/index.d.ts#Manifest
+type Manifest = Readonly<Record<string, unknown>>;
+
+### build/index.d.ts#OptionSpec
+interface OptionSpec {
+  readonly type: "string" | "number" | "boolean" | "strings";
+  readonly default: OptionValue;
+  readonly description: string;
+}
+
+### build/index.d.ts#OptionValue
+type OptionValue = string | number | boolean | readonly string[];
+
+### build/index.d.ts#Options
+type Options = Readonly<Record<string, OptionValue>>;
+
+### build/index.d.ts#PackageInfo
+interface PackageInfo {
+  readonly folder: string;
+  readonly dir: string;
+  readonly file: string;
+  readonly text: string;
+  readonly manifest: Manifest;
+}
+
+### build/index.d.ts#RULES
+export declare const RULES: readonly Rule[];
+
+### build/index.d.ts#Rule
+interface Rule {
+  readonly id: string;
+  readonly title: string;
+  readonly reason: string;
+  readonly fix: string;
+  readonly sources: readonly AuditSource[];
+  readonly options: Readonly<Record<string, OptionSpec>>;
+  check(context: RuleContext, options: Options): RuleOutcome;
+}
+
+### build/index.d.ts#RuleConfig
+interface RuleConfig {
+  readonly off?: string;
+  readonly ignore: readonly string[];
+  readonly reason?: string;
+  readonly options: Options;
+}
+
+### build/index.d.ts#RuleContext
+interface RuleContext {
+  readonly root: string;
+  readonly rootPackage: PackageInfo;
+  readonly packages: readonly PackageInfo[];
+  readonly env: Readonly<Record<string, string | undefined>>;
+  readonly base?: string;
+  gitFiles(): readonly string[] | undefined;
+  git(args: readonly string[]): string | undefined;
+}
+
+### build/index.d.ts#RuleOutcome
+type RuleOutcome = readonly Break[] | {
+  readonly skipped: string;
+};
+
+### build/index.d.ts#RuleResult
+interface RuleResult {
+  readonly id: string;
+  readonly title: string;
+  readonly fix: string;
+  readonly status: "pass" | "break" | "off" | "skipped" | "error";
+  readonly breaks: readonly Break[];
+  readonly ignored: number;
+  readonly note?: string;
+}
+
+### build/index.d.ts#STRICT_OPTIONS
+export declare const STRICT_OPTIONS: readonly ["strict", "noImplicitAny", "strictNullChecks", "strictFunctionTypes", "strictBindCallApply", "strictPropertyInitialization", "strictBuiltinIteratorReturn", "noImplicitThis", "useUnknownInCatchVariables", "alwaysStrict", "noUncheckedIndexedAccess", "exactOptionalPropertyTypes", "noImplicitOverride", "noImplicitReturns", "noFallthroughCasesInSwitch", "noPropertyAccessFromIndexSignature"];
+
+### build/index.d.ts#USAGE
+export declare const USAGE: string;
+
+### build/index.d.ts#annotations
+export declare function annotations(result: CheckResult): string;
+
+### build/index.d.ts#cleanPath
+export declare const cleanPath: (path: string) => string;
+
+### build/index.d.ts#createContext
+export declare function createContext(root: string, config: ConventionsConfig, options?: Pick<CheckOptions, "base" | "env">): RuleContext;
+
+### build/index.d.ts#cuePreset
+export declare const cuePreset: Rule;
+
+### build/index.d.ts#defaultOptions
+export declare function defaultOptions(rule: Rule): Options;
+
+### build/index.d.ts#formatResult
+export declare function formatResult(result: CheckResult): string;
+
+### build/index.d.ts#globFolders
+export declare function globFolders(root: string, glob: string): string[];
+
+### build/index.d.ts#globToRegExp
+export declare function globToRegExp(glob: string): RegExp;
+
+### build/index.d.ts#hasFile
+export declare const hasFile: (dir: string, file: string) => boolean;
+
+### build/index.d.ts#inFolder
+export declare const inFolder: (folder: string, file: string) => string;
+
+### build/index.d.ts#isGitSpecifier
+export declare function isGitSpecifier(spec: string): boolean;
+
+### build/index.d.ts#isPinned
+export declare function isPinned(spec: string, fullSha: boolean): boolean;
+
+### build/index.d.ts#isSourcePath
+export declare function isSourcePath(path: string): boolean;
+
+### build/index.d.ts#keyLine
+export declare function keyLine(text: string, field: string, name: string): number | undefined;
+
+### build/index.d.ts#lineOf
+export declare function lineOf(text: string, needle: string, from?: number): number | undefined;
+
+### build/index.d.ts#listRules
+export declare function listRules(config: ConventionsConfig | undefined, rules?: readonly Rule[]): string;
+
+### build/index.d.ts#matchesAny
+export declare function matchesAny(path: string, globs: readonly string[]): boolean;
+
+### build/index.d.ts#noBuildOutput
+export declare const noBuildOutput: Rule;
+
+### build/index.d.ts#noLocalPaths
+export declare const noLocalPaths: Rule;
+
+### build/index.d.ts#packageFolders
+export declare function packageFolders(root: string, globs?: readonly string[] | undefined): string[];
+
+### build/index.d.ts#parseConfig
+export declare function parseConfig(value: unknown, rules: readonly Rule[]): ConventionsConfig;
+
+### build/index.d.ts#parseJsonc
+export declare function parseJsonc(text: string): unknown;
+
+### build/index.d.ts#pathsOf
+export declare function pathsOf(value: unknown): string[];
+
+### build/index.d.ts#pinnedGitDeps
+export declare const pinnedGitDeps: Rule;
+
+### build/index.d.ts#readConfig
+export declare function readConfig(root: string, rules?: readonly Rule[]): ConventionsConfig;
+
+### build/index.d.ts#readJsonc
+export declare function readJsonc(file: string): unknown;
+
+### build/index.d.ts#releaseFiles
+export declare const releaseFiles: Rule;
+
+### build/index.d.ts#requiredScripts
+export declare const requiredScripts: Rule;
+
+### build/index.d.ts#runChecks
+export declare function runChecks(options: CheckOptions): CheckResult;
+
+### build/index.d.ts#runCli
+export declare function runCli(args: readonly string[], io: CliIo): number;
+
+### build/index.d.ts#runGit
+export declare function runGit(root: string, args: readonly string[]): string | undefined;
+
+### build/index.d.ts#sourceMain
+export declare const sourceMain: Rule;
+
+### build/index.d.ts#specifiersOf
+export declare function specifiersOf(manifest: Manifest, field: string): [string, string][];
+
+### build/index.d.ts#summaryMarkdown
+export declare function summaryMarkdown(result: CheckResult): string;
+
+### build/index.d.ts#tsconfigTest
+export declare const tsconfigTest: Rule;
+
+### build/index.d.ts#workspaceGlobs
+export declare function workspaceGlobs(root: string): string[] | undefined;
+
+### build/index.d.ts#workspaceProtocol
+export declare const workspaceProtocol: Rule;
