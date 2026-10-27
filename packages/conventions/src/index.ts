@@ -50,6 +50,7 @@ export { DEFAULT_ALLOWED, HOME_PATTERNS } from "./rules/no-local-paths.ts";
 export { isGitSpecifier, isPinned } from "./rules/pinned-git-deps.ts";
 export { isSourcePath, pathsOf } from "./rules/source-main.ts";
 export { STRICT_OPTIONS } from "./rules/cue-preset.ts";
+export { hasTests } from "./rules/tsconfig-test.ts";
 export {
   annotations,
   createContext,
