@@ -249,8 +249,8 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2
       '@mark1russell7/service':
-        specifier: ^0.5.8
-        version: 0.5.20(zod@4.6.7)
+        specifier: ^0.6.0
+        version: 0.6.0(zod@4.6.7)
       '@types/node':
         specifier: ^26.6.4
         version: 26.6.5
@@ -509,8 +509,8 @@ packages:
       zod:
         optional: true
 
-  '@mark1russell7/service@0.5.20':
-    resolution: {integrity: sha512-NbY/EehhmN7LMkwzk5pI1aBmDaJav1vUXTg2soT18q9KXBdyAtcIJViPjvOWFUMWPRKGZ8MGv+IoRuUCLEwhUA==}
+  '@mark1russell7/service@0.6.0':
+    resolution: {integrity: sha512-0ffqtr+aaC/KKfaIb+GguBUHlsJLEALuPQqzdPnIAbRCc22klWadm0tZx70SBtLDNe5g9CnodetvQPjfvYrjPg==}
     engines: {node: '>=22.19'}
     peerDependencies:
       '@grpc/grpc-js': ^1.14.6
@@ -1693,7 +1693,7 @@ snapshots:
     optionalDependencies:
       zod: 4.6.7
 
-  '@mark1russell7/service@0.5.20(zod@4.6.7)':
+  '@mark1russell7/service@0.6.0(zod@4.6.7)':
     dependencies:
       '@mark1russell7/algebra': 0.7.4(zod@4.6.7)
       '@mark1russell7/quantity': 0.2.0(zod@4.6.7)
