@@ -250,7 +250,7 @@ importers:
         version: 1.0.2
       '@mark1russell7/service':
         specifier: ^0.6.0
-        version: 0.6.0(zod@4.6.7)
+        version: 0.6.1(zod@4.6.7)
       '@types/node':
         specifier: ^26.6.4
         version: 26.6.5
@@ -489,11 +489,14 @@ packages:
   '@loaderkit/resolve@1.0.6':
     resolution: {integrity: sha512-G8FdIoF5CypfwmD9rl8BXod5HDn8JqB0CCNBXDTaRZ+yRYhARrrSToX1zg1zy9jX3zLqigsELwhT4gNtkdQAUg==}
 
-  '@mark1russell7/algebra@0.7.4':
-    resolution: {integrity: sha512-psN2ZMxvbOnz7j/u9CiekyJLZtWwcuGtJ2pETTQ4x6Q9WaTQ7QxFK2Q473TWejhbqwrCloEo9CFJhdGUCZWCtQ==}
+  '@mark1russell7/algebra@0.8.0':
+    resolution: {integrity: sha512-kCNLkjbjF+zzVLPO8wBwsoxCal9v60sPpp0H6DqKxfbJM4C4o7FqU2x68gOhzp7zsiNN9PSkQqolrAJDy/4uWw==}
     engines: {node: '>=22.19'}
     peerDependencies:
       zod: ^4.1.0
+    peerDependenciesMeta:
+      zod:
+        optional: true
 
   '@mark1russell7/cue@1.0.2':
     resolution: {integrity: sha512-ketUJQeJ4eLSmw0X3NpWrGHxXVg30MpMfw/wYdzlpwf7J94BQmmOM80VuGL4OPC4tXczmTj5LWxNdM7NoQKgeA==}
@@ -509,8 +512,8 @@ packages:
       zod:
         optional: true
 
-  '@mark1russell7/service@0.6.0':
-    resolution: {integrity: sha512-0ffqtr+aaC/KKfaIb+GguBUHlsJLEALuPQqzdPnIAbRCc22klWadm0tZx70SBtLDNe5g9CnodetvQPjfvYrjPg==}
+  '@mark1russell7/service@0.6.1':
+    resolution: {integrity: sha512-vmh3SHgsWbXe6jFsV6pBFLTF05rhqIVtPBrYjYW7Eu+u/BZIwsXwuUXWewNJwimJx5a42ZpWkpZpX140WQYMMg==}
     engines: {node: '>=22.19'}
     peerDependencies:
       '@grpc/grpc-js': ^1.14.6
@@ -1682,9 +1685,10 @@ snapshots:
       '@braidai/lang': 1.1.2
     optional: true
 
-  '@mark1russell7/algebra@0.7.4(zod@4.6.7)':
+  '@mark1russell7/algebra@0.8.0(zod@4.6.7)':
     dependencies:
       '@mark1russell7/quantity': 0.2.0(zod@4.6.7)
+    optionalDependencies:
       zod: 4.6.7
 
   '@mark1russell7/cue@1.0.2': {}
@@ -1693,9 +1697,9 @@ snapshots:
     optionalDependencies:
       zod: 4.6.7
 
-  '@mark1russell7/service@0.6.0(zod@4.6.7)':
+  '@mark1russell7/service@0.6.1(zod@4.6.7)':
     dependencies:
-      '@mark1russell7/algebra': 0.7.4(zod@4.6.7)
+      '@mark1russell7/algebra': 0.8.0(zod@4.6.7)
       '@mark1russell7/quantity': 0.2.0(zod@4.6.7)
     optionalDependencies:
       zod: 4.6.7
@@ -2454,4 +2458,5 @@ snapshots:
       '@yuku-toolchain/types': 0.19.0
       yuku-core: 0.19.0
 
-  zod@4.6.7: {}
+  zod@4.6.7:
+    optional: true
