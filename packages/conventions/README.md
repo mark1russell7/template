@@ -1,6 +1,6 @@
 # @mark1russell7/conventions
 
-This package is one check in CI for the conventions that the docs of a repository tell in prose. Each rule is a small module with an id, a reason, a fix and the rows of the invariants audit that it comes from. A repository turns a rule off only with a reason in its `package.json`. Thus each exception is visible in the diff.
+This package is one check in CI for the conventions that the docs of a repository tell in prose. Each rule is a small module with an id, a reason, a fix and the rows of the invariants audit that it comes from. A repository turns a rule off or changes a rule only with a reason in its `package.json`. Thus each exception is visible in the diff.
 
 ## Use
 
@@ -30,7 +30,7 @@ The rules come from the invariants audit of 2026-10-26 (strategy item s38). The 
 | `source-main` | The `main` of each workspace package is `src/index.ts` (a package with only a `bin` has no `main`, and a private package with no entry is an app). A public package that has a source entry has the same field in `publishConfig`, and that field points at the build. | coeval `package-main-source`, `source-package-main`. crawler `pkg-source-main`, `source-package-main`, `publish-config-build`. Graph `new-package-main-index`, `source-package-main`. headroom `source-package-main`. |
 | `tsconfig-test` | Each package with a `tsconfig.json` has a `tsconfig.test.json`, and its `typecheck` script names it. | coeval, crawler, Vex `package-tsconfig-test` or `pkg-tsconfig-test`, and `tsconfig-test`. headroom `tsconfig-test`, `tsconfig-test-per-package`. |
 | `cue-preset` | The `tsconfig.json` of each package extends a preset of `@mark1russell7/cue`. No config of a package turns off a strict option that its preset turns on. | client `cue-config`, `no-manual-tsconfig`. Graph `cue-preset-strict`, `strict-preset`, `new-package-via-cli`. coeval, crawler, headroom, Vex `package-scaffold`. |
-| `required-scripts` | The root `package.json` has the scripts `lint:ste` and `typecheck`. The shared CI skips a missing script, so a removed script turns its check off with no sign. | client, coeval, crawler, Graph, headroom, Vex `ste-prose`. systems `lint-ste-in-ci`. coeval, crawler, headroom, Vex `tsconfig-test`. |
+| `required-scripts` | The root `package.json` has the script `typecheck`. It also has `lint:ste` when the repository uses `ste-lint`: a dependency on `@mark1russell7/ste-lint`, or a `ste.config.json` at the root. The shared CI skips a missing script, so a removed script turns its check off with no sign. | client, coeval, crawler, Graph, headroom, Vex `ste-prose`. systems `lint-ste-in-ci`. coeval, crawler, headroom, Vex `tsconfig-test`. |
 | `no-build-output` | Git keeps no file in a folder named `dist` or `build`. | client `no-build-output`, `no-dist`, `no-dist-commit`. Only one repository of the audit tells this rule. The `.gitignore` of the template has it for each repository. |
 | `no-local-paths` | No tracked file has the home folder of a user: `C:\Users\<name>`, `/Users/<name>` or `/home/<name>`. A CI user (`runner`), a name of one character and a placeholder (`<you>`) are not a break. | client `I12`. systems `no-identifying-names`, `no-private-identifiers`, `no-private-names`. coeval `no-private-names`. |
 | `release-files` | A pull request changes `.github/workflows/release.yml` or `scripts/release/` only with a line `Release-Edit: <reason>` in a commit message or in the body of the pull request. The commits of the release bot (the sync of the template) need no reason. | coeval `no-release-edit`, `no-release-edits`. crawler `no-release-edit`, `no-release-edits`. headroom `no-release-edits`, `release-files-frozen`. |
@@ -39,7 +39,7 @@ The rule `release-files` needs the base of the change. On a pull request, the ch
 
 ## Configuration
 
-The field `conventions` of the root `package.json` sets the rules. An exception needs a reason:
+The field `conventions` of the root `package.json` sets the rules. An exception or a changed option needs a reason:
 
 ```json
 {
@@ -47,7 +47,7 @@ The field `conventions` of the root `package.json` sets the rules. An exception 
     "rules": {
       "no-build-output": { "off": "git installs of this package need dist/" },
       "cue-preset": { "ignore": ["packages/web/**"], "reason": "packages/web keeps TypeScript 6 and its own config" },
-      "workspace-protocol": { "prefix": "workspace:*" }
+      "workspace-protocol": { "prefix": "workspace:*", "reason": "each dependency of the workspace is exact" }
     }
   }
 }
@@ -57,11 +57,11 @@ The field `conventions` of the root `package.json` sets the rules. An exception 
 |---|---|
 | `rules.<id>.off` | The rule does not start. The text is the reason, and the output shows it. |
 | `rules.<id>.ignore` | The globs of the files whose breaks the rule does not report. It needs `reason`. |
-| `rules.<id>.reason` | The reason of `ignore`. |
-| `rules.<id>.<option>` | An option of the rule. `conventions --list` shows the options and their values. |
+| `rules.<id>.reason` | The reason of `ignore` or of a changed option. |
+| `rules.<id>.<option>` | An option of the rule. It needs `reason`, because a changed option can make a rule weaker. `conventions --list` shows the options and their values. |
 | `packages` | The globs of the package folders. The default is the `packages` list of `pnpm-workspace.yaml`. |
 
-An unknown rule, an unknown option or an exception without a reason is an error. Thus a typing error does not turn a rule off.
+An unknown rule, an unknown option, or an exception or a changed option without a reason is an error. Thus a typing error or a quiet change does not make a rule weaker.
 
 | Option | Default | What it sets |
 |---|---|---|
@@ -71,7 +71,8 @@ An unknown rule, an unknown option or an exception without a reason is an error.
 | `source-main.publishConfig` | `true` | When `false`, the rule does not examine `publishConfig`. |
 | `tsconfig-test.file` | `tsconfig.test.json` | The name of the config of the tests. |
 | `cue-preset.prefix` | `@mark1russell7/cue/` | The start of the `extends` path of a preset. |
-| `required-scripts.scripts` | `["lint:ste", "typecheck"]` | The scripts of the root `package.json`. |
+| `required-scripts.scripts` | `["typecheck"]` | The scripts of the root `package.json`. |
+| `required-scripts.steScripts` | `["lint:ste"]` | The scripts of the root `package.json` when the repository uses `ste-lint`. |
 | `no-build-output.folders` | `["dist", "build"]` | The names of the folders of build output. |
 | `no-local-paths.allow` | `[]` | More user names that are not a break. |
 | `no-local-paths.patterns` | `[]` | More regular expressions of text that no file has. The environment variable `CONVENTIONS_PRIVATE_PATTERNS` adds one on each line, so a private name stays out of `package.json`. |

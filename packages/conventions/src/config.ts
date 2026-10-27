@@ -1,6 +1,7 @@
 /**
- * The configuration of the check: the field `conventions` of the root `package.json`. A repository
- * turns a rule off, or removes files from a rule, only with a reason, so each exception is visible.
+ * The configuration of the check: the field `conventions` of the root `package.json`. Each exception
+ * needs a reason: a rule that is off, files that a rule ignores, and a changed option. Thus each
+ * exception is visible.
  */
 import type { OptionValue, Options, Rule } from "./rule.ts";
 
@@ -10,7 +11,7 @@ export interface RuleConfig {
   readonly off?: string;
   /** The globs of files that the rule does not report. */
   readonly ignore: readonly string[];
-  /** The reason of `ignore`. */
+  /** The reason of `ignore` or of the changed options. */
   readonly reason?: string;
   /** The options of the rule, with the defaults. */
   readonly options: Options;
@@ -40,7 +41,7 @@ export function defaultOptions(rule: Rule): Options {
  * This function reads the field `conventions` of the root `package.json` (`value`), and gives the
  * configuration of each rule of `rules`.
  *
- * @throws Error when the field has a wrong shape, an unknown rule or option, or an exception without a reason
+ * @throws Error when the field has a wrong shape, an unknown rule or option, or an exception or a changed option without a reason
  */
 export function parseConfig(value: unknown, rules: readonly Rule[]): ConventionsConfig {
   const byId = new Map(rules.map((rule) => [rule.id, rule]));
@@ -67,6 +68,7 @@ export function parseConfig(value: unknown, rules: readonly Rule[]): Conventions
     if (reason !== undefined && (typeof reason !== "string" || reason.trim() === "")) throw new Error(`${where}.reason must be text.`);
     if (ignore.length > 0 && reason === undefined) throw new Error(`${where}.ignore needs a reason: add "reason": "<why these files are an exception>".`);
     const options: Record<string, OptionValue> = { ...defaultOptions(rule) };
+    const changed: string[] = [];
     for (const [name, option] of Object.entries(entry)) {
       if (RULE_FIELDS.includes(name)) continue;
       const spec = rule.options[name];
@@ -77,6 +79,11 @@ export function parseConfig(value: unknown, rules: readonly Rule[]): Conventions
       const good = spec.type === "strings" ? isStrings(option) : typeof option === spec.type;
       if (!good) throw new Error(`${where}.${name} must be ${spec.type === "strings" ? "an array of strings" : `a ${spec.type}`}.`);
       options[name] = option as OptionValue;
+      changed.push(name);
+    }
+    // A changed option can make a rule weaker, so it needs a reason, as `ignore` does
+    if (changed.length > 0 && reason === undefined && off === undefined) {
+      throw new Error(`${where} changes the option${changed.length > 1 ? "s" : ""} ${changed.join(", ")}, and needs a reason: add "reason": "<why this repository changes the default>".`);
     }
     result[id] = {
       ...(off === undefined ? {} : { off }),

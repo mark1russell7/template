@@ -8,6 +8,7 @@ Each public package has its report in `test/api/public-api.txt`. The report has 
 
 - The names of each entry of the `exports` field, with the declaration file of each name. A subpath pattern (`./*`) gives one entry for each file that it matches.
 - The ambient declarations (`declare module`, `declare global`, `export as namespace`) of each file that an entry reaches.
+- The files of each entry without a declaration file, for example `./tsconfig/*.json`. Thus the removal of a file changes the report.
 - The commands of the `bin` field.
 - The declaration of each name, without comments and without private members.
 

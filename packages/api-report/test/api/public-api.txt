@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 44 names
+## . (build/index.d.ts): 45 names
 
 type ApiReportConfig: build/index.d.ts#ApiReportConfig
 type Bin: build/index.d.ts#Bin
@@ -13,6 +13,7 @@ DEFAULT_TOOL: build/index.d.ts#DEFAULT_TOOL
 type DeclarationInfo: build/index.d.ts#DeclarationInfo
 type DiffLine: build/index.d.ts#DiffLine
 type Entry: build/index.d.ts#Entry
+type EntryFile: build/index.d.ts#EntryFile
 HEADER_LINES: build/index.d.ts#HEADER_LINES
 type ImportBinding: build/index.d.ts#ImportBinding
 type LocalExport: build/index.d.ts#LocalExport
@@ -113,6 +114,13 @@ interface Entry {
   readonly subpath: string;
   readonly types?: string;
   readonly note?: string;
+  readonly files?: readonly EntryFile[];
+}
+
+### build/index.d.ts#EntryFile
+interface EntryFile {
+  readonly subpath: string;
+  readonly path: string;
 }
 
 ### build/index.d.ts#HEADER_LINES

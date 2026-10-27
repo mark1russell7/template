@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package",
   "name": "@mark1russell7/api-report",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A report of the public API of each package of a workspace, from its built .d.ts files: a check in CI shows each change of the API in the pull request.",
   "keywords": [
     "api-report",

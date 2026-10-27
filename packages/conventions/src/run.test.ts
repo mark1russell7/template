@@ -63,9 +63,17 @@ describe("the configuration", () => {
     expect(() => parseConfig({ rules: { nope: { off: "x" } } }, RULES)).toThrow(/unknown rule: nope/);
     expect(() => parseConfig({ rules: { "cue-preset": { ignore: ["packages/web/**"] } } }, RULES)).toThrow(/needs a reason/);
     expect(() => parseConfig({ rules: { "cue-preset": { prefx: "x" } } }, RULES)).toThrow(/unknown field: prefx/);
+    expect(() => parseConfig({ rules: { "required-scripts": { scripts: ["typecheck"] } } }, RULES)).toThrow(/changes the option scripts, and needs a reason/);
+    expect(() => parseConfig({ rules: { "release-files": { paths: [], trailer: "X" } } }, RULES)).toThrow(/changes the options paths, trailer, and needs a reason/);
     expect(() => parseConfig({ rules: { "no-build-output": { folders: "dist" } } }, RULES)).toThrow(/must be an array of strings/);
     expect(() => parseConfig({ other: 1 }, RULES)).toThrow(/unknown fields: other/);
     expect(() => parseConfig([], RULES)).toThrow(/must be an object/);
+  });
+
+  it("accepts a changed option with a reason, or on a rule that is off", () => {
+    const config = parseConfig({ rules: { "required-scripts": { scripts: ["typecheck", "test"], reason: "the tests are a gate" }, "no-build-output": { off: "git installs", folders: ["dist"] } } }, RULES);
+    expect(config.rules["required-scripts"]).toEqual({ ignore: [], reason: "the tests are a gate", options: { scripts: ["typecheck", "test"], steScripts: ["lint:ste"] } });
+    expect(config.rules["no-build-output"]?.off).toBe("git installs");
   });
 
   it("drops the breaks in the files of ignore, and counts them", () => {
