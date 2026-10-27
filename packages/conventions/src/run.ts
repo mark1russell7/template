@@ -197,6 +197,7 @@ export function listRules(config: ConventionsConfig | undefined, rules: readonly
       out.push(`  option ${name} = ${JSON.stringify(value)}: ${spec.description}`);
     }
     if (ruleConfig !== undefined && ruleConfig.ignore.length > 0) out.push(`  ignore ${ruleConfig.ignore.join(", ")}: ${ruleConfig.reason ?? ""}`);
+    else if (ruleConfig?.reason !== undefined) out.push(`  reason: ${ruleConfig.reason}`);
     out.push(`  from: ${rule.sources.map((source) => `${source.repo} ${source.rule} (${source.doc})`).join("; ")}`, "");
   }
   return `${out.join("\n")}`;
@@ -224,10 +225,11 @@ export const USAGE: string = `Usage: conventions check [options]
   -h, --help            Show this text.
 
 The field "conventions" of the root package.json turns a rule off with a reason, keeps an exception
-with a reason, and sets the options of a rule:
+with a reason, and sets the options of a rule with a reason:
 
   "conventions": { "rules": { "no-build-output": { "off": "<reason>" },
-                              "cue-preset": { "ignore": ["packages/web/**"], "reason": "<reason>" } } }
+                              "cue-preset": { "ignore": ["packages/web/**"], "reason": "<reason>" },
+                              "workspace-protocol": { "prefix": "workspace:*", "reason": "<reason>" } } }
 `;
 
 /** An error of the arguments: exit code 2 and the help text. */

@@ -85,7 +85,7 @@ describe("pinned-git-deps", () => {
   });
 
   it("accepts a short SHA when the option fullSha is false", () => {
-    const root = workspace({ devDependencies: { x: "github:a/x#0123abc" }, conventions: { rules: { "pinned-git-deps": { fullSha: false } } } });
+    const root = workspace({ devDependencies: { x: "github:a/x#0123abc" }, conventions: { rules: { "pinned-git-deps": { fullSha: false, reason: "a short SHA is enough here" } } } });
     expect(rule(root, "pinned-git-deps").status).toBe("pass");
   });
 });
@@ -104,7 +104,7 @@ describe("workspace-protocol", () => {
 
   it("accepts workspace:, and the option prefix makes it stricter", () => {
     expect(rule(workspace({}, packages("workspace:^")), "workspace-protocol").status).toBe("pass");
-    const strict = workspace({ conventions: { rules: { "workspace-protocol": { prefix: "workspace:*" } } } }, packages("workspace:^"));
+    const strict = workspace({ conventions: { rules: { "workspace-protocol": { prefix: "workspace:*", reason: "each dependency is exact" } } } }, packages("workspace:^"));
     expect(rule(strict, "workspace-protocol").status).toBe("break");
   });
 });
@@ -218,9 +218,28 @@ describe("cue-preset", () => {
 
 describe("required-scripts", () => {
   it("reports each missing script, and the option scripts sets the list", () => {
-    expect(rule(workspace({ scripts: { "lint:ste": "ste-lint" } }), "required-scripts").breaks.map((item) => item.message)).toEqual(['The root package.json has no script "typecheck".']);
-    const custom = workspace({ scripts: { test: "vitest" }, conventions: { rules: { "required-scripts": { scripts: ["test"] } } } });
+    const result = rule(workspace({ scripts: { "lint:ste": "ste-lint" } }), "required-scripts");
+    expect(result.breaks).toEqual([
+      expect.objectContaining({ message: 'The root package.json has no script "typecheck".', fix: 'Add the script, for example "typecheck": "pnpm -r run typecheck".' }),
+    ]);
+    const custom = workspace({ scripts: { test: "vitest" }, conventions: { rules: { "required-scripts": { scripts: ["test"], reason: "this repository has no TypeScript" } } } });
     expect(rule(custom, "required-scripts").status).toBe("pass");
+    const unknown = workspace({ conventions: { rules: { "required-scripts": { scripts: ["test"], reason: "the tests are the gate" } } } });
+    expect(rule(unknown, "required-scripts").breaks.map((item) => item.fix)).toEqual(['Add the script "test".']);
+  });
+
+  it("asks for lint:ste only when the repository uses ste-lint", () => {
+    expect(rule(workspace({ scripts: { typecheck: "tsc" } }), "required-scripts").status).toBe("pass");
+    const steBreak = {
+      message: 'The root package.json has no script "lint:ste". The repository uses ste-lint.',
+      fix: 'Add the script, for example "lint:ste": "ste-lint".',
+    };
+    const dependency = workspace({ scripts: { typecheck: "tsc" }, devDependencies: { "@mark1russell7/ste-lint": "^0.1.1" } });
+    expect(rule(dependency, "required-scripts").breaks).toEqual([expect.objectContaining(steBreak)]);
+    const config = fixture({ "package.json": { name: "one", scripts: { typecheck: "tsc" } }, "ste.config.json": {} });
+    expect(rule(config, "required-scripts").breaks).toEqual([expect.objectContaining(steBreak)]);
+    const both = workspace({ scripts: { typecheck: "tsc", "lint:ste": "ste-lint" }, devDependencies: { "@mark1russell7/ste-lint": "^0.1.1" } });
+    expect(rule(both, "required-scripts").status).toBe("pass");
   });
 });
 
@@ -258,7 +277,7 @@ describe("no-local-paths", () => {
 
   it("takes more allowed names and more patterns", () => {
     const root = fixture({
-      "package.json": { name: "one", conventions: { rules: { "no-local-paths": { allow: ["bob"], patterns: ["secret-project"] } } } },
+      "package.json": { name: "one", conventions: { rules: { "no-local-paths": { allow: ["bob"], patterns: ["secret-project"], reason: "bob is a test user" } } } },
       "notes.md": `${linux}\nthe secret-project\n`,
     });
     commitAll(root);

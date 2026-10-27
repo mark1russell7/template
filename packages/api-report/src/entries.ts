@@ -19,6 +19,14 @@ export interface Manifest {
   readonly [field: string]: unknown;
 }
 
+/** A file that an entry without a declaration file exports: the subpath and the path of the file. */
+export interface EntryFile {
+  /** The subpath that a consumer imports, for example `./tsconfig/base.json`. */
+  readonly subpath: string;
+  /** The file, relative to the package folder, for example `./tsconfig/base.json`. */
+  readonly path: string;
+}
+
 /** An entry of a package: a subpath and its declaration file, or a note when it has none. */
 export interface Entry {
   /** The subpath of the `exports` field, for example `.` or `./client`. */
@@ -27,6 +35,8 @@ export interface Entry {
   readonly types?: string;
   /** This text tells why the entry has no declaration file. */
   readonly note?: string;
+  /** The files that an entry without a declaration file exports, in the order of the subpaths. A removed file changes the report. */
+  readonly files?: readonly EntryFile[];
 }
 
 /** A command of the `bin` field of a package. */
@@ -131,9 +141,33 @@ function filesUnder(root: string, dir: string): string[] {
 }
 
 /**
+ * This function gives each file under `root` that the target pattern `target` of the subpath
+ * pattern `subpath` matches. Each file has its subpath, in the order of the subpaths. The function
+ * skips each subpath that `isExcluded` excludes.
+ */
+function patternFiles(root: string, subpath: string, target: string, isExcluded: (subpath: string) => boolean): EntryFile[] {
+  const pattern = target.replace(/^\.\//, "");
+  const folder = pattern.slice(0, pattern.indexOf("*")).replace(/[^/]*$/, "");
+  const matched: EntryFile[] = [];
+  for (const file of filesUnder(root, folder)) {
+    const part = patternMatch(pattern, file);
+    if (part === undefined) continue;
+    const expanded = subpath.split("*").join(part);
+    if (!isExcluded(expanded)) matched.push({ subpath: expanded, path: `./${file}` });
+  }
+  return matched.sort((a, b) => byCode(a.subpath, b.subpath) || byCode(a.path, b.path));
+}
+
+/** This function gives an entry without a declaration file, with the files that it exports. */
+function fileEntry(subpath: string, note: string, files: readonly EntryFile[]): Entry {
+  return files.length > 0 ? { subpath, note, files } : { subpath, note };
+}
+
+/**
  * This function gives the entries of a package, in the order of the `exports` field. The
  * `./package.json` entry is not part of the API. A subpath pattern (`./*`) gives one entry for each
- * declaration file that it matches. `root` is the package folder.
+ * declaration file that it matches. An entry without a declaration file (for example a JSON or CSS
+ * file) lists the files that it exports. `root` is the package folder.
  */
 export function entriesOf(manifest: Manifest, root: string): Entry[] {
   const entries: Entry[] = [];
@@ -161,29 +195,25 @@ export function entriesOf(manifest: Manifest, root: string): Entry[] {
       continue;
     }
     const declared = declarationPathOf(target);
+    const own = (path: string): EntryFile[] => (exists(path) ? [{ subpath, path }] : []);
     if (!subpath.includes("*")) {
       if (isExcluded(subpath)) continue;
-      if (!declared) entries.push({ subpath, note: `no declaration file for ${target}` });
+      if (!declared) entries.push(fileEntry(subpath, `no declaration file for ${target}`, own(target)));
       // A JavaScript file without a declaration file has no types. A missing build throws later.
-      else if (declared !== target && !exists(declared) && exists(target)) entries.push({ subpath, note: `no declaration file for ${target}` });
+      else if (declared !== target && !exists(declared) && exists(target)) entries.push(fileEntry(subpath, `no declaration file for ${target}`, own(target)));
       else entries.push({ subpath, types: declared });
       continue;
     }
     if (!declared?.includes("*")) {
-      entries.push({ subpath, note: `no declaration pattern for ${target}` });
+      // A pattern of files that are not declarations, for example `./tsconfig/*.json`
+      const files = target.includes("*") ? patternFiles(root, subpath, target, isExcluded) : [];
+      const note = files.length === 0 && target.includes("*") ? `no file matches ${target}` : `no declaration pattern for ${target}`;
+      entries.push(fileEntry(subpath, note, files));
       continue;
     }
-    const pattern = declared.replace(/^\.\//, "");
-    const folder = pattern.slice(0, pattern.indexOf("*")).replace(/[^/]*$/, "");
-    const matched: Entry[] = [];
-    for (const file of filesUnder(root, folder)) {
-      const part = patternMatch(pattern, file);
-      if (part === undefined) continue;
-      const expanded = subpath.split("*").join(part);
-      if (!isExcluded(expanded)) matched.push({ subpath: expanded, types: `./${file}` });
-    }
+    const matched = patternFiles(root, subpath, declared, isExcluded).map((file): Entry => ({ subpath: file.subpath, types: file.path }));
     if (matched.length === 0) entries.push({ subpath, note: `no file matches ${declared}` });
-    entries.push(...matched.sort((a, b) => byCode(a.subpath, b.subpath)));
+    entries.push(...matched);
   }
   return entries;
 }

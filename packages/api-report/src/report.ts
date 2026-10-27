@@ -4,8 +4,9 @@
  * The report lists the names that each entry of the `exports` field gives, and the declaration of
  * each name. It follows `export *`, `export { a as b } from`, `export * as ns` and the imports that
  * a module exports again. It also lists the ambient declarations of each file that an entry reaches,
- * and the bins. The report has no comments and no private members. Thus a change of a comment or of
- * a private field does not change it.
+ * and the bins. An entry without a declaration file (for example a JSON file) lists its files. The
+ * report has no comments and no private members. Thus a change of a comment or of a private field
+ * does not change it.
  *
  * The text is the same on Windows and on Linux. The line ends
  * are LF, the paths use `/`, and the sort does not use the locale.
@@ -206,6 +207,9 @@ export function apiReport(packageName: string, root: string, entries: readonly E
   for (const entry of entries) {
     if (entry.types === undefined) {
       lines.push("", `## ${entry.subpath}: ${entry.note ?? "no declaration file"}`);
+      // The files of an entry without declarations: a removed file changes the report
+      const files = entry.files ?? [];
+      if (files.length > 0) lines.push("", ...files.map((file) => `file ${file.subpath}: ${file.path.replace(/^\.\//, "")}`));
       continue;
     }
     const file = resolve(root, entry.types);

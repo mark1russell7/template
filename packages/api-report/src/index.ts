@@ -23,6 +23,7 @@ export {
   targetOf,
   type Bin,
   type Entry,
+  type EntryFile,
   type Manifest,
 } from "./entries.ts";
 export { apiReport, DEFAULT_TOOL, HEADER_LINES, packageReport, type PackageReportOptions, type ReportOptions } from "./report.ts";

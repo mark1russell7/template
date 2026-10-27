@@ -120,8 +120,8 @@ describe("the entries of a package.json", () => {
     };
     expect(entriesOf(manifest, root)).toEqual([
       { subpath: ".", types: "./dist/a.d.ts" },
-      { subpath: "./b", note: "no declaration file for ./dist/b.js" },
-      { subpath: "./c.css", note: "no declaration file for ./dist/c.css" },
+      { subpath: "./b", note: "no declaration file for ./dist/b.js", files: [{ subpath: "./b", path: "./dist/b.js" }] },
+      { subpath: "./c.css", note: "no declaration file for ./dist/c.css", files: [{ subpath: "./c.css", path: "./dist/c.css" }] },
     ]);
     expect(entriesOf({ exports: "./dist/a.js" }, root)).toEqual([{ subpath: ".", types: "./dist/a.d.ts" }]);
     expect(entriesOf({ exports: { import: "./dist/a.js" } }, root)).toEqual([{ subpath: ".", types: "./dist/a.d.ts" }]);
@@ -134,6 +134,23 @@ describe("the entries of a package.json", () => {
       { subpath: "./x", types: "./dist/x.d.ts" },
       { subpath: "./y/z", types: "./dist/y/z.d.ts" },
       { subpath: "./none/*", note: "no file matches ./lib/*.d.ts" },
+    ]);
+  });
+
+  it("lists the files of a subpath pattern that are not declarations", () => {
+    const root = fixture({ "tsconfig/node.json": "{}", "tsconfig/base.json": "{}", "tsconfig/sub/web.json": "{}", "tsconfig/readme.md": "", "tsconfig/secret.json": "{}" });
+    const manifest = { exports: { "./tsconfig/*.json": "./tsconfig/*.json", "./tsconfig/secret.json": null, "./css/*": "./css/*.css" } };
+    expect(entriesOf(manifest, root)).toEqual([
+      {
+        subpath: "./tsconfig/*.json",
+        note: "no declaration pattern for ./tsconfig/*.json",
+        files: [
+          { subpath: "./tsconfig/base.json", path: "./tsconfig/base.json" },
+          { subpath: "./tsconfig/node.json", path: "./tsconfig/node.json" },
+          { subpath: "./tsconfig/sub/web.json", path: "./tsconfig/sub/web.json" },
+        ],
+      },
+      { subpath: "./css/*", note: "no file matches ./css/*.css" },
     ]);
   });
 
@@ -308,6 +325,15 @@ describe("the report of a package", () => {
     expect(report).toMatch(/^# The public API of p\n/);
     expect(report).toContain("This package has no type declarations");
     expect(report).toMatch(/## \.\/style\.css: no declaration file for \.\/style\.css\n$/);
+  });
+
+  it("lists each file of an entry without declarations, so a removed file changes the report", () => {
+    const files = { "package.json": { name: "p", exports: { "./tsconfig/*.json": "./tsconfig/*.json", "./package.json": "./package.json" } }, "tsconfig/b.json": "{}", "tsconfig/a.json": "{}" };
+    const report = packageReport(fixture(files));
+    expect(report).toContain("## ./tsconfig/*.json: no declaration pattern for ./tsconfig/*.json\n\nfile ./tsconfig/a.json: tsconfig/a.json\nfile ./tsconfig/b.json: tsconfig/b.json\n");
+    const fewer = packageReport(fixture(Object.fromEntries(Object.entries(files).filter(([file]) => file !== "tsconfig/b.json"))));
+    expect(fewer).not.toContain("tsconfig/b.json");
+    expect(fewer).toContain("file ./tsconfig/a.json: tsconfig/a.json");
   });
 
   it("names the command of the header", () => {
