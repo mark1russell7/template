@@ -17,6 +17,8 @@ Write all prose of this repository in the style of ASD-STE100 Simplified Technic
 - Make a server package with `--preset=service`. Only its entry `src/main.ts` uses `run()` of `@mark1russell7/service`.
 - A package is a source package. Its `main` is `src/index.ts`, so other packages import its source.
 - Each package has a `tsconfig.test.json`. `pnpm typecheck` checks the source and the tests.
+- Each public package has a report of its API in `test/api/public-api.txt`. CI fails when the report is not current.
+- After a change of a public API, build, start `pnpm exec api-report update`, and commit the report with the change.
 
 ## CI
 

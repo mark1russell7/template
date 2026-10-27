@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json.schemastore.org/package",
+  "name": "@mark1russell7/api-report",
+  "version": "0.1.0",
+  "description": "A report of the public API of each package of a workspace, from its built .d.ts files: a check in CI shows each change of the API in the pull request.",
+  "keywords": [
+    "api-report",
+    "public-api",
+    "typescript",
+    "declarations",
+    "monorepo",
+    "pnpm",
+    "workspace",
+    "semver",
+    "ci"
+  ],
+  "homepage": "https://github.com/mark1russell7/template/tree/main/packages/api-report#readme",
+  "bugs": {
+    "url": "https://github.com/mark1russell7/template/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mark1russell7/template.git",
+    "directory": "packages/api-report"
+  },
+  "license": "MIT",
+  "author": "Mark Russell (https://github.com/mark1russell7)",
+  "type": "module",
+  "main": "./src/index.ts",
+  "bin": {
+    "api-report": "./src/cli.ts"
+  },
+  "files": [
+    "build"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "main": "./build/index.js",
+    "types": "./build/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./build/index.d.ts",
+        "import": "./build/index.js"
+      },
+      "./package.json": "./package.json"
+    },
+    "bin": {
+      "api-report": "./build/cli.js"
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json"
+  },
+  "devDependencies": {
+    "@mark1russell7/cue": "^1.0.2",
+    "@types/node": "^26.6.4",
+    "tsdown": "^0.23.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}

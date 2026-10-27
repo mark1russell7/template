@@ -1,0 +1,11 @@
+# The public API of @mark1russell7/template-cli
+#
+# The names of each entry of the exports field, and the declaration of each name, without comments
+# and private members. The command `api-report check` compares this file with the built .d.ts files.
+# To accept a change of the API, start the build, then `api-report update`, and review the diff.
+
+This package has no type declarations: no entry of its package.json gives a .d.ts file.
+
+## bin: 1 commands
+
+template: ./build/index.js

@@ -1,0 +1,274 @@
+# The public API of @mark1russell7/api-report
+#
+# The names of each entry of the exports field, and the declaration of each name, without comments
+# and private members. The command `api-report check` compares this file with the built .d.ts files.
+# To accept a change of the API, start the build, then `api-report update`, and review the diff.
+
+## . (build/index.d.ts): 44 names
+
+type ApiReportConfig: build/index.d.ts#ApiReportConfig
+type Bin: build/index.d.ts#Bin
+type CliIo: build/index.d.ts#CliIo
+DEFAULT_TOOL: build/index.d.ts#DEFAULT_TOOL
+type DeclarationInfo: build/index.d.ts#DeclarationInfo
+type DiffLine: build/index.d.ts#DiffLine
+type Entry: build/index.d.ts#Entry
+HEADER_LINES: build/index.d.ts#HEADER_LINES
+type ImportBinding: build/index.d.ts#ImportBinding
+type LocalExport: build/index.d.ts#LocalExport
+type Manifest: build/index.d.ts#Manifest
+type Mode: build/index.d.ts#Mode
+PUBLISH_CONFIG_FIELDS: build/index.d.ts#PUBLISH_CONFIG_FIELDS
+type PackageReportOptions: build/index.d.ts#PackageReportOptions
+type PackageResult: build/index.d.ts#PackageResult
+REPORT_FILE: build/index.d.ts#REPORT_FILE
+type Reexport: build/index.d.ts#Reexport
+type ReportOptions: build/index.d.ts#ReportOptions
+type RunOptions: build/index.d.ts#RunOptions
+type RunResult: build/index.d.ts#RunResult
+USAGE: build/index.d.ts#USAGE
+type UnifiedDiffOptions: build/index.d.ts#UnifiedDiffOptions
+apiReport: build/index.d.ts#apiReport
+binsOf: build/index.d.ts#binsOf
+byCode: build/index.d.ts#byCode
+declarationPathOf: build/index.d.ts#declarationPathOf
+diffLines: build/index.d.ts#diffLines
+entriesOf: build/index.d.ts#entriesOf
+formatResult: build/index.d.ts#formatResult
+globFolders: build/index.d.ts#globFolders
+globToRegExp: build/index.d.ts#globToRegExp
+packageFolders: build/index.d.ts#packageFolders
+packageReport: build/index.d.ts#packageReport
+parseDeclarations: build/index.d.ts#parseDeclarations
+patternMatch: build/index.d.ts#patternMatch
+publishedManifest: build/index.d.ts#publishedManifest
+readConfig: build/index.d.ts#readConfig
+runCli: build/index.d.ts#runCli
+runReports: build/index.d.ts#runReports
+statementsOf: build/index.d.ts#statementsOf
+summaryMarkdown: build/index.d.ts#summaryMarkdown
+targetOf: build/index.d.ts#targetOf
+unifiedDiff: build/index.d.ts#unifiedDiff
+workspaceGlobs: build/index.d.ts#workspaceGlobs
+
+## bin: 1 commands
+
+api-report: ./build/cli.js
+
+## Declarations
+
+### build/index.d.ts#ApiReportConfig
+interface ApiReportConfig {
+  readonly packages?: readonly string[];
+  readonly report?: string;
+  readonly includePrivate?: boolean;
+  readonly publishConfig?: boolean;
+  readonly tool?: string;
+}
+
+### build/index.d.ts#Bin
+interface Bin {
+  readonly name: string;
+  readonly path: string;
+}
+
+### build/index.d.ts#CliIo
+interface CliIo {
+  readonly cwd: string;
+  readonly env: Readonly<Record<string, string | undefined>>;
+  readonly stdout: (text: string) => void;
+  readonly stderr: (text: string) => void;
+}
+
+### build/index.d.ts#DEFAULT_TOOL
+export declare const DEFAULT_TOOL = "api-report";
+
+### build/index.d.ts#DeclarationInfo
+interface DeclarationInfo {
+  readonly locals: Map<string, string[]>;
+  readonly exported: Map<string, LocalExport>;
+  readonly reexports: Reexport[];
+  readonly stars: {
+    readonly from: string;
+    readonly typeOnly: boolean;
+  }[];
+  readonly namespaces: {
+    readonly name: string;
+    readonly from: string;
+    readonly typeOnly: boolean;
+  }[];
+  readonly imports: Map<string, ImportBinding>;
+  readonly ambient: Map<string, string[]>;
+  readonly references: Set<string>;
+}
+
+### build/index.d.ts#DiffLine
+interface DiffLine {
+  readonly kind: " " | "-" | "+";
+  readonly text: string;
+}
+
+### build/index.d.ts#Entry
+interface Entry {
+  readonly subpath: string;
+  readonly types?: string;
+  readonly note?: string;
+}
+
+### build/index.d.ts#HEADER_LINES
+export declare const HEADER_LINES = 5;
+
+### build/index.d.ts#ImportBinding
+interface ImportBinding {
+  readonly from: string;
+  readonly imported: string;
+  readonly typeOnly: boolean;
+}
+
+### build/index.d.ts#LocalExport
+interface LocalExport {
+  readonly local: string;
+  readonly typeOnly: boolean;
+}
+
+### build/index.d.ts#Manifest
+interface Manifest {
+  readonly name?: string;
+  readonly private?: boolean;
+  readonly exports?: unknown;
+  readonly imports?: unknown;
+  readonly types?: unknown;
+  readonly typings?: unknown;
+  readonly main?: unknown;
+  readonly bin?: unknown;
+  readonly publishConfig?: Readonly<Record<string, unknown>>;
+  readonly [field: string]: unknown;
+}
+
+### build/index.d.ts#Mode
+type Mode = "check" | "update";
+
+### build/index.d.ts#PUBLISH_CONFIG_FIELDS
+export declare const PUBLISH_CONFIG_FIELDS: readonly string[];
+
+### build/index.d.ts#PackageReportOptions
+interface PackageReportOptions {
+  readonly tool?: string;
+  readonly publishConfig?: boolean;
+}
+
+### build/index.d.ts#PackageResult
+interface PackageResult {
+  readonly folder: string;
+  readonly file: string;
+  readonly status: "same" | "changed" | "new" | "stale" | "private" | "error";
+  readonly diff?: string;
+  readonly error?: string;
+}
+
+### build/index.d.ts#REPORT_FILE
+export declare const REPORT_FILE = "test/api/public-api.txt";
+
+### build/index.d.ts#Reexport
+interface Reexport {
+  readonly imported: string;
+  readonly exported: string;
+  readonly typeOnly: boolean;
+  readonly from: string;
+}
+
+### build/index.d.ts#ReportOptions
+interface ReportOptions {
+  readonly manifest?: Manifest;
+  readonly tool?: string;
+}
+
+### build/index.d.ts#RunOptions
+interface RunOptions extends ApiReportConfig {
+  readonly mode: Mode;
+  readonly root: string;
+  readonly folders?: readonly string[];
+}
+
+### build/index.d.ts#RunResult
+interface RunResult {
+  readonly mode: Mode;
+  readonly packages: readonly PackageResult[];
+  readonly failed: boolean;
+}
+
+### build/index.d.ts#USAGE
+export declare const USAGE: string;
+
+### build/index.d.ts#UnifiedDiffOptions
+interface UnifiedDiffOptions {
+  readonly context?: number;
+  readonly from?: string;
+  readonly to?: string;
+}
+
+### build/index.d.ts#apiReport
+export declare function apiReport(packageName: string, root: string, entries: readonly Entry[], options?: ReportOptions): string;
+
+### build/index.d.ts#binsOf
+export declare function binsOf(manifest: Manifest): Bin[];
+
+### build/index.d.ts#byCode
+export declare const byCode: (a: string, b: string) => number;
+
+### build/index.d.ts#declarationPathOf
+export declare function declarationPathOf(path: string): string | undefined;
+
+### build/index.d.ts#diffLines
+export declare function diffLines(before: readonly string[], after: readonly string[]): DiffLine[];
+
+### build/index.d.ts#entriesOf
+export declare function entriesOf(manifest: Manifest, root: string): Entry[];
+
+### build/index.d.ts#formatResult
+export declare function formatResult(result: RunResult, tool?: string): string;
+
+### build/index.d.ts#globFolders
+export declare function globFolders(root: string, glob: string): string[];
+
+### build/index.d.ts#globToRegExp
+export declare function globToRegExp(glob: string): RegExp;
+
+### build/index.d.ts#packageFolders
+export declare function packageFolders(root: string, globs?: readonly string[] | undefined): string[];
+
+### build/index.d.ts#packageReport
+export declare function packageReport(dir: string, options?: PackageReportOptions): string;
+
+### build/index.d.ts#parseDeclarations
+export declare function parseDeclarations(source: string, file?: string): DeclarationInfo;
+
+### build/index.d.ts#patternMatch
+export declare function patternMatch(pattern: string, subpath: string): string | undefined;
+
+### build/index.d.ts#publishedManifest
+export declare function publishedManifest(manifest: Manifest): Manifest;
+
+### build/index.d.ts#readConfig
+export declare function readConfig(root: string): ApiReportConfig;
+
+### build/index.d.ts#runCli
+export declare function runCli(args: readonly string[], io: CliIo): number;
+
+### build/index.d.ts#runReports
+export declare function runReports(options: RunOptions): RunResult;
+
+### build/index.d.ts#statementsOf
+export declare function statementsOf(source: string): string[];
+
+### build/index.d.ts#summaryMarkdown
+export declare function summaryMarkdown(result: RunResult): string;
+
+### build/index.d.ts#targetOf
+export declare function targetOf(value: unknown): string | null | undefined;
+
+### build/index.d.ts#unifiedDiff
+export declare function unifiedDiff(before: string, after: string, options?: UnifiedDiffOptions): string;
+
+### build/index.d.ts#workspaceGlobs
+export declare function workspaceGlobs(root: string): string[] | undefined;

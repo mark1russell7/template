@@ -1,0 +1,719 @@
+# The public API of @mark1russell7/site-pages
+#
+# The names of each entry of the exports field, and the declaration of each name, without comments
+# and private members. The command `api-report check` compares this file with the built .d.ts files.
+# To accept a change of the API, start the build, then `api-report update`, and review the diff.
+
+## . (build/index.d.ts): 108 names
+
+BASE_CSS: build/index.d.ts#BASE_CSS
+type BoardIssue: build/index.d.ts#BoardIssue
+type BoardItem: build/index.d.ts#BoardItem
+type BoardPullRequest: build/index.d.ts#BoardPullRequest
+type BoardSection: build/index.d.ts#BoardSection
+type BuildOptions: build/index.d.ts#BuildOptions
+type BuildResult: build/index.d.ts#BuildResult
+type ChangelogEntry: build/index.d.ts#ChangelogEntry
+type ChangelogSection: build/index.d.ts#ChangelogSection
+type ChangelogSource: build/index.d.ts#ChangelogSource
+type CheckState: build/index.d.ts#CheckState
+type CliIo: build/index.d.ts#CliIo
+DEFAULT_CHANGELOGS: build/index.d.ts#DEFAULT_CHANGELOGS
+GITHUB_API: build/index.d.ts#GITHUB_API
+GITHUB_GRAPHQL: build/index.d.ts#GITHUB_GRAPHQL
+type GitHubOpenWork: build/index.d.ts#GitHubOpenWork
+type GitHubOptions: build/index.d.ts#GitHubOptions
+type GitHubRelease: build/index.d.ts#GitHubRelease
+type GitHubReleases: build/index.d.ts#GitHubReleases
+HELP: build/index.d.ts#HELP
+type ItemGroup: build/index.d.ts#ItemGroup
+type Link: build/index.d.ts#Link
+type LinkOptions: build/index.d.ts#LinkOptions
+type MarkdownTable: build/index.d.ts#MarkdownTable
+NPM_REGISTRY: build/index.d.ts#NPM_REGISTRY
+type NpmOptions: build/index.d.ts#NpmOptions
+type NpmPublishTimes: build/index.d.ts#NpmPublishTimes
+type NpmVersionTime: build/index.d.ts#NpmVersionTime
+OPEN_CLASSES: build/index.d.ts#OPEN_CLASSES
+type OpenWorkTotals: build/index.d.ts#OpenWorkTotals
+type PageOptions: build/index.d.ts#PageOptions
+type PageParts: build/index.d.ts#PageParts
+type ParsedVersion: build/index.d.ts#ParsedVersion
+RELEASES_SCRIPT: build/index.d.ts#RELEASES_SCRIPT
+type ReadReleasesOptions: build/index.d.ts#ReadReleasesOptions
+type ReadStatusBoardOptions: build/index.d.ts#ReadStatusBoardOptions
+type Release: build/index.d.ts#Release
+type ReleaseChange: build/index.d.ts#ReleaseChange
+ReleaseDataError: build/index.d.ts#ReleaseDataError
+type ReleaseKind: build/index.d.ts#ReleaseKind
+type ReleasePoint: build/index.d.ts#ReleasePoint
+type ReleaseSources: build/index.d.ts#ReleaseSources
+type ReleaseSummary: build/index.d.ts#ReleaseSummary
+RoadmapParseError: build/index.d.ts#RoadmapParseError
+STATUS_CLASSES: build/index.d.ts#STATUS_CLASSES
+STATUS_SCRIPT: build/index.d.ts#STATUS_SCRIPT
+type StatusBoardData: build/index.d.ts#StatusBoardData
+type StatusBoardInput: build/index.d.ts#StatusBoardInput
+type StatusClass: build/index.d.ts#StatusClass
+type TagDate: build/index.d.ts#TagDate
+type TagVersion: build/index.d.ts#TagVersion
+type TimelineBand: build/index.d.ts#TimelineBand
+type TimelineLayout: build/index.d.ts#TimelineLayout
+type TimelineMark: build/index.d.ts#TimelineMark
+type TimelineOptions: build/index.d.ts#TimelineOptions
+UsageError: build/index.d.ts#UsageError
+build: build/index.d.ts#build
+buildStatusBoard: build/index.d.ts#buildStatusBoard
+checkStateOf: build/index.d.ts#checkStateOf
+classCounts: build/index.d.ts#classCounts
+compareVersions: build/index.d.ts#compareVersions
+dayRange: build/index.d.ts#dayRange
+escapeHtml: build/index.d.ts#escapeHtml
+firstSentence: build/index.d.ts#firstSentence
+gitTagDates: build/index.d.ts#gitTagDates
+githubOpenWork: build/index.d.ts#githubOpenWork
+githubReleases: build/index.d.ts#githubReleases
+globFiles: build/index.d.ts#globFiles
+headCommit: build/index.d.ts#headCommit
+headingAnchor: build/index.d.ts#headingAnchor
+headingDate: build/index.d.ts#headingDate
+inlineMarkdown: build/index.d.ts#inlineMarkdown
+isShallow: build/index.d.ts#isShallow
+kindOf: build/index.d.ts#kindOf
+laneCenter: build/index.d.ts#laneCenter
+linksOf: build/index.d.ts#linksOf
+longDate: build/index.d.ts#longDate
+markdownTables: build/index.d.ts#markdownTables
+mergeReleases: build/index.d.ts#mergeReleases
+npmPublishTimes: build/index.d.ts#npmPublishTimes
+oldestFirst: build/index.d.ts#oldestFirst
+openGroups: build/index.d.ts#openGroups
+originRepository: build/index.d.ts#originRepository
+pageShell: build/index.d.ts#pageShell
+parseBuildArgs: build/index.d.ts#parseBuildArgs
+parseChangelog: build/index.d.ts#parseChangelog
+parseVersion: build/index.d.ts#parseVersion
+plainText: build/index.d.ts#plainText
+readChangelogs: build/index.d.ts#readChangelogs
+readReleases: build/index.d.ts#readReleases
+readStatusBoard: build/index.d.ts#readStatusBoard
+releaseBodyEntries: build/index.d.ts#releaseBodyEntries
+releaseSummary: build/index.d.ts#releaseSummary
+releasesLead: build/index.d.ts#releasesLead
+renderReleasesPage: build/index.d.ts#renderReleasesPage
+renderStatusPage: build/index.d.ts#renderStatusPage
+roadmapItems: build/index.d.ts#roadmapItems
+runCli: build/index.d.ts#runCli
+safeUrl: build/index.d.ts#safeUrl
+sectionsOf: build/index.d.ts#sectionsOf
+shortDate: build/index.d.ts#shortDate
+slugOf: build/index.d.ts#slugOf
+splitRow: build/index.d.ts#splitRow
+statusClassOf: build/index.d.ts#statusClassOf
+statusLead: build/index.d.ts#statusLead
+timelineLayout: build/index.d.ts#timelineLayout
+utcDay: build/index.d.ts#utcDay
+versionOfTag: build/index.d.ts#versionOfTag
+
+## bin: 1 commands
+
+site-pages: ./build/cli.js
+
+## Declarations
+
+### build/index.d.ts#BASE_CSS
+export declare const BASE_CSS: string;
+
+### build/index.d.ts#BoardIssue
+interface BoardIssue {
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  createdAt: string;
+  updatedAt: string;
+  labels: string[];
+}
+
+### build/index.d.ts#BoardItem
+interface BoardItem {
+  id: string;
+  title: string;
+  status: string;
+  statusClass: StatusClass;
+  owner?: string;
+  area?: string;
+  needs?: string;
+  section: string;
+  line: number;
+  links: Link[];
+}
+
+### build/index.d.ts#BoardPullRequest
+interface BoardPullRequest {
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  branch: string;
+  draft: boolean;
+  createdAt: string;
+  updatedAt: string;
+  labels: string[];
+  checks: CheckState;
+}
+
+### build/index.d.ts#BoardSection
+interface BoardSection {
+  slug: string;
+  label: string;
+  open: number;
+  done: number;
+}
+
+### build/index.d.ts#BuildOptions
+interface BuildOptions {
+  repoDir: string;
+  repository: string;
+  out: string;
+  base: string;
+  roadmap?: string | undefined;
+  packages?: readonly string[] | undefined;
+  changesets?: string | undefined;
+  group?: string | undefined;
+  token?: string | undefined;
+  commit?: string | null | undefined;
+  css?: string | undefined;
+  siteName?: string | undefined;
+  dataOnly?: boolean | undefined;
+  fetch?: typeof fetch | undefined;
+  now?: string | undefined;
+  warn?: ((message: string) => void) | undefined;
+}
+
+### build/index.d.ts#BuildResult
+interface BuildResult {
+  files: string[];
+  releases: Release[];
+  status: StatusBoardData;
+}
+
+### build/index.d.ts#ChangelogEntry
+interface ChangelogEntry {
+  commit: string | null;
+  text: string;
+}
+
+### build/index.d.ts#ChangelogSection
+interface ChangelogSection {
+  version: string;
+  heading: string;
+  entries: ChangelogEntry[];
+}
+
+### build/index.d.ts#ChangelogSource
+interface ChangelogSource {
+  name: string;
+  file: string;
+  markdown: string;
+}
+
+### build/index.d.ts#CheckState
+type CheckState = "success" | "failure" | "pending" | "none";
+
+### build/index.d.ts#CliIo
+interface CliIo {
+  cwd: string;
+  env: Record<string, string | undefined>;
+  stdout: (text: string) => void;
+  stderr: (text: string) => void;
+  fetch?: typeof fetch;
+  now?: string;
+}
+
+### build/index.d.ts#DEFAULT_CHANGELOGS
+export declare const DEFAULT_CHANGELOGS: readonly string[];
+
+### build/index.d.ts#GITHUB_API
+export declare const GITHUB_API = "https://api.github.com";
+
+### build/index.d.ts#GITHUB_GRAPHQL
+export declare const GITHUB_GRAPHQL = "https://api.github.com/graphql";
+
+### build/index.d.ts#GitHubOpenWork
+type GitHubOpenWork = {
+  available: true;
+  pullRequests: BoardPullRequest[];
+  issues: BoardIssue[];
+  totals: OpenWorkTotals;
+} | {
+  available: false;
+  reason: string;
+};
+
+### build/index.d.ts#GitHubOptions
+interface GitHubOptions {
+  owner: string;
+  repo: string;
+  token: string | undefined;
+  fetch?: typeof fetch;
+  timeoutMs?: number;
+}
+
+### build/index.d.ts#GitHubRelease
+interface GitHubRelease {
+  tag: string;
+  name: string;
+  body: string;
+  publishedAt: string;
+  url: string;
+  prerelease: boolean;
+}
+
+### build/index.d.ts#GitHubReleases
+type GitHubReleases = {
+  available: true;
+  releases: GitHubRelease[];
+} | {
+  available: false;
+  reason: string;
+};
+
+### build/index.d.ts#HELP
+export declare const HELP = "Usage: site-pages build --out <dir> [options]\n\nWrites <out>/data/releases.json, <out>/data/status.json, <out>/releases/index.html\nand <out>/status/index.html. Start it in the repository, after the build of the site.\n\nOptions:\n  --out <dir>           The built output folder of the site (necessary)\n  --repo <owner/name>   The GitHub repository (default: $GITHUB_REPOSITORY, else the remote \"origin\")\n  --base </name/>       The path of the site home (default: \"/<name>/\", or \"/\" for <owner>.github.io)\n  --roadmap <file>      The roadmap file (default: none, the status page has only the GitHub part)\n  --packages <names>    npm names or a @scope, separated by commas, for the npm dates\n  --changesets <glob>   The changelog files (default: packages/*/CHANGELOG.md, else CHANGELOG.md)\n  --group <name>        The npm name of the package whose changelog gives the versions\n  --token <token>       A GitHub token with read access (default: $GITHUB_TOKEN)\n  --css <file>          A CSS file for the pages, after the default CSS\n  --site-name <name>    The name of the site in the header (default: the repository name)\n  --data-only           Write only the JSON data, not the pages\n  -h, --help            Show this help\n";
+
+### build/index.d.ts#ItemGroup
+interface ItemGroup {
+  statusClass: StatusClass;
+  items: BoardItem[];
+}
+
+### build/index.d.ts#Link
+interface Link {
+  label: string;
+  url: string;
+}
+
+### build/index.d.ts#LinkOptions
+interface LinkOptions {
+  file?: string;
+  repository?: string;
+  ref?: string;
+}
+
+### build/index.d.ts#MarkdownTable
+interface MarkdownTable {
+  section: string;
+  line: number;
+  header: string[];
+  rows: Array<{
+    line: number;
+    cells: string[];
+  }>;
+}
+
+### build/index.d.ts#NPM_REGISTRY
+export declare const NPM_REGISTRY = "https://registry.npmjs.org";
+
+### build/index.d.ts#NpmOptions
+interface NpmOptions {
+  packages: readonly string[];
+  fetch?: typeof fetch;
+  registry?: string;
+  timeoutMs?: number;
+}
+
+### build/index.d.ts#NpmPublishTimes
+interface NpmPublishTimes {
+  times: NpmVersionTime[];
+  problems: string[];
+}
+
+### build/index.d.ts#NpmVersionTime
+interface NpmVersionTime {
+  name: string;
+  version: string;
+  date: string;
+}
+
+### build/index.d.ts#OPEN_CLASSES
+export declare const OPEN_CLASSES: readonly StatusClass[];
+
+### build/index.d.ts#OpenWorkTotals
+interface OpenWorkTotals {
+  pullRequests: number;
+  issues: number;
+}
+
+### build/index.d.ts#PageOptions
+interface PageOptions {
+  repository: string;
+  base: string;
+  siteName?: string | undefined;
+  extraCss?: string | undefined;
+  generatedAt: string;
+  commit: string | null;
+}
+
+### build/index.d.ts#PageParts
+interface PageParts {
+  title: string;
+  description: string;
+  current: "releases" | "status";
+  main: string;
+  script: string;
+}
+
+### build/index.d.ts#ParsedVersion
+interface ParsedVersion {
+  major: number;
+  minor: number;
+  patch: number;
+  prerelease: string[];
+}
+
+### build/index.d.ts#RELEASES_SCRIPT
+export declare const RELEASES_SCRIPT: string;
+
+### build/index.d.ts#ReadReleasesOptions
+interface ReadReleasesOptions {
+  repoDir: string;
+  repository?: string | undefined;
+  token?: string | undefined;
+  changesets?: string | undefined;
+  packages?: readonly string[] | undefined;
+  group?: string | undefined;
+  ref?: string | undefined;
+  fetch?: typeof fetch | undefined;
+  now?: string | undefined;
+  warn?: ((message: string) => void) | undefined;
+}
+
+### build/index.d.ts#ReadStatusBoardOptions
+interface ReadStatusBoardOptions {
+  repoDir: string;
+  roadmap?: string | null | undefined;
+  owner: string;
+  repo: string;
+  token: string | undefined;
+  commit?: string | null | undefined;
+  fetch?: typeof fetch | undefined;
+  generatedAt?: string | undefined;
+}
+
+### build/index.d.ts#Release
+interface Release {
+  version: string;
+  date: string;
+  kind: ReleaseKind;
+  changes: ReleaseChange[];
+  links: Link[];
+}
+
+### build/index.d.ts#ReleaseChange
+interface ReleaseChange {
+  commit: string | null;
+  text: string;
+  packages: string[];
+}
+
+### build/index.d.ts#ReleaseDataError
+export declare class ReleaseDataError extends Error {}
+
+### build/index.d.ts#ReleaseKind
+type ReleaseKind = "first" | "major" | "minor" | "patch";
+
+### build/index.d.ts#ReleasePoint
+interface ReleasePoint {
+  version: string;
+  date: string;
+  kind: ReleaseKind;
+}
+
+### build/index.d.ts#ReleaseSources
+interface ReleaseSources {
+  changelogs?: readonly ChangelogSource[];
+  githubReleases?: readonly GitHubRelease[];
+  tags?: readonly TagDate[];
+  npm?: readonly NpmVersionTime[];
+  group?: string | undefined;
+  repository?: string | undefined;
+  ref?: string | undefined;
+  headingDate?: ((version: string, file: string) => string | null) | undefined;
+  now?: string | undefined;
+  warn?: ((message: string) => void) | undefined;
+}
+
+### build/index.d.ts#ReleaseSummary
+interface ReleaseSummary {
+  versions: number;
+  major: number;
+  minor: number;
+  patch: number;
+  first: string | null;
+  last: string | null;
+}
+
+### build/index.d.ts#RoadmapParseError
+export declare class RoadmapParseError extends Error {}
+
+### build/index.d.ts#STATUS_CLASSES
+export declare const STATUS_CLASSES: readonly StatusClass[];
+
+### build/index.d.ts#STATUS_SCRIPT
+export declare const STATUS_SCRIPT: string;
+
+### build/index.d.ts#StatusBoardData
+interface StatusBoardData {
+  generatedAt: string;
+  commit: string | null;
+  source: {
+    roadmap: string | null;
+    github: string;
+  };
+  items: BoardItem[];
+  pullRequests: BoardPullRequest[];
+  issues: BoardIssue[];
+  github: {
+    available: boolean;
+    reason?: string;
+    totals?: OpenWorkTotals;
+  };
+}
+
+### build/index.d.ts#StatusBoardInput
+interface StatusBoardInput {
+  items: BoardItem[];
+  github: GitHubOpenWork;
+  roadmap: string | null;
+  repository: string;
+  commit?: string | null;
+  generatedAt?: string;
+}
+
+### build/index.d.ts#StatusClass
+type StatusClass = "waiting" | "blocked" | "progress" | "open" | "later" | "done";
+
+### build/index.d.ts#TagDate
+interface TagDate {
+  tag: string;
+  date: string;
+}
+
+### build/index.d.ts#TagVersion
+interface TagVersion {
+  version: string;
+  package: string | null;
+}
+
+### build/index.d.ts#TimelineBand
+interface TimelineBand {
+  start: number;
+  end: number;
+  x0: number;
+  x1: number;
+  label: string;
+  count: number;
+  empty: boolean;
+}
+
+### build/index.d.ts#TimelineLayout
+interface TimelineLayout<T extends ReleasePoint = ReleasePoint> {
+  width: number;
+  height: number;
+  plotTop: number;
+  plotBottom: number;
+  laneHeight: number;
+  lanes: number;
+  bands: TimelineBand[];
+  marks: Array<TimelineMark<T>>;
+}
+
+### build/index.d.ts#TimelineMark
+interface TimelineMark<T extends ReleasePoint = ReleasePoint> {
+  release: T;
+  time: number;
+  x: number;
+  lane: number;
+  half: number;
+}
+
+### build/index.d.ts#TimelineOptions
+interface TimelineOptions {
+  width: number;
+  padX?: number;
+  laneHeight?: number;
+  charWidth?: number;
+  gap?: number;
+  emptyWeight?: number;
+}
+
+### build/index.d.ts#UsageError
+export declare class UsageError extends Error {}
+
+### build/index.d.ts#build
+export declare function build(options: BuildOptions): Promise<BuildResult>;
+
+### build/index.d.ts#buildStatusBoard
+export declare function buildStatusBoard(input: StatusBoardInput): StatusBoardData;
+
+### build/index.d.ts#checkStateOf
+export declare function checkStateOf(rollup: {
+  state?: string | null;
+} | null | undefined): CheckState;
+
+### build/index.d.ts#classCounts
+export declare function classCounts(items: readonly BoardItem[]): Record<StatusClass, number>;
+
+### build/index.d.ts#compareVersions
+export declare function compareVersions(a: string, b: string): number;
+
+### build/index.d.ts#dayRange
+export declare function dayRange(start: number, end: number): string;
+
+### build/index.d.ts#escapeHtml
+export declare function escapeHtml(text: string): string;
+
+### build/index.d.ts#firstSentence
+export declare function firstSentence(text: string): string;
+
+### build/index.d.ts#gitTagDates
+export declare function gitTagDates(repoDir: string): TagDate[];
+
+### build/index.d.ts#githubOpenWork
+export declare function githubOpenWork(options: GitHubOptions & {
+  endpoint?: string;
+  first?: number;
+}): Promise<GitHubOpenWork>;
+
+### build/index.d.ts#githubReleases
+export declare function githubReleases(options: GitHubOptions & {
+  endpoint?: string;
+  maxPages?: number;
+}): Promise<GitHubReleases>;
+
+### build/index.d.ts#globFiles
+export declare function globFiles(root: string, pattern: string): string[];
+
+### build/index.d.ts#headCommit
+export declare function headCommit(repoDir: string): string | null;
+
+### build/index.d.ts#headingAnchor
+export declare function headingAnchor(heading: string): string;
+
+### build/index.d.ts#headingDate
+export declare function headingDate(repoDir: string, version: string, file: string): string | null;
+
+### build/index.d.ts#inlineMarkdown
+export declare function inlineMarkdown(markdown: string): string;
+
+### build/index.d.ts#isShallow
+export declare function isShallow(repoDir: string): boolean;
+
+### build/index.d.ts#kindOf
+export declare function kindOf(version: string, oldest: boolean): ReleaseKind;
+
+### build/index.d.ts#laneCenter
+export declare function laneCenter(layout: {
+  plotBottom: number;
+  laneHeight: number;
+}, lane: number): number;
+
+### build/index.d.ts#linksOf
+export declare function linksOf(cell: string | null | undefined, options?: LinkOptions): Link[];
+
+### build/index.d.ts#longDate
+export declare function longDate(date: string | number): string;
+
+### build/index.d.ts#markdownTables
+export declare function markdownTables(markdown: string): MarkdownTable[];
+
+### build/index.d.ts#mergeReleases
+export declare function mergeReleases(sources: ReleaseSources): Release[];
+
+### build/index.d.ts#npmPublishTimes
+export declare function npmPublishTimes(options: NpmOptions): Promise<NpmPublishTimes>;
+
+### build/index.d.ts#oldestFirst
+export declare function oldestFirst<T extends ReleasePoint>(releases: readonly T[]): T[];
+
+### build/index.d.ts#openGroups
+export declare function openGroups(items: readonly BoardItem[]): ItemGroup[];
+
+### build/index.d.ts#originRepository
+export declare function originRepository(repoDir: string): string | null;
+
+### build/index.d.ts#pageShell
+export declare function pageShell(parts: PageParts, options: PageOptions): string;
+
+### build/index.d.ts#parseBuildArgs
+export declare function parseBuildArgs(argv: readonly string[], io: Pick<CliIo, "cwd" | "env">): BuildOptions | "help";
+
+### build/index.d.ts#parseChangelog
+export declare function parseChangelog(markdown: string): ChangelogSection[];
+
+### build/index.d.ts#parseVersion
+export declare function parseVersion(version: string): ParsedVersion | null;
+
+### build/index.d.ts#plainText
+export declare function plainText(markdown: string | null | undefined): string;
+
+### build/index.d.ts#readChangelogs
+export declare function readChangelogs(repoDir: string, pattern?: string): ChangelogSource[];
+
+### build/index.d.ts#readReleases
+export declare function readReleases(options: ReadReleasesOptions): Promise<Release[]>;
+
+### build/index.d.ts#readStatusBoard
+export declare function readStatusBoard(options: ReadStatusBoardOptions): Promise<StatusBoardData>;
+
+### build/index.d.ts#releaseBodyEntries
+export declare function releaseBodyEntries(body: string): ChangelogEntry[];
+
+### build/index.d.ts#releaseSummary
+export declare function releaseSummary(releases: readonly ReleasePoint[]): ReleaseSummary;
+
+### build/index.d.ts#releasesLead
+export declare function releasesLead(releases: readonly Release[]): string;
+
+### build/index.d.ts#renderReleasesPage
+export declare function renderReleasesPage(releases: readonly Release[], options: PageOptions): string;
+
+### build/index.d.ts#renderStatusPage
+export declare function renderStatusPage(data: StatusBoardData, options: PageOptions): string;
+
+### build/index.d.ts#roadmapItems
+export declare function roadmapItems(markdown: string, options?: LinkOptions): BoardItem[];
+
+### build/index.d.ts#runCli
+export declare function runCli(argv: readonly string[], io: CliIo): Promise<number>;
+
+### build/index.d.ts#safeUrl
+export declare function safeUrl(url: string): string | null;
+
+### build/index.d.ts#sectionsOf
+export declare function sectionsOf(items: readonly BoardItem[]): BoardSection[];
+
+### build/index.d.ts#shortDate
+export declare function shortDate(date: string | number): string;
+
+### build/index.d.ts#slugOf
+export declare function slugOf(text: string): string;
+
+### build/index.d.ts#splitRow
+export declare function splitRow(line: string): string[];
+
+### build/index.d.ts#statusClassOf
+export declare function statusClassOf(text: string | null | undefined): StatusClass;
+
+### build/index.d.ts#statusLead
+export declare function statusLead(data: StatusBoardData): string;
+
+### build/index.d.ts#timelineLayout
+export declare function timelineLayout<T extends ReleasePoint>(releases: readonly T[], options: TimelineOptions): TimelineLayout<T>;
+
+### build/index.d.ts#utcDay
+export declare function utcDay(time: number): number;
+
+### build/index.d.ts#versionOfTag
+export declare function versionOfTag(tag: string): TagVersion | null;

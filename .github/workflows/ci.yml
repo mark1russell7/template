@@ -1,6 +1,6 @@
 # The CI of this repository. The job ci is the shared CI of mark1russell7 (reusable-ci.yml, CI.md)
 # with its default inputs: it runs each standard script that package.json has (format:check,
-# typecheck, lint, test, build in each package that has it, and lint:ste).
+# typecheck, lint, test, build in each package that has it, check:boundaries, check:api and lint:ste).
 name: CI
 
 on:

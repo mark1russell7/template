@@ -1,0 +1,78 @@
+# The public API of @mark1russell7/boundaries
+#
+# The names of each entry of the exports field, and the declaration of each name, without comments
+# and private members. The command `api-report check` compares this file with the built .d.ts files.
+# To accept a change of the API, start the build, then `api-report update`, and review the diff.
+
+## . (build/index.d.ts): 12 names
+
+BoundaryOptions: build/index.d.ts#BoundaryOptions
+Config: build/index.d.ts#Config
+Rule: build/index.d.ts#Rule
+WorkspacePackage: build/index.d.ts#WorkspacePackage
+boundaries: build/index.d.ts#boundaries
+boundaryRules: build/index.d.ts#boundaryRules
+defaultOptions: build/index.d.ts#defaultOptions
+entryPattern: build/index.d.ts#entryPattern
+packageEntries: build/index.d.ts#packageEntries
+parserOptions: build/index.d.ts#parserOptions
+workspaceGlobs: build/index.d.ts#workspaceGlobs
+workspacePackages: build/index.d.ts#workspacePackages
+
+## Declarations
+
+### build/index.d.ts#BoundaryOptions
+export interface BoundaryOptions {
+  packages?: string[];
+  apps?: "private" | string[];
+  reference?: string;
+  forbidden?: Rule[];
+  options?: Record<string, unknown>;
+}
+
+### build/index.d.ts#Config
+export interface Config {
+  forbidden: Rule[];
+  options: Record<string, unknown>;
+}
+
+### build/index.d.ts#Rule
+export interface Rule {
+  name: string;
+  severity: "error" | "warn" | "info" | "ignore";
+  comment?: string;
+  from: Record<string, unknown>;
+  to: Record<string, unknown>;
+}
+
+### build/index.d.ts#WorkspacePackage
+export interface WorkspacePackage {
+  name: string;
+  dir: string;
+  private: boolean;
+  entries: string[];
+}
+
+### build/index.d.ts#boundaries
+export declare function boundaries(root: string, opts?: BoundaryOptions): Config;
+
+### build/index.d.ts#boundaryRules
+export declare function boundaryRules(packages: WorkspacePackage[], opts?: Pick<BoundaryOptions, "apps" | "reference">): Rule[];
+
+### build/index.d.ts#defaultOptions
+export declare function defaultOptions(root?: string): Record<string, unknown>;
+
+### build/index.d.ts#entryPattern
+export declare function entryPattern(dir: string, target: string): string;
+
+### build/index.d.ts#packageEntries
+export declare function packageEntries(dir: string, manifest: Record<string, unknown>): string[];
+
+### build/index.d.ts#parserOptions
+export declare function parserOptions(root?: string): Record<string, unknown>;
+
+### build/index.d.ts#workspaceGlobs
+export declare function workspaceGlobs(yaml: string): string[];
+
+### build/index.d.ts#workspacePackages
+export declare function workspacePackages(root: string, globs?: string[]): WorkspacePackage[];
