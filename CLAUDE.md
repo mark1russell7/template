@@ -19,6 +19,8 @@ Write all prose of this repository in the style of ASD-STE100 Simplified Technic
 - Each package has a `tsconfig.test.json`. `pnpm typecheck` checks the source and the tests.
 - Each public package has a report of its API in `test/api/public-api.txt`. CI fails when the report is not current.
 - After a change of a public API, build, start `pnpm exec api-report update`, and commit the report with the change.
+- `pnpm check:conventions` examines the rules of this file that a script can examine. CI fails on a break. `pnpm exec conventions --list` shows the rules.
+- To keep an exception to a rule, write it with its reason in the field `conventions` of the root `package.json`.
 
 ## CI
 

@@ -27,7 +27,7 @@ The job starts all the scripts, also after a failure. Then it fails with the nam
 
 | Input | Default | What it sets |
 |---|---|---|
-| `scripts` | `format:check typecheck lint test build check:boundaries check:api lint:ste` | The scripts, in sequence. `check:boundaries` is the import check of `@mark1russell7/boundaries`. `check:api` is the check of the public API of `@mark1russell7/api-report`. |
+| `scripts` | `format:check typecheck lint check:conventions test build check:boundaries check:api lint:ste` | The scripts, in sequence. `check:conventions` is the conventions check of `@mark1russell7/conventions`. `check:boundaries` is the import check of `@mark1russell7/boundaries`. `check:api` is the check of the public API of `@mark1russell7/api-report`. |
 | `recursive-scripts` | `build` | The scripts that run in each package when the root `package.json` does not have them. |
 | `node-versions` | `["26"]` | The Node.js versions of the matrix, as JSON. |
 | `os` | `["ubuntu-latest"]` | The runners of the matrix, as JSON. |
@@ -35,7 +35,7 @@ The job starts all the scripts, also after a failure. Then it fails with the nam
 | `run` | (empty) | A command after the scripts. |
 | `env` | `{}` | The environment variables of the job, as a JSON object. |
 | `working-directory` | `.` | The folder of `package.json`. |
-| `fetch-depth` | `1` | The commits of the checkout. `0` gets the whole history. |
+| `fetch-depth` | `2` | The commits of the checkout. `0` gets the whole history. With `2`, the checkout of a pull request has the parents of its merge commit, so `check:conventions` sees the change. |
 | `timeout-minutes` | `15` | The time limit of each job of the matrix. |
 | `changesets` | `true` | The changeset check on a pull request (refer to the next section). |
 | `changeset-ignore` | (empty) | More globs of files that need no changeset. |

@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json.schemastore.org/package",
+  "name": "@mark1russell7/conventions",
+  "version": "0.1.0",
+  "description": "One check in CI for the conventions of a pnpm workspace that docs tell in prose: pinned git dependencies, source packages, tsconfig.test.json, no build output in git and more.",
+  "keywords": [
+    "conventions",
+    "lint",
+    "monorepo",
+    "pnpm",
+    "workspace",
+    "architecture",
+    "guardrails",
+    "ci"
+  ],
+  "homepage": "https://github.com/mark1russell7/template/tree/main/packages/conventions#readme",
+  "bugs": {
+    "url": "https://github.com/mark1russell7/template/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mark1russell7/template.git",
+    "directory": "packages/conventions"
+  },
+  "license": "MIT",
+  "author": "Mark Russell (https://github.com/mark1russell7)",
+  "type": "module",
+  "main": "./src/index.ts",
+  "bin": {
+    "conventions": "./src/cli.ts"
+  },
+  "files": [
+    "build"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "main": "./build/index.js",
+    "types": "./build/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./build/index.d.ts",
+        "import": "./build/index.js"
+      },
+      "./package.json": "./package.json"
+    },
+    "bin": {
+      "conventions": "./build/cli.js"
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json"
+  },
+  "devDependencies": {
+    "@mark1russell7/cue": "^1.0.2",
+    "@types/node": "^26.6.4",
+    "tsdown": "^0.23.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}
