@@ -94,6 +94,10 @@ jobs:
           path: .shared-actions
           sparse-checkout: .github/actions
           persist-credentials: false
+      # The check is TypeScript: Node runs it with its type stripping, not the Node of the runner image
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
       - uses: ./.shared-actions/.github/actions/changeset-check
         with:
           ignore: ${{ inputs.changeset-ignore }}

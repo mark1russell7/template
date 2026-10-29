@@ -7,7 +7,7 @@
 #   post    Posts the result as one review of the pull request. It holds the job token with
 #           "pull-requests: write", and no API key.
 #
-# Both jobs run scripts/ai-review/codex-review.mjs of the same template commit as this file: a sparse
+# Both jobs run scripts/ai-review/codex-review.ts of the same template commit as this file: a sparse
 # checkout gets it (job.workflow_repository and job.workflow_sha). No job checks out the code of the
 # pull request.
 name: AI second opinion (reusable)
@@ -153,6 +153,13 @@ jobs:
           sparse-checkout: scripts/ai-review
           persist-credentials: false
 
+      # The script is TypeScript: Node runs it with its type stripping, not the Node of the runner image
+      - name: Node for the review script
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+
       # The OpenAI Responses API directly, not openai/codex-action: in each protected mode, that action
       # gives Codex a shell and refuses the options that remove it (CODEX-REVIEW.md).
       - name: Review
@@ -170,7 +177,7 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
           REVIEW_DIR: ${{ runner.temp }}/codex-review
-        run: node .codex-review/scripts/ai-review/codex-review.mjs review
+        run: node .codex-review/scripts/ai-review/codex-review.ts review
 
   post:
     needs: review
@@ -195,6 +202,12 @@ jobs:
           sparse-checkout: scripts/ai-review
           persist-credentials: false
 
+      - name: Node for the post script
+        if: needs.review.result == 'success' && needs.review.outputs.run == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+
       - name: Post the review
         if: needs.review.result == 'success' && needs.review.outputs.run == 'true'
         continue-on-error: true
@@ -207,7 +220,7 @@ jobs:
           LABEL: ${{ inputs.label }}
           RESULT: ${{ needs.review.outputs.result }}
           OUTCOME: ${{ needs.review.outputs.outcome }}
-        run: node .codex-review/scripts/ai-review/codex-review.mjs post
+        run: node .codex-review/scripts/ai-review/codex-review.ts post
 
       - name: Remove the review label
         if: always() && github.event.action == 'labeled'

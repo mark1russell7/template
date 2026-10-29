@@ -118,7 +118,7 @@ Most repositories need no inputs. A repository with more release steps uses thes
 | `reusable-release-build.yml` | `node-version` | `26` | The Node.js version of the build. |
 | `reusable-release-build.yml` | `node-version-file` | (empty) | A file with the Node.js version, for example `.nvmrc`. It replaces `node-version`. |
 | `reusable-release-build.yml` | `build` | (empty) | The build command. Empty starts the `build` script. |
-| `reusable-release-build.yml` | `after-pack` | (empty) | A command after `pack.mjs` and `tags.mjs`, before the upload of the artifacts. |
+| `reusable-release-build.yml` | `after-pack` | (empty) | A command after `pack.ts` and `tags.ts`, before the upload of the artifacts. |
 | `npm-publish` | `new-packages` | `error` | `warning`: a package that is not on npm gives a warning, and the step does not fail. |
 | `npm-publish` | `node-version` | `26` | The Node.js version of npm. |
 | `reusable-release-tag.yml` | `published` | (empty) | The versions that the job `publish` published. |
@@ -138,7 +138,7 @@ Each entry of the plan of the tags has `name`, `version`, `tag`, `prerelease` an
 
 At most one entry sets `latest`. A prerelease does not become the latest release. When no entry sets `latest`, the job gives no `--latest` flag, the same as before.
 
-The `tags.mjs` of the template does not write these fields. The `tags.mjs` of a repository can write them. The command `after-pack` can also add them.
+The `tags.ts` of the template does not write these fields. The `tags.ts` of a repository can write them. The command `after-pack` can also add them.
 
 ### More jobs in `release.yml`
 
@@ -260,8 +260,8 @@ uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<full commit SHA>
 - Renovate reads the comment `# main` and moves the pin to the newest commit of `main` (the preset of `renovate/`). The manager `github-actions` does this since Renovate 43.84.0.
 - These updates come in one group, "template workflows and actions", with no wait. Renovate merges them when CI passes.
 - The group comes on Monday before 06:00 (New York time). A workflow change during a release makes the tag job fail with HTTP 403 (`RELEASING.md`).
-- Renovate does not change `release.yml`. The release session moves the pins of `release.yml` with `scripts/release/bump-pins.mjs` (`RELEASING.md`).
-- A change of the template that must not wait for Renovate goes out with `bump-pins.mjs --file <workflow>` (`RELEASING.md`).
+- Renovate does not change `release.yml`. The release session moves the pins of `release.yml` with `scripts/release/bump-pins.ts` (`RELEASING.md`).
+- A change of the template that must not wait for Renovate goes out with `bump-pins.ts --file <workflow>` (`RELEASING.md`).
 - Renovate also moves `CLAUDE_CODE_VERSION` of `reusable-ai-review.yml` to the newest version on npm. A person reviews and merges that pull request.
 
 ## The template and new repositories

@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 61 names
+## . (build/index.d.ts): 62 names
 
 type AuditSource: build/index.d.ts#AuditSource
 type Break: build/index.d.ts#Break
@@ -65,6 +65,7 @@ sourceMain: build/index.d.ts#sourceMain
 specifiersOf: build/index.d.ts#specifiersOf
 summaryMarkdown: build/index.d.ts#summaryMarkdown
 tsconfigTest: build/index.d.ts#tsconfigTest
+typedScripts: build/index.d.ts#typedScripts
 workspaceGlobs: build/index.d.ts#workspaceGlobs
 workspaceProtocol: build/index.d.ts#workspaceProtocol
 
@@ -317,6 +318,9 @@ export declare function summaryMarkdown(result: CheckResult): string;
 
 ### build/index.d.ts#tsconfigTest
 export declare const tsconfigTest: Rule;
+
+### build/index.d.ts#typedScripts
+export declare const typedScripts: Rule;
 
 ### build/index.d.ts#workspaceGlobs
 export declare function workspaceGlobs(root: string): string[] | undefined;

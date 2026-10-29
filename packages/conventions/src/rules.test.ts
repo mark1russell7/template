@@ -370,3 +370,41 @@ describe("release-files", () => {
     expect(result.breaks.map((item) => item.file)).toEqual(["scripts/release/x.mjs"]);
   });
 });
+
+describe("typed-scripts", () => {
+  it("reports JavaScript source and shell scripts with logic, and not a launcher of one line", () => {
+    const root = fixture({
+      "package.json": { name: "one" },
+      "scripts/a.mjs": "export {};\n",
+      "scripts/b.cjs": "module.exports = 1;\n",
+      "src/c.js": "1;\n",
+      "src/d.ts": "export const d = 1;\n",
+      "bin/run": "#!/usr/bin/env node\nconsole.log(1);\n",
+      "bin/notes": "plain text\n",
+      "go.sh": "#!/bin/sh\n# start the script\n\nnode scripts/go.ts \"$@\"\n",
+      "build.sh": "#!/usr/bin/env bash\nset -e\npnpm build\n",
+      "tools/x.ps1": "$a = 1\n$b = 2\n",
+    });
+    expect(rule(root, "typed-scripts").status).toBe("skipped");
+    commitAll(root);
+    expect(rule(root, "typed-scripts").breaks.map((item) => item.file)).toEqual(["bin/run", "build.sh", "scripts/a.mjs", "scripts/b.cjs", "src/c.js", "tools/x.ps1"]);
+  });
+
+  it("keeps a file of ignore with a reason, and takes a higher shell limit", () => {
+    const root = fixture({
+      "package.json": {
+        name: "one",
+        conventions: { rules: { "typed-scripts": { ignore: [".dependency-cruiser.mjs"], reason: "dependency-cruiser reads its configuration only as JavaScript", shellLines: 2 } } },
+      },
+      ".dependency-cruiser.mjs": "export default {};\n",
+      "build.sh": "set -e\npnpm build\n",
+    });
+    commitAll(root);
+    expect(rule(root, "typed-scripts").breaks).toEqual([]);
+  });
+
+  it("counts only the lines of code of a shell script", async () => {
+    const { codeLines } = await import("./rules/typed-scripts.ts");
+    expect(codeLines("#!/bin/sh\n\n# a comment\n  # another\nnode x.ts\r\n")).toBe(1);
+  });
+});

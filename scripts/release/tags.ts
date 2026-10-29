@@ -1,6 +1,6 @@
 // Plans the git tag and the GitHub release of each published package, for the release workflow.
 //
-//   node scripts/release/tags.mjs <file>
+//   node scripts/release/tags.ts <file>
 //
 // The script writes <file>: a JSON array with one entry for each published package, in the
 // sequence of packages.txt: { name, version, tag, prerelease, notes }. The tag job of release.yml
@@ -17,22 +17,37 @@
 
 import { realpathSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { parseVersion, publishedPackages, readRepoFile } from "./workspace.mjs";
+import { parseVersion, publishedPackages, readRepoFile } from "./workspace.ts";
 
 // GitHub refuses a release text of more than 125000 characters.
-export const MAX_NOTES = 100_000;
+export const MAX_NOTES: number = 100_000;
+
+/** The plan of the tag and the GitHub release of one package. */
+export interface TagEntry {
+  readonly name: string;
+  readonly version: string;
+  readonly tag: string;
+  readonly prerelease: boolean;
+  readonly notes: string;
+}
+
+/** A package of the plan: its folder, its name and its version. */
+export interface TagPackage {
+  readonly dir: string;
+  readonly manifest: { readonly name: string; readonly version?: string | undefined };
+}
 
 /** This function gives the tag of a version: "v<version>" when the repository has one published package. */
-export function tagName(name, version, packageCount) {
+export function tagName(name: string, version: string, packageCount: number): string {
   return packageCount === 1 ? `v${version}` : `${name}@${version}`;
 }
 
 /** This function tells if a version has a prerelease part (SemVer), for example 1.2.0-rc.1. */
-export function isPrerelease(version) {
+export function isPrerelease(version: string): boolean {
   return (parseVersion(version)?.prerelease.length ?? 0) > 0;
 }
 
-const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * This function gives the text of the section of a version in a changelog, or undefined.
@@ -42,26 +57,27 @@ const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  * The section stops at the next heading of the same level or a higher level. A heading in fenced
  * code does not count. An empty section gives undefined.
  */
-export function changelogSection(markdown, version, name) {
+export function changelogSection(markdown: string, version: string, name: string): string | undefined {
   const heading = new RegExp(`^(#{1,6})\\s+\\[?(?:v|${escape(name)}@)?${escape(version)}\\]?(?=$|[\\s(])`);
   const lines = markdown.split(/\r?\n/);
   let level = 0;
-  let fence = null;
-  const body = [];
+  let fence: string | null = null;
+  const body: string[] = [];
   for (const line of lines) {
     const fenceMark = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
     if (fenceMark !== undefined) {
-      if (fence === null) fence = fenceMark[0];
-      else if (fenceMark[0] === fence) fence = null;
+      const mark = fenceMark[0] ?? "";
+      if (fence === null) fence = mark;
+      else if (mark === fence) fence = null;
       if (level > 0) body.push(line);
       continue;
     }
     if (fence === null) {
-      const levelOf = /^(#{1,6})\s/.exec(line)?.[1].length;
+      const levelOf = /^(#{1,6})\s/.exec(line)?.[1]?.length;
       if (level > 0 && levelOf !== undefined && levelOf <= level) break;
       if (level === 0) {
         const match = heading.exec(line);
-        if (match) level = match[1].length;
+        if (match) level = match[1]?.length ?? 0;
         continue;
       }
     }
@@ -72,7 +88,7 @@ export function changelogSection(markdown, version, name) {
 }
 
 /** This function gives the address of a version on npm. */
-export function npmUrl(name, version) {
+export function npmUrl(name: string, version: string): string {
   return `https://www.npmjs.com/package/${name}/v/${version}`;
 }
 
@@ -80,7 +96,7 @@ export function npmUrl(name, version) {
  * This function gives the text of the GitHub release of a version: its changelog section, or else
  * one list item with a link to npm. The Releases page of site-pages reads each list item as a change.
  */
-export function releaseNotes(name, version, changelog) {
+export function releaseNotes(name: string, version: string, changelog: string | undefined): string {
   const fallback = `- Version ${version} of [\`${name}\`](${npmUrl(name, version)}) on npm.`;
   const section = changelog === undefined ? undefined : changelogSection(changelog, version, name);
   if (section === undefined) return fallback;
@@ -90,24 +106,27 @@ export function releaseNotes(name, version, changelog) {
 
 /**
  * This function gives the plan of the tags and the releases of a list of published packages
- * (`publishedPackages()` of workspace.mjs). `readChangelog(dir)` gives the text of the CHANGELOG.md
- * in a package folder, or undefined.
+ * (`publishedPackages()` of workspace.ts). `readChangelog(dir)` gives the text of the CHANGELOG.md
+ * in a package folder, or undefined. A package with no version is an error.
  */
-export function tagPlan(packages, readChangelog) {
-  return packages.map(({ dir, manifest: { name, version } }) => ({
-    name,
-    version,
-    tag: tagName(name, version, packages.length),
-    prerelease: isPrerelease(version),
-    notes: releaseNotes(name, version, readChangelog(dir)),
-  }));
+export function tagPlan(packages: readonly TagPackage[], readChangelog: (dir: string) => string | undefined): TagEntry[] {
+  return packages.map(({ dir, manifest: { name, version } }) => {
+    if (version === undefined) throw new Error(`The package.json of ${name} has no version.`);
+    return {
+      name,
+      version,
+      tag: tagName(name, version, packages.length),
+      prerelease: isPrerelease(version),
+      notes: releaseNotes(name, version, readChangelog(dir)),
+    };
+  });
 }
 
-// This part runs for "node tags.mjs", not for an import (the tests). realpath: the path can have a link.
+// This part runs for "node tags.ts", not for an import (the tests). realpath: the path can have a link.
 if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   const out = process.argv[2];
   if (out === undefined) {
-    process.stderr.write("usage: node scripts/release/tags.mjs <file>\n");
+    process.stderr.write("usage: node scripts/release/tags.ts <file>\n");
     process.exit(2);
   }
   const plan = tagPlan(publishedPackages(), (dir) => readRepoFile(dir, "CHANGELOG.md"));

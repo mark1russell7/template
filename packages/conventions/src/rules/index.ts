@@ -10,6 +10,7 @@ import { releaseFiles } from "./release-files.ts";
 import { requiredScripts } from "./required-scripts.ts";
 import { sourceMain } from "./source-main.ts";
 import { tsconfigTest } from "./tsconfig-test.ts";
+import { typedScripts } from "./typed-scripts.ts";
 import { workspaceProtocol } from "./workspace-protocol.ts";
 
 /** Each rule of the check. */
@@ -23,6 +24,7 @@ export const RULES: readonly Rule[] = [
   noBuildOutput,
   noLocalPaths,
   releaseFiles,
+  typedScripts,
 ];
 
-export { cuePreset, noBuildOutput, noLocalPaths, pinnedGitDeps, releaseFiles, requiredScripts, sourceMain, tsconfigTest, workspaceProtocol };
+export { cuePreset, noBuildOutput, noLocalPaths, pinnedGitDeps, releaseFiles, requiredScripts, sourceMain, tsconfigTest, typedScripts, workspaceProtocol };

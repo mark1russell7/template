@@ -1,6 +1,6 @@
 // Packs each published package of this repository into one folder, for the release workflow.
 //
-//   node scripts/release/pack.mjs <folder>
+//   node scripts/release/pack.ts <folder>
 //
 // pnpm packs each package: it applies publishConfig, and it replaces each workspace: range with a
 // real range. The script writes <folder>/packages.txt with one line for each tarball,
@@ -12,11 +12,11 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { publishedPackages, unpublishableDependencies, versionProblem } from "./workspace.mjs";
+import { publishedPackages, unpublishableDependencies, versionProblem, type Packument } from "./workspace.ts";
 
 const out = process.argv[2];
 if (out === undefined) {
-  process.stderr.write("usage: node scripts/release/pack.mjs <folder>\n");
+  process.stderr.write("usage: node scripts/release/pack.ts <folder>\n");
   process.exit(2);
 }
 mkdirSync(out, { recursive: true });
@@ -32,11 +32,11 @@ if (blocked.length > 0) {
   process.exit(1);
 }
 
-const problems = [];
+const problems: string[] = [];
 for (const { manifest } of packages) {
   const response = await fetch(`https://registry.npmjs.org/${manifest.name.replaceAll("/", "%2f")}`);
   if (!response.ok && response.status !== 404) throw new Error(`The registry gave HTTP ${response.status} for ${manifest.name}.`);
-  const problem = versionProblem(manifest.version, response.status === 404 ? undefined : await response.json());
+  const problem = versionProblem(manifest.version ?? "", response.status === 404 ? undefined : ((await response.json()) as Packument));
   if (problem) problems.push(`${manifest.name}: ${problem}`);
 }
 if (problems.length > 0) {
@@ -45,7 +45,7 @@ if (problems.length > 0) {
 }
 
 const shell = process.platform === "win32";
-const lines = [];
+const lines: string[] = [];
 for (const { dir, manifest } of packages) {
   // The new file in the folder is the tarball. The output of pnpm is not used: it also holds the
   // output of the package scripts that pnpm pack starts (prepare, prepack).
@@ -53,7 +53,7 @@ for (const { dir, manifest } of packages) {
   execFileSync("pnpm", ["pack", "--pack-destination", resolve(out)], { cwd: dir, stdio: ["ignore", "inherit", "inherit"], shell });
   const added = readdirSync(out).filter((name) => !before.has(name) && name.endsWith(".tgz"));
   if (added.length !== 1) throw new Error(`pnpm pack of ${manifest.name} made ${added.length} tarballs: ${added.join(", ")}`);
-  const file = basename(added[0]);
+  const file = basename(added[0] ?? "");
   lines.push(`${manifest.name} ${manifest.version} ${file}`);
   process.stdout.write(`${manifest.name}@${manifest.version}: ${file}\n`);
 }

@@ -1,4 +1,4 @@
-// The tests of codex-review.mjs: node --test scripts/ai-review/
+// The tests of codex-review.ts: node --test scripts/ai-review/
 // The tests make no network request: a stub replaces fetch for the OpenAI API and the GitHub API.
 
 import assert from "node:assert/strict";
@@ -19,7 +19,23 @@ import {
   reviewResult,
   runPost,
   runReview,
-} from "./codex-review.mjs";
+  type ReviewResult,
+} from "./codex-review.ts";
+
+/** A request that the fetch stub got. */
+interface Sent {
+  readonly url: string;
+  readonly init: { readonly headers: { readonly Authorization?: string } };
+  readonly body: SentBody | undefined;
+}
+
+/** The fields of a request body that the tests read: a Responses API request, or a GitHub review or comment. */
+interface SentBody {
+  readonly model?: string;
+  readonly input?: readonly { readonly content: readonly { readonly text: string }[] }[];
+  readonly comments?: readonly unknown[];
+  readonly body?: string;
+}
 
 const DIFF = `diff --git a/src/a.ts b/src/a.ts
 index 1111111..2222222 100644
@@ -60,7 +76,7 @@ const KEY = "test-openai-key-0123456789abcdefghij";
 const GH_TOKEN = `ghp_${"a".repeat(36)}`;
 
 /** This function gives a Responses API reply with the review as its output text. */
-function apiReply(review, extra = {}) {
+function apiReply(review: unknown, extra: Readonly<Record<string, unknown>> = {}) {
   return {
     id: "resp_1",
     status: "completed",
@@ -80,17 +96,18 @@ function apiReply(review, extra = {}) {
 }
 
 /** This function gives a fetch stub that records each request and gives the replies in sequence. */
-function stubFetch(replies) {
-  const calls = [];
-  const fetchImpl = async (url, init) => {
-    calls.push({ url, init, body: init.body === undefined ? undefined : JSON.parse(init.body) });
-    const [status, body] = replies[calls.length - 1];
+function stubFetch(replies: readonly (readonly [number, unknown])[]) {
+  const calls: Sent[] = [];
+  const fetchImpl = async (url: string, init: RequestInit): Promise<Response> => {
+    const sent = typeof init.body === "string" ? (JSON.parse(init.body) as SentBody) : undefined;
+    calls.push({ url, init: { headers: init.headers as { Authorization?: string } }, body: sent });
+    const [status, body] = replies[calls.length - 1] ?? [500, "no reply"];
     return new Response(typeof body === "string" ? body : JSON.stringify(body), { status });
   };
   return { calls, fetchImpl };
 }
 
-function tempDir() {
+function tempDir(): string {
   return mkdtempSync(join(tmpdir(), "codex-review-"));
 }
 
@@ -101,14 +118,14 @@ test("the annotated diff numbers the added lines and the context lines of the ne
   assert.match(text, /^ {4}11 \+const two = 3;$/m);
   assert.match(text, /^ {4}12 \+const three = 3;$/m);
   assert.match(text, /^ {4}14  return one;$/m);
-  assert.deepEqual([...lines.get("src/a.ts")], [10, 11, 12, 13, 14]);
+  assert.deepEqual([...(lines.get("src/a.ts") ?? [])], [10, 11, 12, 13, 14]);
 });
 
 test("the annotated diff knows deleted, new, quoted and spaced file names", () => {
   const { text, lines } = annotateDiff(DIFF);
   assert.equal(lines.has("old.txt"), false);
-  assert.deepEqual([...lines.get("new file.md")], [1, 2]);
-  assert.deepEqual([...lines.get("café.txt")], [1]);
+  assert.deepEqual([...(lines.get("new file.md") ?? [])], [1, 2]);
+  assert.deepEqual([...(lines.get("café.txt") ?? [])], [1]);
   assert.match(text, /^\\ No newline at end of file$/m);
   // The header lines stay the same
   assert.match(text, /^\+\+\+ \/dev\/null$/m);
@@ -133,12 +150,12 @@ test("the request has no tools, a strict JSON schema, and the diff only in the u
   assert.deepEqual(request.reasoning, { effort: "medium" });
   assert.equal(request.text.format.type, "json_schema");
   assert.equal(request.text.format.strict, true);
-  assert.equal(request.text.format.schema.additionalProperties, false);
+  assert.equal(request.text.format.schema["additionalProperties"], false);
   assert.match(request.instructions, /pull request #7 of the repository o\/r/);
   assert.match(request.instructions, /Notes from the owner of the repository: A note\.$/);
   assert.doesNotMatch(request.instructions, /DIFF-SENTINEL|PR-SENTINEL/);
-  assert.match(request.input[0].content[0].text, /<diff>\nDIFF-SENTINEL\n<\/diff>/);
-  assert.equal(buildRequest({ model: "m", effort: "", diff: "", prText: "" }).reasoning, undefined);
+  assert.match(request.input[0]?.content[0]?.text ?? "", /<diff>\nDIFF-SENTINEL\n<\/diff>/);
+  assert.equal(buildRequest({ model: "m", effort: "", maxOutputTokens: 1, repo: "o/r", pr: "7", diff: "", prText: "" }).reasoning, undefined);
 });
 
 test("the cost uses the price list, and the cached tokens are a part of the input tokens", () => {
@@ -165,7 +182,7 @@ test("an error, an incomplete response, a refusal and a bad JSON review are not 
   });
   const incomplete = parseResponse(200, { status: "incomplete", incomplete_details: { reason: "max_output_tokens" }, usage: { output_tokens: 9 } });
   assert.equal(incomplete.reason, "the response is incomplete (max_output_tokens)");
-  assert.equal(incomplete.usage.output_tokens, 9);
+  assert.equal(incomplete.usage?.output_tokens, 9);
   const refusal = parseResponse(200, {
     status: "completed",
     output: [{ type: "message", content: [{ type: "refusal", refusal: "No." }] }],
@@ -226,13 +243,14 @@ test("the review job sends one request with the key and writes a redacted result
       fetchImpl,
     );
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].url, RESPONSES_URL);
-    assert.equal(calls[0].init.headers.Authorization, `Bearer ${KEY}`);
-    assert.equal(calls[0].body.model, "gpt-6.1-sol");
-    assert.match(calls[0].body.input[0].content[0].text, /^ {4}11 \+const two = 3;$/m);
-    assert.match(calls[0].body.input[0].content[0].text, /^# A change\n\nThe description\.$/m);
+    assert.equal(calls[0]?.url, RESPONSES_URL);
+    assert.equal(calls[0]?.init.headers.Authorization, `Bearer ${KEY}`);
+    assert.equal(calls[0]?.body?.model, "gpt-6.1-sol");
+    assert.match(calls[0]?.body?.input?.[0]?.content[0]?.text ?? "", /^ {4}11 \+const two = 3;$/m);
+    assert.match(calls[0]?.body?.input?.[0]?.content[0]?.text ?? "", /^# A change\n\nThe description\.$/m);
+    assert.equal(result.ok, true);
     assert.equal(result.summary, "The key [REDACTED] and the token [REDACTED] leak.");
-    assert.equal(result.inline[0].body, "Do not print [REDACTED].");
+    assert.equal(result.inline[0]?.body, "Do not print [REDACTED].");
     const written = readFileSync(output, "utf8");
     assert.match(written, /^result<<END_[0-9a-f]{16}\n/);
     assert.equal(written.includes(KEY), false);
@@ -260,7 +278,7 @@ test("a failed API request gives a result that tells why, and no exception", asy
   }
 });
 
-const RESULT = {
+const RESULT: Extract<ReviewResult, { ok: true }> = {
   ok: true,
   verdict: "findings",
   summary: `- One problem. ${GH_TOKEN}`,
@@ -294,18 +312,18 @@ test("the post job posts one review, and one comment when GitHub refuses the rev
   };
   const first = stubFetch([[200, {}]]);
   assert.equal(await runPost(env, first.fetchImpl), "review");
-  assert.equal(first.calls[0].url, "https://api.example/repos/o/r/pulls/7/reviews");
-  assert.equal(first.calls[0].init.headers.Authorization, "Bearer job-token");
-  assert.equal(first.calls[0].body.comments.length, 1);
+  assert.equal(first.calls[0]?.url, "https://api.example/repos/o/r/pulls/7/reviews");
+  assert.equal(first.calls[0]?.init.headers.Authorization, "Bearer job-token");
+  assert.equal(first.calls[0]?.body?.comments?.length, 1);
 
   const second = stubFetch([
     [422, { message: "Line could not be resolved" }],
     [201, {}],
   ]);
   assert.equal(await runPost(env, second.fetchImpl), "comment");
-  assert.equal(second.calls[1].url, "https://api.example/repos/o/r/issues/7/comments");
-  assert.match(second.calls[1].body.body, /^### Second opinion \(OpenAI gpt-6\.1-sol\)/);
-  assert.equal(second.calls[1].body.body.includes(GH_TOKEN), false);
+  assert.equal(second.calls[1]?.url, "https://api.example/repos/o/r/issues/7/comments");
+  assert.match(second.calls[1]?.body?.body ?? "", /^### Second opinion \(OpenAI gpt-6\.1-sol\)/);
+  assert.equal((second.calls[1]?.body?.body ?? "").includes(GH_TOKEN), false);
 
   const third = stubFetch([
     [422, {}],

@@ -1,8 +1,8 @@
-// The tests of tags.mjs: node --test scripts/release/
+// The tests of tags.ts: node --test scripts/release/
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { MAX_NOTES, changelogSection, isPrerelease, releaseNotes, tagName, tagPlan } from "./tags.mjs";
+import { MAX_NOTES, changelogSection, isPrerelease, releaseNotes, tagName, tagPlan } from "./tags.ts";
 
 const CHANGESETS = `# @scope/core
 
@@ -103,7 +103,7 @@ test("the plan has one entry for each package, in the sequence of the packages",
     { dir: "/repo/packages/core", manifest: { name: "@scope/core", version: "1.2.0" } },
     { dir: "/repo/packages/cli", manifest: { name: "@scope/cli", version: "0.4.0-rc.1" } },
   ];
-  const changelogs = { "/repo/packages/core": CHANGESETS };
+  const changelogs: Readonly<Record<string, string>> = { "/repo/packages/core": CHANGESETS };
   assert.deepEqual(
     tagPlan(packages, (dir) => changelogs[dir]),
     [
@@ -123,6 +123,6 @@ test("the plan has one entry for each package, in the sequence of the packages",
       },
     ],
   );
-  assert.equal(tagPlan([packages[0]], () => undefined)[0].tag, "v1.2.0");
+  assert.equal(tagPlan(packages.slice(0, 1), () => undefined)[0]?.tag, "v1.2.0");
   assert.deepEqual(tagPlan([], () => undefined), []);
 });

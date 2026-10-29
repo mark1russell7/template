@@ -18,7 +18,7 @@
 # repository gives it "contents: write", and only this job of the release holds that permission.
 #
 # Each entry of the plan (tags.json) has name, version, tag, prerelease and notes. Three fields are
-# optional. The tags.mjs of the template does not write them, but the tags.mjs of a repository or
+# optional. The tags.ts of the template does not write them, but the tags.ts of a repository or
 # the input after-pack of reusable-release-build.yml can add them:
 #   title     The title of the GitHub release. The default is the tag.
 #   tarballs  An array of package names. The release gets the tarball of each one as a file, from

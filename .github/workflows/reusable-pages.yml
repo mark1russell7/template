@@ -111,7 +111,7 @@ on:
 jobs:
   build:
     # A failed CI run, a CI run for a pull request and a CI run for a push to a different branch do not
-    # deploy (scripts/workflows/pages-guard.test.mjs).
+    # deploy (scripts/workflows/pages-guard.test.ts).
     if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == github.event.repository.default_branch)
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout-minutes }}

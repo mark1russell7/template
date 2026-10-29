@@ -184,6 +184,9 @@ importers:
       '@swc/core':
         specifier: ^1.15.0
         version: 1.16.20
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
       dependency-cruiser:
         specifier: ^18.7.0
         version: 18.7.0

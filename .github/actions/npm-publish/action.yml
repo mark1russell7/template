@@ -86,7 +86,7 @@ runs:
             echo "::error::npm refused the OIDC token exchange for $1 (\"package not found\" or 404, npm/cli#9969). For a repository with the immutable OIDC subject of GitHub, the trusted publisher must name no GitHub environment. RELEASING.md tells how to correct it."
           fi
           if grep -qs "ENEEDAUTH" publish.log; then
-            echo "::error::npm got no token for $1 (ENEEDAUTH): the trusted publisher is missing or expired. A new trust expires when no publish uses it in 2 days. The owner starts scripts/release/npm-bootstrap.mjs --replace-trust again, then this workflow (RELEASING.md)."
+            echo "::error::npm got no token for $1 (ENEEDAUTH): the trusted publisher is missing or expired. A new trust expires when no publish uses it in 2 days. The owner starts scripts/release/npm-bootstrap.ts --replace-trust again, then this workflow (RELEASING.md)."
           fi
         }
         new_packages=()
