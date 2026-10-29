@@ -9,7 +9,7 @@ The workflow `.github/workflows/release.yml` publishes the packages of this repo
 | Job | What it uses |
 |---|---|
 | `verify` | The `ci.yml` of the repository. |
-| `build` | `reusable-release-build.yml` of the template, with `scripts/release/pack.mjs` and `scripts/release/tags.mjs` of the same template commit. |
+| `build` | `reusable-release-build.yml` of the template, with `scripts/release/pack.ts` and `scripts/release/tags.ts` of the same template commit. |
 | `publish` | A job of `release.yml`. Its step is the action `npm-publish` of the template. |
 | `tag` | `reusable-release-tag.yml` of the template. |
 
@@ -22,8 +22,8 @@ Each `uses:` of the template has a pin to a commit of `main`. Renovate does not 
 A workflow change between the merge of a version and its release run makes the tag job fail with HTTP 403 ("A tag that GitHub refuses"). Thus Renovate does not change `release.yml` or `scripts/release/`. The release session moves the pins of `release.yml` each week, at a quiet time.
 
 ```sh
-node scripts/release/bump-pins.mjs --dry-run <owner/repo> ...
-node scripts/release/bump-pins.mjs --notes "<what the new commits bring>" <owner/repo> ...
+node scripts/release/bump-pins.ts --dry-run <owner/repo> ...
+node scripts/release/bump-pins.ts --notes "<what the new commits bring>" <owner/repo> ...
 ```
 
 The target is the head of `main` of the template. `--sha <commit>` sets a different commit of `main`. A name without an owner, for example `vex`, gets the owner `mark1russell7`.
@@ -57,7 +57,7 @@ After a refusal, the script goes to the next repository. The exit code is 1 when
 A version pull request can open after the script made its pull request. Thus do the check again immediately before each merge:
 
 ```sh
-node scripts/release/bump-pins.mjs --check <owner/repo> ...
+node scripts/release/bump-pins.ts --check <owner/repo> ...
 ```
 
 When the result is `quiet`, merge the pull request with a squash merge after its checks pass. The next release uses the new pins.
@@ -72,7 +72,7 @@ The owner (Mark) and one Claude session that the owner names are responsible for
 - When a package that is not on npm blocks your work, use `workspace:*` in this repository. Use a `github:` specifier pinned to a commit for a package in a different repository.
 - Tell the owner the name, the version and the SemVer reason of each package that you want on npm.
 
-`scripts/release/pack.mjs` stops the release when a published package has a `github:`, `file:` or `link:` dependency. Change each one to an npm range before the release.
+`scripts/release/pack.ts` stops the release when a published package has a `github:`, `file:` or `link:` dependency. Change each one to an npm range before the release.
 
 ## A release of a package that is on npm
 
@@ -84,7 +84,7 @@ The owner (Mark) and one Claude session that the owner names are responsible for
 
 The push to `main` starts `release.yml`. The workflow starts the CI gates, builds and packs each published package, and publishes each version that is not on npm. Then it makes a git tag and a GitHub release for each new version. A version with a hyphen, for example `1.2.0-rc.1`, gets the dist-tag `next`. The other versions get `latest`.
 
-`scripts/release/pack.mjs` stops the release when a version is not SemVer. It also stops when a version is not greater than the `latest` version on npm. The registry does not accept a version two times, also after a removal. Thus a bad release gets a new PATCH, and `npm deprecate` marks the bad version.
+`scripts/release/pack.ts` stops the release when a version is not SemVer. It also stops when a version is not greater than the `latest` version on npm. The registry does not accept a version two times, also after a removal. Thus a bad release gets a new PATCH, and `npm deprecate` marks the bad version.
 
 To publish again after a failure, start the workflow by hand: `gh workflow run release.yml --ref main`. It skips each version that is on npm.
 
@@ -109,11 +109,11 @@ After the publish, the job `tag` of `release.yml` makes a git tag and a GitHub r
 - When no entry sets `latest`, the job gives no `--latest` flag.
 - The Releases page of `@mark1russell7/site-pages` reads these releases.
 
-The build job writes the plan of the tags and the release texts (`scripts/release/tags.mjs`). The job `tag` has only the permission `contents: write`. It starts no code of the repository. `gh release create` makes each tag on GitHub, at the commit of the release.
+The build job writes the plan of the tags and the release texts (`scripts/release/tags.ts`). The job `tag` has only the permission `contents: write`. It starts no code of the repository. `gh release create` makes each tag on GitHub, at the commit of the release.
 
 When a repository gets a second published package, the next tags use `<name>@<version>`.
 
-A repository with its own `tags.mjs` can change the plan. For example, it can give each release a title and the tarballs as files (`CI.md`).
+A repository with its own `tags.ts` can change the plan. For example, it can give each release a title and the tarballs as files (`CI.md`).
 
 ### A second run
 
@@ -143,11 +143,11 @@ A tag ruleset of the repository must not block the creation of tags by GitHub Ac
 npm trusts a workflow only for a package that exists. A new trust expires when no publish uses it in 2 days. Thus the owner bootstraps each new package one time, on the day of its first release:
 
 ```sh
-node scripts/release/npm-bootstrap.mjs --dry-run
-node scripts/release/npm-bootstrap.mjs --dispatch
+node scripts/release/npm-bootstrap.ts --dry-run
+node scripts/release/npm-bootstrap.ts --dispatch
 ```
 
-A repository does not need its own copy of `scripts/release/`. Start the scripts of `~/git/template` with the path of the repository, for example `node ~/git/template/scripts/release/npm-bootstrap.mjs --dry-run ~/git/<repo>`. The variable `RELEASE_REPO` also names the repository for the other scripts.
+A repository does not need its own copy of `scripts/release/`. Start the scripts of `~/git/template` with the path of the repository, for example `node ~/git/template/scripts/release/npm-bootstrap.ts --dry-run ~/git/<repo>`. The variable `RELEASE_REPO` also names the repository for the other scripts.
 
 The script reads the packages of `origin/main`. For each new package, it publishes a placeholder version `0.0.0-bootstrap.0` with the dist-tag `bootstrap`. Then it connects the package to `release.yml` (`npm trust github`) and sets "Require two-factor authentication and disallow tokens" (`npm access set mfa=publish`). With `--dispatch`, it starts `release.yml` on `main`, which publishes the real version.
 
@@ -174,7 +174,7 @@ The action `npm-publish` gives a hint for two failures of the trusted publisher.
 For the two failures, the owner makes the trust again, and then starts the release:
 
 ```sh
-node scripts/release/npm-bootstrap.mjs --replace-trust --dispatch
+node scripts/release/npm-bootstrap.ts --replace-trust --dispatch
 ```
 
 The script removes a trust that does not agree with `release.yml`, for example a trust with an environment. Then it adds a trust with no environment, because `release.yml` names none.
@@ -192,8 +192,8 @@ The script removes a trust that does not agree with `release.yml`, for example a
 ## The state of the packages
 
 ```sh
-node scripts/release/npm-audit.mjs            # the packages of this repository
-node scripts/release/npm-audit.mjs --all      # each package of the npm user
+node scripts/release/npm-audit.ts            # the packages of this repository
+node scripts/release/npm-audit.ts --all      # each package of the npm user
 ```
 
 The audit uses only public data. It shows the latest version of each package, if a trusted publisher published it, and if `main` has a version that is not on npm.

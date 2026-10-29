@@ -23,5 +23,5 @@ runs:
         LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
         IGNORE: ${{ inputs.ignore }}
         CHANGESET_DIR: ${{ inputs.changeset-dir }}
-        CHECK: ${{ github.action_path }}/check.mjs
+        CHECK: ${{ github.action_path }}/check.ts
       run: node "$CHECK"

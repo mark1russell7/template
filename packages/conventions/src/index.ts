@@ -44,6 +44,7 @@ export {
   RULES,
   sourceMain,
   tsconfigTest,
+  typedScripts,
   workspaceProtocol,
 } from "./rules/index.ts";
 export { DEFAULT_ALLOWED, HOME_PATTERNS } from "./rules/no-local-paths.ts";

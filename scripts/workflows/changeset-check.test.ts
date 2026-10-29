@@ -1,12 +1,13 @@
-// Tests of the rules of the changeset check (.github/actions/changeset-check/check.mjs).
+// Tests of the rules of the changeset check (.github/actions/changeset-check/check.ts).
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  type EvaluateInput,
   evaluate,
   globToRegExp,
   packageJsonChanged,
   parseChangeset,
-} from "../../.github/actions/changeset-check/check.mjs";
+} from "../../.github/actions/changeset-check/check.ts";
 
 const packages = [
   { name: "root", dir: ".", version: "0.0.0", private: true },
@@ -18,7 +19,7 @@ const packages = [
 test("a changed package with no changeset fails, and the message names it", () => {
   const r = evaluate({ packages, changedFiles: ["packages/a/src/index.ts"], changesets: [] });
   assert.equal(r.errors.length, 1);
-  assert.match(r.errors[0], /@x\/a/);
+  assert.match(r.errors[0] ?? "", /@x\/a/);
 });
 
 test("a changeset for the changed package passes", () => {
@@ -91,14 +92,14 @@ test("the version pull request of changesets is skipped", () => {
 });
 
 test("major on a 0.x package fails unless the label release-1.0 is on the pull request", () => {
-  const input = {
+  const input: EvaluateInput = {
     packages,
     changedFiles: ["packages/a/src/index.ts"],
     changesets: [{ file: ".changeset/big.md", releases: { "@x/a": "major" } }],
   };
   const r = evaluate(input);
   assert.equal(r.errors.length, 1);
-  assert.match(r.errors[0], /1\.0\.0/);
+  assert.match(r.errors[0] ?? "", /1\.0\.0/);
   assert.deepEqual(evaluate({ ...input, labels: ["release-1.0"] }).errors, []);
   // major on a 1.x package is a normal breaking change
   assert.deepEqual(
@@ -144,7 +145,7 @@ test("a file belongs to the deepest package folder", () => {
     { name: "@x/inner", dir: "packages/inner", version: "1.0.0", private: false },
   ];
   const r = evaluate({ packages: nested, changedFiles: ["packages/inner/src/a.ts", "src/b.ts"], changesets: [] });
-  assert.match(r.errors[0], /@x\/inner, @x\/root/);
+  assert.match(r.errors[0] ?? "", /@x\/inner, @x\/root/);
 });
 
 test("parseChangeset reads the front matter", () => {
@@ -175,7 +176,7 @@ test("in a fixed group, a changeset of one member covers the other changed membe
     fixed: [["@g/one", "@g/two"]],
   });
   assert.equal(r.errors.length, 1);
-  assert.match(r.errors[0], /@x\/solo/);
-  assert.doesNotMatch(r.errors[0], /@g\/two/);
+  assert.match(r.errors[0] ?? "", /@x\/solo/);
+  assert.doesNotMatch(r.errors[0] ?? "", /@g\/two/);
   assert.match(r.notes.join(" "), /also release @g\/two/);
 });

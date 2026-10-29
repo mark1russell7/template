@@ -1,15 +1,18 @@
-// The tests of dispatch.mjs: node --test scripts/release/
+// The tests of dispatch.ts: node --test scripts/release/
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ON_MAIN, compareWithMain, dispatchPlan } from "./dispatch.mjs";
+import { ON_MAIN, compareWithMain, dispatchPlan } from "./dispatch.ts";
 
 const SHA = "0123456789abcdef0123456789abcdef01234567";
+/** The argument of dispatchPlan(). */
+type PlanInput = Parameters<typeof dispatchPlan>[0];
+
 const COMMAND = "gh workflow run release.yml --repo owner/repo --ref main";
 
 /** This function gives the arguments of dispatchPlan(), and records each call of compare(). */
-function input(overrides = {}, status = "identical") {
-  const calls = [];
+function input(overrides: Partial<PlanInput> = {}, status: string | Error = "identical"): { calls: [string, string][]; args: PlanInput } {
+  const calls: [string, string][] = [];
   return {
     calls,
     args: {
@@ -18,7 +21,7 @@ function input(overrides = {}, status = "identical") {
       dispatch: true,
       failed: false,
       commits: new Map([["owner/repo", SHA]]),
-      compare: (repository, sha) => {
+      compare: (repository: string, sha: string): string => {
         calls.push([repository, sha]);
         if (status instanceof Error) throw status;
         return status;
@@ -33,7 +36,7 @@ test("only the head of main and the older commits of main are on main", () => {
 });
 
 test("compareWithMain() makes one gh api call to the compare API and gives the status", () => {
-  const calls = [];
+  const calls: (readonly string[])[] = [];
   const status = compareWithMain("owner/repo", SHA, (args) => {
     calls.push(args);
     return "behind\n";
@@ -53,6 +56,7 @@ test("a commit on main starts the release", () => {
 test("a commit that is not on main starts no release, and the text has the command for after the merge", () => {
   for (const status of ["ahead", "diverged"]) {
     const [step] = dispatchPlan(input({}, status).args);
+    assert.ok(step);
     assert.equal(step.start, false);
     assert.match(step.text, new RegExp(`${SHA}, and that commit is not on main \\(status: ${status}\\)`));
     assert.match(step.text, /Merge the change to main/);
@@ -62,6 +66,7 @@ test("a commit that is not on main starts no release, and the text has the comma
 
 test("a compare that fails starts no release", () => {
   const [step] = dispatchPlan(input({}, new Error("gh: Not Found (HTTP 404)\nmore text")).args);
+  assert.ok(step);
   assert.equal(step.start, false);
   assert.match(step.text, /status: not known \(GitHub did not compare it with main: gh: Not Found \(HTTP 404\)\)/);
   assert.ok(step.text.endsWith(COMMAND));
@@ -70,6 +75,7 @@ test("a compare that fails starts no release", () => {
 test("after a failure of the bootstrap, the script starts no release and does not compare", () => {
   const { args, calls } = input({ failed: true });
   const [step] = dispatchPlan(args);
+  assert.ok(step);
   assert.equal(step.start, false);
   assert.match(step.text, /The bootstrap stopped before the end/);
   assert.ok(step.text.endsWith(COMMAND));
@@ -83,7 +89,7 @@ test("without --dispatch, the script shows the command and does not compare", ()
 });
 
 test("each repository gets its own decision, in the sequence of the set", () => {
-  const statuses = { "owner/a": "identical", "owner/b": "ahead" };
+  const statuses: Readonly<Record<string, string>> = { "owner/a": "identical", "owner/b": "ahead" };
   const plan = dispatchPlan({
     repositories: new Set(["owner/a", "owner/b"]),
     workflow: "release.yml",
@@ -93,7 +99,7 @@ test("each repository gets its own decision, in the sequence of the set", () => 
       ["owner/a", SHA],
       ["owner/b", SHA],
     ]),
-    compare: (repository) => statuses[repository],
+    compare: (repository) => statuses[repository] ?? "",
   });
   assert.deepEqual(
     plan.map(({ repository, start }) => [repository, start]),

@@ -34,6 +34,7 @@ The rules come from the invariants audit of 2026-10-26 (strategy item s38). The 
 | `no-build-output` | Git keeps no file in a folder named `dist` or `build`. | client `no-build-output`, `no-dist`, `no-dist-commit`. Only one repository of the audit tells this rule. The `.gitignore` of the template has it for each repository. |
 | `no-local-paths` | No tracked file has the home folder of a user: `C:\Users\<name>`, `/Users/<name>` or `/home/<name>`. A CI user (`runner`), a name of one character and a placeholder (`<you>`) are not a break. | client `I12`. systems `no-identifying-names`, `no-private-identifiers`, `no-private-names`. coeval `no-private-names`. |
 | `release-files` | A pull request changes `.github/workflows/release.yml` or `scripts/release/` only with a line `Release-Edit: <reason>` in a commit message or in the body of the pull request. The commits of the release bot (the sync of the template) need no reason. | coeval `no-release-edit`, `no-release-edits`. crawler `no-release-edit`, `no-release-edits`. headroom `no-release-edits`, `release-files-frozen`. |
+| `typed-scripts` | Git keeps no JavaScript source (`.js`, `.mjs`, `.cjs`, `.jsx`, or a file with a `#!` line of `node`) and no shell script (`.sh`, `.bash`, `.zsh`, `.ps1`, or a `#!` line of a shell) of more than one line of code. Each script is TypeScript, which Node 22.18 and later starts directly. A file that must stay (generated output, vendored code, a configuration that a tool reads only as JavaScript) goes in `ignore` with its reason, so the list of exceptions can only get shorter. | fleet `typed-everything` (STRATEGY.md, direction 15). |
 
 The rule `release-files` needs the base of the change. On a pull request, the checkout is a merge commit, and the rule reads its two parents (`fetch-depth` 2 or more). In other runs, give `--base <ref>`. Without a base, the rule shows `skip`.
 
@@ -79,6 +80,9 @@ An unknown rule, an unknown option, or an exception or a changed option without 
 | `release-files.paths` | `[".github/workflows/release.yml", "scripts/release/**"]` | The globs of the files of the release flow. |
 | `release-files.trailer` | `Release-Edit` | The key of the line that gives the reason. |
 | `release-files.authors` | `["mark1russell7-release-train[bot]"]` | The authors of the release flow. Their commits need no reason. |
+| `typed-scripts.javascript` | `[".js", ".mjs", ".cjs", ".jsx"]` | The extensions of JavaScript source. |
+| `typed-scripts.shell` | `[".sh", ".bash", ".zsh", ".ps1"]` | The extensions of shell scripts. |
+| `typed-scripts.shellLines` | `1` | The most lines of code of a shell script (a launcher). Empty lines and comments do not count. |
 
 ## Commands
 

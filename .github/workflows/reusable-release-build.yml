@@ -1,9 +1,9 @@
 # The build job of the standard npm release (RELEASING.md, CI.md). The release.yml of a repository
 # calls it after its CI gates.
 #
-# The job builds and packs each published package (scripts/release/pack.mjs of the template commit of
+# The job builds and packs each published package (scripts/release/pack.ts of the template commit of
 # this file, so a repository needs no copy of scripts/release), and
-# writes the plan of the git tags and the GitHub releases (scripts/release/tags.mjs). It uploads two
+# writes the plan of the git tags and the GitHub releases (scripts/release/tags.ts). It uploads two
 # artifacts of the run: "release" (packages.txt and the tarballs) for the publish job, and "tags"
 # (tags.json) for reusable-release-tag.yml.
 #
@@ -40,7 +40,7 @@ on:
         type: string
         default: ""
       after-pack:
-        description: A bash command after pack.mjs and tags.mjs, before the uploads. RELEASE_DIR is the folder of packages.txt and the tarballs. TAGS_FILE is the plan of the tags. Empty runs no command.
+        description: A bash command after pack.ts and tags.ts, before the uploads. RELEASE_DIR is the folder of packages.txt and the tarballs. TAGS_FILE is the plan of the tags. Empty runs no command.
         type: string
         default: ""
     outputs:
@@ -110,11 +110,17 @@ jobs:
           path: .release-template
           sparse-checkout: scripts/release
           persist-credentials: false
-      - run: node .release-template/scripts/release/pack.mjs "$RUNNER_TEMP/release"
+      # The scripts are TypeScript: Node runs them with its type stripping, also when the build of the
+      # repository used an older Node (node-version, node-version-file)
+      - name: Node for the release scripts
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+      - run: node .release-template/scripts/release/pack.ts "$RUNNER_TEMP/release"
         env:
           RELEASE_REPO: ${{ github.workspace }}
       # The tag, the prerelease flag and the release text of each published package, for the tag job
-      - run: node .release-template/scripts/release/tags.mjs "$RUNNER_TEMP/tags.json"
+      - run: node .release-template/scripts/release/tags.ts "$RUNNER_TEMP/tags.json"
         env:
           RELEASE_REPO: ${{ github.workspace }}
       # The input after-pack. It can test the tarballs, add files to the artifact "release", and

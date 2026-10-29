@@ -11,30 +11,31 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const workflow = readFileSync(resolve(root, ".github/workflows/reusable-pages.yml"), "utf-8");
 
 /** The expression of the "if" key of the job build. */
-function buildGuard() {
+function buildGuard(): string {
   const job = workflow.slice(workflow.indexOf("\n  build:\n"));
   const match = /\n    if: (.+)\n/.exec(job);
   assert.ok(match, "The job build has an if key.");
-  return match[1];
+  return match[1] ?? "";
 }
 
 /**
  * This function evaluates the guard for an event. It knows only the operators of the guard:
  * ==, !=, && and || on the values of the github context and on strings.
  */
-function evaluate(expression, github) {
+function evaluate(expression: string, github: unknown): unknown {
   const js = expression
-    .replace(/'([^']*)'/g, (_, text) => JSON.stringify(text))
+    .replace(/'([^']*)'/g, (_: string, text: string) => JSON.stringify(text))
     .replace(/!=/g, "!==")
     .replace(/(?<![!=])==/g, "===")
-    .replace(/\bgithub((?:\.[A-Za-z_][A-Za-z0-9_-]*)+)/g, (_, path) => `get(${JSON.stringify(path.slice(1))})`);
+    .replace(/\bgithub((?:\.[A-Za-z_][A-Za-z0-9_-]*)+)/g, (_: string, path: string) => `get(${JSON.stringify(path.slice(1))})`);
   assert.match(js, /^[\sget()"A-Za-z0-9_.\-!=&|]+$/, `The guard has only known operators: ${js}`);
-  const get = (path) => path.split(".").reduce((value, key) => value?.[key], github);
+  const get = (path: string): unknown =>
+    path.split(".").reduce<unknown>((value, key) => (value as Record<string, unknown> | null | undefined)?.[key], github);
   return new Function("get", `return (${js});`)(get);
 }
 
 /** The github context of a workflow_run event. */
-function workflowRun(run) {
+function workflowRun(run: Readonly<Record<string, unknown>>): Record<string, unknown> {
   return {
     event_name: "workflow_run",
     event: { repository: { default_branch: "main" }, workflow_run: { conclusion: "success", event: "push", head_branch: "main", ...run } },

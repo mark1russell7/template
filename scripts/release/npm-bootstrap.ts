@@ -1,6 +1,6 @@
 // The one-time npm setup of the packages of one or more repositories. The owner starts it.
 //
-//   node scripts/release/npm-bootstrap.mjs [<repo folder> ...] [options]
+//   node scripts/release/npm-bootstrap.ts [<repo folder> ...] [options]
 //
 // npm trusts a GitHub workflow only for a package that exists, and a new trust expires when no
 // publish uses it in 2 days. Thus, for each published package of each repository:
@@ -48,21 +48,40 @@ import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { compareWithMain, dispatchPlan } from "./dispatch.mjs";
-import { githubRepository, publishedPackages, readRepoFile, root } from "./workspace.mjs";
+import { compareWithMain, dispatchPlan } from "./dispatch.ts";
+import { githubRepository, publishedPackages, readRepoFile, root, type Manifest, type Packument } from "./workspace.ts";
+
+/** The result of an npm command: its status, its JSON output and its text. */
+interface NpmResult {
+  readonly ok: boolean;
+  readonly json: unknown;
+  readonly text: string;
+}
+
+/** The error of npm that asks for the 2FA in the browser. */
+interface NpmError {
+  readonly code?: string;
+  readonly authUrl?: string;
+  readonly doneUrl?: string;
+}
+
+/** The npm search result, with the fields that the script reads. */
+interface SearchResult {
+  readonly objects: readonly { readonly package: { readonly name: string } }[];
+}
 
 const PLACEHOLDER = "0.0.0-bootstrap.0";
 const REGISTRY = "https://registry.npmjs.org";
 const LOCKS_FILE = join(homedir(), ".npm-bootstrap-locks.json");
 
 const argv = process.argv.slice(2);
-const flag = (name) => argv.includes(name);
-const value = (name) => {
+const flag = (name: string): boolean => argv.includes(name);
+const value = (name: string): string | undefined => {
   const index = argv.indexOf(name);
   return index === -1 ? undefined : argv[index + 1];
 };
 const valued = new Set(["--file", "--env", "--only", "--ref", "--pause"]);
-const repos = argv.filter((arg, i) => !arg.startsWith("--") && !valued.has(argv[i - 1])).map((dir) => resolve(dir));
+const repos = argv.filter((arg, i) => !arg.startsWith("--") && !valued.has(argv[i - 1] ?? "")).map((dir) => resolve(dir));
 const lockAll = flag("--lock-all");
 if (repos.length === 0 && !lockAll) repos.push(root);
 
@@ -78,23 +97,23 @@ const dispatch = flag("--dispatch");
 const relock = flag("--relock");
 const PAUSE_MS = Number(value("--pause") ?? "3") * 1000;
 
-const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+const sleep = (ms: number): Promise<void> => new Promise((done) => setTimeout(done, ms));
 
 class RateLimited extends Error {}
 
 // npm runs as `node npm-cli.js` when that file is found: no shell, so each argument stays exact.
-const npmCli = [join(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"), process.env.npm_execpath]
-  .find((file) => typeof file === "string" && file.endsWith("npm-cli.js") && existsSync(file));
+const npmCli = [join(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"), process.env["npm_execpath"]]
+  .find((file): file is string => typeof file === "string" && file.endsWith("npm-cli.js") && existsSync(file));
 
 /** This function starts npm with JSON output and gives its status, its JSON and its text. */
-function npmJson(args) {
+function npmJson(args: readonly string[]): NpmResult {
   // Global options use the form `--key=value`: a command with strict flags (`npm trust`) reads `--key value` as a flag and a positional argument.
   const all = [...args, "--json", "--fetch-retries=0"];
   const r = npmCli
     ? spawnSync(process.execPath, [npmCli, ...all], { encoding: "utf8" })
     : spawnSync("npm", all, { encoding: "utf8", shell: process.platform === "win32" });
   const text = `${r.stdout ?? ""}\n${r.stderr ?? ""}`;
-  let json;
+  let json: unknown;
   const start = (r.stdout ?? "").search(/[[{]/);
   if (start !== -1) {
     try {
@@ -107,15 +126,15 @@ function npmJson(args) {
 }
 
 /** This function gives the npm token of the registry from ~/.npmrc, for the 2FA page. */
-function registryToken() {
+function registryToken(): string | undefined {
   const file = join(homedir(), ".npmrc");
   if (!existsSync(file)) return undefined;
   const line = readFileSync(file, "utf8").split(/\r?\n/).find((l) => l.startsWith("//registry.npmjs.org/:_authToken="));
   return line?.slice(line.indexOf("=") + 1).trim();
 }
 
-function openBrowser(url) {
-  const [cmd, args] =
+function openBrowser(url: string): void {
+  const [cmd, args]: [string, string[]] =
     process.platform === "win32"
       ? ["rundll32", ["url.dll,FileProtocolHandler", url]]
       : process.platform === "darwin"
@@ -125,7 +144,7 @@ function openBrowser(url) {
 }
 
 /** This function waits until the owner confirms the 2FA in the browser, and gives the one-time token. */
-async function webOtp(authUrl, doneUrl) {
+async function webOtp(authUrl: string, doneUrl: string): Promise<string> {
   console.log(`\n  npm asks for the 2FA. Confirm it in the browser: ${authUrl}`);
   console.log("  Select the option to skip the 2FA for 5 minutes, so that the next steps need no new confirmation.\n");
   openBrowser(authUrl);
@@ -133,7 +152,7 @@ async function webOtp(authUrl, doneUrl) {
   const deadline = Date.now() + 5 * 60_000;
   while (Date.now() < deadline) {
     const response = await fetch(doneUrl, { headers: token ? { authorization: `Bearer ${token}` } : {} });
-    if (response.status === 200) return (await response.json()).token;
+    if (response.status === 200) return ((await response.json()) as { token: string }).token;
     if (response.status === 429) throw new RateLimited("npm limits the requests (429) during the 2FA.");
     if (response.status !== 202) throw new Error(`The 2FA page gave HTTP ${response.status}.`);
     const wait = Number(response.headers.get("retry-after") ?? "5");
@@ -147,9 +166,9 @@ async function webOtp(authUrl, doneUrl) {
  * npm takes a one-time password only once, so each command opens the 2FA page. In the 5 minutes
  * after the owner selects "skip the 2FA", that page confirms without a new tap.
  */
-async function npmWrite(args) {
+async function npmWrite(args: readonly string[]): Promise<NpmResult> {
   let r = npmJson(args);
-  const error = r.json?.error;
+  const error = (r.json as { error?: NpmError } | undefined)?.error;
   if (!r.ok && error?.code === "EOTP" && error.authUrl && error.doneUrl) {
     const otp = await webOtp(error.authUrl, error.doneUrl);
     r = npmJson([...args, `--otp=${otp}`]);
@@ -160,24 +179,24 @@ async function npmWrite(args) {
 }
 
 /** This function reads the public data of a package: undefined when npm does not have it. */
-async function packument(name) {
+async function packument(name: string): Promise<Packument | undefined> {
   const response = await fetch(`${REGISTRY}/${name.replaceAll("/", "%2f")}`);
   await sleep(300);
   if (response.status === 404) return undefined;
   if (response.status === 429) throw new RateLimited(`The registry gave HTTP 429 for ${name}.`);
   if (!response.ok) throw new Error(`The registry gave HTTP ${response.status} for ${name}.`);
-  return response.json();
+  return (await response.json()) as Packument;
 }
 
 /** This function writes a placeholder package to a temporary folder. */
-function placeholder(manifest, repository) {
+function placeholder(manifest: Manifest & { readonly name: string }, repository: string): string {
   const dir = mkdtempSync(join(tmpdir(), "npm-bootstrap-"));
   const data = {
     name: manifest.name,
     version: PLACEHOLDER,
     description: `A placeholder that lets npm trust the release workflow of ${repository}. Use a later version.`,
     repository: { type: "git", url: `git+https://github.com/${repository}.git` },
-    ...(manifest.license ? { license: manifest.license } : {}),
+    ...(typeof manifest["license"] === "string" ? { license: manifest["license"] } : {}),
     publishConfig: { access: "public" },
   };
   writeFileSync(join(dir, "package.json"), `${JSON.stringify(data, null, 2)}\n`);
@@ -189,32 +208,33 @@ function placeholder(manifest, repository) {
 }
 
 /** This function tells if a trust list names the repository, the workflow and the environment. */
-function trustMatches(list, repository, environment) {
+function trustMatches(list: unknown, repository: string, environment: string | undefined): boolean {
   const text = JSON.stringify(list ?? "").toLowerCase();
   const sameEnvironment = environment ? text.includes(`"${environment.toLowerCase()}"`) : !/"environment":"[^"]/.test(text);
   return text.includes(repository.toLowerCase()) && text.includes(workflow.toLowerCase()) && sameEnvironment;
 }
 
 /** This function gives the GitHub environment of the jobs of a workflow, or undefined. */
-function workflowEnvironment(text) {
+function workflowEnvironment(text: string | undefined): string | undefined {
   const match = /^\s*environment:\s*(?:\r?\n\s*name:\s*)?["']?([\w-]+)/m.exec(text ?? "");
   return match?.[1];
 }
 
 /** This function gives the IDs in a trust list. */
-function trustIds(list) {
-  const items = Array.isArray(list) ? list : (list?.trustedPublishers ?? list?.items ?? (list ? [list] : []));
-  return items.map((item) => item?.id).filter(Boolean);
+function trustIds(list: unknown): string[] {
+  const object = list as { trustedPublishers?: unknown[]; items?: unknown[] } | null | undefined;
+  const items: unknown[] = Array.isArray(list) ? list : (object?.trustedPublishers ?? object?.items ?? (list ? [list] : []));
+  return items.map((item) => (item as { id?: unknown } | null)?.id).filter((id): id is string => typeof id === "string" && id !== "");
 }
 
-const summary = [];
-const handled = new Set();
-const trusted = new Set();
-const placeholders = new Set();
+const summary: string[] = [];
+const handled = new Set<string>();
+const trusted = new Set<string>();
+const placeholders = new Set<string>();
 // The commit of --ref in each repository: --dispatch starts a release only when it is on main
-const commits = new Map();
+const commits = new Map<string, string>();
 
-async function bootstrapRepo(repo) {
+async function bootstrapRepo(repo: string): Promise<void> {
   const repository = githubRepository(repo);
   execFileSync("git", ["fetch", "--quiet", "origin"], { cwd: repo, stdio: "inherit" });
   commits.set(repository, execFileSync("git", ["rev-parse", "--verify", `${ref}^{commit}`], { cwd: repo, encoding: "utf8" }).trim());
@@ -229,12 +249,13 @@ async function bootstrapRepo(repo) {
   }
 
   for (const { manifest } of packages) {
-    const { name, version } = manifest;
+    const { name } = manifest;
+    const version = manifest.version ?? "";
     handled.add(name);
     const data = await packument(name);
     const exists = data !== undefined;
     const pending = data === undefined || data.versions?.[version] === undefined;
-    const steps = [];
+    const steps: string[] = [];
 
     if (lockOnly) {
       if (!exists) {
@@ -302,11 +323,14 @@ async function bootstrapRepo(repo) {
 }
 
 /** This function sets "disallow tokens" on each package of the npm user that the run did not handle. */
-async function lockOtherPackages() {
+async function lockOtherPackages(): Promise<void> {
   const user = dryRun ? "mark1russell7" : String(npmJson(["whoami"]).json ?? "").trim() || "mark1russell7";
   const response = await fetch(`${REGISTRY}/-/v1/search?text=maintainer:${user}&size=250`);
   if (!response.ok) throw new Error(`The npm search gave HTTP ${response.status}.`);
-  const names = (await response.json()).objects.map((o) => o.package.name).filter((name) => !handled.has(name)).sort();
+  const names = ((await response.json()) as SearchResult).objects
+    .map((o) => o.package.name)
+    .filter((name) => !handled.has(name))
+    .sort();
   console.log(`\nThe other packages of ${user}: ${names.length}`);
   for (const name of names) {
     summary.push(`${name}: ${await lockPackage(name)}`);
@@ -315,8 +339,8 @@ async function lockOtherPackages() {
 }
 
 /** This function sets "disallow tokens" on a package, unless the record names it. It gives the step text. */
-async function lockPackage(name) {
-  const locks = existsSync(LOCKS_FILE) ? JSON.parse(readFileSync(LOCKS_FILE, "utf8")) : {};
+async function lockPackage(name: string): Promise<string> {
+  const locks: Record<string, string> = existsSync(LOCKS_FILE) ? (JSON.parse(readFileSync(LOCKS_FILE, "utf8")) as Record<string, string>) : {};
   if (locks[name] && !relock) return `disallows tokens (since ${locks[name]}, from the record)`;
   if (dryRun) return "would set disallow tokens";
   const r = await npmWrite(["access", "set", "mfa=publish", name]);
@@ -326,7 +350,7 @@ async function lockPackage(name) {
   return "disallows tokens";
 }
 
-let failure;
+let failure: unknown;
 try {
   if (!dryRun) {
     const who = npmJson(["whoami"]);
@@ -345,7 +369,7 @@ console.log(`\nSummary${dryRun ? " (dry run)" : ""}:\n  ${summary.join("\n  ") |
  * This function waits until the public registry shows each new package. The registry can need some
  * minutes, and a release that starts before it gets HTTP 404 and stops (lag-hud, 2026-10-18).
  */
-async function waitUntilVisible(names) {
+async function waitUntilVisible(names: Iterable<string>): Promise<void> {
   const deadline = Date.now() + 5 * 60_000;
   for (const name of names) {
     while ((await fetch(`${REGISTRY}/${name.replaceAll("/", "%2f")}?t=${Date.now()}`)).status !== 200) {
@@ -356,7 +380,7 @@ async function waitUntilVisible(names) {
 }
 
 // After a failure, the script starts no release: it shows the command. A release publishes only a
-// commit on main, so the script also starts no release for a commit that is not on main (dispatch.mjs).
+// commit on main, so the script also starts no release for a commit that is not on main (dispatch.ts).
 const plan = dispatchPlan({ repositories: trusted, workflow, dispatch, failed: failure !== undefined, commits, compare: compareWithMain });
 if (plan.some(({ start }) => start) && placeholders.size > 0) {
   console.log(`\nWaiting until the registry shows ${[...placeholders].join(", ")}...`);
@@ -370,6 +394,6 @@ if (failure instanceof RateLimited) {
   console.error(`\nnpm limits the requests of this account (HTTP 429). Start the same command again later. It skips each step that is done.\n${failure.message}`);
   process.exit(3);
 } else if (failure) {
-  console.error(`\n${failure.stack ?? failure}`);
+  console.error(`\n${failure instanceof Error ? (failure.stack ?? failure.message) : String(failure)}`);
   process.exit(1);
 }

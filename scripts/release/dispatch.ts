@@ -1,4 +1,4 @@
-// The start of the release workflow by a script (npm-bootstrap.mjs --dispatch).
+// The start of the release workflow by a script (npm-bootstrap.ts --dispatch).
 //
 // A release publishes only a commit that is on main: the head of main, or an older commit of main
 // (RELEASING.md). The first step of the build job (reusable-release-build.yml) compares the commit
@@ -8,14 +8,30 @@
 import { execFileSync } from "node:child_process";
 
 /** The statuses of the GitHub compare API (main...<commit>) for a commit that is on main. */
-export const ON_MAIN = new Set(["identical", "behind"]);
+export const ON_MAIN: ReadonlySet<string> = new Set(["identical", "behind"]);
+
+/** A function that starts gh with these arguments and gives its output text. */
+export type Gh = (args: readonly string[]) => string;
+
+/** The text of an error, or of a value that a throw gave. */
+export function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** What the bootstrap script does for one repository. */
+export interface DispatchStep {
+  readonly repository: string;
+  readonly start: boolean;
+  readonly text: string;
+}
 
 /** This function starts gh and gives its output text. Its error has the error text of gh. */
-function gh(args) {
+function gh(args: readonly string[]): string {
   try {
     return execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   } catch (error) {
-    throw new Error(String(error.stderr ?? "").trim() || error.message);
+    const stderr = (error as { stderr?: unknown }).stderr;
+    throw new Error(String(stderr ?? "").trim() || errorText(error));
   }
 }
 
@@ -24,7 +40,7 @@ function gh(args) {
  * compare API: "identical", "behind", "ahead" or "diverged". It throws when GitHub does not compare,
  * for example for a commit that is not on GitHub.
  */
-export function compareWithMain(repository, sha, run = gh) {
+export function compareWithMain(repository: string, sha: string, run: Gh = gh): string {
   return run(["api", `repos/${repository}/compare/main...${sha}`, "--jq", ".status"]).trim();
 }
 
@@ -35,7 +51,21 @@ export function compareWithMain(repository, sha, run = gh) {
  * packages of each repository. `compare(repository, sha)` gives the status of compareWithMain(),
  * and the function calls it only when it can start the release.
  */
-export function dispatchPlan({ repositories, workflow, dispatch, failed, commits, compare }) {
+export function dispatchPlan({
+  repositories,
+  workflow,
+  dispatch,
+  failed,
+  commits,
+  compare,
+}: {
+  readonly repositories: Iterable<string>;
+  readonly workflow: string;
+  readonly dispatch: boolean;
+  readonly failed: boolean;
+  readonly commits: ReadonlyMap<string, string>;
+  readonly compare: (repository: string, sha: string) => string;
+}): DispatchStep[] {
   return [...repositories].map((repository) => {
     const command = `gh workflow run ${workflow} --repo ${repository} --ref main`;
     if (!dispatch) return { repository, start: false, text: `Start the release in the next 2 days: ${command}` };
@@ -48,12 +78,12 @@ export function dispatchPlan({ repositories, workflow, dispatch, failed, commits
           `Start the bootstrap again. When it is done, start the release in the next 2 days: ${command}`,
       };
     }
-    const sha = commits.get(repository);
-    let status;
+    const sha = commits.get(repository) ?? "(unknown)";
+    let status: string;
     try {
       status = compare(repository, sha);
     } catch (error) {
-      status = `not known (GitHub did not compare it with main: ${String(error.message ?? error).trim().split("\n")[0]})`;
+      status = `not known (GitHub did not compare it with main: ${errorText(error).trim().split("\n")[0]})`;
     }
     if (!ON_MAIN.has(status)) {
       return {
