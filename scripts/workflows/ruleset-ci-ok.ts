@@ -1,13 +1,13 @@
-// The ruleset of main of each repository: a pull request must pass the checks "CI OK" and "Security OK"
-// (CI.md, "The check of the ruleset"). The owner starts it, because a ruleset is a setting of the repository.
+// The ruleset of main of each repository: a pull request must pass each summary check of the gate, the
+// checks with a name "<Name> OK" such as "CI OK", "Security OK" and "Xplat OK" (CI.md, "The check of the
+// ruleset"). The owner starts it, because a ruleset is a setting of the repository.
 //
 //   node scripts/workflows/ruleset-ci-ok.ts [<owner/repo> ...] [--apply]
 //
 // Without --apply, the script only prints what it would do. For each repository:
-//   1. It reads the check runs of the last 10 commits of the default branch. A repository where none
-//      of them has a "CI OK" that passed is skipped. A rule for a check that never starts blocks
-//      each pull request.
-//      "Security OK" is added only where it passed in the same way.
+//   1. It reads the check runs of the last 10 commits of the default branch, and keeps each summary
+//      check that passed on one of them. A repository with no "CI OK" that passed is skipped. A rule for
+//      a check that never starts blocks each pull request, so only checks that passed are added.
 //   2. It reads the rules of the branch, from each ruleset of any name. A check that a ruleset names
 //      already is not added again. The other checks that a ruleset names stay.
 //   3. With --apply, it adds one ruleset for the missing checks: the default branch, the integration
@@ -17,7 +17,8 @@
 import { execFileSync } from "node:child_process";
 
 const CHECK = "CI OK";
-const SECURITY = "Security OK";
+// The name of a summary job: one word or more, each with a capital letter, then " OK".
+const SUMMARY = /^[A-Z][A-Za-z0-9]*( [A-Z][A-Za-z0-9]*)* OK$/;
 const OWNER = "mark1russell7";
 // The app id of GitHub Actions, so that only a check of Actions passes the rule.
 const ACTIONS_APP = 15368;
@@ -51,13 +52,15 @@ function repositories(named: readonly string[]): string[] {
   return repos.filter((r) => r.defaultBranchRef !== null).map((r) => r.nameWithOwner);
 }
 
-// The last commit can still be in CI, so the script examines the last 10 commits of the branch.
-function hasPassed(repo: string, branch: string, check: string): boolean {
+// The summary checks that passed on one of the last 10 commits. The last commit can still be in CI.
+function passedSummaries(repo: string, branch: string): Set<string> {
+  const passed = new Set<string>();
   const commits = json<{ sha: string }[]>(["api", `repos/${repo}/commits?sha=${encodeURIComponent(branch)}&per_page=10`]);
-  return commits.some((c) => {
-    const runs = json<{ check_runs: CheckRun[] }>(["api", `repos/${repo}/commits/${c.sha}/check-runs?check_name=${encodeURIComponent(check)}&per_page=10`]);
-    return runs.check_runs.some((r) => r.conclusion === "success");
-  });
+  for (const c of commits) {
+    const runs = json<{ check_runs: CheckRun[] }>(["api", `repos/${repo}/commits/${c.sha}/check-runs?per_page=100`]);
+    for (const r of runs.check_runs) if (SUMMARY.test(r.name) && r.conclusion === "success") passed.add(r.name);
+  }
+  return passed;
 }
 
 function main(argv: readonly string[]): void {
@@ -66,14 +69,15 @@ function main(argv: readonly string[]): void {
   let added = 0;
   for (const repo of repositories(named)) {
     const branch = json<{ default_branch: string }>(["api", `repos/${repo}`]).default_branch;
-    if (!hasPassed(repo, branch, CHECK)) {
+    const passed = passedSummaries(repo, branch);
+    if (!passed.has(CHECK)) {
       console.log(`skip   ${repo}: no "${CHECK}" that passed on ${branch}. Add the job ci-ok of the template first.`);
       continue;
     }
     // The rules that apply to the branch, from each ruleset of any name.
     const rules = json<BranchRule[]>(["api", `repos/${repo}/rules/branches/${encodeURIComponent(branch)}`]);
     const checks = rules.filter((r) => r.type === "required_status_checks").flatMap((r) => r.parameters?.required_status_checks ?? []).map((c) => c.context);
-    const wanted = hasPassed(repo, branch, SECURITY) ? [CHECK, SECURITY] : [CHECK];
+    const wanted = [...passed].sort((a, b) => (a === CHECK ? -1 : b === CHECK ? 1 : a.localeCompare(b)));
     const missing = wanted.filter((c) => !checks.includes(c));
     if (missing.length === 0) {
       console.log(`have   ${repo}: a ruleset names ${wanted.map((c) => `"${c}"`).join(" and ")} on ${branch}.`);
