@@ -1,12 +1,10 @@
-# The security scans of this repository (reusable-security.yml, CI.md): dependency review,
-# osv-scanner and CodeQL. A pull request fails only for a new finding at or above high.
+# The scans of the schedule and of a manual run (reusable-security.yml, CI.md): dependency review,
+# osv-scanner and CodeQL. The scans of a pull request and of a push are the job security of ci.yml,
+# so that CI OK needs them. A pull request fails only for a new finding at or above high.
 # Other repositories call mark1russell7/template/.github/workflows/reusable-security.yml@<commit> # main
 name: Security
 
 on:
-  pull_request:
-  push:
-    branches: [main]
   # A weekly scan finds the new advisories for the dependencies that do not change
   schedule:
     - cron: "23 5 * * 1"

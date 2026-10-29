@@ -71,7 +71,7 @@ The job `ci-ok` (name `CI OK`) of `ci.yml` is the one check that a pull request 
 
 Thus the ruleset names one check, and it does not change when a job is added. `gh pr merge --auto` merges only after the whole gate. A ruleset that names only some jobs lets `--auto` merge before the other jobs end.
 
-- Add each new job of the gate to `needs` of `ci-ok`.
+- Add each new job of the gate to `needs` of `ci-ok`. The security scans are a gate job: `ci.yml` has the job `security`, and `security.yml` keeps only the weekly scan and the manual run.
 - A gate job in another workflow file is not in `needs`. Move it into `ci.yml` as a job (it can use a reusable workflow with `uses:`), or add its name to the ruleset.
 - Set the ruleset once with `node scripts/workflows/ruleset-ci-ok.ts <owner/repo> --apply`. Without `--apply`, it only prints the changes. It skips a repository where no "CI OK" passed on the default branch, and a repository where a ruleset names "CI OK" already.
 
