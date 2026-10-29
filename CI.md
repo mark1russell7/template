@@ -73,7 +73,7 @@ Thus the ruleset names one check, and it does not change when a job is added. `g
 
 - Add each new job of the gate to `needs` of `ci-ok`.
 - A gate job in another workflow file is not in `needs`. Move it into `ci.yml` as a job (it can use a reusable workflow with `uses:`), or add its name to the ruleset.
-- Set the ruleset once: `gh api -X POST repos/<owner>/<repo>/rulesets` with a rule `required_status_checks` for the context `CI OK` on the default branch.
+- Set the ruleset once with `node scripts/workflows/ruleset-ci-ok.ts <owner/repo> --apply`. Without `--apply`, it only prints what it would do. It skips a repository where no "CI OK" passed on the default branch, and a repository where a ruleset names "CI OK" already.
 
 ## Release
 
