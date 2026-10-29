@@ -65,6 +65,16 @@ jobs:
       run: npm pack --dry-run
 ```
 
+### The check of the ruleset
+
+The job `ci-ok` (name `CI OK`) of `ci.yml` is the one check that a pull request to `main` must pass in the ruleset. It needs each other job of the file. It starts also after a failure (`if: always()`), and it fails when a job failed or was cancelled. A job that its own `if` skips (for example `presets` outside the template) does not fail it.
+
+Thus the ruleset names one check, and it does not change when a job is added. `gh pr merge --auto` merges only after the whole gate. A ruleset that names only some jobs lets `--auto` merge before the other jobs end.
+
+- Add each new job of the gate to `needs` of `ci-ok`.
+- A gate job in another workflow file is not in `needs`. Move it into `ci.yml` as a job (it can use a reusable workflow with `uses:`), or add its name to the ruleset.
+- Set the ruleset once: `gh api -X POST repos/<owner>/<repo>/rulesets` with a rule `required_status_checks` for the context `CI OK` on the default branch.
+
 ## Release
 
 The `release.yml` of a repository keeps four jobs:

@@ -52,3 +52,21 @@ jobs:
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm --filter "@template/$PACKAGE" typecheck
       - run: pnpm --filter "@template/$PACKAGE" test
+
+  # The one check of the ruleset of main (CI.md, "The check of the ruleset"). It passes only when
+  # each job of needs passed or was skipped by its own if. A new job of this file goes in needs, so the
+  # ruleset never has to change, and gh pr merge --auto waits for the whole gate.
+  ci-ok:
+    name: CI OK
+    if: always()
+    needs: [ci, presets]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Each job passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          case " $RESULTS " in *" failure "*|*" cancelled "*) exit 1 ;; esac
