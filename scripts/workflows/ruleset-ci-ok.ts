@@ -5,9 +5,12 @@
 //   node scripts/workflows/ruleset-ci-ok.ts [<owner/repo> ...] [--apply]
 //
 // Without --apply, the script only prints what it would do. For each repository:
-//   1. It reads the check runs of the last 10 commits of the default branch, and keeps each summary
-//      check that passed on one of them. A repository with no "CI OK" that passed is skipped. A rule for
-//      a check that never starts blocks each pull request, so only checks that passed are added.
+//   1. It reads the check runs of the head commits of the last 5 pull requests that merged into the default
+//      branch. It uses the newest one where "CI OK" passed, and keeps each summary check that passed there.
+//      (A pull request whose checks ran before "CI OK" came to main can merge later without it.) A ruleset applies to pull requests, so
+//      this is the proof that each check starts on a pull request. A check that starts only on a push
+//      to main never runs on a pull request, and a rule for it blocks each pull request. A repository
+//      where "CI OK" did not pass there is skipped.
 //   2. It reads the rules of the branch, from each ruleset of any name. A check that a ruleset names
 //      already is not added again. The other checks that a ruleset names stay.
 //   3. With --apply, it adds one ruleset for the missing checks: the default branch, the integration
@@ -52,13 +55,16 @@ function repositories(named: readonly string[]): string[] {
   return repos.filter((r) => r.defaultBranchRef !== null).map((r) => r.nameWithOwner);
 }
 
-// The summary checks that passed on one of the last 10 commits. The last commit can still be in CI.
+// The summary checks that passed on the head of the newest of the last 5 merged pull requests where "CI OK" passed.
 function passedSummaries(repo: string, branch: string): Set<string> {
   const passed = new Set<string>();
-  const commits = json<{ sha: string }[]>(["api", `repos/${repo}/commits?sha=${encodeURIComponent(branch)}&per_page=10`]);
-  for (const c of commits) {
-    const runs = json<{ check_runs: CheckRun[] }>(["api", `repos/${repo}/commits/${c.sha}/check-runs?per_page=100`]);
+  const pulls = json<{ merged_at: string | null; head: { sha: string } }[]>(["api", `repos/${repo}/pulls?state=closed&base=${encodeURIComponent(branch)}&sort=updated&direction=desc&per_page=30`]);
+  const merged = pulls.filter((p) => p.merged_at !== null).sort((a, b) => (b.merged_at as string).localeCompare(a.merged_at as string)).slice(0, 5);
+  for (const pull of merged) {
+    const runs = json<{ check_runs: CheckRun[] }>(["api", `repos/${repo}/commits/${pull.head.sha}/check-runs?per_page=100`]);
     for (const r of runs.check_runs) if (SUMMARY.test(r.name) && r.conclusion === "success") passed.add(r.name);
+    if (passed.has(CHECK)) return passed;
+    passed.clear();
   }
   return passed;
 }
@@ -71,7 +77,7 @@ function main(argv: readonly string[]): void {
     const branch = json<{ default_branch: string }>(["api", `repos/${repo}`]).default_branch;
     const passed = passedSummaries(repo, branch);
     if (!passed.has(CHECK)) {
-      console.log(`skip   ${repo}: no "${CHECK}" that passed on ${branch}. Add the job ci-ok of the template first.`);
+      console.log(`skip   ${repo}: no "${CHECK}" that passed on the last 5 pull requests into ${branch}. Add the job ci-ok of the template first.`);
       continue;
     }
     // The rules that apply to the branch, from each ruleset of any name.
