@@ -74,7 +74,7 @@ The ruleset names only the summary checks. Thus it does not change when a job is
 - Add each new job of the gate to `needs` of `ci-ok`.
 - `release.yml` uses `ci.yml` with `contents: read` only. A called job cannot get more permissions than its caller. Thus a gate job that needs more (the scans need `security-events: write`, a download of an artifact of another run needs `actions: read`) stays in its own workflow, with its own summary job.
 - A gate workflow must start on each pull request, with no `paths` filter. Otherwise its summary check does not start, and the ruleset blocks the pull request. To skip the work, add a job that examines the changes. Then add an `if` on the other jobs.
-- Set the ruleset once with `node scripts/workflows/ruleset-ci-ok.ts <owner/repo> --apply`. Without `--apply`, it only prints the changes. It finds each check with a name `<Name> OK` that passed on the default branch, and it adds each of them that no ruleset names. It skips a repository where no "CI OK" passed.
+- Set the ruleset once with `node scripts/workflows/ruleset-ci-ok.ts <owner/repo> --apply`. Without `--apply`, it only prints the changes. It reads the checks of the newest of the last 5 pull requests into the default branch where "CI OK" passed. It adds each check with a name `<Name> OK` that passed there and that no ruleset names. It skips a repository where "CI OK" did not pass on any of the 5. A check that starts only on a push to `main` is not added, because it does not start on a pull request.
 
 ## Release
 
