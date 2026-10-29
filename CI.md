@@ -67,13 +67,14 @@ jobs:
 
 ### The check of the ruleset
 
-The job `ci-ok` (name `CI OK`) of `ci.yml` is the one check that a pull request to `main` must pass in the ruleset. It needs each other job of the file. It starts also after a failure (`if: always()`), and it fails when a job failed or was cancelled. A job that its own `if` skips (for example `presets` outside the template) does not fail it.
+A pull request to `main` must pass two checks of the ruleset. They are the job `ci-ok` (name `CI OK`) of `ci.yml` and the job `security-ok` (name `Security OK`) of `security.yml`. Each needs each other job of its file. Each starts also after a failure (`if: always()`), and it fails when a job failed or was cancelled. A job that its own `if` skips (for example `presets` outside the template) does not fail it.
 
-Thus the ruleset names one check, and it does not change when a job is added. `gh pr merge --auto` merges only after the whole gate. A ruleset that names only some jobs lets `--auto` merge before the other jobs end.
+Thus the ruleset names two checks, and it does not change when a job is added. `gh pr merge --auto` merges only after the whole gate. A ruleset that names only some jobs lets `--auto` merge before the other jobs end.
 
 - Add each new job of the gate to `needs` of `ci-ok`.
+- The security scans stay in `security.yml`, because `release.yml` uses `ci.yml` with `contents: read` only, and the scans need `security-events: write`. `security.yml` has its own summary job `security-ok` (name `Security OK`), and the ruleset names it too.
 - A gate job in another workflow file is not in `needs`. Move it into `ci.yml` as a job (it can use a reusable workflow with `uses:`), or add its name to the ruleset.
-- Set the ruleset once with `node scripts/workflows/ruleset-ci-ok.ts <owner/repo> --apply`. Without `--apply`, it only prints the changes. It skips a repository where no "CI OK" passed on the default branch, and a repository where a ruleset names "CI OK" already.
+- Set the ruleset once with `node scripts/workflows/ruleset-ci-ok.ts <owner/repo> --apply`. Without `--apply`, it only prints the changes. It skips a repository where no "CI OK" passed on the default branch. It adds "Security OK" only where it passed on the default branch, and it adds no check that a ruleset names already.
 
 ## Release
 
