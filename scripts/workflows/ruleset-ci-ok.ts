@@ -20,8 +20,8 @@
 import { execFileSync } from "node:child_process";
 
 const CHECK = "CI OK";
-// The name of a summary job: one word or more, each with a capital letter, then " OK".
-const SUMMARY = /^[A-Z][A-Za-z0-9]*( [A-Z][A-Za-z0-9]*)* OK$/;
+// The name of a summary job: one word or more, the first with a capital letter, then " OK" ("Joint bench OK").
+const SUMMARY = /^[A-Z][A-Za-z0-9]*( [A-Za-z0-9]+)* OK$/;
 const OWNER = "mark1russell7";
 // The app id of GitHub Actions, so that only a check of Actions passes the rule.
 const ACTIONS_APP = 15368;
