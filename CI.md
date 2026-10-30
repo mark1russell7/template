@@ -67,7 +67,9 @@ jobs:
 
 ### The check of the ruleset
 
-Each workflow of the merge gate has one summary job, with the name `<Name> OK`. The template has two: `ci-ok` (name `CI OK`) of `ci.yml` and `security-ok` (name `Security OK`) of `security.yml`. A summary job needs each other job of its file. It starts also after a failure (`if: always()`), and it fails when a job failed or was cancelled. A job that its own `if` skips (for example `presets` outside the template) does not fail it.
+Each workflow of the merge gate has one summary job, with the name `<Name> OK`. The template has two: `ci-ok` (name `CI OK`) of `ci.yml` and `security-ok` (name `Security OK`) of `security.yml`. A summary job needs each other job of its file. It starts also after a failure (`if: always()`).
+
+A summary job passes only when each job passed. A job can be skipped only when the list `ALLOW_SKIP` of the summary job names it. For example, outside the template, the `if` of `presets` skips it. Each other skipped job fails the summary. An empty `needs` also fails it, because a job that did not start is not a pass.
 
 The ruleset names only the summary checks. Thus it does not change when a job is added. `gh pr merge --auto` merges only after the whole gate. A ruleset that names only some jobs lets `--auto` merge before the other jobs end.
 
