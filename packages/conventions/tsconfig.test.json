@@ -9,10 +9,12 @@
     "isolatedDeclarations": false,
     "types": [
       "node"
-    ]
+    ],
+    "rootDir": "."
   },
   "include": [
-    "src/**/*"
+    "src/**/*",
+    "*.config.ts"
   ],
   "exclude": []
 }

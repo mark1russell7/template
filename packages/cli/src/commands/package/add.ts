@@ -119,6 +119,7 @@ function tsconfigOptions(config: CueConfig): Record<string, unknown> {
 }
 
 // The base presets exclude *.test.ts, so tests get their own config, and "typecheck" checks both.
+// The config files of the package (vitest.config.ts) are in it too, so each TypeScript file has a type check (rule typed-files).
 function testTsconfig(config: CueConfig): Record<string, unknown> {
   return {
     $schema: "https://json.schemastore.org/tsconfig",
@@ -130,8 +131,9 @@ function testTsconfig(config: CueConfig): Record<string, unknown> {
       declarationMap: false,
       isolatedDeclarations: false,
       types: LIBRARY_CONFIGS.includes(config) ? ["node"] : ["vite/client", "node"],
+      rootDir: ".",
     },
-    include: ["src/**/*"],
+    include: ["src/**/*", "*.config.ts"],
     exclude: [],
   };
 }
@@ -174,7 +176,7 @@ export interface WrittenPackage {
 /**
  * This function writes the folder `packages/<name>` of a new package of a preset in a repository.
  * It writes `package.json`, `tsconfig.json`, `tsconfig.test.json`, `vitest.config.ts` and the files
- * of the preset. It installs nothing: it gives the `pnpm add` commands of the preset.
+ * of the preset, or `src/index.ts` and a first test. It installs nothing: it gives the `pnpm add` commands of the preset.
  *
  * @throws Error when the name is not valid, the scope is not found, or the package exists
  */
@@ -255,11 +257,16 @@ async function writeFiles({ dir, name, scope, packageName, preset, dependencies,
     }
   } else {
     await writeFile(resolve(dir, "src", "index.ts"), `export {};\n`);
+    // A first test, so that the test step runs a test: the runner fails when it finds none (rule tests-required)
+    await writeFile(
+      resolve(dir, "src", "index.test.ts"),
+      `import { describe, expect, it } from "vitest";\nimport * as entry from "./index.ts";\n\ndescribe("the entry", () => {\n  it("loads", () => {\n    expect(entry).toBeTypeOf("object");\n  });\n});\n`,
+    );
   }
 
   await writeFile(
     resolve(dir, "vitest.config.ts"),
-    `import { defineConfig } from "vitest/config";\n\nexport default defineConfig({\n  test: {\n    include: ["src/**/*.{test,spec}.{ts,tsx}"],\n    passWithNoTests: true,\n  },\n});\n`,
+    `import { defineConfig } from "vitest/config";\n\nexport default defineConfig({\n  test: {\n    include: ["src/**/*.{test,spec}.{ts,tsx}"],\n  },\n});\n`,
   );
 
   // `pnpm add` resolves the newest versions and installs the workspace.
