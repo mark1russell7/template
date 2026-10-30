@@ -203,6 +203,7 @@ jobs:
 - A scheduled build uses the commit of `green-main`. The input `pending` goes to that action.
 - The inputs of `site-pages` go to the action: `site-pages-version`, `roadmap`, `base`, `packages`, `changesets`, `group`, `css`, `site-name` and `data-only`.
 - `site-pages: false` builds the site without the Releases page and the Status page.
+- Without `roadmap`, the Status page shows only the open pull requests and issues. The rule `roadmap-parses` of `@mark1russell7/conventions` thus needs `roadmap` in each call, or `site-pages: false`.
 - `deploy: false` builds and uploads the artifact, with no deploy.
 - `github-token: true` gives the build `GITHUB_TOKEN`, with the read permissions of the build job.
 - The workflow gets the actions of the same template commit as the workflow file. A second checkout gets them.
