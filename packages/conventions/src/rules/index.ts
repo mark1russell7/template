@@ -9,7 +9,9 @@ import { pinnedGitDeps } from "./pinned-git-deps.ts";
 import { releaseFiles } from "./release-files.ts";
 import { requiredScripts } from "./required-scripts.ts";
 import { sourceMain } from "./source-main.ts";
+import { testsRequired } from "./tests-required.ts";
 import { tsconfigTest } from "./tsconfig-test.ts";
+import { typedFiles } from "./typed-files.ts";
 import { typedScripts } from "./typed-scripts.ts";
 import { workspaceProtocol } from "./workspace-protocol.ts";
 
@@ -25,6 +27,8 @@ export const RULES: readonly Rule[] = [
   noLocalPaths,
   releaseFiles,
   typedScripts,
+  typedFiles,
+  testsRequired,
 ];
 
-export { cuePreset, noBuildOutput, noLocalPaths, pinnedGitDeps, releaseFiles, requiredScripts, sourceMain, tsconfigTest, typedScripts, workspaceProtocol };
+export { cuePreset, noBuildOutput, noLocalPaths, pinnedGitDeps, releaseFiles, requiredScripts, sourceMain, testsRequired, tsconfigTest, typedFiles, typedScripts, workspaceProtocol };

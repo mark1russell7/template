@@ -408,3 +408,76 @@ describe("typed-scripts", () => {
     expect(codeLines("#!/bin/sh\n\n# a comment\n  # another\nnode x.ts\r\n")).toBe(1);
   });
 });
+
+describe("typed-files", () => {
+  it("reports each TypeScript file that no tsconfig of a typecheck holds, and not a declaration file", () => {
+    const root = fixture({
+      "package.json": { name: "one", scripts: { typecheck: "tsc -p tsconfig.json" } },
+      "tsconfig.json": { compilerOptions: { noEmit: true }, include: ["src"] },
+      "src/a.ts": "export const a = 1;\n",
+      "scripts/b.ts": "export const b = 1;\n",
+      "vitest.config.ts": "export default {};\n",
+      "types/c.d.ts": "export declare const c: number;\n",
+    });
+    expect(rule(root, "typed-files").status).toBe("skipped");
+    commitAll(root);
+    expect(rule(root, "typed-files").breaks.map((item) => item.file)).toEqual(["scripts/b.ts", "vitest.config.ts"]);
+  });
+
+  it("follows the references of a config, and counts a file that a covered file imports", () => {
+    const root = fixture({
+      "package.json": { name: "one", scripts: { typecheck: "tsc -b" } },
+      "tsconfig.json": { files: [], references: [{ path: "./tsconfig.test.json" }] },
+      "tsconfig.test.json": { compilerOptions: { noEmit: true, allowImportingTsExtensions: true, module: "nodenext" }, include: ["src", "*.config.ts"] },
+      "src/a.ts": 'export { b } from "../lib/b.ts";\n',
+      "lib/b.ts": "export const b = 1;\n",
+      "vitest.config.ts": "export default {};\n",
+    });
+    commitAll(root);
+    expect(rule(root, "typed-files").breaks).toEqual([]);
+  });
+
+  it("fails closed: a typecheck that names a missing config, and a repository with no typecheck", () => {
+    const missing = fixture({ "package.json": { name: "one", scripts: { typecheck: "tsc -p tsconfig.test.json" } }, "src/a.ts": "export {};\n" });
+    commitAll(missing);
+    const breaks = rule(missing, "typed-files").breaks;
+    expect(breaks[0]?.message).toMatch(/names tsconfig\.test\.json, and that file does not exist/);
+    expect(breaks.map((item) => item.file)).toContain("src/a.ts");
+    const none = fixture({ "package.json": { name: "one" }, "src/a.ts": "export {};\n" });
+    commitAll(none);
+    expect(rule(none, "typed-files").breaks.map((item) => item.message)).toEqual([expect.stringMatching(/No typecheck script names a tsconfig/), "src/a.ts is in no tsconfig that a typecheck script examines."]);
+  });
+
+  it("follows the scripts that a typecheck starts in the same package, and not those of other packages", async () => {
+    const { scriptsOf } = await import("./index.ts");
+    const scripts = { typecheck: "pnpm -r run typecheck && pnpm run typecheck:scripts", "typecheck:scripts": "tsc -p tsconfig.scripts.json && npm run loop", loop: "pnpm typecheck" };
+    expect(scriptsOf(scripts, "typecheck")).toEqual([scripts.typecheck, scripts["typecheck:scripts"], scripts.loop]);
+    expect(scriptsOf(scripts, "missing")).toEqual([]);
+  });
+
+  it("reads the configs of a typecheck script", async () => {
+    const { configsOfScript } = await import("./index.ts");
+    expect(configsOfScript("tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json")).toEqual(["tsconfig.json", "tsconfig.test.json"]);
+    expect(configsOfScript("tsc --noEmit")).toEqual(["tsconfig.json"]);
+    expect(configsOfScript("tsc --project=e2e/tsconfig.json; vue-tsc -b a b --verbose")).toEqual(["e2e/tsconfig.json", "a", "b"]);
+    expect(configsOfScript("node_modules/.bin/tsgo -p x.json")).toEqual(["x.json"]);
+    expect(configsOfScript("svelte-check --tsconfig ./tsconfig.json")).toEqual(["./tsconfig.json"]);
+    expect(configsOfScript("pnpm -r typecheck")).toEqual([]);
+    expect(configsOfScript("tsc-alias && echo tsconfig")).toEqual([]);
+  });
+});
+
+describe("tests-required", () => {
+  it("reports passWithNoTests in a config and in a script, and not the option set to false", () => {
+    const root = fixture({
+      "package.json": { name: "one", scripts: { test: "vitest run --passWithNoTests" } },
+      "packages/a/vitest.config.ts": "export default { test: { passWithNoTests: true } };\n",
+      "packages/b/vitest.config.ts": "export default { test: { passWithNoTests: false } };\n",
+      "packages/c/playwright.e2e.config.ts": "export default {};\n",
+      "notes.md": "passWithNoTests: true\n",
+    });
+    expect(rule(root, "tests-required").status).toBe("skipped");
+    commitAll(root);
+    expect(rule(root, "tests-required").breaks.map((item) => `${item.file}:${String(item.line)}`)).toEqual(["package.json:4", "packages/a/vitest.config.ts:1"]);
+  });
+});

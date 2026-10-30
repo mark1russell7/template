@@ -43,7 +43,9 @@ export {
   requiredScripts,
   RULES,
   sourceMain,
+  testsRequired,
   tsconfigTest,
+  typedFiles,
   typedScripts,
   workspaceProtocol,
 } from "./rules/index.ts";
@@ -52,6 +54,7 @@ export { isGitSpecifier, isPinned } from "./rules/pinned-git-deps.ts";
 export { isSourcePath, pathsOf } from "./rules/source-main.ts";
 export { STRICT_OPTIONS } from "./rules/cue-preset.ts";
 export { hasTests } from "./rules/tsconfig-test.ts";
+export { configsOfScript, scriptsOf } from "./rules/typed-files.ts";
 export {
   annotations,
   createContext,
