@@ -29,6 +29,10 @@ on:
       - ".github/workflows/reusable-pages.yml"
       - ".github/workflows/reusable-release-*.yml"
       - "scripts/release/**"
+      # The test site installs the workspace, so a change of a package file can break it
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "packages/*/package.json"
   pull_request:
     paths:
       - ".github/actions/**"
@@ -36,6 +40,10 @@ on:
       - ".github/workflows/reusable-pages.yml"
       - ".github/workflows/reusable-release-*.yml"
       - "scripts/release/**"
+      # The test site installs the workspace, so a change of a package file can break it
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "packages/*/package.json"
   workflow_dispatch:
 
 permissions:
@@ -82,6 +90,7 @@ jobs:
       out: test-site
       env: '{"TEST_SITE": "actions-test"}'
       packages: "@mark1russell7/template-cli,@mark1russell7/site-pages"
+      roadmap: docs/ROADMAP.md
       deploy: false
 
   pages-check:
@@ -105,7 +114,7 @@ jobs:
             test -s "$OUT/$f" || { echo "::error::$f is missing"; exit 1; }
             echo "ok $f ($(wc -c < "$OUT/$f") bytes)"
           done
-          node -e 'const s = require(process.argv[1]); if (!s.github?.available) { console.error("::error::the GitHub part is not available:", s.github?.reason); process.exit(1); } console.log("github:", s.pullRequests.length, "open PRs,", s.issues.length, "open issues")' "$OUT/data/status.json"
+          node -e 'const s = require(process.argv[1]); if (!s.github?.available) { console.error("::error::the GitHub part is not available:", s.github?.reason); process.exit(1); } if (!(s.items?.length > 0)) { console.error("::error::the Status page has no roadmap item"); process.exit(1); } console.log("github:", s.pullRequests.length, "open PRs,", s.issues.length, "open issues;", s.items.length, "roadmap items")' "$OUT/data/status.json"
 
   release-build:
     uses: ./.github/workflows/reusable-release-build.yml

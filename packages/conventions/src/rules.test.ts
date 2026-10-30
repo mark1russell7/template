@@ -510,6 +510,26 @@ describe("roadmap-parses", () => {
     ]);
   });
 
+  it("reports a call of the Pages workflow that gives no roadmap, in its own job", () => {
+    const root = fixture({
+      "package.json": { name: "one" },
+      ".github/workflows/pages.yml": `jobs:\n  site:\n    permissions:\n      contents: read\n    uses: ./.github/workflows/reusable-pages.yml\n    with:\n      out: site\n${pages.slice("jobs:\n".length)}`,
+      ".github/workflows/other.yml": "jobs:\n  a:\n    with:\n      roadmap: ${{ inputs.roadmap }}\n    uses: o/template/.github/workflows/reusable-pages.yml@0123abc # main\n",
+      "docs/ROADMAP.md": roadmap,
+    });
+    commitAll(root);
+    expect(rule(root, "roadmap-parses").breaks.map((item) => `${item.file}:${String(item.line)}: ${item.message}`)).toEqual([
+      ".github/workflows/pages.yml:5: .github/workflows/pages.yml builds the site with the Pages workflow and gives no roadmap, so the Status page shows no roadmap item.",
+    ]);
+    const plain = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": "jobs:\n  site:\n    uses: o/t/.github/workflows/reusable-pages.yml@0123abc\n    with:\n      site-pages: false # no Status page\n" });
+    commitAll(plain);
+    expect(rule(plain, "roadmap-parses").status).toBe("skipped");
+    const only = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": "jobs:\n  site:\n    uses: o/t/.github/workflows/reusable-pages.yml@0123abc\n" });
+    commitAll(only);
+    expect(rule(only, "roadmap-parses").status).not.toBe("skipped");
+    expect(rule(only, "roadmap-parses").breaks).toHaveLength(1);
+  });
+
   it("reads the value of a roadmap key", () => {
     expect(["  roadmap: docs/R.md", "roadmap: './R.md' # x", "roadmap:", "roadmap: ${{ inputs.roadmap }}", "  roadmaps: x", "# roadmap: x"].map(roadmapOfLine)).toEqual(["docs/R.md", "R.md", undefined, undefined, undefined, undefined]);
   });
