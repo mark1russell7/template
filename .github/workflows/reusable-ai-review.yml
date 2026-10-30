@@ -145,7 +145,7 @@ jobs:
         if: steps.gate.outputs.run == 'true'
         continue-on-error: true
         env:
-          CLAUDE_CODE_VERSION: 2.1.307
+          CLAUDE_CODE_VERSION: 2.1.312
         run: |
           npm install --global --no-fund --no-audit "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION"
           claude --version
