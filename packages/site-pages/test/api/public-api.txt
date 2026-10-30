@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 108 names
+## . (build/index.d.ts): 109 names
 
 BASE_CSS: build/index.d.ts#BASE_CSS
 type BoardIssue: build/index.d.ts#BoardIssue
@@ -92,6 +92,7 @@ originRepository: build/index.d.ts#originRepository
 pageShell: build/index.d.ts#pageShell
 parseBuildArgs: build/index.d.ts#parseBuildArgs
 parseChangelog: build/index.d.ts#parseChangelog
+parseRoadmap: build/index.d.ts#parseRoadmap
 parseVersion: build/index.d.ts#parseVersion
 plainText: build/index.d.ts#plainText
 readChangelogs: build/index.d.ts#readChangelogs
@@ -651,6 +652,9 @@ export declare function parseBuildArgs(argv: readonly string[], io: Pick<CliIo, 
 
 ### build/index.d.ts#parseChangelog
 export declare function parseChangelog(markdown: string): ChangelogSection[];
+
+### build/index.d.ts#parseRoadmap
+export declare function parseRoadmap(markdown: string, options?: LinkOptions): BoardItem[];
 
 ### build/index.d.ts#parseVersion
 export declare function parseVersion(version: string): ParsedVersion | null;

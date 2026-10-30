@@ -25,6 +25,7 @@ export {
   linksOf,
   markdownTables,
   OPEN_CLASSES,
+  parseRoadmap,
   plainText,
   readStatusBoard,
   roadmapItems,

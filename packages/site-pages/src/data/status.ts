@@ -450,6 +450,19 @@ export interface StatusBoardInput {
   generatedAt?: string;
 }
 
+/**
+ * This function gives the items of a roadmap file, as the Status page reads them. It fails when the file has no item.
+ *
+ * @throws RoadmapParseError when the cells of a row do not match the header
+ * @throws RoadmapParseError when the roadmap has no item: no table with an ID and a Status column, and no item heading
+ */
+export function parseRoadmap(markdown: string, options: LinkOptions = {}): BoardItem[] {
+  const { file = "ROADMAP.md" } = options;
+  const items = roadmapItems(markdown, options);
+  if (items.length === 0) throw new RoadmapParseError(`${file}: no table with an ID column and a Status column, and no heading "### \`id\`: Title"`);
+  return items;
+}
+
 /** This function puts the roadmap items and the GitHub part into the shape of `status.json`. */
 export function buildStatusBoard(input: StatusBoardInput): StatusBoardData {
   const { items, github, roadmap, repository, commit = null, generatedAt = new Date().toISOString() } = input;
@@ -490,8 +503,7 @@ export async function readStatusBoard(options: ReadStatusBoardOptions): Promise<
   let items: BoardItem[] = [];
   if (roadmap) {
     const markdown = readFileSync(join(repoDir, ...roadmap.split("/")), "utf8");
-    items = roadmapItems(markdown, { file: roadmap, repository, ref: commit ?? "HEAD" });
-    if (items.length === 0) throw new RoadmapParseError(`${roadmap}: no table with an ID column and a Status column, and no heading "### \`id\`: Title"`);
+    items = parseRoadmap(markdown, { file: roadmap, repository, ref: commit ?? "HEAD" });
   }
   const github = await githubOpenWork({ owner, repo, token, ...(options.fetch ? { fetch: options.fetch } : {}) });
   return buildStatusBoard({

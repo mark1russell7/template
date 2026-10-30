@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { hasTests, isGitSpecifier, isPinned, isSourcePath, parseJsonc, runChecks, type CheckOptions, type RuleResult } from "./index.ts";
+import { hasTests, isGitSpecifier, isPinned, isSourcePath, parseJsonc, roadmapOfLine, runChecks, type CheckOptions, type RuleResult } from "./index.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-rules-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -479,5 +479,38 @@ describe("tests-required", () => {
     expect(rule(root, "tests-required").status).toBe("skipped");
     commitAll(root);
     expect(rule(root, "tests-required").breaks.map((item) => `${item.file}:${String(item.line)}`)).toEqual(["package.json:4", "packages/a/vitest.config.ts:1"]);
+  });
+});
+
+describe("roadmap-parses", () => {
+  const roadmap = "# Roadmap\n\n| ID | Item | Status |\n| --- | --- | --- |\n| a1 | First | done |\n";
+  const pages = "jobs:\n  pages:\n    uses: o/template/.github/workflows/reusable-pages.yml@0123abc\n    with:\n      roadmap: docs/ROADMAP.md # the Status page\n";
+
+  it("passes a roadmap that a workflow names and that parses, and skips with no named roadmap", () => {
+    const root = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": pages, "docs/ROADMAP.md": roadmap });
+    commitAll(root);
+    expect(rule(root, "roadmap-parses").breaks).toEqual([]);
+    const none = fixture({ "package.json": { name: "one" }, ".github/workflows/ci.yml": "jobs:\n  a:\n    with:\n      roadmap: ${{ inputs.roadmap }}\n", "docs/ROADMAP.md": roadmap });
+    commitAll(none);
+    expect(rule(none, "roadmap-parses").status).toBe("skipped");
+  });
+
+  it("reports a bad row, a roadmap with no item and a missing file, with their lines", () => {
+    const root = fixture({
+      "package.json": { name: "one", conventions: { rules: { "roadmap-parses": { roadmaps: ["docs/EMPTY.md"], reason: "a second roadmap" } } } },
+      ".github/workflows/pages.yml": `${pages}      other: x\n  later:\n    with:\n      roadmap: "docs/GONE.md"\n`,
+      "docs/ROADMAP.md": `${roadmap}| a2 | Second |\n`,
+      "docs/EMPTY.md": "# Nothing\n",
+    });
+    commitAll(root);
+    expect(rule(root, "roadmap-parses").breaks.map((item) => `${item.file}:${String(item.line)}: ${item.message}`)).toEqual([
+      "docs/ROADMAP.md:6: docs/ROADMAP.md: the row has 2 cells, and the header has 3",
+      ".github/workflows/pages.yml:9: .github/workflows/pages.yml names the roadmap docs/GONE.md, and the file does not exist.",
+      expect.stringMatching(/^docs\/EMPTY\.md:undefined: docs\/EMPTY\.md: no table with an ID column/),
+    ]);
+  });
+
+  it("reads the value of a roadmap key", () => {
+    expect(["  roadmap: docs/R.md", "roadmap: './R.md' # x", "roadmap:", "roadmap: ${{ inputs.roadmap }}", "  roadmaps: x", "# roadmap: x"].map(roadmapOfLine)).toEqual(["docs/R.md", "R.md", undefined, undefined, undefined, undefined]);
   });
 });

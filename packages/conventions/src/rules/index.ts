@@ -8,6 +8,7 @@ import { noLocalPaths } from "./no-local-paths.ts";
 import { pinnedGitDeps } from "./pinned-git-deps.ts";
 import { releaseFiles } from "./release-files.ts";
 import { requiredScripts } from "./required-scripts.ts";
+import { roadmapParses } from "./roadmap-parses.ts";
 import { sourceMain } from "./source-main.ts";
 import { testsRequired } from "./tests-required.ts";
 import { tsconfigTest } from "./tsconfig-test.ts";
@@ -29,6 +30,7 @@ export const RULES: readonly Rule[] = [
   typedScripts,
   typedFiles,
   testsRequired,
+  roadmapParses,
 ];
 
-export { cuePreset, noBuildOutput, noLocalPaths, pinnedGitDeps, releaseFiles, requiredScripts, sourceMain, testsRequired, tsconfigTest, typedFiles, typedScripts, workspaceProtocol };
+export { cuePreset, noBuildOutput, noLocalPaths, pinnedGitDeps, releaseFiles, requiredScripts, roadmapParses, sourceMain, testsRequired, tsconfigTest, typedFiles, typedScripts, workspaceProtocol };

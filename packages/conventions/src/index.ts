@@ -41,6 +41,7 @@ export {
   pinnedGitDeps,
   releaseFiles,
   requiredScripts,
+  roadmapParses,
   RULES,
   sourceMain,
   testsRequired,
@@ -50,6 +51,7 @@ export {
   workspaceProtocol,
 } from "./rules/index.ts";
 export { DEFAULT_ALLOWED, HOME_PATTERNS } from "./rules/no-local-paths.ts";
+export { roadmapOfLine } from "./rules/roadmap-parses.ts";
 export { isGitSpecifier, isPinned } from "./rules/pinned-git-deps.ts";
 export { isSourcePath, pathsOf } from "./rules/source-main.ts";
 export { STRICT_OPTIONS } from "./rules/cue-preset.ts";
