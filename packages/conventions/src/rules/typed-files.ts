@@ -13,41 +13,66 @@ import { codePackages, inFolder, lineOf, readJsonc, type Break, type PackageInfo
 const TYPESCRIPT = /\.(?:[cm]?ts|tsx)$/;
 const DECLARATION = /\.d\.(?:[cm]?ts|tsx)$/;
 
-/** The commands of a typecheck that read `-p <config>` (or `tsconfig.json` without it). */
-const TSC = /(?:^|[\s;&|(])(?:\S*\/)?(?:tsc|tsgo|vue-tsc)(?=\s|$|[;&|)])([^;&|)]*)/g;
-/** `svelte-check --tsconfig <config>`. */
-const SVELTE = /(?:^|[\s;&|(])svelte-check\b[^;&|)]*?--tsconfig[=\s]+(\S+)/g;
+/** The compilers that read `-p <config>` (or `tsconfig.json` without it). */
+const COMPILERS = new Set(["tsc", "tsgo", "vue-tsc"]);
+
+/** This function gives the commands of a script: its parts between `&&`, `||`, `;`, `|` and parentheses, each as words. */
+function commandsOf(script: string): string[][] {
+  return script
+    .split(/&&|\|\||[;|()]/)
+    .map((part) => part.trim().split(/\s+/).filter((word) => word !== ""))
+    .filter((words) => words.length > 0);
+}
+
+/** The last part of a path of a command (`node_modules/.bin/tsc` gives `tsc`). */
+const commandName = (word: string): string => word.slice(word.lastIndexOf("/") + 1);
+
+/** This function gives the configs that one `tsc` command examines, from the words after the command. */
+function compilerConfigs(words: readonly string[]): string[] {
+  const configs: string[] = [];
+  let named = false;
+  for (let index = 0; index < words.length; index++) {
+    const word = words[index] as string;
+    if (word === "-p" || word === "--project") {
+      const next = words[index + 1];
+      if (next !== undefined) configs.push(next);
+      named = true;
+      index++;
+    } else if (word.startsWith("-p=") || word.startsWith("--project=")) {
+      configs.push(word.slice(word.indexOf("=") + 1));
+      named = true;
+    } else if (word === "-b" || word === "--build") {
+      named = true;
+      let more = 0;
+      while (words[index + 1] !== undefined && !(words[index + 1] as string).startsWith("-")) {
+        configs.push(words[index + 1] as string);
+        index++;
+        more++;
+      }
+      if (more === 0) configs.push("tsconfig.json");
+    }
+  }
+  if (!named) configs.push("tsconfig.json");
+  return configs;
+}
 
 /** This function gives the configs that one `typecheck` script examines, relative to the folder of the package. */
 export function configsOfScript(script: string): string[] {
   const configs: string[] = [];
-  for (const match of script.matchAll(TSC)) {
-    const words = (match[1] ?? "").trim().split(/\s+/).filter((word) => word !== "");
-    let named = false;
-    for (let index = 0; index < words.length; index++) {
-      const word = words[index] as string;
-      if (word === "-p" || word === "--project") {
-        const next = words[index + 1];
-        if (next !== undefined) configs.push(next);
-        named = true;
-        index++;
-      } else if (word.startsWith("-p=") || word.startsWith("--project=")) {
-        configs.push(word.slice(word.indexOf("=") + 1));
-        named = true;
-      } else if (word === "-b" || word === "--build") {
-        named = true;
-        let more = 0;
-        while (words[index + 1] !== undefined && !(words[index + 1] as string).startsWith("-")) {
-          configs.push(words[index + 1] as string);
-          index++;
-          more++;
-        }
-        if (more === 0) configs.push("tsconfig.json");
-      }
+  for (const words of commandsOf(script)) {
+    const at = words.findIndex((word) => COMPILERS.has(commandName(word)) || commandName(word) === "svelte-check");
+    if (at < 0) continue;
+    const rest = words.slice(at + 1);
+    if (commandName(words[at] as string) !== "svelte-check") {
+      configs.push(...compilerConfigs(rest));
+      continue;
     }
-    if (!named) configs.push("tsconfig.json");
+    for (let index = 0; index < rest.length; index++) {
+      const word = rest[index] as string;
+      if (word === "--tsconfig" && rest[index + 1] !== undefined) configs.push(rest[index + 1] as string);
+      else if (word.startsWith("--tsconfig=")) configs.push(word.slice("--tsconfig=".length));
+    }
   }
-  for (const match of script.matchAll(SVELTE)) if (match[1] !== undefined) configs.push(match[1]);
   return configs.map((config) => config.replace(/^["']|["']$/g, ""));
 }
 

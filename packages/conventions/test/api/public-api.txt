@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 62 names
+## . (build/index.d.ts): 66 names
 
 type AuditSource: build/index.d.ts#AuditSource
 type Break: build/index.d.ts#Break
@@ -31,6 +31,7 @@ USAGE: build/index.d.ts#USAGE
 annotations: build/index.d.ts#annotations
 cleanPath: build/index.d.ts#cleanPath
 codePackages: build/index.d.ts#codePackages
+configsOfScript: build/index.d.ts#configsOfScript
 createContext: build/index.d.ts#createContext
 cuePreset: build/index.d.ts#cuePreset
 defaultOptions: build/index.d.ts#defaultOptions
@@ -61,10 +62,13 @@ requiredScripts: build/index.d.ts#requiredScripts
 runChecks: build/index.d.ts#runChecks
 runCli: build/index.d.ts#runCli
 runGit: build/index.d.ts#runGit
+scriptsOf: build/index.d.ts#scriptsOf
 sourceMain: build/index.d.ts#sourceMain
 specifiersOf: build/index.d.ts#specifiersOf
 summaryMarkdown: build/index.d.ts#summaryMarkdown
+testsRequired: build/index.d.ts#testsRequired
 tsconfigTest: build/index.d.ts#tsconfigTest
+typedFiles: build/index.d.ts#typedFiles
 typedScripts: build/index.d.ts#typedScripts
 workspaceGlobs: build/index.d.ts#workspaceGlobs
 workspaceProtocol: build/index.d.ts#workspaceProtocol
@@ -217,6 +221,9 @@ export declare const cleanPath: (path: string) => string;
 ### build/index.d.ts#codePackages
 export declare function codePackages(context: Pick<RuleContext, "rootPackage" | "packages">): readonly PackageInfo[];
 
+### build/index.d.ts#configsOfScript
+export declare function configsOfScript(script: string): string[];
+
 ### build/index.d.ts#createContext
 export declare function createContext(root: string, config: ConventionsConfig, options?: Pick<CheckOptions, "base" | "env">): RuleContext;
 
@@ -307,6 +314,9 @@ export declare function runCli(args: readonly string[], io: CliIo): number;
 ### build/index.d.ts#runGit
 export declare function runGit(root: string, args: readonly string[]): string | undefined;
 
+### build/index.d.ts#scriptsOf
+export declare function scriptsOf(scripts: Readonly<Record<string, unknown>>, name: string, seen?: Set<string>): string[];
+
 ### build/index.d.ts#sourceMain
 export declare const sourceMain: Rule;
 
@@ -316,8 +326,14 @@ export declare function specifiersOf(manifest: Manifest, field: string): [string
 ### build/index.d.ts#summaryMarkdown
 export declare function summaryMarkdown(result: CheckResult): string;
 
+### build/index.d.ts#testsRequired
+export declare const testsRequired: Rule;
+
 ### build/index.d.ts#tsconfigTest
 export declare const tsconfigTest: Rule;
+
+### build/index.d.ts#typedFiles
+export declare const typedFiles: Rule;
 
 ### build/index.d.ts#typedScripts
 export declare const typedScripts: Rule;
