@@ -272,6 +272,9 @@ importers:
       '@mark1russell7/cue':
         specifier: ^1.0.2
         version: 1.0.2
+      '@mark1russell7/site-pages':
+        specifier: workspace:*
+        version: link:../site-pages
       '@types/node':
         specifier: ^26.6.4
         version: 26.6.5

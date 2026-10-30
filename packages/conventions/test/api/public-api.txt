@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 66 names
+## . (build/index.d.ts): 68 names
 
 type AuditSource: build/index.d.ts#AuditSource
 type Break: build/index.d.ts#Break
@@ -59,6 +59,8 @@ readConfig: build/index.d.ts#readConfig
 readJsonc: build/index.d.ts#readJsonc
 releaseFiles: build/index.d.ts#releaseFiles
 requiredScripts: build/index.d.ts#requiredScripts
+roadmapOfLine: build/index.d.ts#roadmapOfLine
+roadmapParses: build/index.d.ts#roadmapParses
 runChecks: build/index.d.ts#runChecks
 runCli: build/index.d.ts#runCli
 runGit: build/index.d.ts#runGit
@@ -304,6 +306,12 @@ export declare const releaseFiles: Rule;
 
 ### build/index.d.ts#requiredScripts
 export declare const requiredScripts: Rule;
+
+### build/index.d.ts#roadmapOfLine
+export declare function roadmapOfLine(line: string): string | undefined;
+
+### build/index.d.ts#roadmapParses
+export declare const roadmapParses: Rule;
 
 ### build/index.d.ts#runChecks
 export declare function runChecks(options: CheckOptions): CheckResult;
