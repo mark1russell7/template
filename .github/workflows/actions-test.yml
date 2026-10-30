@@ -29,6 +29,10 @@ on:
       - ".github/workflows/reusable-pages.yml"
       - ".github/workflows/reusable-release-*.yml"
       - "scripts/release/**"
+      # The test site installs the workspace, so a change of a package file can break it
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "packages/*/package.json"
   pull_request:
     paths:
       - ".github/actions/**"
@@ -36,6 +40,10 @@ on:
       - ".github/workflows/reusable-pages.yml"
       - ".github/workflows/reusable-release-*.yml"
       - "scripts/release/**"
+      # The test site installs the workspace, so a change of a package file can break it
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "packages/*/package.json"
   workflow_dispatch:
 
 permissions:
