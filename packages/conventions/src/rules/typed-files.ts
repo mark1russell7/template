@@ -132,9 +132,14 @@ function referencesOf(config: string): string[] {
 /** A config file of a tool (`vitest.config.ts`), with its extension. */
 const CONFIG_FILE = /\.config(\.[cm]?ts)$/;
 
+/** A `rootDir` that is the folder of the tsconfig, so that the config files at the root are in it. */
+const ROOT_DIRS = new Set([".", "./", "${configDir}", "${configDir}/"]);
+
 /**
  * This function gives the edit that adds the config files at the root of a package to its `tsconfig.test.json`: the
- * include `*.config.ts` and `rootDir: "."`. It gives no edit for a tsconfig with comments, so that no comment goes.
+ * include `*.config.ts`, and `rootDir: "."` when the `rootDir` is a subfolder. The edit changes only these values and
+ * keeps the format of the file. It gives no edit for a tsconfig with comments, so that no comment goes, and no edit when
+ * the changed text does not parse as the intended config.
  */
 function configEdit(root: string, tsconfig: string, extension: string): Edit[] {
   const text = readFileSync(tsconfig, "utf8");
@@ -144,12 +149,32 @@ function configEdit(root: string, tsconfig: string, extension: string): Edit[] {
   } catch {
     return [];
   }
-  if (!Array.isArray(json.include)) return [];
-  const glob = `*.config${extension}`;
-  const include = json.include.includes(glob) ? json.include : [...json.include, glob];
-  const compilerOptions = { ...json.compilerOptions, rootDir: "." };
+  const globs = json.include;
+  if (!Array.isArray(globs)) return [];
+  const prefix = globs.length > 0 && globs.every((glob) => typeof glob === "string" && glob.startsWith("${configDir}/")) ? "${configDir}/" : "";
+  const glob = `${prefix}*.config${extension}`;
   const eol = text.includes("\r\n") ? "\r\n" : "\n";
-  const after = `${JSON.stringify({ ...json, compilerOptions, include }, null, 2)}\n`.replace(/\n/g, eol);
+  let after = text;
+  if (!globs.includes(glob)) {
+    after = after.replace(/("include"\s*:\s*\[)([^\]]*)\]/, (_all, start: string, items: string) => {
+      const kept = items.replace(/\s+$/, "");
+      const end = items.slice(kept.length);
+      if (kept.trim() === "") return `${start}${JSON.stringify(glob)}]`;
+      const indent = kept.includes("\n") ? (/\n([ \t]*)[^\n]*$/.exec(kept)?.[1] ?? "") : undefined;
+      return `${start}${kept},${indent === undefined ? " " : `${eol}${indent}`}${JSON.stringify(glob)}${end}]`;
+    });
+  }
+  const rootDir = json.compilerOptions?.["rootDir"];
+  const moveRoot = typeof rootDir === "string" && !ROOT_DIRS.has(rootDir);
+  if (moveRoot) after = after.replace(/("rootDir"\s*:\s*)"(?:[^"\\]|\\.)*"/, '$1"."');
+  const intended = { ...json, ...(moveRoot ? { compilerOptions: { ...json.compilerOptions, rootDir: "." } } : {}), include: globs.includes(glob) ? globs : [...globs, glob] };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(after);
+  } catch {
+    return [];
+  }
+  if (JSON.stringify(parsed) !== JSON.stringify(intended)) return [];
   return after === text ? [] : [{ file: fromRoot(root, tsconfig), before: text, after }];
 }
 

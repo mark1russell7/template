@@ -131,6 +131,41 @@ describe("conventions fix", () => {
     expect(fixed.result.rules[0]?.breaks.map((item) => item.file)).toEqual(["packages/b/vitest.config.ts"]);
   });
 
+  it("adds only the include in the style of the tsconfig, and keeps a rootDir that is its folder", () => {
+    const lines = [
+      "{",
+      '  "extends": "./tsconfig.json",',
+      '  "compilerOptions": { "noEmit": true, "rootDir": "${configDir}" },',
+      '  "include": ["${configDir}/src/**/*", "${configDir}/test/**/*"],',
+      '  "exclude": ["${configDir}/dist"]',
+      "}",
+      "",
+    ];
+    const root = repo({
+      "package.json": { name: "one", scripts: { typecheck: "tsc -p tsconfig.test.json" } },
+      "tsconfig.json": { compilerOptions: { noEmit: true, allowImportingTsExtensions: true, module: "nodenext" } },
+      "tsconfig.test.json": lines.join("\n"),
+      "src/a.ts": "export const a = 1;\n",
+      "vitest.config.ts": "export default {};\n",
+    });
+    const fixed = runFix({ root, only: ["typed-files"] });
+    lines[3] = '  "include": ["${configDir}/src/**/*", "${configDir}/test/**/*", "${configDir}/*.config.ts"],';
+    expect(read(root, "tsconfig.test.json")).toBe(lines.join("\n"));
+    expect(fixed.result.failed).toBe(false);
+  });
+
+  it("adds the include on its own line in a list of lines", () => {
+    const text = '{\r\n  "include": [\r\n    "src"\r\n  ]\r\n}\r\n';
+    const root = repo({
+      "package.json": { name: "one", scripts: { typecheck: "tsc -p tsconfig.test.json" } },
+      "tsconfig.test.json": text,
+      "src/a.ts": "export const a = 1;\n",
+      "vitest.config.ts": "export default {};\n",
+    });
+    runFix({ root, only: ["typed-files"] });
+    expect(read(root, "tsconfig.test.json")).toBe('{\r\n  "include": [\r\n    "src",\r\n    "*.config.ts"\r\n  ]\r\n}\r\n');
+  });
+
   it("does not write an edit when the file changed after the check", () => {
     const root = repo({ "package.json": { name: "one" }, "a.txt": "old\n" });
     const stale: Rule = {
