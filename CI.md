@@ -226,7 +226,7 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: "23 5 * * 1"
+    - cron: "<minute> 5 * * 1" # the minute that the rule runner-budget gives
   workflow_dispatch:
 
 permissions: {}

@@ -7,9 +7,10 @@ on:
   pull_request:
   push:
     branches: [main]
-  # A weekly scan finds the new advisories for the dependencies that do not change
+  # A weekly scan finds the new advisories for the dependencies that do not change. The minute comes from the
+  # repository and the file (the rule runner-budget), so the scans of the repositories do not start together.
   schedule:
-    - cron: "23 5 * * 1"
+    - cron: "28 5 * * 1"
   workflow_dispatch:
 
 permissions: {}

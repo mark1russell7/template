@@ -32,6 +32,8 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
+      # The runners are shared by all repositories of the account (the rule runner-budget)
+      max-parallel: 3
       matrix:
         preset: [node, node-cjs, ts, vite, react, service]
     env:

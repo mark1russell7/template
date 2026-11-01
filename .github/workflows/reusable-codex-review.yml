@@ -191,6 +191,11 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+    # The posts of one pull request wait for each other. No post cancels another, so each review gets its
+    # comment and the label goes away.
+    concurrency:
+      group: codex-post-${{ github.repository }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
     steps:
       - name: Get the post script
         if: needs.review.result == 'success' && needs.review.outputs.run == 'true'

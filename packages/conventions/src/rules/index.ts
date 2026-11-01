@@ -9,6 +9,7 @@ import { pinnedGitDeps } from "./pinned-git-deps.ts";
 import { releaseFiles } from "./release-files.ts";
 import { requiredScripts } from "./required-scripts.ts";
 import { roadmapParses } from "./roadmap-parses.ts";
+import { runnerBudget } from "./runner-budget.ts";
 import { sourceMain } from "./source-main.ts";
 import { testsRequired } from "./tests-required.ts";
 import { tsconfigTest } from "./tsconfig-test.ts";
@@ -31,6 +32,7 @@ export const RULES: readonly Rule[] = [
   typedFiles,
   testsRequired,
   roadmapParses,
+  runnerBudget,
 ];
 
-export { cuePreset, noBuildOutput, noLocalPaths, pinnedGitDeps, releaseFiles, requiredScripts, roadmapParses, sourceMain, testsRequired, tsconfigTest, typedFiles, typedScripts, workspaceProtocol };
+export { cuePreset, noBuildOutput, noLocalPaths, pinnedGitDeps, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sourceMain, testsRequired, tsconfigTest, typedFiles, typedScripts, workspaceProtocol };
