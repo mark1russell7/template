@@ -136,10 +136,10 @@ const CONFIG_FILE = /\.config(\.[cm]?ts)$/;
 const ROOT_DIRS = new Set([".", "./", "${configDir}", "${configDir}/"]);
 
 /**
- * This function gives the edit that adds the config files at the root of a package to its `tsconfig.test.json`: the
- * include `*.config.ts`, and `rootDir: "."` when the `rootDir` is a subfolder. The edit changes only these values and
- * keeps the format of the file. It gives no edit for a tsconfig with comments, so that no comment goes, and no edit when
- * the changed text does not parse as the intended config.
+ * This function gives the edit that adds the config files at the root of a package to its `tsconfig.test.json`. It adds
+ * the include `*.config.ts`. When the `rootDir` is a subfolder, it sets `rootDir: "."`. The edit changes only these
+ * values and keeps the format of the file. It gives no edit for a tsconfig with comments, so that no comment goes. It
+ * also gives no edit when the changed text does not parse as the intended config.
  */
 function configEdit(root: string, tsconfig: string, extension: string): Edit[] {
   const text = readFileSync(tsconfig, "utf8");
