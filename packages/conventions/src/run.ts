@@ -148,8 +148,8 @@ export function formatResult(result: CheckResult): string {
   return `${out.join("\n")}\n`;
 }
 
-/** This function escapes the text of a cell of a Markdown table. */
-const cell = (text: string): string => text.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+/** This function escapes the text of a cell of a Markdown table: first each backslash, then each `|`. */
+const cell = (text: string): string => text.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 
 /** This function gives the result as Markdown for the summary of a GitHub Actions run. */
 export function summaryMarkdown(result: CheckResult): string {
