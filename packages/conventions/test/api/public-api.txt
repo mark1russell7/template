@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 71 names
+## . (build/index.d.ts): 75 names
 
 type AuditSource: build/index.d.ts#AuditSource
 type Break: build/index.d.ts#Break
@@ -14,6 +14,8 @@ type CliIo: build/index.d.ts#CliIo
 type ConventionsConfig: build/index.d.ts#ConventionsConfig
 DEFAULT_ALLOWED: build/index.d.ts#DEFAULT_ALLOWED
 DEPENDENCY_FIELDS: build/index.d.ts#DEPENDENCY_FIELDS
+type Edit: build/index.d.ts#Edit
+type FixResult: build/index.d.ts#FixResult
 HOME_PATTERNS: build/index.d.ts#HOME_PATTERNS
 type Manifest: build/index.d.ts#Manifest
 type OptionSpec: build/index.d.ts#OptionSpec
@@ -58,12 +60,14 @@ pinnedGitDeps: build/index.d.ts#pinnedGitDeps
 readConfig: build/index.d.ts#readConfig
 readJsonc: build/index.d.ts#readJsonc
 releaseFiles: build/index.d.ts#releaseFiles
+replaceLine: build/index.d.ts#replaceLine
 repositoryOfRemote: build/index.d.ts#repositoryOfRemote
 requiredScripts: build/index.d.ts#requiredScripts
 roadmapOfLine: build/index.d.ts#roadmapOfLine
 roadmapParses: build/index.d.ts#roadmapParses
 runChecks: build/index.d.ts#runChecks
 runCli: build/index.d.ts#runCli
+runFix: build/index.d.ts#runFix
 runGit: build/index.d.ts#runGit
 runnerBudget: build/index.d.ts#runnerBudget
 scheduleMinute: build/index.d.ts#scheduleMinute
@@ -97,6 +101,7 @@ interface Break {
   readonly line?: number;
   readonly message: string;
   readonly fix?: string;
+  readonly edits?: readonly Edit[];
 }
 
 ### build/index.d.ts#CheckOptions
@@ -133,6 +138,20 @@ export declare const DEFAULT_ALLOWED: readonly string[];
 
 ### build/index.d.ts#DEPENDENCY_FIELDS
 export declare const DEPENDENCY_FIELDS: readonly ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
+
+### build/index.d.ts#Edit
+interface Edit {
+  readonly file: string;
+  readonly before: string;
+  readonly after: string;
+}
+
+### build/index.d.ts#FixResult
+interface FixResult {
+  readonly changed: readonly string[];
+  readonly passes: number;
+  readonly result: CheckResult;
+}
 
 ### build/index.d.ts#HOME_PATTERNS
 export declare const HOME_PATTERNS: readonly RegExp[];
@@ -307,6 +326,9 @@ export declare function readJsonc(file: string): unknown;
 ### build/index.d.ts#releaseFiles
 export declare const releaseFiles: Rule;
 
+### build/index.d.ts#replaceLine
+export declare function replaceLine(text: string, line: number, lines: readonly string[]): string;
+
 ### build/index.d.ts#repositoryOfRemote
 export declare function repositoryOfRemote(url: string): string | undefined;
 
@@ -324,6 +346,9 @@ export declare function runChecks(options: CheckOptions): CheckResult;
 
 ### build/index.d.ts#runCli
 export declare function runCli(args: readonly string[], io: CliIo): number;
+
+### build/index.d.ts#runFix
+export declare function runFix(options: CheckOptions): FixResult;
 
 ### build/index.d.ts#runGit
 export declare function runGit(root: string, args: readonly string[]): string | undefined;

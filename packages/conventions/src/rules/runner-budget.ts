@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { byCode } from "../workspace.ts";
-import type { Break, Rule } from "../rule.ts";
+import { replaceLine, type Break, type Edit, type Rule } from "../rule.ts";
 
 /** A workflow file. */
 const WORKFLOW = /^\.github\/workflows\/[^/]+\.ya?ml$/;
@@ -117,11 +117,24 @@ function jobsOf(lines: readonly string[]): Job[] {
 const hasTopGroup = (lines: readonly string[]): boolean => lines.some((line) => indentOf(line) === 0 && line.startsWith("concurrency:"));
 
 /**
+ * This function gives the edit that adds a concurrency group at the top of a workflow, before `jobs:`. A new run of a pull
+ * request stops the old run. A run of another event waits for the old run, so that no release or scheduled run stops.
+ */
+function groupEdits(file: string, text: string, lines: readonly string[]): Edit[] {
+  const jobs = lines.findIndex((line) => indentOf(line) === 0 && line.startsWith("jobs:"));
+  if (jobs < 0) return [];
+  const pad = " ".repeat(childIndent(lines, jobs) ?? 2);
+  const original = text.split(/\r?\n/)[jobs] ?? "jobs:";
+  const group = ["concurrency:", pad + "group: ${{ github.workflow }}-${{ github.ref }}", pad + "cancel-in-progress: ${{ github.event_name == 'pull_request' }}", "", original];
+  return [{ file, before: text, after: replaceLine(text, jobs + 1, group) }];
+}
+
+/**
  * This function gives the breaks of the concurrency groups. A workflow with no group at the top needs one in each job.
  * A job that calls a shared workflow of `grouped` gets its group from the jobs of that workflow. A shared workflow gets
  * its group from its caller, but a shared workflow of `grouped` has a group in each job.
  */
-function concurrencyBreaks(file: string, lines: readonly string[], grouped: readonly string[]): Break[] {
+function concurrencyBreaks(file: string, text: string, lines: readonly string[], grouped: readonly string[]): Break[] {
   const name = file.slice(file.lastIndexOf("/") + 1);
   const jobs = jobsOf(lines);
   if (isShared(lines)) {
@@ -129,23 +142,33 @@ function concurrencyBreaks(file: string, lines: readonly string[], grouped: read
     return jobs.filter((job) => !job.grouped).map((job) => ({ file, line: job.line, message: `${file}: the job ${job.name} has no concurrency group, and its callers rely on it (the option grouped).` }));
   }
   if (hasTopGroup(lines)) return [];
-  return jobs
-    .filter((job) => !job.grouped && !(job.calls !== undefined && grouped.includes(job.calls)))
-    .map((job) => ({ file, line: job.line, message: `${file}: the job ${job.name} has no concurrency group, and the workflow has none.` }));
+  const missing = jobs.filter((job) => !job.grouped && !(job.calls !== undefined && grouped.includes(job.calls)));
+  const edits = missing.length === 0 ? [] : groupEdits(file, text, lines);
+  return missing.map((job) => ({ file, line: job.line, message: `${file}: the job ${job.name} has no concurrency group, and the workflow has none.`, edits }));
 }
 
 /** This function gives the breaks of the matrices: each `strategy` with a `matrix` has a `max-parallel` of `limit` or less. */
-function matrixBreaks(file: string, lines: readonly string[], limit: number): Break[] {
+function matrixBreaks(file: string, text: string, lines: readonly string[], limit: number): Break[] {
   const breaks: Break[] = [];
+  const originals = text.split(/\r?\n/);
   lines.forEach((line, index) => {
     if (keyValue(line, "strategy") === undefined) return;
     const keyIndent = childIndent(lines, index);
-    const keys = lines.slice(index + 1, blockEnd(lines, index)).filter((text) => indentOf(text) === keyIndent);
-    if (!keys.some((text) => keyValue(text, "matrix") !== undefined)) return;
-    const raw = keys.map((text) => keyValue(text, "max-parallel")).find((value) => value !== undefined);
+    if (keyIndent === undefined) return;
+    const keys: number[] = [];
+    for (let i = index + 1; i < blockEnd(lines, index); i++) if ((lines[i] ?? "").trim() !== "" && indentOf(lines[i] ?? "") === keyIndent) keys.push(i);
+    if (!keys.some((i) => keyValue(lines[i] ?? "", "matrix") !== undefined)) return;
+    const at = keys.find((i) => keyValue(lines[i] ?? "", "max-parallel") !== undefined);
+    const raw = at === undefined ? undefined : keyValue(lines[at] ?? "", "max-parallel");
     const value = raw === undefined ? Number.NaN : Number(raw);
-    if (raw === undefined) breaks.push({ file, line: index + 1, message: `${file}: a matrix has no max-parallel.` });
-    else if (!Number.isInteger(value) || value < 1 || value > limit) breaks.push({ file, line: index + 1, message: `${file}: a matrix has max-parallel ${raw}, and the most is ${String(limit)}.` });
+    const wanted = `${" ".repeat(keyIndent)}max-parallel: ${String(limit)}`;
+    if (at === undefined || raw === undefined) {
+      const after = replaceLine(text, index + 1, [originals[index] ?? line, wanted]);
+      breaks.push({ file, line: index + 1, message: `${file}: a matrix has no max-parallel.`, edits: [{ file, before: text, after }] });
+    } else if (!Number.isInteger(value) || value < 1 || value > limit) {
+      const after = replaceLine(text, at + 1, [wanted]);
+      breaks.push({ file, line: index + 1, message: `${file}: a matrix has max-parallel ${raw}, and the most is ${String(limit)}.`, edits: [{ file, before: text, after }] });
+    }
   });
   return breaks;
 }
@@ -173,8 +196,9 @@ function startsPerHour(field: string): number {
  * This function gives the breaks of the schedules: the minute of each `cron` is the minute of the repository and the file. A
  * schedule that starts more than once in each hour starts at equal steps from that minute (`18,48` for each 30 minutes).
  */
-function cronBreaks(file: string, lines: readonly string[], minute: number): Break[] {
+function cronBreaks(file: string, text: string, lines: readonly string[], minute: number): Break[] {
   const breaks: Break[] = [];
+  const originals = text.split(/\r?\n/);
   lines.forEach((line, index) => {
     const value = keyValue(line, "cron");
     if (value === undefined) return;
@@ -182,7 +206,9 @@ function cronBreaks(file: string, lines: readonly string[], minute: number): Bre
     const wanted = minuteField(minute, startsPerHour(fields[0] ?? ""));
     if (fields[0] === wanted) return;
     const expected = [wanted, ...fields.slice(1)].join(" ");
-    breaks.push({ file, line: index + 1, message: `${file}: the schedule "${value}" starts at minute ${fields[0] ?? "?"}, and the minute of this repository and file is ${String(minute)}.`, fix: `cron: "${expected}"` });
+    const original = originals[index] ?? line;
+    const edits: Edit[] = original.includes(value) ? [{ file, before: text, after: replaceLine(text, index + 1, [original.replace(value, () => expected)]) }] : [];
+    breaks.push({ file, line: index + 1, message: `${file}: the schedule "${value}" starts at minute ${fields[0] ?? "?"}, and the minute of this repository and file is ${String(minute)}.`, fix: `cron: "${expected}"`, edits });
   });
   return breaks;
 }
@@ -221,11 +247,11 @@ export const runnerBudget: Rule = {
         continue;
       }
       const lines = text.split(/\r?\n/).map((line) => (line.trimStart().startsWith("#") ? "" : line));
-      breaks.push(...matrixBreaks(file, lines, limit), ...concurrencyBreaks(file, lines, grouped));
+      breaks.push(...matrixBreaks(file, text, lines, limit), ...concurrencyBreaks(file, text, lines, grouped));
       if (options["minute"] !== false) {
         const schedules = lines.some((line) => keyValue(line, "cron") !== undefined);
         if (schedules && repository === undefined) breaks.push({ file, message: `${file} has a schedule, and the rule cannot find the repository (GITHUB_REPOSITORY, or a GitHub URL of the remote origin).` });
-        else if (repository !== undefined) breaks.push(...cronBreaks(file, lines, scheduleMinute(repository, file)));
+        else if (repository !== undefined) breaks.push(...cronBreaks(file, text, lines, scheduleMinute(repository, file)));
       }
     }
     return breaks;

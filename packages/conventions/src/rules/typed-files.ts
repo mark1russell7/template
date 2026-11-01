@@ -3,11 +3,11 @@
  * script examines.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { byCode } from "../workspace.ts";
-import { codePackages, inFolder, lineOf, readJsonc, type Break, type PackageInfo, type Rule } from "../rule.ts";
+import { codePackages, inFolder, lineOf, readJsonc, type Break, type Edit, type PackageInfo, type Rule } from "../rule.ts";
 
 /** A TypeScript source: `.ts`, `.tsx`, `.mts` or `.cts`, and not a declaration file. */
 const TYPESCRIPT = /\.(?:[cm]?ts|tsx)$/;
@@ -129,6 +129,55 @@ function referencesOf(config: string): string[] {
   return references.flatMap((item: unknown) => (typeof item === "object" && item !== null && typeof (item as { path?: unknown }).path === "string" ? [resolve(dirname(config), (item as { path: string }).path)] : []));
 }
 
+/** A config file of a tool (`vitest.config.ts`), with its extension. */
+const CONFIG_FILE = /\.config(\.[cm]?ts)$/;
+
+/** A `rootDir` that is the folder of the tsconfig, so that the config files at the root are in it. */
+const ROOT_DIRS = new Set([".", "./", "${configDir}", "${configDir}/"]);
+
+/**
+ * This function gives the edit that adds the config files at the root of a package to its `tsconfig.test.json`. It adds
+ * the include `*.config.ts`. When the `rootDir` is a subfolder, it sets `rootDir: "."`. The edit changes only these
+ * values and keeps the format of the file. It gives no edit for a tsconfig with comments, so that no comment goes. It
+ * also gives no edit when the changed text does not parse as the intended config.
+ */
+function configEdit(root: string, tsconfig: string, extension: string): Edit[] {
+  const text = readFileSync(tsconfig, "utf8");
+  let json: { include?: unknown; compilerOptions?: Record<string, unknown> };
+  try {
+    json = JSON.parse(text) as typeof json;
+  } catch {
+    return [];
+  }
+  const globs = json.include;
+  if (!Array.isArray(globs)) return [];
+  const prefix = globs.length > 0 && globs.every((glob) => typeof glob === "string" && glob.startsWith("${configDir}/")) ? "${configDir}/" : "";
+  const glob = `${prefix}*.config${extension}`;
+  const eol = text.includes("\r\n") ? "\r\n" : "\n";
+  let after = text;
+  if (!globs.includes(glob)) {
+    after = after.replace(/("include"\s*:\s*\[)([^\]]*)\]/, (_all, start: string, items: string) => {
+      const kept = items.replace(/\s+$/, "");
+      const end = items.slice(kept.length);
+      if (kept.trim() === "") return `${start}${JSON.stringify(glob)}]`;
+      const indent = kept.includes("\n") ? (/\n([ \t]*)[^\n]*$/.exec(kept)?.[1] ?? "") : undefined;
+      return `${start}${kept},${indent === undefined ? " " : `${eol}${indent}`}${JSON.stringify(glob)}${end}]`;
+    });
+  }
+  const rootDir = json.compilerOptions?.["rootDir"];
+  const moveRoot = typeof rootDir === "string" && !ROOT_DIRS.has(rootDir);
+  if (moveRoot) after = after.replace(/("rootDir"\s*:\s*)"(?:[^"\\]|\\.)*"/, '$1"."');
+  const intended = { ...json, ...(moveRoot ? { compilerOptions: { ...json.compilerOptions, rootDir: "." } } : {}), include: globs.includes(glob) ? globs : [...globs, glob] };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(after);
+  } catch {
+    return [];
+  }
+  if (JSON.stringify(parsed) !== JSON.stringify(intended)) return [];
+  return after === text ? [] : [{ file: fromRoot(root, tsconfig), before: text, after }];
+}
+
 /** The path of `file` relative to `root`, with `/`. */
 const fromRoot = (root: string, file: string): string => relative(root, file).split("\\").join("/");
 
@@ -152,6 +201,8 @@ export const typedFiles: Rule = {
     const breaks: Break[] = [];
     // The configs that a typecheck examines, as absolute paths
     const queue: string[] = [];
+    // The tsconfig.test.json of each package folder that its typecheck names, for the edits
+    const testConfigs = new Map<string, string>();
     const packages: PackageInfo[] = [context.rootPackage, ...codePackages(context).filter((info) => info !== context.rootPackage)];
     for (const info of packages) {
       const scripts = info.manifest["scripts"];
@@ -166,6 +217,7 @@ export const typedFiles: Rule = {
           continue;
         }
         queue.push(path);
+        if (basename(path) === "tsconfig.test.json" && resolve(dirname(path)) === resolve(info.dir)) testConfigs.set(info.folder, path);
       }
     }
     const extra = Array.isArray(options["configs"]) ? options["configs"] : [];
@@ -194,7 +246,12 @@ export const typedFiles: Rule = {
       breaks.push({ file: "package.json", message: "No typecheck script names a tsconfig, so no TypeScript file has a type check.", fix: "Add a script typecheck (`tsc -p tsconfig.json`) to each package." });
     }
     for (const file of files) {
-      if (!covered.has(file)) breaks.push({ file, message: `${file} is in no tsconfig that a typecheck script examines.` });
+      if (covered.has(file)) continue;
+      const folder = file.includes("/") ? file.slice(0, file.lastIndexOf("/")) : "";
+      const extension = CONFIG_FILE.exec(file)?.[1];
+      const tsconfig = testConfigs.get(folder);
+      const edits = extension === undefined || tsconfig === undefined ? [] : configEdit(context.root, tsconfig, extension);
+      breaks.push({ file, message: `${file} is in no tsconfig that a typecheck script examines.`, edits });
     }
     return breaks;
   },

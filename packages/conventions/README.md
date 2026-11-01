@@ -14,10 +14,19 @@ Add the script `"check:conventions": "conventions check"` to the root `package.j
 
 ```sh
 pnpm exec conventions check
+pnpm exec conventions fix
 pnpm exec conventions --list
 ```
 
 Each break shows the file, the line, the rule and the fix. In GitHub Actions, the check also writes an annotation on the line of each break. It also writes a table of the rules to the summary of the run (`GITHUB_STEP_SUMMARY`). The exit code is 1 when a rule has a break.
+
+`conventions fix` writes the fixes that the rules know, and checks again. It continues until no fix applies. Each fix is an exact change of a file, and the fix writes it only when the file did not change after the check. These breaks have a fix:
+
+- `runner-budget`: the minute of a schedule, a `max-parallel` of a matrix, and a concurrency group at the top of a workflow. A new run of a pull request stops the old run. A run of another event waits for the old run.
+- `tests-required`: the option `passWithNoTests` in a config or a script, in a package with test files. A package with no tests needs a person, who removes its test script.
+- `typed-files`: a config file at the root of a package (`vitest.config.ts`). The fix adds `*.config.ts` and `rootDir: "."` to the `tsconfig.test.json` of the package, when that file has no comments.
+
+The text output marks each break that has a fix. In the JSON output, such a break has `fixable: true`. The release train starts `conventions fix` in its update pull requests. Thus a break that a script can fix does not block a repository.
 
 ## Rules
 
@@ -98,6 +107,7 @@ An unknown rule, an unknown option, or an exception or a changed option without 
 | Option | What it sets |
 |---|---|
 | `check` | Start each rule. |
+| `fix` | Write the fixes of the breaks that have one, and check again. The exit code is 1 when a break stays. |
 | `--list` | Show each rule: the reason, the fix, the options, the state and the audit rows. |
 | `--root <folder>` | The root of the repository. The default is the current folder. |
 | `--rule <id>` | Only this rule. Use it again for more rules. |
@@ -106,13 +116,16 @@ An unknown rule, an unknown option, or an exception or a changed option without 
 
 ## Add a rule
 
-A rule is a module in `src/rules/` that exports a `Rule`. A `Rule` has an `id`, a `title`, a `reason`, a `fix` and its audit `sources`. It also has its `options` with defaults, and a function `check(context, options)`. The function gives a list of breaks, or `{ skipped: "<reason>" }`. Add the rule to `RULES` in `src/rules/index.ts`, with a test of a case that passes and a case that breaks. Add a rule only when 3 or more repositories tell it and a script examines it exactly.
+A rule is a module in `src/rules/` that exports a `Rule`. A `Rule` has an `id`, a `title`, a `reason`, a `fix` and its audit `sources`. It also has its `options` with defaults, and a function `check(context, options)`. The function gives a list of breaks, or `{ skipped: "<reason>" }`. 
+
+A break can have `edits`: each edit gives a file, its whole text `before` and its whole text `after`. Give an edit only when the fix is certain, and test it with `runFix`. Add the rule to `RULES` in `src/rules/index.ts`, with a test of a case that passes and a case that breaks. Add a rule only when 3 or more repositories tell it and a script examines it exactly.
 
 ## Library
 
 The package also exports the functions of the tool:
 
-- `runChecks(options)` starts the rules and gives the result of each rule. `runCli(args, io)` is the bin.
+- `runChecks(options)` starts the rules and gives the result of each rule. `runFix(options)` writes the edits and gives the changed files and the last result. `runCli(args, io)` is the bin.
+- `replaceLine(text, line, lines)` gives the text with one line replaced, for the edits of a rule.
 - `formatResult(result)`, `summaryMarkdown(result)`, `annotations(result)` and `listRules(config)` give the output.
 - `parseConfig(value, rules)` and `readConfig(root)` read the field `conventions`.
 - `RULES` and each rule, with the helpers `isGitSpecifier`, `isPinned`, `isSourcePath` and `parseJsonc`.
