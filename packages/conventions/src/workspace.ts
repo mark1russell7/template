@@ -63,12 +63,19 @@ export function globToRegExp(glob: string): RegExp {
 /** The characters that make a path segment a pattern. */
 const GLOB_CHARS = /[*?{]/;
 
+/** This function removes the `/` characters at the end of a path, with a loop in place of a regular expression. */
+function trimEndSlashes(path: string): string {
+  let end = path.length;
+  while (end > 0 && path.charAt(end - 1) === "/") end -= 1;
+  return path.slice(0, end);
+}
+
 /**
  * This function gives the folders under `root` that a glob names, as `/` paths relative to `root`,
  * in the order of the code units. It does not go into `node_modules` or a folder that starts with `.`.
  */
 export function globFolders(root: string, glob: string): string[] {
-  const clean = glob.replace(/^\.\//, "").replace(/\/+$/, "");
+  const clean = trimEndSlashes(glob.startsWith("./") ? glob.slice(2) : glob);
   const segments = clean.split("/");
   const firstPattern = segments.findIndex((segment) => GLOB_CHARS.test(segment));
   if (firstPattern < 0) return existsSync(join(root, clean)) ? [clean] : [];

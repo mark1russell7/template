@@ -185,6 +185,15 @@ describe("tsconfig-test", () => {
     expect(hasTests(["test/api/public-api.txt"], "")).toBe(false);
   });
 
+  it("finds a test file as the old regular expression did, in linear time", () => {
+    const old = /(?:^|\/)(?:[^/]+\.(?:test|spec)\.[cm]?[jt]sx?|__tests__\/.+)$/;
+    const paths = ["x.test.ts", "a/b.spec.mjs", "a/.test.ts", ".test.ts", "x.test.tsx", "x.test.cjs", "x.tests.ts", "x.test.py", "__tests__/a", "a/__tests__/b/c.md", "__tests__", "a/__tests__/", "x.test.ts/", "a/b.spec.jsx", "test.ts", "x.Test.ts"];
+    for (const path of paths) expect(hasTests([path], ""), path).toBe(old.test(path));
+    const start = performance.now();
+    expect(hasTests([`${"/".repeat(100_000)}x.test.tss`, `${"a.".repeat(100_000)}`], "")).toBe(false);
+    expect(performance.now() - start).toBeLessThan(1000);
+  });
+
   it("examines the root of a repository of one package", () => {
     const root = fixture({ "package.json": { name: "one" }, "pnpm-workspace.yaml": "allowBuilds: {}\n", "tsconfig.json": {} });
     expect(rule(root, "tsconfig-test").breaks.map((item) => item.file)).toEqual(["tsconfig.test.json"]);

@@ -4,13 +4,24 @@
  */
 import { codePackages, hasFile, inFolder, lineOf, type Break, type Rule } from "../rule.ts";
 
-/** The path of a test file: `*.test.*` or `*.spec.*` of JavaScript or TypeScript, or a file in a folder `__tests__`. */
-const TEST_FILE = /(?:^|\/)(?:[^/]+\.(?:test|spec)\.[cm]?[jt]sx?|__tests__\/.+)$/;
+/** The ends of the name of a test file: `.test.` or `.spec.`, then an extension of JavaScript or TypeScript. */
+const TEST_ENDS = ["test", "spec"].flatMap((kind) => ["", "c", "m"].flatMap((module) => ["j", "t"].flatMap((lang) => ["", "x"].map((jsx) => `.${kind}.${module}${lang}s${jsx}`))));
+
+/**
+ * This function tells if a path is a test file: `*.test.*` or `*.spec.*` of JavaScript or TypeScript, or a file in a
+ * folder `__tests__`. It uses string operations, with no regular expression, so a long path takes linear time.
+ */
+export function isTestFile(path: string): boolean {
+  const segments = path.split("/");
+  const name = segments[segments.length - 1] ?? "";
+  if (name !== "" && segments.slice(0, -1).includes("__tests__")) return true;
+  return TEST_ENDS.some((end) => name.length > end.length && name.endsWith(end));
+}
 
 /** This function tells if git tracks a test file in the package folder `folder` (`""` is the root). */
 export function hasTests(files: readonly string[], folder: string): boolean {
   const prefix = folder === "" ? "" : `${folder}/`;
-  return files.some((path) => path.startsWith(prefix) && TEST_FILE.test(path.slice(prefix.length)));
+  return files.some((path) => path.startsWith(prefix) && isTestFile(path.slice(prefix.length)));
 }
 
 export const tsconfigTest: Rule = {
