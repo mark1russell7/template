@@ -15,12 +15,14 @@ import { testsRequired } from "./tests-required.ts";
 import { tsconfigTest } from "./tsconfig-test.ts";
 import { typedFiles } from "./typed-files.ts";
 import { typedScripts } from "./typed-scripts.ts";
+import { trustPolicy } from "./trust-policy.ts";
 import { workspaceProtocol } from "./workspace-protocol.ts";
 
 /** Each rule of the check. */
 export const RULES: readonly Rule[] = [
   pinnedGitDeps,
   workspaceProtocol,
+  trustPolicy,
   sourceMain,
   tsconfigTest,
   cuePreset,
@@ -35,4 +37,4 @@ export const RULES: readonly Rule[] = [
   runnerBudget,
 ];
 
-export { cuePreset, noBuildOutput, noLocalPaths, pinnedGitDeps, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sourceMain, testsRequired, tsconfigTest, typedFiles, typedScripts, workspaceProtocol };
+export { cuePreset, noBuildOutput, noLocalPaths, pinnedGitDeps, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, workspaceProtocol };

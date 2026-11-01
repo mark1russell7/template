@@ -14,14 +14,15 @@ minimumReleaseAgeExclude:
   - "@mark1russell7/*"
   - "@procedures/*"
 
-# An install fails when a version has less trust evidence than an earlier version of the same package: for example,
-# a version with no provenance after versions from a trusted publisher. Such a version can be a stolen token.
-# Our own packages pass, because release.yml publishes them with OIDC and provenance.
+# An install fails when a new version has less trust evidence than an earlier version of the same package: for
+# example, a version with no provenance after versions from a trusted publisher. Such a version can be a stolen token.
 trustPolicy: no-downgrade
-# The first versions of these 3 packages were staged by hand, with an approver. pnpm ranks a staged publish above a
-# trusted publisher, so it refuses each later version from release.yml (pnpm/pnpm#16689). The bootstrap of today
-# publishes a prerelease, which pnpm does not compare, so no other package needs this.
+# The check examines the versions of the last 7 days. A stolen-token version is new, and the registry removes it in
+# hours. Older versions can have less evidence for other reasons: for example undici-types 6.21.0 under @types/node.
+trustPolicyIgnoreAfter: 10080
+# The release train updates our own scopes, and it checks the provenance of each version. pnpm cannot use them: it
+# ranks the first versions, which were staged by hand, above the versions from release.yml (pnpm/pnpm#16689). On
+# 11-01 that refused the latest version of 30 of 57 @procedures packages and 3 of 40 @mark1russell7 packages.
 trustPolicyExclude:
-  - "@mark1russell7/cue"
-  - "@mark1russell7/docker-sqlite"
-  - "@mark1russell7/splay"
+  - "@mark1russell7/*"
+  - "@procedures/*"

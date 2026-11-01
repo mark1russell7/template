@@ -25,6 +25,7 @@ Each break shows the file, the line, the rule and the fix. In GitHub Actions, th
 - `runner-budget`: the minute of a schedule, a `max-parallel` of a matrix, and a concurrency group at the top of a workflow. A new run of a pull request stops the old run. A run of another event waits for the old run.
 - `tests-required`: the option `passWithNoTests` in a config or a script, in a package with test files. A package with no tests needs a person, who removes its test script.
 - `typed-files`: a config file at the root of a package (`vitest.config.ts`). The fix adds `*.config.ts` and `rootDir: "."` to the `tsconfig.test.json` of the package, when that file has no comments.
+- `trust-policy`: the settings `trustPolicy`, `trustPolicyIgnoreAfter` and `trustPolicyExclude` of `pnpm-workspace.yaml`. The fix makes the file when the repository has none.
 
 The text output marks each break that has a fix. In the JSON output, such a break has `fixable: true`. The release train starts `conventions fix` in its update pull requests. Thus a break that a script can fix does not block a repository.
 
@@ -36,6 +37,7 @@ The rules come from the invariants audit of 2026-10-26 (strategy item s38). The 
 |---|---|---|
 | `pinned-git-deps` | A dependency from git (`github:`, `git+https:`, `owner/repo`) names a full commit SHA. The rule also examines `overrides`, `resolutions` and `pnpm.overrides`. | coeval `pinned-deps`, `unpublished-dep-pinned`. headroom `non-npm-deps-pinned`, `pinned-github-specifier`. Graph `github-dep-full-sha`, `github-dep-pinned`. client `general-npm-version`. |
 | `workspace-protocol` | A dependency on a package of the workspace uses `workspace:`. The rule does not examine peer dependencies. | client `workspace-protocol`, `workspace-deps`. coeval `pinned-deps`. headroom `non-npm-deps-pinned`. crawler `mcp-workspace-dep`. |
+| `trust-policy` | A repository with a `pnpm-lock.yaml` sets `trustPolicy: no-downgrade` in `pnpm-workspace.yaml`: pnpm refuses a version with less trust evidence than an earlier version, for example one with no provenance after versions from a trusted publisher. `trustPolicyIgnoreAfter` is 10080 or more, so the check examines the versions of the last 7 days. A stolen-token version is new, and older versions can have less evidence for other reasons. `trustPolicyExclude` has the scopes of the release train, which checks the provenance of their versions itself. | fleet `trust-policy` (STRATEGY.md, 2026-11-01). |
 | `source-main` | The `main` of each workspace package is `src/index.ts` (a package with only a `bin` has no `main`, and a private package with no entry is an app). A public package that has a source entry has the same field in `publishConfig`, and that field points at the build. | coeval `package-main-source`, `source-package-main`. crawler `pkg-source-main`, `source-package-main`, `publish-config-build`. Graph `new-package-main-index`, `source-package-main`. headroom `source-package-main`. |
 | `tsconfig-test` | Each package with a `tsconfig.json` has a `tsconfig.test.json`, and its `typecheck` script names it. | coeval, crawler, Vex `package-tsconfig-test` or `pkg-tsconfig-test`, and `tsconfig-test`. headroom `tsconfig-test`, `tsconfig-test-per-package`. |
 | `cue-preset` | The `tsconfig.json` of each package extends a preset of `@mark1russell7/cue`. No config of a package turns off a strict option that its preset turns on. | client `cue-config`, `no-manual-tsconfig`. Graph `cue-preset-strict`, `strict-preset`, `new-package-via-cli`. coeval, crawler, headroom, Vex `package-scaffold`. |
@@ -98,6 +100,8 @@ An unknown rule, an unknown option, or an exception or a changed option without 
 | `typed-scripts.shellLines` | `1` | The most lines of code of a shell script (a launcher). Empty lines and comments do not count. |
 | `typed-files.configs` | `[]` | More tsconfig files, relative to the root, that CI examines with another command (for example a script that the typecheck starts). |
 | `roadmap-parses.roadmaps` | `[]` | More roadmap files, relative to the root, for a roadmap that no workflow names. |
+| `trust-policy.exclude` | `["@mark1russell7/*", "@procedures/*"]` | The patterns that `trustPolicyExclude` must have. |
+| `trust-policy.ignoreAfter` | `10080` | The smallest `trustPolicyIgnoreAfter`, in minutes. |
 | `runner-budget.maxParallel` | `3` | The largest `max-parallel` of a matrix. |
 | `runner-budget.minute` | `true` | When `false`, the rule does not examine the minute of the schedules. |
 | `runner-budget.grouped` | `["reusable-ai-review.yml", "reusable-codex-review.yml"]` | The shared workflows that give a concurrency group in each of their jobs. |
