@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { hasTests, isGitSpecifier, isPinned, isSourcePath, parseJsonc, repositoryOfRemote, roadmapOfLine, runChecks, scheduleMinute, type CheckOptions, type RuleResult } from "./index.ts";
+import { minuteField } from "./rules/runner-budget.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-rules-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -600,6 +601,23 @@ describe("runner-budget", () => {
       `.github/workflows/scan.yml:3: .github/workflows/scan.yml: the schedule "${String(other)} 5 * * 1" starts at minute ${String(other)}, and the minute of this repository and file is ${String(minute)}.`,
     ]);
     expect(rule(root, "runner-budget", { env }).breaks.at(-1)?.fix).toBe(`cron: "${String(minute)} 5 * * 1"`);
+  });
+
+  it("lets a schedule start more than once in each hour, at equal steps from the minute", () => {
+    expect(minuteField(18, 1)).toBe("18");
+    expect(minuteField(18, 2)).toBe("18,48");
+    expect(minuteField(50, 4)).toBe("5,20,35,50");
+    const cron = (field: string): string => {
+      const root = fixture({ "package.json": { name: "one" }, ".github/workflows/scan.yml": `on:\n  schedule:\n    - cron: "${field} * * * *"\nconcurrency: scan\njobs: {}\n` });
+      commitAll(root);
+      return root;
+    };
+    expect(show(cron(minuteField(minute, 2)))).toEqual([]);
+    const each30 = cron("*/30");
+    expect(rule(each30, "runner-budget", { env }).breaks.map((item) => item.fix)).toEqual([`cron: "${minuteField(minute, 2)} * * * *"`]);
+    // A list at the wrong minutes keeps its number of starts, and a list that does not divide the hour becomes one start.
+    expect(rule(cron(minuteField(other, 3)), "runner-budget", { env }).breaks.map((item) => item.fix)).toEqual([`cron: "${minuteField(minute, 3)} * * * *"`]);
+    expect(rule(cron("1,2,3,4,5,6,7"), "runner-budget", { env }).breaks.map((item) => item.fix)).toEqual([`cron: "${String(minute)} * * * *"`]);
   });
 
   it("reports a schedule when the repository is not known, and skips with no workflow", () => {
