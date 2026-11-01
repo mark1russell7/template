@@ -1,8 +1,8 @@
 /**
- * The commands `check` and `--list` of the bin `conventions`, as functions. `runChecks` starts the
- * rules, and `runCli` reads the arguments and writes the result.
+ * The commands `check`, `fix` and `--list` of the bin `conventions`, as functions. `runChecks` starts the
+ * rules, `runFix` writes the edits of the breaks, and `runCli` reads the arguments and writes the result.
  */
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseConfig, type ConventionsConfig } from "./config.ts";
 import { matchesAny, runGit, type Break, type Manifest, type PackageInfo, type Rule, type RuleContext } from "./rule.ts";
@@ -119,6 +119,56 @@ export function runChecks(options: CheckOptions): CheckResult {
   return { rules: results, failed: results.some((result) => result.status === "break" || result.status === "error") };
 }
 
+/** The result of `runFix`. */
+export interface FixResult {
+  /** The files that the edits changed, relative to the root, with `/`, in the order of the first change. */
+  readonly changed: readonly string[];
+  /** The number of checks. */
+  readonly passes: number;
+  /** The result of the last check, after the edits. */
+  readonly result: CheckResult;
+}
+
+/** The most checks of `runFix`. Each check writes at most one edit of each file. */
+const MAX_PASSES = 20;
+
+/**
+ * This function writes the edits of the breaks, and checks again, until no edit applies. In each pass it writes the first
+ * edit of each file whose `before` is the current text of the file. The other edits of that file wait for the next check,
+ * which gives them again from the new text. Thus a fix does not write over a change that it did not see.
+ */
+export function runFix(options: CheckOptions): FixResult {
+  const root = resolve(options.root);
+  const changed: string[] = [];
+  let result = runChecks(options);
+  let passes = 1;
+  while (passes < MAX_PASSES) {
+    const written = new Set<string>();
+    for (const rule of result.rules) {
+      for (const edit of rule.breaks.flatMap((item) => item.edits ?? [])) {
+        if (written.has(edit.file)) continue;
+        const path = join(root, edit.file);
+        if (!existsSync(path) || readFileSync(path, "utf8") !== edit.before) continue;
+        writeFileSync(path, edit.after);
+        written.add(edit.file);
+        if (!changed.includes(edit.file)) changed.push(edit.file);
+      }
+    }
+    if (written.size === 0) break;
+    result = runChecks(options);
+    passes += 1;
+  }
+  return { changed, passes, result };
+}
+
+/** This function gives a result for JSON: each break without the texts of its edits, and with `fixable`. */
+function withoutEdits(result: CheckResult): object {
+  return {
+    ...result,
+    rules: result.rules.map((rule) => ({ ...rule, breaks: rule.breaks.map(({ edits, ...item }) => ({ ...item, fixable: (edits ?? []).length > 0 })) })),
+  };
+}
+
 /** The most breaks of one rule in the text output. The JSON output has each break. */
 const MAX_SHOWN = 50;
 
@@ -138,7 +188,7 @@ export function formatResult(result: CheckResult): string {
     const extra = rule.ignored > 0 ? ` (${rule.ignored} ignored: ${rule.note ?? ""})` : rule.note !== undefined && rule.status !== "pass" ? ` (${rule.note})` : "";
     out.push(`${label[rule.status]}  ${rule.id}${rule.breaks.length > 0 ? `: ${rule.breaks.length} break(s)` : ""}${extra}`);
     for (const item of rule.breaks.slice(0, MAX_SHOWN)) {
-      out.push(`       ${placeOf(item)}  ${item.message}`);
+      out.push(`       ${placeOf(item)}  ${item.message}${(item.edits ?? []).length > 0 ? " (conventions fix writes the fix)" : ""}`);
       if (item.fix !== undefined) out.push(`         fix: ${item.fix}`);
     }
     if (rule.breaks.length > MAX_SHOWN) out.push(`       ... ${rule.breaks.length - MAX_SHOWN} more. Start \`conventions check --json\` for each break.`);
@@ -213,9 +263,11 @@ export interface CliIo {
 
 /** The help text of the bin. */
 export const USAGE: string = `Usage: conventions check [options]
+       conventions fix [options]
        conventions --list
 
   check                 Start each rule. Exit code 1 when a rule has a break.
+  fix                   Write the fixes of the breaks that have one, and check again. Exit code 1 when a break stays.
   --list                Show each rule: why, fix, options, state and the audit rows that it comes from.
 
   --root <folder>       The root of the repository. The default is the current folder.
@@ -238,6 +290,7 @@ class UsageError extends Error {}
 /** This function starts the bin with the arguments `args`, and gives its exit code. */
 export function runCli(args: readonly string[], io: CliIo): number {
   let check = false;
+  let fix = false;
   let list = false;
   let json = false;
   let root = io.cwd;
@@ -252,6 +305,7 @@ export function runCli(args: readonly string[], io: CliIo): number {
         return next;
       };
       if (arg === "check") check = true;
+      else if (arg === "fix") fix = true;
       else if (arg === "--list" || arg === "list") list = true;
       else if (arg === "--json") json = true;
       else if (arg === "--root") root = resolve(io.cwd, value());
@@ -262,7 +316,7 @@ export function runCli(args: readonly string[], io: CliIo): number {
         return 0;
       } else throw new UsageError(`An unknown argument: ${arg}`);
     }
-    if (!check && !list) throw new UsageError("Give the command check, or --list.");
+    if (!check && !fix && !list) throw new UsageError("Give the command check or fix, or --list.");
   } catch (error) {
     if (!(error instanceof UsageError)) throw error;
     io.stderr(`conventions: ${error.message}\n\n${USAGE}`);
@@ -280,13 +334,23 @@ export function runCli(args: readonly string[], io: CliIo): number {
     return 0;
   }
   let result: CheckResult;
+  let fixed: FixResult | undefined;
   try {
-    result = runChecks({ root, only, env: io.env, ...(base === undefined ? {} : { base }) });
+    const options = { root, only, env: io.env, ...(base === undefined ? {} : { base }) };
+    if (fix) {
+      fixed = runFix(options);
+      result = fixed.result;
+    } else result = runChecks(options);
   } catch (error) {
     io.stderr(`conventions: ${error instanceof Error ? error.message : String(error)}\n`);
     return 1;
   }
-  if (json) io.stdout(`${JSON.stringify(result, null, 2)}\n`);
+  if (fixed !== undefined && !json) {
+    const files = fixed.changed.map((file) => `  ${file}\n`).join("");
+    io.stdout(fixed.changed.length === 0 ? "conventions fix: no break has a fix that applies.\n" : `conventions fix: changed ${fixed.changed.length} file(s) in ${fixed.passes} check(s):\n${files}\n`);
+  }
+  const shown = fixed === undefined ? withoutEdits(result) : { changed: fixed.changed, passes: fixed.passes, ...withoutEdits(result) };
+  if (json) io.stdout(`${JSON.stringify(shown, null, 2)}\n`);
   else {
     if (io.env["GITHUB_ACTIONS"] === "true") io.stdout(annotations(result));
     io.stdout(formatResult(result));

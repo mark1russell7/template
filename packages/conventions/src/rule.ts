@@ -22,6 +22,29 @@ export interface Break {
   readonly message: string;
   /** A fix for this break. The fix of the rule applies when this field is missing. */
   readonly fix?: string;
+  /** The changes of files that fix this break, for `conventions fix`. A break with no edits needs a person. */
+  readonly edits?: readonly Edit[];
+}
+
+/**
+ * A change of one file that `conventions fix` writes. The file must still have the text `before`, else the edit does
+ * not apply. An edit that an earlier edit made stale waits for the next check.
+ */
+export interface Edit {
+  /** The file, relative to the root, with `/`. */
+  readonly file: string;
+  /** The whole text of the file before the change. */
+  readonly before: string;
+  /** The whole text of the file after the change. */
+  readonly after: string;
+}
+
+/** This function gives `text` with the line `line` (from 1) replaced by `lines`, with the line ends of `text`. An empty `lines` removes the line. */
+export function replaceLine(text: string, line: number, lines: readonly string[]): string {
+  const eol = text.includes("\r\n") ? "\r\n" : "\n";
+  const all = text.split(/\r?\n/);
+  all.splice(line - 1, 1, ...lines);
+  return all.join(eol);
 }
 
 /** A value of an option of a rule. */

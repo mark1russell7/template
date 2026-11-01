@@ -6,6 +6,7 @@
  *
  * ```sh
  * conventions check
+ * conventions fix
  * conventions --list
  * ```
  */
@@ -21,10 +22,12 @@ export {
   matchesAny,
   parseJsonc,
   readJsonc,
+  replaceLine,
   runGit,
   specifiersOf,
   type AuditSource,
   type Break,
+  type Edit,
   type Manifest,
   type OptionSpec,
   type Options,
@@ -67,11 +70,13 @@ export {
   readConfig,
   runChecks,
   runCli,
+  runFix,
   summaryMarkdown,
   USAGE,
   type CheckOptions,
   type CheckResult,
   type CliIo,
+  type FixResult,
   type RuleResult,
 } from "./run.ts";
 export { globFolders, globToRegExp, packageFolders, workspaceGlobs } from "./workspace.ts";
