@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { hasTests, isGitSpecifier, isPinned, isSourcePath, parseJsonc, roadmapOfLine, runChecks, type CheckOptions, type RuleResult } from "./index.ts";
+import { hasTests, isGitSpecifier, isPinned, isSourcePath, parseJsonc, repositoryOfRemote, roadmapOfLine, runChecks, scheduleMinute, type CheckOptions, type RuleResult } from "./index.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-rules-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -532,5 +532,88 @@ describe("roadmap-parses", () => {
 
   it("reads the value of a roadmap key", () => {
     expect(["  roadmap: docs/R.md", "roadmap: './R.md' # x", "roadmap:", "roadmap: ${{ inputs.roadmap }}", "  roadmaps: x", "# roadmap: x"].map(roadmapOfLine)).toEqual(["docs/R.md", "R.md", undefined, undefined, undefined, undefined]);
+  });
+});
+
+describe("runner-budget", () => {
+  const env = { GITHUB_REPOSITORY: "o/one" };
+  const minute = scheduleMinute("o/one", ".github/workflows/scan.yml");
+  const other = minute === 59 ? 1 : minute + 1;
+  const show = (root: string): string[] => rule(root, "runner-budget", { env }).breaks.map((item) => `${item.file}:${String(item.line)}: ${item.message}`);
+
+  it("gives a minute from 1 to 59 that depends on the repository and the file", () => {
+    expect(minute).toBeGreaterThanOrEqual(1);
+    expect(minute).toBeLessThanOrEqual(59);
+    expect(scheduleMinute("O/One", ".github/workflows/scan.yml")).toBe(minute);
+    const minutes = new Set(Array.from({ length: 60 }, (_, index) => scheduleMinute(`o/repo-${String(index)}`, ".github/workflows/security.yml")));
+    expect(minutes.size).toBeGreaterThan(30);
+  });
+
+  it("passes the workflows that keep the budget", () => {
+    const scan = ["on:", "  schedule:", `    - cron: "${String(minute)} 5 * * 1" # weekly`, "concurrency:", "  group: scan", "jobs:", "  a:", "    strategy:", "      max-parallel: 3", "      matrix:", "        node: [24, 26]", "    runs-on: ubuntu-latest", ""];
+    const each = ["on: push", "jobs:", "  a:", "    concurrency: a", "    runs-on: ubuntu-latest", "  b:", "    runs-on: ubuntu-latest", "    concurrency:", "      group: b", ""];
+    const root = fixture({
+      "package.json": { name: "one" },
+      ".github/workflows/scan.yml": scan.join("\n"),
+      ".github/workflows/shared.yml": "on:\n  workflow_call:\njobs:\n  a:\n    runs-on: ubuntu-latest\n",
+      ".github/workflows/each.yml": each.join("\n"),
+    });
+    commitAll(root);
+    expect(show(root)).toEqual([]);
+  });
+
+  it("reports a matrix with no max-parallel or too large a one, a job with no group, and a schedule at another minute", () => {
+    const scan = [
+      "on:",
+      "  schedule:",
+      `    - cron: '${String(other)} 5 * * 1'`,
+      "# concurrency:",
+      "jobs:",
+      "  a:",
+      "    strategy:",
+      "      matrix:",
+      "        node: [24, 26]",
+      "    runs-on: ubuntu-latest",
+      "  b:",
+      "    strategy:",
+      "      fail-fast: false",
+      "      max-parallel: 8",
+      "      matrix: ${{ fromJSON(inputs.cells) }}",
+      "",
+    ];
+    const root = fixture({ "package.json": { name: "one" }, ".github/workflows/scan.yml": scan.join("\n") });
+    commitAll(root);
+    expect(show(root)).toEqual([
+      ".github/workflows/scan.yml:7: .github/workflows/scan.yml: a matrix has no max-parallel.",
+      ".github/workflows/scan.yml:12: .github/workflows/scan.yml: a matrix has max-parallel 8, and the most is 3.",
+      ".github/workflows/scan.yml:6: .github/workflows/scan.yml: the job a has no concurrency group, and the workflow has none.",
+      ".github/workflows/scan.yml:11: .github/workflows/scan.yml: the job b has no concurrency group, and the workflow has none.",
+      `.github/workflows/scan.yml:3: .github/workflows/scan.yml: the schedule "${String(other)} 5 * * 1" starts at minute ${String(other)}, and the minute of this repository and file is ${String(minute)}.`,
+    ]);
+    expect(rule(root, "runner-budget", { env }).breaks.at(-1)?.fix).toBe(`cron: "${String(minute)} 5 * * 1"`);
+  });
+
+  it("reports a schedule when the repository is not known, and skips with no workflow", () => {
+    const root = fixture({ "package.json": { name: "one" }, ".github/workflows/scan.yml": 'on:\n  schedule:\n    - cron: "1 5 * * 1"\nconcurrency: scan\njobs: {}\n' });
+    commitAll(root);
+    expect(rule(root, "runner-budget").breaks.map((item) => item.message)).toEqual([expect.stringContaining("cannot find the repository")]);
+    const none = fixture({ "package.json": { name: "one" } });
+    commitAll(none);
+    expect(rule(none, "runner-budget").status).toBe("skipped");
+  });
+
+  it("lets a job call a shared workflow of grouped, and examines the jobs of that workflow", () => {
+    const caller = "on: pull_request\njobs:\n  review:\n    uses: ./.github/workflows/reusable-ai-review.yml\n  other:\n    uses: o/template/.github/workflows/reusable-ci.yml@0123abc # main\n";
+    const shared = "on:\n  workflow_call:\njobs:\n  review:\n    concurrency:\n      group: r\n    runs-on: ubuntu-latest\n  post:\n    runs-on: ubuntu-latest\n";
+    const root = fixture({ "package.json": { name: "one" }, ".github/workflows/ai.yml": caller, ".github/workflows/reusable-ai-review.yml": shared, ".github/workflows/reusable-ci.yml": "on: workflow_call\njobs:\n  a:\n    runs-on: ubuntu-latest\n" });
+    commitAll(root);
+    expect(show(root)).toEqual([
+      ".github/workflows/ai.yml:5: .github/workflows/ai.yml: the job other has no concurrency group, and the workflow has none.",
+      ".github/workflows/reusable-ai-review.yml:8: .github/workflows/reusable-ai-review.yml: the job post has no concurrency group, and its callers rely on it (the option grouped).",
+    ]);
+  });
+
+  it("reads the repository of a remote URL", () => {
+    expect(["git@github.com:o/r.git", "https://github.com/o/r", "https://github.com/o/r.git/", "https://gitlab.com/o/r", "https://github.com/o"].map(repositoryOfRemote)).toEqual(["o/r", "o/r", "o/r", undefined, undefined]);
   });
 });

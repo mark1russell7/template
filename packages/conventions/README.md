@@ -38,6 +38,7 @@ The rules come from the invariants audit of 2026-10-26 (strategy item s38). The 
 | `typed-files` | Each TypeScript file that git keeps (`.ts`, `.tsx`, `.mts`, `.cts`, not `.d.ts`) is in the program of a tsconfig that a `typecheck` script names: the tests, the e2e specs, the scripts, the benches and the configs too. The rule reads the configs of each `tsc`, `tsgo` or `vue-tsc` (`-p`, `--project`, `-b`, or `tsconfig.json`) and of `svelte-check --tsconfig`, follows their `references`, and lists the files with `tsc --listFilesOnly`. A file that a covered file imports is covered. A config that does not exist, and a repository where no typecheck names a config, are a break. | fleet `fail-closed` (STRATEGY.md, 2026-10-30). |
 | `tests-required` | No test runner passes when it finds no test: no `passWithNoTests: true` in a config of vitest, vite, jest or Playwright, and no `--passWithNoTests` in `package.json`. With the option, a broken include pattern turns the test gate green with no test run. | fleet `fail-closed` (STRATEGY.md, 2026-10-30). |
 | `roadmap-parses` | Each call of the Pages workflow of the template (`reusable-pages.yml`) gives a `roadmap`, or `site-pages: false`. Without it, the Status page shows no item of the plan. Each roadmap that a workflow gives to the Status page (a `roadmap:` key) parses as `@mark1russell7/site-pages` reads it. The rule uses the parser of site-pages. Thus a pull request finds a bad row, and the Pages job on `main` does not stop on it. | fleet `fail-closed` (STRATEGY.md, 2026-10-30). |
+| `runner-budget` | All repositories of the account share 40 runners. Each `strategy` with a `matrix` has a `max-parallel` of 3 or less. Each workflow has a concurrency group at the top or in each job. A job that calls a shared workflow of the option `grouped` gets its group from that workflow, and each job of that workflow has a group. The minute of each `cron` comes from a hash of the repository and the file (1 to 59), so the schedules of the repositories do not start together. The repository comes from `GITHUB_REPOSITORY` or from the remote `origin`. | fleet `runner-slots` (STRATEGY.md, 2026-10-30). |
 
 The rule `release-files` needs the base of the change. On a pull request, the checkout is a merge commit, and the rule reads its two parents (`fetch-depth` 2 or more). In other runs, give `--base <ref>`. Without a base, the rule shows `skip`.
 
@@ -88,6 +89,9 @@ An unknown rule, an unknown option, or an exception or a changed option without 
 | `typed-scripts.shellLines` | `1` | The most lines of code of a shell script (a launcher). Empty lines and comments do not count. |
 | `typed-files.configs` | `[]` | More tsconfig files, relative to the root, that CI examines with another command (for example a script that the typecheck starts). |
 | `roadmap-parses.roadmaps` | `[]` | More roadmap files, relative to the root, for a roadmap that no workflow names. |
+| `runner-budget.maxParallel` | `3` | The largest `max-parallel` of a matrix. |
+| `runner-budget.minute` | `true` | When `false`, the rule does not examine the minute of the schedules. |
+| `runner-budget.grouped` | `["reusable-ai-review.yml", "reusable-codex-review.yml"]` | The shared workflows that give a concurrency group in each of their jobs. |
 
 ## Commands
 

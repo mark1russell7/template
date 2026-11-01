@@ -49,6 +49,11 @@ on:
 permissions:
   contents: read
 
+# A new push cancels the older run of the same ref, so the runs of old commits free their runners
+concurrency:
+  group: actions-test-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   green-main:
     runs-on: ubuntu-latest
