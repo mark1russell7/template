@@ -110,17 +110,21 @@ jobs:
           path: .release-template
           sparse-checkout: scripts/release
           persist-credentials: false
+      # checkout writes only into the workspace. The scripts go out of it before the pack, because a package at the
+      # root with no "files" field and no .npmignore packs each file that .gitignore does not name.
+      - name: Move the release scripts out of the workspace
+        run: mv .release-template "$RUNNER_TEMP/release-template"
       # The scripts are TypeScript: Node runs them with its type stripping, also when the build of the
       # repository used an older Node (node-version, node-version-file)
       - name: Node for the release scripts
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "26"
-      - run: node .release-template/scripts/release/pack.ts "$RUNNER_TEMP/release"
+      - run: node "$RUNNER_TEMP/release-template/scripts/release/pack.ts" "$RUNNER_TEMP/release"
         env:
           RELEASE_REPO: ${{ github.workspace }}
       # The tag, the prerelease flag and the release text of each published package, for the tag job
-      - run: node .release-template/scripts/release/tags.ts "$RUNNER_TEMP/tags.json"
+      - run: node "$RUNNER_TEMP/release-template/scripts/release/tags.ts" "$RUNNER_TEMP/tags.json"
         env:
           RELEASE_REPO: ${{ github.workspace }}
       # The input after-pack. It can test the tarballs, add files to the artifact "release", and

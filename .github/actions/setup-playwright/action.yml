@@ -90,9 +90,18 @@ runs:
           fi
         }
         for attempt in $(seq 1 "$ATTEMPTS"); do
-          setsid -w $COMMAND $step &
-          pid=$!
-          ( sleep "$((MINUTES * 60))"; kill -TERM -- "-$pid" 2>/dev/null; sleep 30; kill -KILL -- "-$pid" 2>/dev/null ) &
+          # setsid (util-linux) gives the try its own process group, so the watchdog stops the whole group. The macOS
+          # runners and Git Bash on Windows have no setsid: there the watchdog stops the process only.
+          if command -v setsid >/dev/null 2>&1; then
+            setsid -w $COMMAND $step &
+            pid=$!
+            target="-$pid"
+          else
+            $COMMAND $step &
+            pid=$!
+            target="$pid"
+          fi
+          ( sleep "$((MINUTES * 60))"; kill -TERM -- "$target" 2>/dev/null; sleep 30; kill -KILL -- "$target" 2>/dev/null ) &
           watch=$!
           if wait "$pid"; then pkill -P "$watch" 2>/dev/null || true; kill "$watch" 2>/dev/null || true; exit 0; fi
           pkill -P "$watch" 2>/dev/null || true; kill "$watch" 2>/dev/null || true
