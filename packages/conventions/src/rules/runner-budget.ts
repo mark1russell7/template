@@ -150,15 +150,38 @@ function matrixBreaks(file: string, lines: readonly string[], limit: number): Br
   return breaks;
 }
 
-/** This function gives the breaks of the schedules: the minute of each `cron` is the minute of the repository and the file. */
+/**
+ * This function gives the minute field of a schedule that starts `perHour` times in each hour, at equal steps. One start is at
+ * `minute`: `"18"` for 1, `"18,48"` for 2. The list is in the order of the numbers.
+ */
+export function minuteField(minute: number, perHour: number): string {
+  const step = 60 / perHour;
+  return Array.from({ length: perHour }, (_, k) => (minute + k * step) % 60)
+    .sort((a, b) => a - b)
+    .join(",");
+}
+
+/** This function gives the number of starts in each hour of a minute field (`"*\/30"` or `"5,35"` give 2), or 1 when it cannot tell. */
+function startsPerHour(field: string): number {
+  const step = /^\*\/(\d+)$/.exec(field);
+  const count = step ? 60 / Number(step[1]) : field.split(",").length;
+  // Only a number of starts that divides the hour gives equal steps.
+  return Number.isInteger(count) && count >= 1 && 60 % count === 0 ? count : 1;
+}
+
+/**
+ * This function gives the breaks of the schedules: the minute of each `cron` is the minute of the repository and the file. A
+ * schedule that starts more than once in each hour starts at equal steps from that minute (`18,48` for each 30 minutes).
+ */
 function cronBreaks(file: string, lines: readonly string[], minute: number): Break[] {
   const breaks: Break[] = [];
   lines.forEach((line, index) => {
     const value = keyValue(line, "cron");
     if (value === undefined) return;
     const fields = value.split(" ").filter((field) => field !== "");
-    if (fields[0] === String(minute)) return;
-    const expected = [String(minute), ...fields.slice(1)].join(" ");
+    const wanted = minuteField(minute, startsPerHour(fields[0] ?? ""));
+    if (fields[0] === wanted) return;
+    const expected = [wanted, ...fields.slice(1)].join(" ");
     breaks.push({ file, line: index + 1, message: `${file}: the schedule "${value}" starts at minute ${fields[0] ?? "?"}, and the minute of this repository and file is ${String(minute)}.`, fix: `cron: "${expected}"` });
   });
   return breaks;
