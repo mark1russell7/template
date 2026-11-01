@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 68 names
+## . (build/index.d.ts): 71 names
 
 type AuditSource: build/index.d.ts#AuditSource
 type Break: build/index.d.ts#Break
@@ -58,12 +58,15 @@ pinnedGitDeps: build/index.d.ts#pinnedGitDeps
 readConfig: build/index.d.ts#readConfig
 readJsonc: build/index.d.ts#readJsonc
 releaseFiles: build/index.d.ts#releaseFiles
+repositoryOfRemote: build/index.d.ts#repositoryOfRemote
 requiredScripts: build/index.d.ts#requiredScripts
 roadmapOfLine: build/index.d.ts#roadmapOfLine
 roadmapParses: build/index.d.ts#roadmapParses
 runChecks: build/index.d.ts#runChecks
 runCli: build/index.d.ts#runCli
 runGit: build/index.d.ts#runGit
+runnerBudget: build/index.d.ts#runnerBudget
+scheduleMinute: build/index.d.ts#scheduleMinute
 scriptsOf: build/index.d.ts#scriptsOf
 sourceMain: build/index.d.ts#sourceMain
 specifiersOf: build/index.d.ts#specifiersOf
@@ -304,6 +307,9 @@ export declare function readJsonc(file: string): unknown;
 ### build/index.d.ts#releaseFiles
 export declare const releaseFiles: Rule;
 
+### build/index.d.ts#repositoryOfRemote
+export declare function repositoryOfRemote(url: string): string | undefined;
+
 ### build/index.d.ts#requiredScripts
 export declare const requiredScripts: Rule;
 
@@ -321,6 +327,12 @@ export declare function runCli(args: readonly string[], io: CliIo): number;
 
 ### build/index.d.ts#runGit
 export declare function runGit(root: string, args: readonly string[]): string | undefined;
+
+### build/index.d.ts#runnerBudget
+export declare const runnerBudget: Rule;
+
+### build/index.d.ts#scheduleMinute
+export declare function scheduleMinute(repository: string, file: string): number;
 
 ### build/index.d.ts#scriptsOf
 export declare function scriptsOf(scripts: Readonly<Record<string, unknown>>, name: string, seen?: Set<string>): string[];
