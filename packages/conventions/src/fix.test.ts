@@ -166,6 +166,47 @@ describe("conventions fix", () => {
     expect(read(root, "tsconfig.test.json")).toBe('{\r\n  "include": [\r\n    "src",\r\n    "*.config.ts"\r\n  ]\r\n}\r\n');
   });
 
+  it("writes the trust policy, the days of the check and the scopes of the train, and keeps the rest of the file", () => {
+    const workspace = 'packages:\r\n  - "packages/*"\r\n\r\ntrustPolicy: off # for now\r\ntrustPolicyExclude:\r\n  - "@mark1russell7/cue"\r\n';
+    const root = repo({ "package.json": { name: "one" }, "pnpm-lock.yaml": "lockfileVersion: '9.0'\n", "pnpm-workspace.yaml": workspace });
+    const fixed = runFix({ root, only: ["trust-policy"] });
+    const lines = read(root, "pnpm-workspace.yaml").split("\r\n");
+    expect(lines.filter((line) => !line.startsWith("#"))).toEqual([
+      "packages:",
+      '  - "packages/*"',
+      "",
+      "trustPolicy: no-downgrade",
+      "trustPolicyIgnoreAfter: 10080",
+      "trustPolicyExclude:",
+      '  - "@mark1russell7/cue"',
+      '  - "@mark1russell7/*"',
+      '  - "@procedures/*"',
+      "",
+    ]);
+    // The comment of trustPolicyIgnoreAfter is above it
+    expect(lines[lines.indexOf("trustPolicyIgnoreAfter: 10080") - 1]?.startsWith("# ")).toBe(true);
+    expect(fixed).toMatchObject({ changed: ["pnpm-workspace.yaml"], passes: 4, result: { failed: false } });
+  });
+
+  it("makes pnpm-workspace.yaml when a pnpm repository has none, and skips a repository with no pnpm lockfile", () => {
+    const root = repo({ "package.json": { name: "one" }, "pnpm-lock.yaml": "lockfileVersion: '9.0'\n" });
+    expect(runFix({ root, only: ["trust-policy"] }).result.failed).toBe(false);
+    const text = read(root, "pnpm-workspace.yaml");
+    expect(text.startsWith("# ")).toBe(true);
+    expect(text).toContain("\ntrustPolicy: no-downgrade\n");
+    expect(text).toContain("\ntrustPolicyIgnoreAfter: 10080\n");
+    expect(text).toContain('\ntrustPolicyExclude:\n  - "@mark1russell7/*"\n  - "@procedures/*"\n');
+    const npm = repo({ "package.json": { name: "two" }, "package-lock.json": "{}\n" });
+    expect(runChecks({ root: npm, only: ["trust-policy"] }).rules[0]).toMatchObject({ status: "skipped", note: "the repository has no pnpm-lock.yaml" });
+  });
+
+  it("keeps a larger trustPolicyIgnoreAfter, and does not rewrite a trustPolicyExclude in the flow style", () => {
+    const root = repo({ "package.json": { name: "one" }, "pnpm-lock.yaml": "\n", "pnpm-workspace.yaml": "trustPolicy: no-downgrade\ntrustPolicyIgnoreAfter: 20160\ntrustPolicyExclude: [a]\n" });
+    const fixed = runFix({ root, only: ["trust-policy"] });
+    expect(fixed).toMatchObject({ changed: [], result: { failed: true } });
+    expect(fixed.result.rules[0]?.breaks.map((item) => item.message)).toEqual(['trustPolicyExclude does not have @mark1russell7/*, @procedures/*.']);
+  });
+
   it("does not write an edit when the file changed after the check", () => {
     const root = repo({ "package.json": { name: "one" }, "a.txt": "old\n" });
     const stale: Rule = {

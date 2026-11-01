@@ -2,8 +2,8 @@
  * The commands `check`, `fix` and `--list` of the bin `conventions`, as functions. `runChecks` starts the
  * rules, `runFix` writes the edits of the breaks, and `runCli` reads the arguments and writes the result.
  */
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { parseConfig, type ConventionsConfig } from "./config.ts";
 import { matchesAny, runGit, type Break, type Manifest, type PackageInfo, type Rule, type RuleContext } from "./rule.ts";
 import { RULES } from "./rules/index.ts";
@@ -148,7 +148,9 @@ export function runFix(options: CheckOptions): FixResult {
       for (const edit of rule.breaks.flatMap((item) => item.edits ?? [])) {
         if (written.has(edit.file)) continue;
         const path = join(root, edit.file);
-        if (!existsSync(path) || readFileSync(path, "utf8") !== edit.before) continue;
+        // A file that does not exist has the text "": an edit with an empty `before` makes the file
+        if ((existsSync(path) ? readFileSync(path, "utf8") : "") !== edit.before) continue;
+        mkdirSync(dirname(path), { recursive: true });
         writeFileSync(path, edit.after);
         written.add(edit.file);
         if (!changed.includes(edit.file)) changed.push(edit.file);

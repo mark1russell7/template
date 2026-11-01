@@ -33,7 +33,7 @@ export interface Break {
 export interface Edit {
   /** The file, relative to the root, with `/`. */
   readonly file: string;
-  /** The whole text of the file before the change. */
+  /** The whole text of the file before the change. An empty text makes a file that does not exist. */
   readonly before: string;
   /** The whole text of the file after the change. */
   readonly after: string;

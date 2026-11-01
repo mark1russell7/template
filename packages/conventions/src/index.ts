@@ -49,6 +49,7 @@ export {
   runnerBudget,
   sourceMain,
   testsRequired,
+  trustPolicy,
   tsconfigTest,
   typedFiles,
   typedScripts,
@@ -61,6 +62,7 @@ export { isGitSpecifier, isPinned } from "./rules/pinned-git-deps.ts";
 export { isSourcePath, pathsOf } from "./rules/source-main.ts";
 export { STRICT_OPTIONS } from "./rules/cue-preset.ts";
 export { hasTests } from "./rules/tsconfig-test.ts";
+export { IGNORE_AFTER, TRAIN_SCOPES } from "./rules/trust-policy.ts";
 export { configsOfScript, scriptsOf } from "./rules/typed-files.ts";
 export {
   annotations,
