@@ -35,7 +35,7 @@ The job starts all the scripts, also after a failure. Then it fails with the nam
 | `run` | (empty) | A command after the scripts. |
 | `env` | `{}` | The environment variables of the job, as a JSON object. |
 | `working-directory` | `.` | The folder of `package.json`. |
-| `fetch-depth` | `2` | The commits of the checkout. `0` gets the whole history. With `2`, the checkout of a pull request has the parents of its merge commit, so `check:conventions` sees the change. |
+| `fetch-depth` | `2` | The commits of the checkout. `0` gets the whole history. With `2`, the checkout of a pull request has the parents of its merge commit. On a pull request of more than one commit, the job then deepens the checkout to the merge base, so `check:conventions` reads each commit of the change. |
 | `timeout-minutes` | `15` | The time limit of each job of the matrix. |
 | `changesets` | `true` | The changeset check on a pull request (refer to the next section). |
 | `changeset-ignore` | (empty) | More globs of files that need no changeset. |

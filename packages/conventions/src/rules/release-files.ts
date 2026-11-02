@@ -11,13 +11,15 @@ interface Range {
   readonly diff: readonly string[];
   /** The arguments of `git log` that give the commit messages. */
   readonly log: readonly string[];
+  /** The two ends of the change. The checkout must have their merge base, or `log` does not give each commit of the change. */
+  readonly ends: readonly [string, string];
 }
 
 /** This function gives the range of the change: the option `--base`, or the merge commit of a pull request. */
 function rangeOf(context: RuleContext): Range | { readonly skipped: string } {
   if (context.base !== undefined) {
     if (context.git(["rev-parse", "--verify", "--quiet", `${context.base}^{commit}`]) === undefined) return { skipped: `git does not know the base ${context.base}` };
-    return { diff: [`${context.base}...HEAD`], log: [`${context.base}..HEAD`] };
+    return { diff: [`${context.base}...HEAD`], log: [`${context.base}..HEAD`], ends: [context.base, "HEAD"] };
   }
   const event = context.env["GITHUB_EVENT_NAME"];
   if (event !== "pull_request" && event !== "pull_request_target") return { skipped: "no base: the rule runs on a pull request, or with --base <ref>" };
@@ -25,18 +27,28 @@ function rangeOf(context: RuleContext): Range | { readonly skipped: string } {
   const parents = context.git(["rev-list", "--parents", "-n", "1", "HEAD"])?.trim().split(/\s+/) ?? [];
   if (parents.length !== 3) return { skipped: "HEAD is not the merge commit of the pull request" };
   if (context.git(["cat-file", "-e", "HEAD^1^{commit}"]) === undefined) return { skipped: "the checkout has no parent of HEAD: set fetch-depth to 2 or more" };
-  return { diff: ["HEAD^1", "HEAD"], log: ["HEAD^1..HEAD"] };
+  return { diff: ["HEAD^1", "HEAD"], log: ["HEAD^1..HEAD"], ends: ["HEAD^1", "HEAD^2"] };
 }
 
-/** This function gives the body of the pull request from the event file of GitHub Actions, or an empty string. */
-function pullRequestBody(context: RuleContext): string {
+/** The facts of the pull request in the event file of GitHub Actions. */
+interface PullRequest {
+  /** The body, or an empty string. */
+  readonly body: string;
+  /** The number of commits, if the event file gives it. */
+  readonly commits?: number;
+}
+
+/** This function gives the pull request of the event file of GitHub Actions. With no event file, the body is empty. */
+function pullRequestOf(context: RuleContext): PullRequest {
   const file = context.env["GITHUB_EVENT_PATH"];
-  if (file === undefined || file === "" || !existsSync(file)) return "";
+  if (file === undefined || file === "" || !existsSync(file)) return { body: "" };
   try {
-    const event = JSON.parse(readFileSync(file, "utf8")) as { pull_request?: { body?: unknown } };
-    return typeof event.pull_request?.body === "string" ? event.pull_request.body : "";
+    const event = JSON.parse(readFileSync(file, "utf8")) as { pull_request?: { body?: unknown; commits?: unknown } };
+    const body = typeof event.pull_request?.body === "string" ? event.pull_request.body : "";
+    const commits = event.pull_request?.commits;
+    return typeof commits === "number" ? { body, commits } : { body };
   } catch {
-    return "";
+    return { body: "" };
   }
 }
 
@@ -76,8 +88,19 @@ export const releaseFiles: Rule = {
     if (changed.length === 0) return [];
     const trailer = typeof options["trailer"] === "string" ? options["trailer"] : "Release-Edit";
     const line = new RegExp(`^${escape(trailer)}:[ \\t]*\\S`, "im");
+    const pullRequest = pullRequestOf(context);
+    if (line.test(pullRequest.body)) return [];
+    // A shallow checkout can end inside the change: a commit at its end looks like a first commit, so it seems to change
+    // each file, and the commits under it are not there. Then the authors and the messages are not those of the change.
+    // A pull request of one commit is complete at depth 2, because its commit is the whole change.
+    const single = pullRequest.commits === 1 && context.git(["rev-parse", "--verify", "--quiet", `${range.ends[1]}^2`]) === undefined;
+    if (!single && context.git(["merge-base", ...range.ends]) === undefined) {
+      throw new Error(
+        `The checkout does not have the merge base of ${range.ends.join(" and ")}, so the rule cannot read each commit of the change. Use fetch-depth 0, or the CI of the template, which deepens the checkout of a pull request to its merge base.`,
+      );
+    }
     const messages = context.git(["log", "--no-merges", "--format=%B", ...range.log]) ?? "";
-    if (line.test(messages) || line.test(pullRequestBody(context))) return [];
+    if (line.test(messages)) return [];
     const authors = new Set(Array.isArray(options["authors"]) ? options["authors"] : []);
     const changers = (context.git(["log", "--no-merges", "--format=%an", ...range.log, "--", ...changed]) ?? "").split(/\r?\n/).filter((name) => name !== "");
     if (changers.length > 0 && changers.every((name) => authors.has(name))) return [];
