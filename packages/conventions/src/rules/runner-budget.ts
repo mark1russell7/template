@@ -6,47 +6,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { byCode } from "../workspace.ts";
 import { replaceLine, type Break, type Edit, type Rule } from "../rule.ts";
-
-/** A workflow file. */
-const WORKFLOW = /^\.github\/workflows\/[^/]+\.ya?ml$/;
-
-const indentOf = (line: string): number => line.length - line.trimStart().length;
-
-/** This function removes a comment at the end of a value, and the quotes around it. */
-function valueOf(raw: string): string {
-  const comment = raw.indexOf(" #");
-  let value = (comment >= 0 ? raw.slice(0, comment) : raw).trim();
-  const quote = value.charAt(0);
-  if (value.length >= 2 && (quote === '"' || quote === "'") && value.endsWith(quote)) value = value.slice(1, -1).trim();
-  return value;
-}
-
-/** This function gives the value of the key `key` on a line, or undefined when the line has another key. */
-function keyValue(line: string, key: string): string | undefined {
-  let text = line.trimStart();
-  if (text.startsWith("- ")) text = text.slice(2).trimStart();
-  if (!text.startsWith(`${key}:`)) return undefined;
-  return valueOf(text.slice(key.length + 1));
-}
-
-/** This function gives the lines of the block under the line `index`: the next lines with a larger indent. */
-function blockEnd(lines: readonly string[], index: number): number {
-  const indent = indentOf(lines[index] ?? "");
-  let end = index + 1;
-  while (end < lines.length) {
-    const line = lines[end] ?? "";
-    if (line.trim() !== "" && indentOf(line) <= indent) break;
-    end += 1;
-  }
-  return end;
-}
-
-/** This function gives the indent of the first key of the block under the line `index`, or undefined for an empty block. */
-function childIndent(lines: readonly string[], index: number): number | undefined {
-  const end = blockEnd(lines, index);
-  for (let i = index + 1; i < end; i++) if ((lines[i] ?? "").trim() !== "") return indentOf(lines[i] ?? "");
-  return undefined;
-}
+import { WORKFLOW, blockEnd, childIndent, indentOf, keyValue, workflowLines } from "../workflow.ts";
 
 /**
  * This function gives the minute (1 to 59) of the schedules of a workflow: the FNV-1a hash of the repository and the
@@ -246,7 +206,7 @@ export const runnerBudget: Rule = {
       } catch {
         continue;
       }
-      const lines = text.split(/\r?\n/).map((line) => (line.trimStart().startsWith("#") ? "" : line));
+      const lines = workflowLines(text);
       breaks.push(...matrixBreaks(file, text, lines, limit), ...concurrencyBreaks(file, text, lines, grouped));
       if (options["minute"] !== false) {
         const schedules = lines.some((line) => keyValue(line, "cron") !== undefined);

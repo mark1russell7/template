@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { hasTests, isGitSpecifier, isPinned, isSourcePath, parseJsonc, repositoryOfRemote, roadmapOfLine, runChecks, scheduleMinute, type CheckOptions, type RuleResult } from "./index.ts";
+import { convertGate, hasTests, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, type CheckOptions, type RuleResult } from "./index.ts";
 import { minuteField } from "./rules/runner-budget.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-rules-"));
@@ -642,5 +642,178 @@ describe("runner-budget", () => {
 
   it("reads the repository of a remote URL", () => {
     expect(["git@github.com:o/r.git", "https://github.com/o/r", "https://github.com/o/r.git/", "https://gitlab.com/o/r", "https://github.com/o"].map(repositoryOfRemote)).toEqual(["o/r", "o/r", "o/r", undefined, undefined]);
+  });
+});
+
+describe("gate-trigger", () => {
+  const show = (root: string, options: Omit<CheckOptions, "root" | "only"> = {}): string[] =>
+    rule(root, "gate-trigger", options).breaks.map((item) => `${item.file}:${String(item.line)}: ${(item.edits ?? []).length > 0 ? "fix " : ""}${item.message}`);
+  const bench = [
+    "name: Speed gate",
+    "on:",
+    "  push:",
+    "    branches: [main]",
+    '    paths: ["src/**"]',
+    "  pull_request:",
+    "    types: [opened, synchronize]",
+    "    paths:",
+    '      - "src/**"',
+    "      # the workflow itself",
+    "      - .github/workflows/bench.yml",
+    "  workflow_dispatch:",
+    "concurrency:",
+    "  group: bench",
+    "jobs:",
+    "  plan:",
+    "    if: ${{ inputs.plan }}",
+    "    runs-on: ubuntu-latest",
+    "  bench:",
+    "    needs: plan",
+    "    runs-on: ubuntu-latest",
+    "  report:",
+    "    needs:",
+    "      - bench",
+    "    if: ${{ !cancelled() }}",
+    "    runs-on: ubuntu-latest",
+    "  other:",
+    "    runs-on: ubuntu-latest",
+    "",
+  ];
+
+  it("finds the path filters of the pull request triggers, and only those", () => {
+    expect(prPathFilters(bench.join("\n"))).toEqual([{ line: 8, trigger: "pull_request", key: "paths" }]);
+    expect(prPathFilters('"on":\n  pull_request_target: { paths-ignore: [docs/**] }\njobs: {}\n')).toEqual([{ line: 2, trigger: "pull_request_target", key: "paths-ignore" }]);
+    for (const text of ["on: pull_request\n", "on: [push, pull_request]\n", "on:\n  push:\n    paths: [a]\n  pull_request:\n", "on:\n  pull_request:\n    # paths: [a]\n    branches: [main]\n"]) {
+      expect(prPathFilters(text), text).toEqual([]);
+    }
+  });
+
+  it("converts a gate: the trigger loses the filter, each job needs changes, and a summary needs each job", () => {
+    const converted = convertGate(bench.join("\n"), ".github/workflows/bench.yml", SHA);
+    if (!("text" in converted)) throw new Error(converted.reason);
+    expect(converted.text.split("\n")).toEqual([
+      "name: Speed gate",
+      "on:",
+      "  push:",
+      "    branches: [main]",
+      '    paths: ["src/**"]',
+      "  # Each pull request starts this workflow, so its summary check is always there. The job changes skips the",
+      '  # work when the pull request changes no file of the gate (CI.md of the template, "A gate with paths").',
+      "  pull_request:",
+      "    types: [opened, synchronize]",
+      "  workflow_dispatch:",
+      "concurrency:",
+      "  group: bench",
+      "jobs:",
+      "  changes:",
+      "    runs-on: ubuntu-latest",
+      "    timeout-minutes: 5",
+      "    permissions:",
+      "      contents: read",
+      "      pull-requests: read",
+      "    outputs:",
+      "      match: ${{ steps.changes.outputs.match }}",
+      "    steps:",
+      "      - id: changes",
+      `        uses: mark1russell7/template/.github/actions/changes@${SHA} # main`,
+      "        with:",
+      "          paths: |",
+      "            src/**",
+      "            .github/workflows/bench.yml",
+      "",
+      "  plan:",
+      "    needs: changes",
+      "    if: ${{ needs.changes.outputs.match == 'true' && (inputs.plan) }}",
+      "    runs-on: ubuntu-latest",
+      "  bench:",
+      "    if: needs.changes.outputs.match == 'true'",
+      "    needs: [changes, plan]",
+      "    runs-on: ubuntu-latest",
+      "  report:",
+      "    needs:",
+      "      - changes",
+      "      - bench",
+      "    if: ${{ needs.changes.outputs.match == 'true' && (!cancelled()) }}",
+      "    runs-on: ubuntu-latest",
+      "  other:",
+      "    needs: changes",
+      "    if: needs.changes.outputs.match == 'true'",
+      "    runs-on: ubuntu-latest",
+      "",
+      "  speed-gate-ok:",
+      "    name: Speed gate OK",
+      "    if: always()",
+      "    needs: [changes, plan, bench, report, other]",
+      "    runs-on: ubuntu-latest",
+      "    timeout-minutes: 2",
+      "    permissions: {}",
+      "    steps:",
+      `      - uses: mark1russell7/template/.github/actions/gate-summary@${SHA} # main`,
+      "        with:",
+      "          needs: ${{ toJSON(needs) }}",
+      "          allow-skip: plan bench report",
+      "",
+    ]);
+    expect(prPathFilters(converted.text)).toEqual([]);
+  });
+
+  it("gives paths-ignore to changes, a group to each new job of a workflow with no group, and the name of the file when the workflow has none", () => {
+    const converted = convertGate("on:\n  pull_request:\n    paths-ignore: [docs/**]\njobs:\n  a:\n    concurrency: a\n    runs-on: ubuntu-latest\n", ".github/workflows/text-bench.yml", SHA);
+    if (!("text" in converted)) throw new Error(converted.reason);
+    expect(converted.text).toContain("          paths: |\n            **\n          paths-ignore: |\n            docs/**\n");
+    expect(converted.text).toContain("  text-bench-ok:\n    name: Text bench OK\n");
+    expect(converted.text).toContain("    concurrency:\n      group: ${{ github.workflow }}-changes-${{ github.ref }}\n");
+    expect(converted.text).toContain("    concurrency:\n      group: ${{ github.workflow }}-text-bench-ok-${{ github.ref }}\n");
+    expect(["HTTP", "search objective", "Harness (cells)", "", "- x -"].map(summaryName)).toEqual(["HTTP OK", "Search objective OK", "Harness cells OK", "Gate OK", "X OK"]);
+  });
+
+  it("leaves to a person a workflow that it cannot convert with certainty", () => {
+    const head = "on:\n  pull_request:\n    paths: [a]\njobs:\n";
+    const reasons = [
+      `${head}  changes:\n    runs-on: ubuntu-latest\n`,
+      `${head}  a:\n    if: >-\n      inputs.x\n    runs-on: ubuntu-latest\n`,
+      `${head}  a:\n    if: \${{ a }} && \${{ b }}\n    runs-on: ubuntu-latest\n`,
+      "on:\n  pull_request: { paths: [a] }\njobs:\n  a:\n    runs-on: ubuntu-latest\n",
+      "on:\n  pull_request:\n    paths: [a]\n  pull_request_target:\n    paths: [b]\njobs:\n  a:\n    runs-on: ubuntu-latest\n",
+    ].map((text) => {
+      const converted = convertGate(text, ".github/workflows/x.yml", SHA);
+      return "reason" in converted ? converted.reason : "converted";
+    });
+    expect(reasons).toEqual([
+      "the workflow already has a job changes",
+      "the if of the job a has more than one line",
+      "the if of the job a has a part in ${{ }}",
+      "on.pull_request has the flow form",
+      "the triggers have different paths",
+    ]);
+  });
+
+  it("reports each filtered workflow once with its fix, skips the option allow, and passes after conventions fix", () => {
+    const root = fixture({
+      "package.json": { name: "one" },
+      ".github/workflows/bench.yml": bench.join("\n"),
+      ".github/workflows/preview.yml": "on:\n  pull_request:\n    paths: [site/**]\njobs:\n  a:\n    runs-on: ubuntu-latest\n",
+      ".github/workflows/odd.yml": "on:\n  pull_request: { paths: [a] }\njobs:\n  a:\n    runs-on: ubuntu-latest\n",
+      ".github/workflows/ci.yml": "on:\n  pull_request:\n  push:\n    paths: [src/**]\njobs:\n  a:\n    runs-on: ubuntu-latest\n",
+    });
+    commitAll(root);
+    expect(show(root)).toEqual([
+      ".github/workflows/bench.yml:8: fix .github/workflows/bench.yml: on.pull_request.paths, so the workflow does not start on each pull request, and the ruleset cannot ask for its summary check.",
+      ".github/workflows/odd.yml:2: .github/workflows/odd.yml: on.pull_request.paths, so the workflow does not start on each pull request, and the ruleset cannot ask for its summary check.",
+      ".github/workflows/preview.yml:3: fix .github/workflows/preview.yml: on.pull_request.paths, so the workflow does not start on each pull request, and the ruleset cannot ask for its summary check.",
+    ]);
+    const odd = rule(root, "gate-trigger").breaks.find((item) => item.file.endsWith("odd.yml"));
+    expect(odd?.fix).toMatch(/^A person must convert it, because on.pull_request has the flow form\. /);
+    writeFileSync(join(root, "package.json"), JSON.stringify({ name: "one", conventions: { rules: { "gate-trigger": { allow: ["preview.yml", "odd.yml"], reason: "a preview and a test" } } } }));
+    expect(show(root).map((line) => line.split(":")[0])).toEqual([".github/workflows/bench.yml"]);
+    const fixed = runFix({ root, only: ["gate-trigger"] });
+    expect(fixed.changed).toEqual([".github/workflows/bench.yml"]);
+    expect(fixed.result.failed).toBe(false);
+  });
+
+  it("skips a repository with no workflow", () => {
+    const root = fixture({ "package.json": { name: "one" } });
+    commitAll(root);
+    expect(rule(root, "gate-trigger")).toMatchObject({ status: "skipped", note: "the repository has no workflow" });
   });
 });
