@@ -43,7 +43,7 @@ export const HOMES: readonly Home[] = [
     packages: ["@mark1russell7/rigor-statistics"],
     repo: "mark1russell7/rigor",
     state: "published",
-    words: ["stats", "quantile", "median", "mean", "percentile", "bootstrap", "interval", "confidence", "p-value", "brier", "wilson", "holm", "spearman", "kendall", "noise"],
+    words: ["stats", "quantile", "median", "mean", "percentile", "bootstrap", "interval", "confidence", "p-value", "brier", "wilson", "holm", "spearman", "kendall", "noise", "stddev", "variance", "resample", "resampling", "bonferroni", "regression", "histogram", "pvalue", "significance", "welch", "ttest", "mann", "whitney", "pearson", "correlation"],
     signatures: ["quantiles?", "percentiles?", "median(Of)?", "std[Dd]ev", "standardDeviation", "variance", "bootstrap[A-Za-z0-9]*", "wilson[A-Za-z0-9]*", "holm[A-Za-z0-9]*", "brier[A-Za-z0-9]*", "spearman[A-Za-z0-9]*", "kendall[A-Za-z0-9]*", "signTest", "pairedPermutation", "permutationTest", "noiseFloor", "iqr"],
   },
   {
@@ -53,7 +53,7 @@ export const HOMES: readonly Home[] = [
     packages: ["@mark1russell7/rigor-generators"],
     repo: "mark1russell7/rigor",
     state: "published",
-    words: ["seed", "prng", "mulberry32", "fnv", "hash", "shuffle", "sample", "fixture", "generator"],
+    words: ["seed", "prng", "mulberry32", "fnv", "hash", "shuffle", "sample", "fixture", "generator", "random", "rng", "seeded", "xorshift", "splitmix", "latin", "hypercube", "saltelli", "sobol", "halton", "sampler"],
     signatures: ["mulberry32", "splitmix[A-Za-z0-9]*", "xorshift[A-Za-z0-9]*", "sfc32", "xoshiro[A-Za-z0-9]*", "fnv1a[A-Za-z0-9]*", "deriveSeed", "seededRandom", "seededRng", "makeRng", "createRng"],
   },
   {
@@ -63,7 +63,7 @@ export const HOMES: readonly Home[] = [
     packages: [],
     repo: "mark1russell7/rigor",
     state: "planned",
-    words: ["benchmark", "harness", "timing", "perf", "gate", "paired-time", "a/a", "warm-up"],
+    words: ["benchmark", "harness", "timing", "perf", "gate", "paired-time", "a/a", "warm-up", "bench", "measure", "timer", "stopwatch", "profile", "elapsed", "hrtime", "determinism", "deterministic", "baseline", "ratchet", "threshold"],
     note: "Five repositories have their own harness today (vex, packing, highways, layout-stack, typeset). Do not grow a local harness: the shared one replaces them.",
   },
   {
@@ -73,7 +73,7 @@ export const HOMES: readonly Home[] = [
     packages: [],
     repo: "mark1russell7/rigor",
     state: "planned",
-    words: ["test", "testing", "property", "fast-check", "arbitrary", "pairwise", "metamorphic", "chaos", "load", "fake"],
+    words: ["test", "testing", "property", "fast-check", "arbitrary", "pairwise", "metamorphic", "chaos", "load", "fake", "fastcheck", "covering", "combinatorial", "fault", "injection", "soak", "stress", "throughput", "shrink"],
     note: "@mark1russell7/vex-testkit is only for Vex domains. A fake shell for tests is in @procedures/shell.",
   },
   {
