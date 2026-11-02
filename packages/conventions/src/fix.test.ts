@@ -238,7 +238,7 @@ describe("conventions fix", () => {
     expect(fixed.result.failed).toBe(false);
   });
 
-  it("sets rootDir to the folder when the tsconfig.test.json gets a subfolder from a config that it extends", () => {
+  it("sets rootDir and isolatedDeclarations when the tsconfig.test.json gets a subfolder or isolatedDeclarations from a config that it extends", () => {
     const options = '  "compilerOptions": {\n    "noEmit": true\n  },\n';
     const test = (extend: string): string =>
       `{\n  "extends": "${extend}",\n${options}  "include": ["src/**/*"]\n}\n`;
@@ -259,7 +259,7 @@ describe("conventions fix", () => {
       "packages/a/tsconfig.test.json": test("./tsconfig.json"),
       "packages/a/src/a.ts": "export const a = 1;\n",
       "packages/a/vitest.config.ts": "export default {};\n",
-      // b: the preset is not installed, so the rule cannot tell, and sets the rootDir
+      // b: the preset is not installed, so the rule cannot tell, and sets the rootDir and isolatedDeclarations
       "packages/b/package.json": { name: "b", scripts },
       "packages/b/tsconfig.test.json": test("missing-preset/node.json"),
       "packages/b/src/b.ts": "export const b = 1;\n",
@@ -277,6 +277,16 @@ describe("conventions fix", () => {
         '{ "extends": "./tsconfig.json", "include": ["src"] }\n',
       "packages/d/src/d.ts": "export const d = 1;\n",
       "packages/d/vitest.config.ts": "export default {};\n",
+      // e: a rootDir of its own folder, and isolatedDeclarations from the preset, which refuses `export default`
+      "node_modules/strict/ts.json": {
+        compilerOptions: { isolatedDeclarations: true, declaration: true },
+      },
+      "packages/e/package.json": { name: "e", scripts },
+      "packages/e/tsconfig.json": { extends: "strict/ts.json" },
+      "packages/e/tsconfig.test.json":
+        '{\n  "extends": "./tsconfig.json",\n  "compilerOptions": {\n    "noEmit": true,\n    "rootDir": "${configDir}"\n  },\n  "include": ["${configDir}/src/**/*"]\n}\n',
+      "packages/e/src/e.ts": "export const e = 1;\n",
+      "packages/e/vitest.config.ts": "export default {};\n",
     });
     const fixed = runFix({ root, only: ["typed-files"] });
     const withRoot = (extend: string): string =>
@@ -285,7 +295,7 @@ describe("conventions fix", () => {
       withRoot("./tsconfig.json"),
     );
     expect(read(root, "packages/b/tsconfig.test.json")).toBe(
-      withRoot("missing-preset/node.json"),
+      `{\n  "extends": "missing-preset/node.json",\n  "compilerOptions": {\n    "rootDir": ".",\n    "isolatedDeclarations": false,\n    "noEmit": true\n  },\n  "include": ["src/**/*", "*.config.ts"]\n}\n`,
     );
     expect(read(root, "packages/c/tsconfig.test.json")).toBe(
       `{\n  "extends": "./tsconfig.json",\n${options}  "include": ["src/**/*", "*.config.ts"]\n}\n`,
@@ -300,7 +310,11 @@ describe("conventions fix", () => {
       "packages/b/tsconfig.test.json",
       "packages/c/tsconfig.test.json",
       "packages/d/tsconfig.test.json",
+      "packages/e/tsconfig.test.json",
     ]);
+    expect(read(root, "packages/e/tsconfig.test.json")).toBe(
+      '{\n  "extends": "./tsconfig.json",\n  "compilerOptions": {\n    "isolatedDeclarations": false,\n    "noEmit": true,\n    "rootDir": "${configDir}"\n  },\n  "include": ["${configDir}/src/**/*", "${configDir}/*.config.ts"]\n}\n',
+    );
   });
 
   it("adds the include on its own line in a list of lines", () => {

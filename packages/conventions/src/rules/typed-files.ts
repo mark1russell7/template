@@ -197,16 +197,22 @@ const CONFIG_FILE = /\.config(\.[cm]?ts)$/;
 /** A `rootDir` that is the folder of the tsconfig, so that the config files at the root are in it. */
 const ROOT_DIRS = new Set([".", "./", "${configDir}", "${configDir}/"]);
 
+/** The value of an option that a tsconfig gets from a config that it extends, and the file of that config. */
+interface Inherited {
+  readonly value: unknown;
+  readonly file: string;
+}
+
 /**
- * This function gives the `rootDir` that a tsconfig gets from the configs it extends, as an absolute path. It gives
+ * This function gives the value of the compiler option `name` that a tsconfig gets from the configs it extends. It gives
  * `null` when no config of the chain sets it. It gives `undefined` when it cannot read a config of the chain, for example
  * a package that is not installed.
  */
-function inheritedRootDir(
+function inheritedOption(
   tsconfig: string,
-  leaf: string = tsconfig,
+  name: string,
   seen: ReadonlySet<string> = new Set(),
-): string | null | undefined {
+): Inherited | null | undefined {
   const json = readJsonc(tsconfig) as { extends?: unknown } | undefined;
   if (json === undefined || seen.has(tsconfig)) return undefined;
   const specs = Array.isArray(json.extends)
@@ -214,7 +220,7 @@ function inheritedRootDir(
     : json.extends === undefined
       ? []
       : [json.extends];
-  let found: string | null = null;
+  let found: Inherited | null = null;
   // A later config of the list wins, as in tsc
   for (const spec of specs) {
     if (typeof spec !== "string") return undefined;
@@ -229,20 +235,34 @@ function inheritedRootDir(
     }
     if (!existsSync(file) && existsSync(`${file}.json`)) file = `${file}.json`;
     const parent = readJsonc(file) as
-      { compilerOptions?: { rootDir?: unknown } } | undefined;
+      { compilerOptions?: Record<string, unknown> } | undefined;
     if (parent === undefined) return undefined;
-    const own = parent.compilerOptions?.rootDir;
-    // `${configDir}` is the folder of the config that tsc reads first, the others are relative to their own config
-    const rootDir =
-      typeof own === "string"
-        ? own.startsWith("${configDir}")
-          ? resolve(dirname(leaf), `.${own.slice("${configDir}".length)}`)
-          : resolve(dirname(file), own)
-        : inheritedRootDir(file, leaf, new Set([...seen, tsconfig]));
-    if (rootDir === undefined) return undefined;
-    if (rootDir !== null) found = rootDir;
+    const own = parent.compilerOptions?.[name];
+    const value =
+      own === undefined
+        ? inheritedOption(file, name, new Set([...seen, tsconfig]))
+        : { value: own, file };
+    if (value === undefined) return undefined;
+    if (value !== null) found = value;
   }
   return found;
+}
+
+/**
+ * This function tells if a tsconfig gets a `rootDir` other than its folder from a config that it extends. It also says
+ * yes when it cannot read that config. A `${configDir}` is the folder of the tsconfig, the other paths are relative to
+ * the config that sets them.
+ */
+function inheritsSubfolder(tsconfig: string): boolean {
+  const inherited = inheritedOption(tsconfig, "rootDir");
+  if (inherited === null) return false;
+  if (inherited === undefined || typeof inherited.value !== "string")
+    return true;
+  const own = inherited.value;
+  const rootDir = own.startsWith("${configDir}")
+    ? resolve(dirname(tsconfig), `.${own.slice("${configDir}".length)}`)
+    : resolve(dirname(inherited.file), own);
+  return rootDir !== resolve(dirname(tsconfig));
 }
 
 /**
@@ -292,42 +312,65 @@ function configEdit(root: string, tsconfig: string, extension: string): Edit[] {
   const moveRoot = typeof rootDir === "string" && !ROOT_DIRS.has(rootDir);
   if (moveRoot)
     after = after.replace(/("rootDir"\s*:\s*)"(?:[^"\\]|\\.)*"/, '$1"."');
-  // With no rootDir of its own, the file can get a subfolder (`src`) from a config that it extends
-  const inherited =
-    rootDir === undefined && after !== text ? inheritedRootDir(tsconfig) : null;
-  const addRoot =
-    inherited !== null &&
-    (inherited === undefined ||
-      resolve(inherited) !== resolve(dirname(tsconfig)));
-  if (addRoot && options !== undefined) {
+  // The options that the file gets from a config that it extends can break the check of the config files: a rootDir
+  // of a subfolder (`src`) leaves them out, and isolatedDeclarations refuses their `export default`. A test config does
+  // not emit, so the fix sets both, also when it cannot read the config that the file extends.
+  const added: Record<string, unknown> = {};
+  if (after !== text) {
+    if (rootDir === undefined && inheritsSubfolder(tsconfig))
+      added["rootDir"] = ".";
+    const isolated =
+      options?.["isolatedDeclarations"] === undefined
+        ? inheritedOption(tsconfig, "isolatedDeclarations")
+        : null;
+    if (
+      isolated === undefined ||
+      (isolated !== null && isolated.value !== false)
+    )
+      added["isolatedDeclarations"] = false;
+  }
+  const entries = Object.entries(added).map(
+    ([key, value]) => `${JSON.stringify(key)}: ${JSON.stringify(value)}`,
+  );
+  if (entries.length > 0 && options !== undefined) {
     after =
       Object.keys(options).length === 0
         ? after.replace(
             /("compilerOptions"\s*:\s*\{)\s*\}/,
-            '$1 "rootDir": "." }',
+            `$1 ${entries.join(", ")} }`,
           )
         : after.replace(
             /("compilerOptions"\s*:\s*\{)(\s*)/,
             (_all, start: string, space: string) =>
-              `${start}${space}"rootDir": ".",${space}`,
+              `${start}${space}${entries.join(`,${space}`)},${space}`,
           );
-  } else if (addRoot) {
+  } else if (entries.length > 0) {
     after = after.replace(
       /^(\s*\{)(\s*)/,
       (_all, start: string, space: string) =>
-        `${start}${space}"compilerOptions": { "rootDir": "." },${space}`,
+        `${start}${space}"compilerOptions": { ${entries.join(", ")} },${space}`,
     );
   }
   const include = globs.includes(glob) ? globs : [...globs, glob];
-  const intended = addRoot
-    ? options === undefined
-      ? { compilerOptions: { rootDir: "." }, ...json, include }
-      : { ...json, compilerOptions: { rootDir: ".", ...options }, include }
-    : {
-        ...json,
-        ...(moveRoot ? { compilerOptions: { ...options, rootDir: "." } } : {}),
-        include,
-      };
+  const intended =
+    entries.length > 0
+      ? options === undefined
+        ? { compilerOptions: added, ...json, include }
+        : {
+            ...json,
+            compilerOptions: {
+              ...added,
+              ...(moveRoot ? { ...options, rootDir: "." } : options),
+            },
+            include,
+          }
+      : {
+          ...json,
+          ...(moveRoot
+            ? { compilerOptions: { ...options, rootDir: "." } }
+            : {}),
+          include,
+        };
   let parsed: unknown;
   try {
     parsed = JSON.parse(after);
