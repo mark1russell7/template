@@ -54,6 +54,7 @@ The rules come from the invariants audit of 2026-10-26 (strategy item s38). The 
 | `roadmap-parses` | Each call of the Pages workflow of the template (`reusable-pages.yml`) gives a `roadmap`, or `site-pages: false`. Without it, the Status page shows no item of the plan. Each roadmap that a workflow gives to the Status page (a `roadmap:` key) parses as `@mark1russell7/site-pages` reads it. The rule uses the parser of site-pages. Thus a pull request finds a bad row, and the Pages job on `main` does not stop on it. | fleet `fail-closed` (STRATEGY.md, 2026-10-30). |
 | `runner-budget` | All repositories of the account share 40 runners. Each `strategy` with a `matrix` has a `max-parallel` of 3 or less. Each workflow has a concurrency group at the top or in each job. A job that calls a shared workflow of the option `grouped` gets its group from that workflow, and each job of that workflow has a group. The minute of each `cron` comes from a hash of the repository and the file (1 to 59), so the schedules of the repositories do not start together. The repository comes from `GITHUB_REPOSITORY` or from the remote `origin`. | fleet `runner-slots` (STRATEGY.md, 2026-10-30). |
 | `gate-trigger` | No workflow has `paths` or `paths-ignore` on `on.pull_request` or `on.pull_request_target`. The ruleset needs the summary check `<Name> OK` of each gate, and a workflow with a path filter does not start on each pull request. Then its check is not there, the ruleset cannot ask for it, and a pull request can merge before the gate ends. A gate uses the actions `changes` and `gate-summary` of the template (`CI.md`, "A gate with paths"). | fleet `gate-trigger` (STRATEGY.md, 2026-11-02). |
+| `home-package` | A change does not add a function with a signature name of another home of the map (for example `median`, `mulberry32` or `writeFileAtomic`). A local copy drifts from the home and splits the fixes. On 2026-11-02 the fleet had 68 local statistics functions in 14 repositories. The rule examines only the lines that the change adds, so the copies that exist do not break. | fleet direction 18 (STRATEGY.md, 2026-11-02). |
 
 The rule `release-files` needs the base of the change. On a pull request, the checkout is a merge commit, and the rule reads its two parents (`fetch-depth` 2 or more). In other runs, give `--base <ref>`. Without a base, the rule shows `skip`. The rule also needs each commit of the change. A shallow checkout can end inside the change. Then the authors and the messages that the rule reads are not those of the change, so the rule shows `error`. A pull request of one commit is complete at depth 2. For a longer one, the CI of the template deepens the checkout to the merge base.
 
@@ -110,6 +111,7 @@ An unknown rule, an unknown option, or an exception or a changed option without 
 | `runner-budget.minute` | `true` | When `false`, the rule does not examine the minute of the schedules. |
 | `runner-budget.grouped` | `["reusable-ai-review.yml", "reusable-codex-review.yml"]` | The shared workflows that give a concurrency group in each of their jobs. |
 | `gate-trigger.allow` | `[]` | The file names of the workflows that can filter pull requests by path, because they are not a gate (for example a preview). |
+| `home-package.scope` | `"change"` | `"change"`: only the lines that a pull request or `--base` adds. `"all"`: each line of each tracked file, for a sweep of the copies that exist. |
 
 ## Commands
 
@@ -120,7 +122,7 @@ An unknown rule, an unknown option, or an exception or a changed option without 
 | `--list` | Show each rule: the reason, the fix, the options, the state and the audit rows. |
 | `--root <folder>` | The root of the repository. The default is the current folder. |
 | `--rule <id>` | Only this rule. Use it again for more rules. |
-| `--base <ref>` | The base commit of the change, for the rule `release-files`. |
+| `--base <ref>` | The base commit of the change, for the rules `release-files` and `home-package`. |
 | `--json` | Write the result as JSON. |
 
 ## The map of homes
@@ -133,6 +135,8 @@ conventions map seeded random    # the areas that match the words
 conventions map --markdown       # the table with the rule, for a CLAUDE.md
 conventions map --overlay homes.json --markdown   # with more homes from a JSON file
 ```
+
+Each home can give `signatures`: the names of functions that only the home has, as regular expressions of a whole name. The rule `home-package` breaks on a new function with such a name in another repository. Its message says if the home already exports the name. The index of the exports is `src/home-exports.ts`. The script `scripts/homes/exports.ts` of the template writes it from the latest version of each home on npm.
 
 An overlay file has the shape `{ "homes": [...] }`. A home of the overlay takes the place of the home with the same area. The private repositories use an overlay, because the public map names only public packages.
 

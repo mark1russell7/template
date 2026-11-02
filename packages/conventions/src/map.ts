@@ -20,6 +20,12 @@ export interface Home {
   readonly state: HomeState;
   /** More words that find the area in a search. */
   readonly words: readonly string[];
+  /**
+   * The names of the functions that only the home has: each is a regular expression of a whole name, for example `median(Of)?`.
+   * The rule home-package of conventions breaks on a new function with such a name in another repository. Names that many
+   * areas use (for example `parse` or `record`) are not signatures: they give false breaks.
+   */
+  readonly signatures?: readonly string[];
   /** A note: the code that goes to another home, or a known split. */
   readonly note?: string;
 }
@@ -37,7 +43,8 @@ export const HOMES: readonly Home[] = [
     packages: ["@mark1russell7/rigor-statistics"],
     repo: "mark1russell7/rigor",
     state: "published",
-    words: ["stats", "quantile", "median", "mean", "percentile", "bootstrap", "interval", "confidence", "p-value", "brier", "wilson", "holm", "spearman", "kendall", "noise"],
+    words: ["stats", "quantile", "median", "mean", "percentile", "bootstrap", "interval", "confidence", "p-value", "brier", "wilson", "holm", "spearman", "kendall", "noise", "stddev", "variance", "resample", "resampling", "bonferroni", "regression", "histogram", "pvalue", "significance", "welch", "ttest", "mann", "whitney", "pearson", "correlation"],
+    signatures: ["quantiles?", "percentiles?", "median(Of)?", "std[Dd]ev", "standardDeviation", "variance", "bootstrap[A-Za-z0-9]*", "wilson[A-Za-z0-9]*", "holm[A-Za-z0-9]*", "brier[A-Za-z0-9]*", "spearman[A-Za-z0-9]*", "kendall[A-Za-z0-9]*", "signTest", "pairedPermutation", "permutationTest", "noiseFloor", "iqr"],
   },
   {
     area: "random",
@@ -46,7 +53,8 @@ export const HOMES: readonly Home[] = [
     packages: ["@mark1russell7/rigor-generators"],
     repo: "mark1russell7/rigor",
     state: "published",
-    words: ["seed", "prng", "mulberry32", "fnv", "hash", "shuffle", "sample", "fixture", "generator"],
+    words: ["seed", "prng", "mulberry32", "fnv", "hash", "shuffle", "sample", "fixture", "generator", "random", "rng", "seeded", "xorshift", "splitmix", "latin", "hypercube", "saltelli", "sobol", "halton", "sampler"],
+    signatures: ["mulberry32", "splitmix[A-Za-z0-9]*", "xorshift[A-Za-z0-9]*", "sfc32", "xoshiro[A-Za-z0-9]*", "fnv1a[A-Za-z0-9]*", "deriveSeed", "seededRandom", "seededRng", "makeRng", "createRng"],
   },
   {
     area: "bench",
@@ -55,7 +63,7 @@ export const HOMES: readonly Home[] = [
     packages: [],
     repo: "mark1russell7/rigor",
     state: "planned",
-    words: ["benchmark", "harness", "timing", "perf", "gate", "paired-time", "a/a", "warm-up"],
+    words: ["benchmark", "harness", "timing", "perf", "gate", "paired-time", "a/a", "warm-up", "bench", "measure", "timer", "stopwatch", "profile", "elapsed", "hrtime", "determinism", "deterministic", "baseline", "ratchet", "threshold"],
     note: "Five repositories have their own harness today (vex, packing, highways, layout-stack, typeset). Do not grow a local harness: the shared one replaces them.",
   },
   {
@@ -65,7 +73,7 @@ export const HOMES: readonly Home[] = [
     packages: [],
     repo: "mark1russell7/rigor",
     state: "planned",
-    words: ["test", "testing", "property", "fast-check", "arbitrary", "pairwise", "metamorphic", "chaos", "load", "fake"],
+    words: ["test", "testing", "property", "fast-check", "arbitrary", "pairwise", "metamorphic", "chaos", "load", "fake", "fastcheck", "covering", "combinatorial", "fault", "injection", "soak", "stress", "throughput", "shrink"],
     note: "@mark1russell7/vex-testkit is only for Vex domains. A fake shell for tests is in @procedures/shell.",
   },
   {
@@ -76,6 +84,7 @@ export const HOMES: readonly Home[] = [
     repo: "mark1russell7/algebra",
     state: "unpublished",
     words: ["math", "arithmetic", "rational", "bigint", "interval", "error bound", "predicate", "orientation", "symbolic", "exact"],
+    signatures: ["orient2d", "orientation", "inCircle", "incircle"],
     note: "Statistics go to rigor-statistics, and geometry records go to layout-contract. There is no math package.",
   },
   {
@@ -105,6 +114,7 @@ export const HOMES: readonly Home[] = [
     repo: "mark1russell7/systems",
     state: "published",
     words: ["server", "http server", "lifecycle", "shutdown", "health", "loop", "clock", "backoff", "retry", "jitter", "websocket"],
+    signatures: ["exponentialBackoff", "backoffDelay", "withRetry", "retryWithBackoff", "withJitter"],
     note: "A server package is made with the template preset service. @procedures/peer is in mark1russell7/client.",
   },
   {
@@ -124,6 +134,7 @@ export const HOMES: readonly Home[] = [
     repo: "mark1russell7/client",
     state: "published",
     words: ["file", "atomic", "write", "spawn", "exec", "shell", "command", "github", "registry", "fetch", "yaml", "csv", "env"],
+    signatures: ["atomicWrite[A-Za-z0-9]*", "writeFileAtomic", "writeJsonAtomic", "writeAtomic"],
   },
   {
     area: "cli",
@@ -133,6 +144,7 @@ export const HOMES: readonly Home[] = [
     repo: "mark1russell7/client",
     state: "planned",
     words: ["argv", "arguments", "flags", "options", "parser", "help text", "command line"],
+    signatures: ["parseArgs", "parseArgv"],
     note: "Nine hand-written parsers exist (10-25). Until the library is ready, use @procedures/cli-run or keep the parser small.",
   },
   {
@@ -143,6 +155,7 @@ export const HOMES: readonly Home[] = [
     repo: "mark1russell7/client",
     state: "published",
     words: ["list", "queue", "deque", "heap", "tree map", "graph", "dag", "topological", "cycle"],
+    signatures: ["topoSort", "topologicalSort", "toposort", "topoOrder", "detectCycles?", "findCycles?"],
   },
   {
     area: "optional",
@@ -162,6 +175,7 @@ export const HOMES: readonly Home[] = [
     repo: "mark1russell7/layout-contract",
     state: "published",
     words: ["point", "rect", "box", "segment", "polygon", "tolerance", "overlap", "intersection", "bounds"],
+    signatures: ["segmentsIntersect", "segmentsCross", "segmentIntersection", "segmentsIntersection", "boxesOverlap", "rectsOverlap", "rectsIntersect", "pointInPolygon", "distanceToSegment", "pointSegmentDistance"],
     note: "Exact predicates go to algebra. @mark1russell7/vex-domains has 2D vectors for Vex formulas only.",
   },
   {
@@ -199,6 +213,7 @@ export const HOMES: readonly Home[] = [
     repo: "mark1russell7/typeset",
     state: "planned",
     words: ["string", "unicode", "grapheme", "font", "width", "measure text", "line break", "wrap", "hyphen"],
+    signatures: ["graphemes", "segmentGraphemes", "wrapText", "breakLines", "measureText", "textWidth", "stringWidth"],
     note: "Plain string helpers (case, padding, templates) have no home yet: ask the strategist.",
   },
   {

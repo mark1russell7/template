@@ -4,6 +4,7 @@
 import type { Rule } from "../rule.ts";
 import { cuePreset } from "./cue-preset.ts";
 import { gateTrigger } from "./gate-trigger.ts";
+import { homePackage } from "./home-package.ts";
 import { mainCheck } from "./main-check.ts";
 import { noBuildOutput } from "./no-build-output.ts";
 import { noLocalPaths } from "./no-local-paths.ts";
@@ -39,6 +40,7 @@ export const RULES: readonly Rule[] = [
   roadmapParses,
   runnerBudget,
   gateTrigger,
+  homePackage,
 ];
 
-export { cuePreset, gateTrigger, mainCheck, noBuildOutput, noLocalPaths, pinnedGitDeps, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, workspaceProtocol };
+export { cuePreset, gateTrigger, homePackage, mainCheck, noBuildOutput, noLocalPaths, pinnedGitDeps, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, workspaceProtocol };

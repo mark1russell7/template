@@ -40,6 +40,7 @@ export {
 export {
   cuePreset,
   gateTrigger,
+  homePackage,
   mainCheck,
   noBuildOutput,
   noLocalPaths,
@@ -61,6 +62,8 @@ export { DEFAULT_ALLOWED, HOME_PATTERNS } from "./rules/no-local-paths.ts";
 export { hasImportMetaMain, REAL_COMPARE } from "./rules/main-check.ts";
 export { roadmapOfLine } from "./rules/roadmap-parses.ts";
 export { repositoryOfRemote, scheduleMinute } from "./rules/runner-budget.ts";
+export { declaredName, messageOf, repoOf, signaturesOf } from "./rules/home-package.ts";
+export { HOME_EXPORTS } from "./home-exports.ts";
 export { ACTIONS_COMMIT, convertGate, prPathFilters, summaryName, type PathFilter } from "./rules/gate-trigger.ts";
 export { isGitSpecifier, isPinned } from "./rules/pinned-git-deps.ts";
 export { isSourcePath, pathsOf } from "./rules/source-main.ts";

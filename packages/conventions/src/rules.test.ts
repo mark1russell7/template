@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
-import { convertGate, hasTests, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, type CheckOptions, type RuleResult } from "./index.ts";
+import { convertGate, declaredName, hasTests, HOMES, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, type CheckOptions, type RuleResult } from "./index.ts";
 import { minuteField } from "./rules/runner-budget.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-rules-"));
@@ -863,5 +863,62 @@ describe("gate-trigger", () => {
     const root = fixture({ "package.json": { name: "one" } });
     commitAll(root);
     expect(rule(root, "gate-trigger")).toMatchObject({ status: "skipped", note: "the repository has no workflow" });
+  });
+});
+
+describe("home-package", () => {
+  /** A repository of `repo` with a first commit, and a second commit that adds `added` to src/a.ts. */
+  function changed(added: string, repo = "mark1russell7/other"): string {
+    const root = fixture({ "package.json": { name: "one" }, "src/a.ts": "export function median(values: number[]): number {\n  return values[0] ?? 0;\n}\n" });
+    commitAll(root);
+    git(root, "remote", "add", "origin", `https://github.com/${repo}.git`);
+    git(root, "tag", "base");
+    writeFileSync(join(root, "src/a.ts"), `export function median(values: number[]): number {\n  return values[0] ?? 0;\n}\n${added}`);
+    git(root, "commit", "-q", "-am", "change");
+    return root;
+  }
+
+  it("knows the forms of a declaration", () => {
+    expect(declaredName("export async function quantile(xs: number[], q: number) {")).toBe("quantile");
+    expect(declaredName("function* draws(seed: number) {")).toBe("draws");
+    // A long line with no declaration does not backtrack for a long time (CodeQL js/polynomial-redos)
+    const start = performance.now();
+    expect(declaredName(`function${" ".repeat(50_000)}(`)).toBeUndefined();
+    expect(performance.now() - start).toBeLessThan(500);
+    expect(declaredName("const medianOf = (values: readonly number[]): number => 0;")).toBe("medianOf");
+    expect(declaredName("export const mulberry32 = function (seed: number) {")).toBe("mulberry32");
+    expect(declaredName("const total = values.length;")).toBeUndefined();
+    expect(declaredName("  return median(values);")).toBeUndefined();
+  });
+
+  it("breaks on an added function of another home, and not on the copy that exists", () => {
+    const result = rule(changed("const quantile = (xs: number[], q: number): number => xs[0] ?? q;\nfunction total(xs: number[]): number {\n  return xs.length;\n}\n"), "home-package", { base: "base", env: {} });
+    expect(result.status).toBe("break");
+    expect(result.breaks).toHaveLength(1);
+    expect(result.breaks[0]).toMatchObject({ file: "src/a.ts", line: 4 });
+    expect(result.breaks[0]?.message).toContain("Import `quantile` from `@mark1russell7/rigor-statistics`");
+  });
+
+  it("says when the home does not export the name yet, and passes in the home itself", () => {
+    const message = rule(changed("function medianOf(xs: number[]): number {\n  return xs[0] ?? 0;\n}\n"), "home-package", { base: "base", env: {} }).breaks[0]?.message;
+    expect(message).toContain("does not export `medianOf` yet: add it to the home in a pull request of mark1russell7/rigor");
+    expect(rule(changed("function medianOf(xs: number[]): number {\n  return xs[0] ?? 0;\n}\n", "mark1russell7/rigor"), "home-package", { base: "base", env: {} }).status).toBe("pass");
+  });
+
+  it("skips with no change, and examines each line with the option scope all", () => {
+    const root = changed("// the end\n");
+    expect(rule(root, "home-package", { env: {} }).status).toBe("skipped");
+    writeFileSync(join(root, "package.json"), JSON.stringify({ name: "one", conventions: { rules: { "home-package": { scope: "all", reason: "a sweep of the copies" } } } }));
+    expect(rule(root, "home-package", { env: {} }).breaks.map((item) => item.line)).toEqual([1]);
+  });
+
+  it("has signatures that compile, and no name that two homes claim", () => {
+    const signatures = signaturesOf(HOMES);
+    expect(signatures.length).toBeGreaterThan(40);
+    const names = ["quantile", "median", "medianOf", "mulberry32", "fnv1a32", "orient2d", "writeFileAtomic", "topoSort", "segmentsIntersect", "exponentialBackoff"];
+    for (const name of names) expect(new Set(signatures.filter((item) => item.pattern.test(name)).map((item) => item.home.area)).size, name).toBe(1);
+    for (const name of ["record", "run", "parse", "mean", "seconds", "connect", "measure"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(false);
+    // A planned home has no package to import yet, so its signatures do not break
+    for (const name of ["graphemes", "parseArgs"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(false);
   });
 });
