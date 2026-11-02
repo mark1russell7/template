@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 78 names
+## . (build/index.d.ts): 81 names
 
 type AuditSource: build/index.d.ts#AuditSource
 type Break: build/index.d.ts#Break
@@ -23,6 +23,7 @@ type OptionSpec: build/index.d.ts#OptionSpec
 type OptionValue: build/index.d.ts#OptionValue
 type Options: build/index.d.ts#Options
 type PackageInfo: build/index.d.ts#PackageInfo
+REAL_COMPARE: build/index.d.ts#REAL_COMPARE
 RULES: build/index.d.ts#RULES
 type Rule: build/index.d.ts#Rule
 type RuleConfig: build/index.d.ts#RuleConfig
@@ -43,6 +44,7 @@ formatResult: build/index.d.ts#formatResult
 globFolders: build/index.d.ts#globFolders
 globToRegExp: build/index.d.ts#globToRegExp
 hasFile: build/index.d.ts#hasFile
+hasImportMetaMain: build/index.d.ts#hasImportMetaMain
 hasTests: build/index.d.ts#hasTests
 inFolder: build/index.d.ts#inFolder
 isGitSpecifier: build/index.d.ts#isGitSpecifier
@@ -51,6 +53,7 @@ isSourcePath: build/index.d.ts#isSourcePath
 keyLine: build/index.d.ts#keyLine
 lineOf: build/index.d.ts#lineOf
 listRules: build/index.d.ts#listRules
+mainCheck: build/index.d.ts#mainCheck
 matchesAny: build/index.d.ts#matchesAny
 noBuildOutput: build/index.d.ts#noBuildOutput
 noLocalPaths: build/index.d.ts#noLocalPaths
@@ -187,6 +190,9 @@ interface PackageInfo {
   readonly manifest: Manifest;
 }
 
+### build/index.d.ts#REAL_COMPARE
+export declare const REAL_COMPARE = "process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))";
+
 ### build/index.d.ts#RULES
 export declare const RULES: readonly Rule[];
 
@@ -278,6 +284,9 @@ export declare function globToRegExp(glob: string): RegExp;
 ### build/index.d.ts#hasFile
 export declare const hasFile: (dir: string, file: string) => boolean;
 
+### build/index.d.ts#hasImportMetaMain
+export declare function hasImportMetaMain(range: unknown): boolean;
+
 ### build/index.d.ts#hasTests
 export declare function hasTests(files: readonly string[], folder: string): boolean;
 
@@ -301,6 +310,9 @@ export declare function lineOf(text: string, needle: string, from?: number): num
 
 ### build/index.d.ts#listRules
 export declare function listRules(config: ConventionsConfig | undefined, rules?: readonly Rule[]): string;
+
+### build/index.d.ts#mainCheck
+export declare const mainCheck: Rule;
 
 ### build/index.d.ts#matchesAny
 export declare function matchesAny(path: string, globs: readonly string[]): boolean;

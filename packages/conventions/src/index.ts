@@ -39,6 +39,7 @@ export {
 } from "./rule.ts";
 export {
   cuePreset,
+  mainCheck,
   noBuildOutput,
   noLocalPaths,
   pinnedGitDeps,
@@ -56,6 +57,7 @@ export {
   workspaceProtocol,
 } from "./rules/index.ts";
 export { DEFAULT_ALLOWED, HOME_PATTERNS } from "./rules/no-local-paths.ts";
+export { hasImportMetaMain, REAL_COMPARE } from "./rules/main-check.ts";
 export { roadmapOfLine } from "./rules/roadmap-parses.ts";
 export { repositoryOfRemote, scheduleMinute } from "./rules/runner-budget.ts";
 export { isGitSpecifier, isPinned } from "./rules/pinned-git-deps.ts";
