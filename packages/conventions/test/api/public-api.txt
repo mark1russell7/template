@@ -4,8 +4,9 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 81 names
+## . (build/index.d.ts): 87 names
 
+ACTIONS_COMMIT: build/index.d.ts#ACTIONS_COMMIT
 type AuditSource: build/index.d.ts#AuditSource
 type Break: build/index.d.ts#Break
 type CheckOptions: build/index.d.ts#CheckOptions
@@ -23,6 +24,7 @@ type OptionSpec: build/index.d.ts#OptionSpec
 type OptionValue: build/index.d.ts#OptionValue
 type Options: build/index.d.ts#Options
 type PackageInfo: build/index.d.ts#PackageInfo
+type PathFilter: build/index.d.ts#PathFilter
 REAL_COMPARE: build/index.d.ts#REAL_COMPARE
 RULES: build/index.d.ts#RULES
 type Rule: build/index.d.ts#Rule
@@ -37,10 +39,12 @@ annotations: build/index.d.ts#annotations
 cleanPath: build/index.d.ts#cleanPath
 codePackages: build/index.d.ts#codePackages
 configsOfScript: build/index.d.ts#configsOfScript
+convertGate: build/index.d.ts#convertGate
 createContext: build/index.d.ts#createContext
 cuePreset: build/index.d.ts#cuePreset
 defaultOptions: build/index.d.ts#defaultOptions
 formatResult: build/index.d.ts#formatResult
+gateTrigger: build/index.d.ts#gateTrigger
 globFolders: build/index.d.ts#globFolders
 globToRegExp: build/index.d.ts#globToRegExp
 hasFile: build/index.d.ts#hasFile
@@ -62,6 +66,7 @@ parseConfig: build/index.d.ts#parseConfig
 parseJsonc: build/index.d.ts#parseJsonc
 pathsOf: build/index.d.ts#pathsOf
 pinnedGitDeps: build/index.d.ts#pinnedGitDeps
+prPathFilters: build/index.d.ts#prPathFilters
 readConfig: build/index.d.ts#readConfig
 readJsonc: build/index.d.ts#readJsonc
 releaseFiles: build/index.d.ts#releaseFiles
@@ -80,6 +85,7 @@ scriptsOf: build/index.d.ts#scriptsOf
 sourceMain: build/index.d.ts#sourceMain
 specifiersOf: build/index.d.ts#specifiersOf
 summaryMarkdown: build/index.d.ts#summaryMarkdown
+summaryName: build/index.d.ts#summaryName
 testsRequired: build/index.d.ts#testsRequired
 trustPolicy: build/index.d.ts#trustPolicy
 tsconfigTest: build/index.d.ts#tsconfigTest
@@ -93,6 +99,9 @@ workspaceProtocol: build/index.d.ts#workspaceProtocol
 conventions: ./build/cli.js
 
 ## Declarations
+
+### build/index.d.ts#ACTIONS_COMMIT
+export declare const ACTIONS_COMMIT: string;
 
 ### build/index.d.ts#AuditSource
 interface AuditSource {
@@ -190,6 +199,13 @@ interface PackageInfo {
   readonly manifest: Manifest;
 }
 
+### build/index.d.ts#PathFilter
+interface PathFilter {
+  readonly line: number;
+  readonly trigger: string;
+  readonly key: string;
+}
+
 ### build/index.d.ts#REAL_COMPARE
 export declare const REAL_COMPARE = "process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))";
 
@@ -263,6 +279,13 @@ export declare function codePackages(context: Pick<RuleContext, "rootPackage" | 
 ### build/index.d.ts#configsOfScript
 export declare function configsOfScript(script: string): string[];
 
+### build/index.d.ts#convertGate
+export declare function convertGate(text: string, file: string, commit?: string): {
+  text: string;
+} | {
+  reason: string;
+};
+
 ### build/index.d.ts#createContext
 export declare function createContext(root: string, config: ConventionsConfig, options?: Pick<CheckOptions, "base" | "env">): RuleContext;
 
@@ -274,6 +297,9 @@ export declare function defaultOptions(rule: Rule): Options;
 
 ### build/index.d.ts#formatResult
 export declare function formatResult(result: CheckResult): string;
+
+### build/index.d.ts#gateTrigger
+export declare const gateTrigger: Rule;
 
 ### build/index.d.ts#globFolders
 export declare function globFolders(root: string, glob: string): string[];
@@ -338,6 +364,9 @@ export declare function pathsOf(value: unknown): string[];
 ### build/index.d.ts#pinnedGitDeps
 export declare const pinnedGitDeps: Rule;
 
+### build/index.d.ts#prPathFilters
+export declare function prPathFilters(text: string): PathFilter[];
+
 ### build/index.d.ts#readConfig
 export declare function readConfig(root: string, rules?: readonly Rule[]): ConventionsConfig;
 
@@ -391,6 +420,9 @@ export declare function specifiersOf(manifest: Manifest, field: string): [string
 
 ### build/index.d.ts#summaryMarkdown
 export declare function summaryMarkdown(result: CheckResult): string;
+
+### build/index.d.ts#summaryName
+export declare function summaryName(workflowName: string): string;
 
 ### build/index.d.ts#testsRequired
 export declare const testsRequired: Rule;

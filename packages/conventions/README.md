@@ -27,6 +27,7 @@ Each break shows the file, the line, the rule and the fix. In GitHub Actions, th
 - `typed-files`: a config file at the root of a package (`vitest.config.ts`). The fix adds `*.config.ts` and `rootDir: "."` to the `tsconfig.test.json` of the package, when that file has no comments.
 - `trust-policy`: the settings `trustPolicy`, `trustPolicyIgnoreAfter` and `trustPolicyExclude` of `pnpm-workspace.yaml`. The fix makes the file when the repository has none.
 - `main-check`: a compare of `process.argv[1]` with the path of the script. The fix writes `import.meta.main` when each Node version of `engines.node` has it (`^22.18`, `>=24.2`). Else it writes a compare of the two real paths, and it adds the imports. It removes the imports that only the old compare used.
+- `gate-trigger`: a path filter on the pull request trigger of a gate. The fix removes the filter and adds a job `changes` with the same patterns. Each other job needs it and has an `if` on its match. A summary job `<Name> OK` with the action `gate-summary` needs each job. A job with its own `if`, and each job that needs such a job, can be skipped (`allow-skip`). Some workflows need a person, because the fix cannot convert them with certainty. Examples are a trigger in the flow form, an `if` of more than one line, and a job `changes` that already exists.
 
 The text output marks each break that has a fix. In the JSON output, such a break has `fixable: true`. The release train starts `conventions fix` in its update pull requests. Thus a break that a script can fix does not block a repository.
 
@@ -52,6 +53,7 @@ The rules come from the invariants audit of 2026-10-26 (strategy item s38). The 
 | `tests-required` | No test runner passes when it finds no test: no `passWithNoTests: true` in a config of vitest, vite, jest or Playwright, and no `--passWithNoTests` in `package.json`. With the option, a broken include pattern turns the test gate green with no test run. | fleet `fail-closed` (STRATEGY.md, 2026-10-30). |
 | `roadmap-parses` | Each call of the Pages workflow of the template (`reusable-pages.yml`) gives a `roadmap`, or `site-pages: false`. Without it, the Status page shows no item of the plan. Each roadmap that a workflow gives to the Status page (a `roadmap:` key) parses as `@mark1russell7/site-pages` reads it. The rule uses the parser of site-pages. Thus a pull request finds a bad row, and the Pages job on `main` does not stop on it. | fleet `fail-closed` (STRATEGY.md, 2026-10-30). |
 | `runner-budget` | All repositories of the account share 40 runners. Each `strategy` with a `matrix` has a `max-parallel` of 3 or less. Each workflow has a concurrency group at the top or in each job. A job that calls a shared workflow of the option `grouped` gets its group from that workflow, and each job of that workflow has a group. The minute of each `cron` comes from a hash of the repository and the file (1 to 59), so the schedules of the repositories do not start together. The repository comes from `GITHUB_REPOSITORY` or from the remote `origin`. | fleet `runner-slots` (STRATEGY.md, 2026-10-30). |
+| `gate-trigger` | No workflow has `paths` or `paths-ignore` on `on.pull_request` or `on.pull_request_target`. The ruleset needs the summary check `<Name> OK` of each gate, and a workflow with a path filter does not start on each pull request. Then its check is not there, the ruleset cannot ask for it, and a pull request can merge before the gate ends. A gate uses the actions `changes` and `gate-summary` of the template (`CI.md`, "A gate with paths"). | fleet `gate-trigger` (STRATEGY.md, 2026-11-02). |
 
 The rule `release-files` needs the base of the change. On a pull request, the checkout is a merge commit, and the rule reads its two parents (`fetch-depth` 2 or more). In other runs, give `--base <ref>`. Without a base, the rule shows `skip`.
 
@@ -107,6 +109,7 @@ An unknown rule, an unknown option, or an exception or a changed option without 
 | `runner-budget.maxParallel` | `3` | The largest `max-parallel` of a matrix. |
 | `runner-budget.minute` | `true` | When `false`, the rule does not examine the minute of the schedules. |
 | `runner-budget.grouped` | `["reusable-ai-review.yml", "reusable-codex-review.yml"]` | The shared workflows that give a concurrency group in each of their jobs. |
+| `gate-trigger.allow` | `[]` | The file names of the workflows that can filter pull requests by path, because they are not a gate (for example a preview). |
 
 ## Commands
 
