@@ -40,3 +40,30 @@ export function addedFiles(context: RuleContext): ReadonlySet<string> | undefine
   if (out === undefined) return undefined;
   return new Set(out.split(/\r?\n/).filter((file) => file !== ""));
 }
+
+/**
+ * This function gives the lines that the change adds, for each changed file: the numbers (from 1) of the new file.
+ * A renamed file with no other change has no added lines. With no change (no base and no pull request), it gives undefined.
+ */
+export function addedLines(context: RuleContext): ReadonlyMap<string, ReadonlySet<number>> | undefined {
+  const range = rangeOf(context);
+  if ("skipped" in range) return undefined;
+  const out = context.git(["diff", "--unified=0", "--no-color", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/", "--find-renames", "--diff-filter=AMR", ...range.diff]);
+  if (out === undefined) return undefined;
+  const lines = new Map<string, Set<number>>();
+  let file: string | undefined;
+  for (const line of out.split(/\r?\n/)) {
+    if (line.startsWith("+++ ")) {
+      file = line === "+++ /dev/null" ? undefined : line.slice(6);
+      continue;
+    }
+    const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
+    if (hunk === null || file === undefined) continue;
+    const start = Number(hunk[1]);
+    const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
+    let set = lines.get(file);
+    if (set === undefined) lines.set(file, (set = new Set()));
+    for (let index = 0; index < count; index++) set.add(start + index);
+  }
+  return lines;
+}

@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 96 names
+## . (build/index.d.ts): 102 names
 
 ACTIONS_COMMIT: build/index.d.ts#ACTIONS_COMMIT
 type AuditSource: build/index.d.ts#AuditSource
@@ -18,6 +18,7 @@ DEPENDENCY_FIELDS: build/index.d.ts#DEPENDENCY_FIELDS
 type Edit: build/index.d.ts#Edit
 type FixResult: build/index.d.ts#FixResult
 HOMES: build/index.d.ts#HOMES
+HOME_EXPORTS: build/index.d.ts#HOME_EXPORTS
 HOME_PATTERNS: build/index.d.ts#HOME_PATTERNS
 type Home: build/index.d.ts#Home
 type HomeState: build/index.d.ts#HomeState
@@ -46,6 +47,7 @@ configsOfScript: build/index.d.ts#configsOfScript
 convertGate: build/index.d.ts#convertGate
 createContext: build/index.d.ts#createContext
 cuePreset: build/index.d.ts#cuePreset
+declaredName: build/index.d.ts#declaredName
 defaultOptions: build/index.d.ts#defaultOptions
 findHomes: build/index.d.ts#findHomes
 formatResult: build/index.d.ts#formatResult
@@ -55,6 +57,7 @@ globToRegExp: build/index.d.ts#globToRegExp
 hasFile: build/index.d.ts#hasFile
 hasImportMetaMain: build/index.d.ts#hasImportMetaMain
 hasTests: build/index.d.ts#hasTests
+homePackage: build/index.d.ts#homePackage
 inFolder: build/index.d.ts#inFolder
 isGitSpecifier: build/index.d.ts#isGitSpecifier
 isPinned: build/index.d.ts#isPinned
@@ -67,6 +70,7 @@ mapMarkdown: build/index.d.ts#mapMarkdown
 mapText: build/index.d.ts#mapText
 matchesAny: build/index.d.ts#matchesAny
 mergeHomes: build/index.d.ts#mergeHomes
+messageOf: build/index.d.ts#messageOf
 noBuildOutput: build/index.d.ts#noBuildOutput
 noLocalPaths: build/index.d.ts#noLocalPaths
 packageFolders: build/index.d.ts#packageFolders
@@ -80,6 +84,7 @@ readJsonc: build/index.d.ts#readJsonc
 readOverlay: build/index.d.ts#readOverlay
 releaseFiles: build/index.d.ts#releaseFiles
 replaceLine: build/index.d.ts#replaceLine
+repoOf: build/index.d.ts#repoOf
 repositoryOfRemote: build/index.d.ts#repositoryOfRemote
 requiredScripts: build/index.d.ts#requiredScripts
 roadmapOfLine: build/index.d.ts#roadmapOfLine
@@ -91,6 +96,7 @@ runGit: build/index.d.ts#runGit
 runnerBudget: build/index.d.ts#runnerBudget
 scheduleMinute: build/index.d.ts#scheduleMinute
 scriptsOf: build/index.d.ts#scriptsOf
+signaturesOf: build/index.d.ts#signaturesOf
 sourceMain: build/index.d.ts#sourceMain
 specifiersOf: build/index.d.ts#specifiersOf
 summaryMarkdown: build/index.d.ts#summaryMarkdown
@@ -180,6 +186,12 @@ interface FixResult {
 ### build/index.d.ts#HOMES
 export declare const HOMES: readonly Home[];
 
+### build/index.d.ts#HOME_EXPORTS
+export declare const HOME_EXPORTS: Readonly<Record<string, {
+  readonly version: string;
+  readonly names: readonly string[];
+}>>;
+
 ### build/index.d.ts#HOME_PATTERNS
 export declare const HOME_PATTERNS: readonly RegExp[];
 
@@ -192,6 +204,7 @@ interface Home {
   readonly repo: string;
   readonly state: HomeState;
   readonly words: readonly string[];
+  readonly signatures?: readonly string[];
   readonly note?: string;
 }
 
@@ -322,6 +335,9 @@ export declare function createContext(root: string, config: ConventionsConfig, o
 ### build/index.d.ts#cuePreset
 export declare const cuePreset: Rule;
 
+### build/index.d.ts#declaredName
+export declare function declaredName(line: string): string | undefined;
+
 ### build/index.d.ts#defaultOptions
 export declare function defaultOptions(rule: Rule): Options;
 
@@ -348,6 +364,9 @@ export declare function hasImportMetaMain(range: unknown): boolean;
 
 ### build/index.d.ts#hasTests
 export declare function hasTests(files: readonly string[], folder: string): boolean;
+
+### build/index.d.ts#homePackage
+export declare const homePackage: Rule;
 
 ### build/index.d.ts#inFolder
 export declare const inFolder: (folder: string, file: string) => string;
@@ -384,6 +403,9 @@ export declare function matchesAny(path: string, globs: readonly string[]): bool
 
 ### build/index.d.ts#mergeHomes
 export declare function mergeHomes(base: readonly Home[], extra: readonly Home[]): readonly Home[];
+
+### build/index.d.ts#messageOf
+export declare function messageOf(file: string, name: string, home: Home): string;
 
 ### build/index.d.ts#noBuildOutput
 export declare const noBuildOutput: Rule;
@@ -424,6 +446,9 @@ export declare const releaseFiles: Rule;
 ### build/index.d.ts#replaceLine
 export declare function replaceLine(text: string, line: number, lines: readonly string[]): string;
 
+### build/index.d.ts#repoOf
+export declare function repoOf(context: RuleContext): string | undefined;
+
 ### build/index.d.ts#repositoryOfRemote
 export declare function repositoryOfRemote(url: string): string | undefined;
 
@@ -456,6 +481,9 @@ export declare function scheduleMinute(repository: string, file: string): number
 
 ### build/index.d.ts#scriptsOf
 export declare function scriptsOf(scripts: Readonly<Record<string, unknown>>, name: string, seen?: Set<string>): string[];
+
+### build/index.d.ts#signaturesOf
+export declare function signaturesOf(homes: readonly Home[]): Signature[];
 
 ### build/index.d.ts#sourceMain
 export declare const sourceMain: Rule;
