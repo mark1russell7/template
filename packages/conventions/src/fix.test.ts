@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { replaceLine, runChecks, runCli, runFix, scheduleMinute, type CliIo, type Rule } from "./index.ts";
+import { hasImportMetaMain } from "./rules/main-check.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-fix-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -205,6 +206,63 @@ describe("conventions fix", () => {
     const fixed = runFix({ root, only: ["trust-policy"] });
     expect(fixed).toMatchObject({ changed: [], result: { failed: true } });
     expect(fixed.result.rules[0]?.breaks.map((item) => item.message)).toEqual(['trustPolicyExclude does not have @mark1russell7/*, @procedures/*.']);
+  });
+
+  it("allows import.meta.main only where each Node version of engines.node has it", () => {
+    expect([">=24.2", "^24.2.0", ">=25", "^22.18", "~22.19.0"].map(hasImportMetaMain)).toEqual([true, true, true, true, true]);
+    expect([">=22", ">=22.18", ">=24", "^22.17", "23", ">=20 || >=24.2", undefined].map(hasImportMetaMain)).toEqual([false, false, false, false, false, false, false]);
+  });
+
+  it("finds a main check by path, and writes import.meta.main or a compare of real paths by engines.node", () => {
+    // The parts make the text of the fixture, so that this file has no main check by path itself
+    const argv = ["process", "argv[1]"].join(".");
+    const meta = ["import", "meta"].join(".");
+    const script = `#!/usr/bin/env node
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+export const x = readFileSync;
+if (${argv} !== undefined && resolve(${argv}) === fileURLToPath(${meta}.url)) await main();
+`;
+    const real = `if (${argv} !== undefined && realpathSync(${argv}) === realpathSync(fileURLToPath(${meta}.url))) main();
+`;
+    const other = `if (${argv} === fileURLToPath(${meta}.url) && process.env.X) main();
+`;
+    const root = repo({
+      "package.json": { name: "one", private: true, workspaces: ["packages/*"], engines: { node: ">=22" } },
+      "packages/new/package.json": { name: "new", engines: { node: ">=24.2" } },
+      "packages/new/scripts/run.ts": script,
+      "scripts/old.ts": script,
+      "scripts/real.mjs": `import { realpathSync } from "node:fs";
+${real}`,
+      "scripts/other.ts": other,
+    });
+    const checked = runChecks({ root, only: ["main-check"] }).rules[0];
+    expect(checked?.breaks.map((item) => `${item.file}:${String(item.line)}:${String(item.edits !== undefined)}`).sort()).toEqual([
+      "packages/new/scripts/run.ts:7:true",
+      "scripts/old.ts:7:true",
+      "scripts/other.ts:1:false",
+    ]);
+    runFix({ root, only: ["main-check"] });
+    // engines.node 24.2: import.meta.main, and the imports that only the compare used are gone
+    expect(read(root, "packages/new/scripts/run.ts")).toBe(`#!/usr/bin/env node
+import { readFileSync } from "node:fs";
+
+export const x = readFileSync;
+if (${meta}.main) await main();
+`);
+    // engines.node 22, which Node 22.0 and 23 have no import.meta.main in: the compare of real paths, with its imports
+    expect(read(root, "scripts/old.ts")).toBe(
+      `#!/usr/bin/env node
+import { readFileSync, realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+export const x = readFileSync;
+if (${argv} !== undefined && realpathSync(${argv}) === realpathSync(fileURLToPath(${meta}.url))) await main();
+`,
+    );
+    expect(runChecks({ root, only: ["main-check"] }).rules[0]?.breaks.map((item) => item.file)).toEqual(["scripts/other.ts"]);
   });
 
   it("does not write an edit when the file changed after the check", () => {

@@ -3,9 +3,9 @@
 // line. evaluate() has the rules and no I/O, so the tests call it directly
 // (scripts/workflows/changeset-check.test.ts). main() reads git and the event.
 import { execFileSync } from "node:child_process";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, realpathSync } from "node:fs";
 import { dirname, posix } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 /** A version bump of a changeset. */
 export type Bump = "patch" | "minor" | "major";
@@ -311,4 +311,4 @@ export function main(env: Readonly<Record<string, string | undefined>> = process
   return result.errors.length > 0 ? 1 : 0;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) process.exitCode = main();
+if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) process.exitCode = main();
