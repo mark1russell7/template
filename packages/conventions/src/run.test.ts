@@ -1,4 +1,5 @@
 // The configuration, the output and the bin on fixture repositories.
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -81,6 +82,28 @@ describe("the configuration", () => {
     const result = runChecks({ root, only: ["tsconfig-test"] });
     expect(result.rules[0]).toMatchObject({ status: "pass", ignored: 1, note: "a has no tests" });
     expect(result.failed).toBe(false);
+  });
+
+  it("does not ignore a file that the change adds, and ignores the files that exist and a renamed file", () => {
+    const conventions = { rules: { "typed-scripts": { ignore: ["scripts/*.mjs"], reason: "old scripts" } } };
+    const root = fixture({ "package.json": { name: "root", private: true, conventions }, "scripts/old.mjs": "export {};\n", "scripts/moved.mjs": "export const moved = \"a script that moves\";\n" });
+    const git = (...args: string[]): string =>
+      spawnSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", ...args], { cwd: root, encoding: "utf8" }).stdout.trim();
+    git("init", "-q");
+    git("add", ".");
+    git("commit", "-q", "-m", "base");
+    const base = git("rev-parse", "HEAD");
+    // Each file has its own text, so git does not pair two files of the same text as a rename
+    writeFileSync(join(root, "scripts/new.mjs"), "export const added = 1;\n");
+    git("mv", "scripts/moved.mjs", "scripts/renamed.mjs");
+    git("add", ".");
+    git("commit", "-q", "-m", "change");
+    const rule = runChecks({ root, only: ["typed-scripts"], base }).rules[0];
+    expect(rule?.breaks.map((item) => item.file)).toEqual(["scripts/new.mjs"]);
+    expect(rule?.breaks[0]?.message).toMatch(/The change adds this file, so `ignore` does not cover it\.$/);
+    expect(rule).toMatchObject({ status: "break", ignored: 2 });
+    // With no change, `ignore` covers each file of its globs
+    expect(runChecks({ root, only: ["typed-scripts"] }).rules[0]).toMatchObject({ status: "pass", ignored: 3 });
   });
 });
 
