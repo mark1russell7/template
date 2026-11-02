@@ -4,6 +4,7 @@
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { addedFiles } from "./change.ts";
 import { parseConfig, type ConventionsConfig } from "./config.ts";
 import { matchesAny, runGit, type Break, type Manifest, type PackageInfo, type Rule, type RuleContext } from "./rule.ts";
 import { RULES } from "./rules/index.ts";
@@ -111,7 +112,14 @@ export function runChecks(options: CheckOptions): CheckResult {
       results.push({ ...base, status: "skipped", breaks: [], ignored: 0, note: outcome.skipped });
       continue;
     }
-    const breaks = outcome.filter((item) => !matchesAny(item.file, ruleConfig.ignore));
+    // `ignore` keeps the exceptions that exist. A file that the change adds is not one of them, so `ignore` does not
+    // cover it: the glob scripts/*.mjs let new JavaScript files in with no check (client, 11-02).
+    const added = ruleConfig.ignore.length > 0 ? addedFiles(context) : undefined;
+    const breaks: Break[] = [];
+    for (const item of outcome) {
+      if (!matchesAny(item.file, ruleConfig.ignore)) breaks.push(item);
+      else if (added?.has(item.file) === true) breaks.push({ ...item, message: `${item.message} The change adds this file, so \`ignore\` does not cover it.` });
+    }
     const ignored = outcome.length - breaks.length;
     const note = ruleConfig.reason === undefined ? {} : { note: ruleConfig.reason };
     results.push({ ...base, status: breaks.length > 0 ? "break" : "pass", breaks, ignored, ...note });
