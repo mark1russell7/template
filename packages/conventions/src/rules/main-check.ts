@@ -35,7 +35,8 @@ export function isPathCompare(text: string): boolean {
 /** The lowest version of a range of `engines.node` (for example `>=22.19` or `^24.2.0`). It is undefined when the range has no single lower bound. */
 export function lowestNode(range: unknown): readonly [number, number] | undefined {
   if (typeof range !== "string" || range.includes("||")) return undefined;
-  const found = /^\s*(?:>=|\^|~)?\s*v?(\d+)(?:\.(\d+))?/.exec(range);
+  // One \s* only: two of them around the optional operator are slow on a long run of spaces
+  const found = /^(?:>=|\^|~)?\s*v?(\d+)(?:\.(\d+))?/.exec(range.trim());
   return found ? [Number(found[1]), Number(found[2] ?? 0)] : undefined;
 }
 
@@ -45,7 +46,7 @@ export function hasImportMetaMain(range: unknown): boolean {
   if (lowest === undefined) return false;
   const [major, minor] = lowest;
   // `^22.18` stays in 22. `>=22.18` lets Node 23 in, which does not have import.meta.main
-  if (major === 22) return minor >= 18 && typeof range === "string" && /^\s*[\^~]/.test(range);
+  if (major === 22) return minor >= 18 && typeof range === "string" && /^[\^~]/.test(range.trim());
   return major > 24 || (major === 24 && minor >= 2);
 }
 
