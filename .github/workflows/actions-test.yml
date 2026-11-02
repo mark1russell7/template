@@ -33,17 +33,9 @@ on:
       - "package.json"
       - "pnpm-lock.yaml"
       - "packages/*/package.json"
+  # Each pull request starts this workflow, so the check "Actions OK" of the ruleset is always there. The job
+  # changes skips the tests when the pull request changes no file of them (CI.md, "A gate with paths").
   pull_request:
-    paths:
-      - ".github/actions/**"
-      - ".github/workflows/actions-test.yml"
-      - ".github/workflows/reusable-pages.yml"
-      - ".github/workflows/reusable-release-*.yml"
-      - "scripts/release/**"
-      # The test site installs the workspace, so a change of a package file can break it
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "packages/*/package.json"
   workflow_dispatch:
 
 permissions:
@@ -55,7 +47,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      match: ${{ steps.changes.outputs.match }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      - id: changes
+        uses: ./.github/actions/changes
+        with:
+          # The same files as on.push.paths
+          paths: |
+            .github/actions/**
+            .github/workflows/actions-test.yml
+            .github/workflows/reusable-pages.yml
+            .github/workflows/reusable-release-*.yml
+            scripts/release/**
+            package.json
+            pnpm-lock.yaml
+            packages/*/package.json
+
   green-main:
+    needs: changes
+    if: needs.changes.outputs.match == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -78,6 +99,8 @@ jobs:
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]
 
   pages:
+    needs: changes
+    if: needs.changes.outputs.match == 'true'
     uses: ./.github/workflows/reusable-pages.yml
     permissions:
       contents: read
@@ -122,6 +145,8 @@ jobs:
           node -e 'const s = require(process.argv[1]); if (!s.github?.available) { console.error("::error::the GitHub part is not available:", s.github?.reason); process.exit(1); } if (!(s.items?.length > 0)) { console.error("::error::the Status page has no roadmap item"); process.exit(1); } console.log("github:", s.pullRequests.length, "open PRs,", s.issues.length, "open issues;", s.items.length, "roadmap items")' "$OUT/data/status.json"
 
   release-build:
+    needs: changes
+    if: needs.changes.outputs.match == 'true'
     uses: ./.github/workflows/reusable-release-build.yml
     permissions:
       contents: read
@@ -180,3 +205,19 @@ jobs:
     with:
       published: ""
       dry-run: true
+
+  actions-ok:
+    name: Actions OK
+    if: always()
+    needs: [changes, green-main, pages, pages-check, release-build, release-publish, release-tag]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      - uses: ./.github/actions/gate-summary
+        with:
+          needs: ${{ toJSON(needs) }}

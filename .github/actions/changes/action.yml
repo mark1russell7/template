@@ -1,0 +1,52 @@
+name: changes
+description: >-
+  Tells if a pull request changes a file that a gate is about. A gate workflow starts on each pull request (no
+  on.pull_request.paths), so its summary check "<Name> OK" is always there for the ruleset. This action decides
+  if the gate jobs run. Each event other than a pull request is a match.
+inputs:
+  paths:
+    description: >-
+      The patterns of the files of the gate, one on each line, with the meaning of on.pull_request.paths:
+      "*" does not match "/", "**" matches each part of a path, "?" matches one character, and a pattern that
+      starts with "!" takes files out again. The last pattern that matches a file decides.
+    default: "**"
+  paths-ignore:
+    description: The patterns of the files that the gate is not about, with the meaning of on.pull_request.paths-ignore.
+    default: ""
+  token:
+    description: A GitHub token that can read the files of the pull request (permission "pull-requests read").
+    default: ${{ github.token }}
+outputs:
+  match:
+    description: '"true" when the gate jobs run, else "false".'
+    value: ${{ steps.match.outputs.match }}
+runs:
+  using: composite
+  steps:
+    - id: match
+      name: The files of the gate
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        EVENT: ${{ github.event_name }}
+        NUMBER: ${{ github.event.pull_request.number }}
+        PATHS: ${{ inputs.paths }}
+        IGNORE: ${{ inputs.paths-ignore }}
+      run: |
+        if [ "$EVENT" != pull_request ] && [ "$EVENT" != pull_request_target ]; then
+          echo "The event is $EVENT, not a pull request, so the gate runs."
+          echo "match=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        # The new and the old name of each file. GitHub gives at most 3000 files of a pull request.
+        gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$NUMBER/files?per_page=100" \
+          --jq '.[] | .filename, (.previous_filename // empty)' > files
+        count=$(wc -l < files)
+        if [ "$count" -ge 3000 ]; then
+          echo "The pull request has $count files or more, the limit of the API, so the gate runs."
+          echo "match=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        match=$(jq -R -s -r --arg paths "$PATHS" --arg ignore "$IGNORE" -f "$GITHUB_ACTION_PATH/match.jq" files)
+        echo "$count files. Match: $match."
+        echo "match=$match" >> "$GITHUB_OUTPUT"
