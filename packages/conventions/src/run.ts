@@ -5,6 +5,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { addedFiles } from "./change.ts";
+import { findHomes, HOMES, mapMarkdown, mapText, mergeHomes, readOverlay, type Home } from "./map.ts";
 import { parseConfig, type ConventionsConfig } from "./config.ts";
 import { matchesAny, runGit, type Break, type Manifest, type PackageInfo, type Rule, type RuleContext } from "./rule.ts";
 import { RULES } from "./rules/index.ts";
@@ -275,10 +276,13 @@ export interface CliIo {
 export const USAGE: string = `Usage: conventions check [options]
        conventions fix [options]
        conventions --list
+       conventions map [words] [--markdown | --json] [--overlay <file>]
 
   check                 Start each rule. Exit code 1 when a rule has a break.
   fix                   Write the fixes of the breaks that have one, and check again. Exit code 1 when a break stays.
   --list                Show each rule: why, fix, options, state and the audit rows that it comes from.
+  map                   Show the home package of each area of code, or of the areas that match the words.
+                        --markdown writes the table with the rule, and --overlay adds the homes of a JSON file.
 
   --root <folder>       The root of the repository. The default is the current folder.
   --rule <id>           Only this rule. Use it again for more rules.
@@ -299,6 +303,7 @@ class UsageError extends Error {}
 
 /** This function starts the bin with the arguments `args`, and gives its exit code. */
 export function runCli(args: readonly string[], io: CliIo): number {
+  if (args[0] === "map") return runMap(args.slice(1), io);
   let check = false;
   let fix = false;
   let list = false;
@@ -368,4 +373,37 @@ export function runCli(args: readonly string[], io: CliIo): number {
   const summary = io.env["GITHUB_STEP_SUMMARY"];
   if (summary) appendFileSync(summary, summaryMarkdown(result));
   return result.failed ? 1 : 0;
+}
+
+/** The command `map`: the home of each area, or of the areas that match the words. */
+function runMap(args: readonly string[], io: CliIo): number {
+  let format: "text" | "markdown" | "json" = "text";
+  let homes: readonly Home[] = HOMES;
+  const words: string[] = [];
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index] ?? "";
+    if (arg === "--markdown") format = "markdown";
+    else if (arg === "--json") format = "json";
+    else if (arg === "--overlay") {
+      const file = args[++index];
+      if (file === undefined) {
+        io.stderr(`conventions: The option --overlay needs a value.\n\n${USAGE}`);
+        return 2;
+      }
+      try {
+        homes = mergeHomes(homes, readOverlay(resolve(io.cwd, file)));
+      } catch (error) {
+        io.stderr(`conventions: ${error instanceof Error ? error.message : String(error)}\n`);
+        return 1;
+      }
+    } else if (arg.startsWith("-")) {
+      io.stderr(`conventions: An unknown argument: ${arg}\n\n${USAGE}`);
+      return 2;
+    } else words.push(arg);
+  }
+  const found = findHomes(words.join(" "), homes);
+  if (format === "json") io.stdout(`${JSON.stringify(found, null, 2)}\n`);
+  else if (format === "markdown") io.stdout(mapMarkdown(found));
+  else io.stdout(mapText(found));
+  return 0;
 }
