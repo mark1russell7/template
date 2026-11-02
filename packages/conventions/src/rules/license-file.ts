@@ -1,6 +1,6 @@
 /**
- * The rule `license-file`: each public package has a license field and a license file with the same license, in its
- * own folder, and a repository with a public package has a license file at its root.
+ * The rule `license-file`. Each public package has a license field and, in its own folder, a license file with the
+ * same license. A repository with a public package has a license file at its root.
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -25,7 +25,12 @@ export function licenseFileOf(dir: string): string | undefined {
 
 /** This function gives the name of the author of a manifest: the string before `<` or `(`, or the field `name`. */
 export function authorOf(author: unknown): string | undefined {
-  const name = typeof author === "string" ? author.replace(/\s*[<(].*$/, "") : typeof author === "object" && author !== null && typeof (author as { name?: unknown }).name === "string" ? (author as { name: string }).name : undefined;
+  // A search for one character, not a pattern with a repetition: the time is linear in the length of the field
+  const before = (text: string): string => {
+    const at = text.search(/[<(]/);
+    return at === -1 ? text : text.slice(0, at);
+  };
+  const name = typeof author === "string" ? before(author) : typeof author === "object" && author !== null && typeof (author as { name?: unknown }).name === "string" ? (author as { name: string }).name : undefined;
   return name === undefined || name.trim() === "" ? undefined : name.trim();
 }
 

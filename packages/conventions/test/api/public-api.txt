@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 102 names
+## . (build/index.d.ts): 107 names
 
 ACTIONS_COMMIT: build/index.d.ts#ACTIONS_COMMIT
 type AuditSource: build/index.d.ts#AuditSource
@@ -23,6 +23,7 @@ HOME_PATTERNS: build/index.d.ts#HOME_PATTERNS
 type Home: build/index.d.ts#Home
 type HomeState: build/index.d.ts#HomeState
 IGNORE_AFTER: build/index.d.ts#IGNORE_AFTER
+LICENSE_TEXTS: build/index.d.ts#LICENSE_TEXTS
 MAP_RULE: build/index.d.ts#MAP_RULE
 type Manifest: build/index.d.ts#Manifest
 type OptionSpec: build/index.d.ts#OptionSpec
@@ -41,6 +42,7 @@ STRICT_OPTIONS: build/index.d.ts#STRICT_OPTIONS
 TRAIN_SCOPES: build/index.d.ts#TRAIN_SCOPES
 USAGE: build/index.d.ts#USAGE
 annotations: build/index.d.ts#annotations
+authorOf: build/index.d.ts#authorOf
 cleanPath: build/index.d.ts#cleanPath
 codePackages: build/index.d.ts#codePackages
 configsOfScript: build/index.d.ts#configsOfScript
@@ -63,6 +65,8 @@ isGitSpecifier: build/index.d.ts#isGitSpecifier
 isPinned: build/index.d.ts#isPinned
 isSourcePath: build/index.d.ts#isSourcePath
 keyLine: build/index.d.ts#keyLine
+licenseFile: build/index.d.ts#licenseFile
+licenseFileOf: build/index.d.ts#licenseFileOf
 lineOf: build/index.d.ts#lineOf
 listRules: build/index.d.ts#listRules
 mainCheck: build/index.d.ts#mainCheck
@@ -71,6 +75,7 @@ mapText: build/index.d.ts#mapText
 matchesAny: build/index.d.ts#matchesAny
 mergeHomes: build/index.d.ts#mergeHomes
 messageOf: build/index.d.ts#messageOf
+mitText: build/index.d.ts#mitText
 noBuildOutput: build/index.d.ts#noBuildOutput
 noLocalPaths: build/index.d.ts#noLocalPaths
 packageFolders: build/index.d.ts#packageFolders
@@ -214,6 +219,9 @@ type HomeState = "published" | "unpublished" | "planned" | "none";
 ### build/index.d.ts#IGNORE_AFTER
 export declare const IGNORE_AFTER = 10080;
 
+### build/index.d.ts#LICENSE_TEXTS
+export declare const LICENSE_TEXTS: Readonly<Record<string, RegExp>>;
+
 ### build/index.d.ts#MAP_RULE
 export declare const MAP_RULE = "Before you write a helper, find its home in this map. If the home does not have the function, add it to the home, in a pull request of the home repository. Do not make a local copy, a new package or a new repository for an area that has a home: that needs the strategist. A home that is not on npm is used with workspace:* or a github: specifier pinned to a commit. If no area fits, ask the strategist for a home before you write the code.";
 
@@ -313,6 +321,9 @@ export declare const USAGE: string;
 ### build/index.d.ts#annotations
 export declare function annotations(result: CheckResult): string;
 
+### build/index.d.ts#authorOf
+export declare function authorOf(author: unknown): string | undefined;
+
 ### build/index.d.ts#cleanPath
 export declare const cleanPath: (path: string) => string;
 
@@ -383,6 +394,12 @@ export declare function isSourcePath(path: string): boolean;
 ### build/index.d.ts#keyLine
 export declare function keyLine(text: string, field: string, name: string): number | undefined;
 
+### build/index.d.ts#licenseFile
+export declare const licenseFile: Rule;
+
+### build/index.d.ts#licenseFileOf
+export declare function licenseFileOf(dir: string): string | undefined;
+
 ### build/index.d.ts#lineOf
 export declare function lineOf(text: string, needle: string, from?: number): number | undefined;
 
@@ -406,6 +423,9 @@ export declare function mergeHomes(base: readonly Home[], extra: readonly Home[]
 
 ### build/index.d.ts#messageOf
 export declare function messageOf(file: string, name: string, home: Home): string;
+
+### build/index.d.ts#mitText
+export declare function mitText(year: number, holder: string): string;
 
 ### build/index.d.ts#noBuildOutput
 export declare const noBuildOutput: Rule;
