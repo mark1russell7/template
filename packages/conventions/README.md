@@ -123,6 +123,19 @@ An unknown rule, an unknown option, or an exception or a changed option without 
 | `--base <ref>` | The base commit of the change, for the rule `release-files`. |
 | `--json` | Write the result as JSON. |
 
+## The map of homes
+
+The map gives the home package of each area of code: statistics, seeded random, exact arithmetic, geometry, text, servers, files and commands, tests and more. Before you write a helper, find its home. If the home does not have the function, add the function to the home. Do not make a local copy or a new package.
+
+```sh
+conventions map                  # each area and its home
+conventions map seeded random    # the areas that match the words
+conventions map --markdown       # the table with the rule, for a CLAUDE.md
+conventions map --overlay homes.json --markdown   # with more homes from a JSON file
+```
+
+An overlay file has the shape `{ "homes": [...] }`. A home of the overlay takes the place of the home with the same area. The private repositories use an overlay, because the public map names only public packages.
+
 ## Add a rule
 
 A rule is a module in `src/rules/` that exports a `Rule`. A `Rule` has an `id`, a `title`, a `reason`, a `fix` and its audit `sources`. It also has its `options` with defaults, and a function `check(context, options)`. The function gives a list of breaks, or `{ skipped: "<reason>" }`. 
@@ -137,4 +150,5 @@ The package also exports the functions of the tool:
 - `replaceLine(text, line, lines)` gives the text with one line replaced, for the edits of a rule.
 - `formatResult(result)`, `summaryMarkdown(result)`, `annotations(result)` and `listRules(config)` give the output.
 - `parseConfig(value, rules)` and `readConfig(root)` read the field `conventions`.
+- `HOMES` is the map of homes. `findHomes(query)` finds the homes of words, and `mapMarkdown(homes)` and `mapText(homes)` write them. `readOverlay(file)` and `mergeHomes(base, extra)` add more homes.
 - `RULES` and each rule, with the helpers `isGitSpecifier`, `isPinned`, `isSourcePath` and `parseJsonc`.

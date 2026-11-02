@@ -85,4 +85,5 @@ export {
   type FixResult,
   type RuleResult,
 } from "./run.ts";
+export { findHomes, HOMES, MAP_RULE, mapMarkdown, mapText, mergeHomes, readOverlay, type Home, type HomeState } from "./map.ts";
 export { globFolders, globToRegExp, packageFolders, workspaceGlobs } from "./workspace.ts";

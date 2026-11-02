@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 87 names
+## . (build/index.d.ts): 96 names
 
 ACTIONS_COMMIT: build/index.d.ts#ACTIONS_COMMIT
 type AuditSource: build/index.d.ts#AuditSource
@@ -17,8 +17,12 @@ DEFAULT_ALLOWED: build/index.d.ts#DEFAULT_ALLOWED
 DEPENDENCY_FIELDS: build/index.d.ts#DEPENDENCY_FIELDS
 type Edit: build/index.d.ts#Edit
 type FixResult: build/index.d.ts#FixResult
+HOMES: build/index.d.ts#HOMES
 HOME_PATTERNS: build/index.d.ts#HOME_PATTERNS
+type Home: build/index.d.ts#Home
+type HomeState: build/index.d.ts#HomeState
 IGNORE_AFTER: build/index.d.ts#IGNORE_AFTER
+MAP_RULE: build/index.d.ts#MAP_RULE
 type Manifest: build/index.d.ts#Manifest
 type OptionSpec: build/index.d.ts#OptionSpec
 type OptionValue: build/index.d.ts#OptionValue
@@ -43,6 +47,7 @@ convertGate: build/index.d.ts#convertGate
 createContext: build/index.d.ts#createContext
 cuePreset: build/index.d.ts#cuePreset
 defaultOptions: build/index.d.ts#defaultOptions
+findHomes: build/index.d.ts#findHomes
 formatResult: build/index.d.ts#formatResult
 gateTrigger: build/index.d.ts#gateTrigger
 globFolders: build/index.d.ts#globFolders
@@ -58,7 +63,10 @@ keyLine: build/index.d.ts#keyLine
 lineOf: build/index.d.ts#lineOf
 listRules: build/index.d.ts#listRules
 mainCheck: build/index.d.ts#mainCheck
+mapMarkdown: build/index.d.ts#mapMarkdown
+mapText: build/index.d.ts#mapText
 matchesAny: build/index.d.ts#matchesAny
+mergeHomes: build/index.d.ts#mergeHomes
 noBuildOutput: build/index.d.ts#noBuildOutput
 noLocalPaths: build/index.d.ts#noLocalPaths
 packageFolders: build/index.d.ts#packageFolders
@@ -69,6 +77,7 @@ pinnedGitDeps: build/index.d.ts#pinnedGitDeps
 prPathFilters: build/index.d.ts#prPathFilters
 readConfig: build/index.d.ts#readConfig
 readJsonc: build/index.d.ts#readJsonc
+readOverlay: build/index.d.ts#readOverlay
 releaseFiles: build/index.d.ts#releaseFiles
 replaceLine: build/index.d.ts#replaceLine
 repositoryOfRemote: build/index.d.ts#repositoryOfRemote
@@ -168,11 +177,32 @@ interface FixResult {
   readonly result: CheckResult;
 }
 
+### build/index.d.ts#HOMES
+export declare const HOMES: readonly Home[];
+
 ### build/index.d.ts#HOME_PATTERNS
 export declare const HOME_PATTERNS: readonly RegExp[];
 
+### build/index.d.ts#Home
+interface Home {
+  readonly area: string;
+  readonly title: string;
+  readonly covers: string;
+  readonly packages: readonly string[];
+  readonly repo: string;
+  readonly state: HomeState;
+  readonly words: readonly string[];
+  readonly note?: string;
+}
+
+### build/index.d.ts#HomeState
+type HomeState = "published" | "unpublished" | "planned" | "none";
+
 ### build/index.d.ts#IGNORE_AFTER
 export declare const IGNORE_AFTER = 10080;
+
+### build/index.d.ts#MAP_RULE
+export declare const MAP_RULE = "Before you write a helper, find its home in this map. If the home does not have the function, add it to the home, in a pull request of the home repository. Do not make a local copy, a new package or a new repository for an area that has a home: that needs the strategist. A home that is not on npm is used with workspace:* or a github: specifier pinned to a commit. If no area fits, ask the strategist for a home before you write the code.";
 
 ### build/index.d.ts#Manifest
 type Manifest = Readonly<Record<string, unknown>>;
@@ -295,6 +325,9 @@ export declare const cuePreset: Rule;
 ### build/index.d.ts#defaultOptions
 export declare function defaultOptions(rule: Rule): Options;
 
+### build/index.d.ts#findHomes
+export declare function findHomes(query: string, homes?: readonly Home[]): readonly Home[];
+
 ### build/index.d.ts#formatResult
 export declare function formatResult(result: CheckResult): string;
 
@@ -340,8 +373,17 @@ export declare function listRules(config: ConventionsConfig | undefined, rules?:
 ### build/index.d.ts#mainCheck
 export declare const mainCheck: Rule;
 
+### build/index.d.ts#mapMarkdown
+export declare function mapMarkdown(homes?: readonly Home[]): string;
+
+### build/index.d.ts#mapText
+export declare function mapText(homes: readonly Home[]): string;
+
 ### build/index.d.ts#matchesAny
 export declare function matchesAny(path: string, globs: readonly string[]): boolean;
+
+### build/index.d.ts#mergeHomes
+export declare function mergeHomes(base: readonly Home[], extra: readonly Home[]): readonly Home[];
 
 ### build/index.d.ts#noBuildOutput
 export declare const noBuildOutput: Rule;
@@ -372,6 +414,9 @@ export declare function readConfig(root: string, rules?: readonly Rule[]): Conve
 
 ### build/index.d.ts#readJsonc
 export declare function readJsonc(file: string): unknown;
+
+### build/index.d.ts#readOverlay
+export declare function readOverlay(file: string): readonly Home[];
 
 ### build/index.d.ts#releaseFiles
 export declare const releaseFiles: Rule;
