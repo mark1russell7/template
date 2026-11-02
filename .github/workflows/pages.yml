@@ -1,0 +1,48 @@
+# Builds the site of the template and publishes it to GitHub Pages at https://mark1russell7.github.io/template/,
+# with the shared Pages workflow of this repository (reusable-pages.yml, CI.md "Pages").
+# The site is the home page site/index.html, the Releases page and the Status page.
+# The Pages source of the repository is "GitHub Actions" (Settings > Pages).
+# A scheduled build takes the newest commit of main, or the newest green one if CI failed on it.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  # Every 3 hours, so that the Status page shows the open pull requests and issues of now
+  schedule:
+    - cron: "30 */3 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+# One deployment at a time. A newer push cancels a deployment that waits.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  pages:
+    # The template calls the shared workflow of its own commit, as ci.yml does
+    uses: ./.github/workflows/reusable-pages.yml
+    # The build job of the shared workflow gets only the read permissions. Only its deploy job,
+    # which runs no code of the repository, writes to Pages.
+    permissions:
+      contents: read
+      # green-main reads the Actions runs. site-pages reads the pull requests, the issues and their checks.
+      actions: read
+      issues: read
+      pull-requests: read
+      checks: read
+      statuses: read
+      pages: write
+      id-token: write
+    with:
+      # The home page is a static file. site-pages adds releases/ and status/ next to it.
+      build: |
+        mkdir -p _site
+        cp site/index.html _site/index.html
+      out: _site
+      packages: "@mark1russell7/conventions,@mark1russell7/site-pages,@mark1russell7/api-report,@mark1russell7/boundaries,@mark1russell7/template-cli"
+      site-name: Template
+      # The open items for the Status page. check:conventions parses the file on each pull request (roadmap-parses).
+      roadmap: docs/ROADMAP.md

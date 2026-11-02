@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
-import { authorOf, convertGate, declaredName, hasTests, HOMES, mitText, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, type CheckOptions, type RuleResult } from "./index.ts";
+import { authorOf, convertGate, declaredName, hasTests, HOMES, mitText, pagesCalls, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, type CheckOptions, type RuleResult } from "./index.ts";
 import { minuteField } from "./rules/runner-budget.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-rules-"));
@@ -973,5 +973,46 @@ describe("license-file", () => {
     runFix({ root, only: ["license-file"], env });
     expect(readFileSync(join(root, "LICENSE"), "utf8")).toMatch(/^MIT License\n\nCopyright \(c\) \d{4} Mark Russell\n/);
     expect(rule(root, "license-file", { env }).status).toBe("pass");
+  });
+});
+
+describe("pages-site", () => {
+  const pages = "jobs:\n  pages:\n    uses: mark1russell7/template/.github/workflows/reusable-pages.yml@0123abc # main\n    with:\n      roadmap: docs/ROADMAP.md\n";
+  const test = "jobs:\n  pages:\n    uses: ./.github/workflows/reusable-pages.yml\n    with:\n      out: test-site\n      deploy: false\n  other:\n    runs-on: ubuntu-latest\n";
+  /** This function writes an event file of a run, and gives the environment that names it. */
+  const event = (repository: Record<string, unknown>): Record<string, string> => {
+    const file = join(temp, `event-${fixtures++}.json`);
+    writeFileSync(file, JSON.stringify({ repository }));
+    return { GITHUB_EVENT_PATH: file };
+  };
+
+  it("finds each call of the Pages workflow with any ref, and the calls that do not deploy", () => {
+    expect(pagesCalls(pages)).toEqual([{ line: 3, deploys: true }]);
+    expect(pagesCalls(test)).toEqual([{ line: 3, deploys: false }]);
+    expect(pagesCalls("jobs:\n  a:\n    uses: 'Mark1Russell7/Template/.github/workflows/reusable-pages.yml@v1'\n  b:\n    # uses: ./.github/workflows/reusable-pages.yml\n    uses: o/t/.github/workflows/reusable-pages.yml@main\n")).toEqual([{ line: 3, deploys: true }]);
+    expect(pagesCalls("jobs:\n  b:\n    uses: o/t/.github/workflows/reusable-pages.yml@main\n", ["o/t/.github/workflows/reusable-pages.yml"])).toEqual([{ line: 3, deploys: true }]);
+  });
+
+  it("passes a public repository that deploys a site, and a private repository with no site", () => {
+    const root = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": pages });
+    commitAll(root);
+    expect(rule(root, "pages-site", { env: event({ private: false }) }).status).toBe("pass");
+    const none = fixture({ "package.json": { name: "one" }, ".github/workflows/ci.yml": "jobs:\n  a:\n    runs-on: ubuntu-latest\n" });
+    commitAll(none);
+    expect(rule(none, "pages-site", { env: event({ private: true }) }).status).toBe("pass");
+  });
+
+  it("skips outside a run, and breaks on a public repository with no site or with a test site only", () => {
+    const root = fixture({ "package.json": { name: "one" }, ".github/workflows/actions-test.yml": test });
+    commitAll(root);
+    expect(rule(root, "pages-site", { env: {} }).status).toBe("skipped");
+    expect(rule(root, "pages-site", { env: event({}) }).status).toBe("skipped");
+    const result = rule(root, "pages-site", { env: event({ private: false }) });
+    expect(result.breaks.map((item) => `${item.file}: ${item.message}`)).toEqual([
+      ".github/workflows/pages.yml: The repository is public, and no workflow deploys its site with the Pages workflow of the template. The calls in .github/workflows/actions-test.yml have deploy: false.",
+    ]);
+    const none = fixture({ "package.json": { name: "one" } });
+    commitAll(none);
+    expect(rule(none, "pages-site", { env: event({ private: false }) }).breaks.map((item) => item.message)).toEqual(["The repository is public, and no workflow deploys its site with the Pages workflow of the template."]);
   });
 });
