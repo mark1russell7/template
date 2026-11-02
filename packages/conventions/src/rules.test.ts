@@ -958,4 +958,20 @@ describe("license-file", () => {
     expect(rule(root, "license-file").status).toBe("pass");
     expect([authorOf("A B <a@b.c> (https://x)"), authorOf({ name: "C" }), authorOf(""), authorOf(3)]).toEqual(["A B", "C", undefined, undefined]);
   });
+
+  it("asks a public repository with no public package for a root license file, from the event file of the run", () => {
+    const root = workspace({ author: "Mark Russell" }, { "packages/b/package.json": { name: "b", private: true } });
+    const event = (repository: Record<string, unknown>): Record<string, string> => {
+      const file = join(root, "..", `event-${fixtures++}.json`);
+      writeFileSync(file, JSON.stringify({ repository }));
+      return { GITHUB_EVENT_PATH: file };
+    };
+    expect(rule(root, "license-file", { env: event({ private: true }) }).status).toBe("pass");
+    expect(rule(root, "license-file", { env: event({}) }).status).toBe("pass");
+    const env = event({ private: false });
+    expect(rule(root, "license-file", { env }).breaks.map((item) => item.file)).toEqual(["LICENSE"]);
+    runFix({ root, only: ["license-file"], env });
+    expect(readFileSync(join(root, "LICENSE"), "utf8")).toMatch(/^MIT License\n\nCopyright \(c\) \d{4} Mark Russell\n/);
+    expect(rule(root, "license-file", { env }).status).toBe("pass");
+  });
 });
