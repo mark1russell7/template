@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { convertGate, hasTests, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, type CheckOptions, type RuleResult } from "./index.ts";
 import { minuteField } from "./rules/runner-budget.ts";
@@ -378,6 +379,53 @@ describe("release-files", () => {
     git(root, "merge", "-q", "--no-ff", "-m", "merge", "pr");
     const result = rule(root, "release-files", { env: { GITHUB_EVENT_NAME: "pull_request" } });
     expect(result.breaks.map((item) => item.file)).toEqual(["scripts/release/x.mjs"]);
+  });
+
+  it("does not trust a shallow checkout that ends inside the change, and passes when the checkout has the merge base", () => {
+    /** A pull request with the commits `commits` (an author and a file each), as the merge commit of a checkout with depth 2. */
+    function shallow(commits: readonly (readonly [string, string])[], mergeMain: boolean): string {
+      const root = fixture({ "package.json": { name: "one" }, "scripts/release/x.mjs": "1\n", "README.md": "1\n" });
+      commitAll(root);
+      git(root, "switch", "-q", "-c", "pr");
+      commits.forEach(([author, file], index) => {
+        writeFileSync(join(root, file), `pr ${String(index)}\n`);
+        git(root, "-c", `user.name=${author}`, "commit", "-q", "-am", `pr ${String(index)}`);
+      });
+      git(root, "switch", "-q", "main");
+      writeFileSync(join(root, "other.md"), "1\n");
+      git(root, "add", "other.md");
+      git(root, "commit", "-q", "-m", "main moves");
+      if (mergeMain) {
+        git(root, "switch", "-q", "pr");
+        git(root, "merge", "-q", "--no-ff", "-m", "merge main", "main");
+        git(root, "switch", "-q", "main");
+        writeFileSync(join(root, "other.md"), "2\n");
+        git(root, "commit", "-q", "-am", "main moves again");
+      }
+      git(root, "switch", "-q", "-c", "checkout");
+      git(root, "merge", "-q", "--no-ff", "-m", "merge pr", "pr");
+      const clone = join(temp, String(fixtures++));
+      git(temp, "clone", "-q", "--depth", "2", "--branch", "checkout", pathToFileURL(root).href, clone);
+      return clone;
+    }
+    const bot = "mark1russell7-release-train[bot]";
+    const env = (commits: number): Record<string, string> => {
+      const event = join(temp, `event-${String(fixtures++)}.json`);
+      writeFileSync(event, JSON.stringify({ pull_request: { body: "", commits } }));
+      return { GITHUB_EVENT_NAME: "pull_request", GITHUB_EVENT_PATH: event };
+    };
+    // A person changes a release file, and the train adds a commit on top: the end of the checkout hides the person
+    const hidden = rule(shallow([["a person", "scripts/release/x.mjs"], [bot, "README.md"]], false), "release-files", { env: env(2) });
+    expect(hidden.status).toBe("error");
+    expect(hidden.note).toMatch(/does not have the merge base of HEAD\^1 and HEAD\^2/);
+    // The train changes a release file, and a person takes main in a merge: the commit of the train is under the end
+    const merged = shallow([[bot, "scripts/release/x.mjs"]], true);
+    expect(rule(merged, "release-files", { env: env(2) }).status).toBe("error");
+    git(merged, "fetch", "-q", "--unshallow", "origin");
+    expect(rule(merged, "release-files", { env: env(2) }).status).toBe("pass");
+    // A pull request of one commit is the whole change at depth 2
+    expect(rule(shallow([[bot, "scripts/release/x.mjs"]], false), "release-files", { env: env(1) }).status).toBe("pass");
+    expect(rule(shallow([["a person", "scripts/release/x.mjs"]], false), "release-files", { env: env(1) }).breaks.map((item) => item.file)).toEqual(["scripts/release/x.mjs"]);
   });
 });
 
