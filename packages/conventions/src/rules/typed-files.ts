@@ -198,9 +198,9 @@ const CONFIG_FILE = /\.config(\.[cm]?ts)$/;
 const ROOT_DIRS = new Set([".", "./", "${configDir}", "${configDir}/"]);
 
 /**
- * This function gives the `rootDir` that a tsconfig gets from the configs it extends, as an absolute path, or `null` when
- * no config of the chain sets it. It gives `undefined` when it cannot read a config of the chain, for example a package
- * that is not installed.
+ * This function gives the `rootDir` that a tsconfig gets from the configs it extends, as an absolute path. It gives
+ * `null` when no config of the chain sets it. It gives `undefined` when it cannot read a config of the chain, for example
+ * a package that is not installed.
  */
 function inheritedRootDir(
   tsconfig: string,
@@ -247,8 +247,8 @@ function inheritedRootDir(
 
 /**
  * This function gives the edit that adds the config files at the root of a package to its `tsconfig.test.json`. It adds
- * the include `*.config.ts`. When the `rootDir` is a subfolder, it sets `rootDir: "."`. This is also so when the file
- * gets the `rootDir` from a config that it extends, or when that config cannot be read: a `rootDir` of the folder does
+ * the include `*.config.ts`. When the `rootDir` is a subfolder, it sets `rootDir: "."`. It also does this when the file
+ * gets the `rootDir` from a config that it extends, or when it cannot read that config. A `rootDir` of the folder does
  * no harm to a test config that does not emit. The edit changes only these values and keeps the format of the file. It
  * gives no edit for a tsconfig with comments, so that no comment goes. It also gives no edit when the changed text does
  * not parse as the intended config.
