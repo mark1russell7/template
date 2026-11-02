@@ -11,6 +11,13 @@ Write all prose of this repository in the style of ASD-STE100 Simplified Technic
 - Put code, file names and commands in code font. The linter counts each code span as one word.
 - Add a word to the glossary in `ste.config.json` only if it is a real technical term of the project.
 
+## Where code lives
+
+- Each area of code has one home package. Before you write a helper, find its home with `pnpm exec conventions map <words>`.
+- If the home does not have the function, add the function to the home in a pull request. Do not make a local copy.
+- Do not make a new package for an area that has a home. Ask the strategist first.
+- In a review, report each new function that belongs in another home.
+
 ## Packages
 
 - Make a new package with `pnpm package add <name> --preset=<preset>`. Do not write `package.json` or `tsconfig.json` by hand.
