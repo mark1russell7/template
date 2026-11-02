@@ -43,7 +43,7 @@ The input `auto: true` of the caller also turns on the automatic review. Use it 
 
 1. A person or a session adds the `ai-review` label. The workflow starts. With the automatic review, a pull request that opens, opens again or becomes ready for review also starts the workflow.
 2. The workflow examines the cost guards. When a guard stops the review, the job summary tells the cause.
-3. Claude Code (`claude -p`) reads the diff and the files that it needs. It looks for bugs, security problems and breaking API changes. It ignores the style.
+3. Claude Code (`claude -p`) reads the diff and the files that it needs. It looks for bugs, security problems, breaking API changes and code in the wrong home. The map of homes comes from `conventions map --markdown` of `@mark1russell7/conventions` on npm, at a fixed version, not from the pull request. It ignores the style.
 4. Claude gives a summary and an inline comment for each real problem. The workflow posts them as one review of the pull request.
 5. When Claude finds no problem, the summary is "No blocking findings."
 6. The workflow removes the label. Add the label again for one more review.
