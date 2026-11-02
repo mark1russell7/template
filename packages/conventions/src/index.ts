@@ -41,6 +41,7 @@ export {
   cuePreset,
   gateTrigger,
   homePackage,
+  licenseFile,
   mainCheck,
   noBuildOutput,
   noLocalPaths,
@@ -64,6 +65,7 @@ export { roadmapOfLine } from "./rules/roadmap-parses.ts";
 export { repositoryOfRemote, scheduleMinute } from "./rules/runner-budget.ts";
 export { declaredName, messageOf, repoOf, signaturesOf } from "./rules/home-package.ts";
 export { HOME_EXPORTS } from "./home-exports.ts";
+export { authorOf, LICENSE_TEXTS, licenseFileOf, mitText } from "./rules/license-file.ts";
 export { ACTIONS_COMMIT, convertGate, prPathFilters, summaryName, type PathFilter } from "./rules/gate-trigger.ts";
 export { isGitSpecifier, isPinned } from "./rules/pinned-git-deps.ts";
 export { isSourcePath, pathsOf } from "./rules/source-main.ts";

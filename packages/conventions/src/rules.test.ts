@@ -1,11 +1,11 @@
 // Each rule on fixture repositories: a case that passes and a case that breaks.
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
-import { convertGate, declaredName, hasTests, HOMES, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, type CheckOptions, type RuleResult } from "./index.ts";
+import { authorOf, convertGate, declaredName, hasTests, HOMES, mitText, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, type CheckOptions, type RuleResult } from "./index.ts";
 import { minuteField } from "./rules/runner-budget.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-rules-"));
@@ -922,5 +922,40 @@ describe("home-package", () => {
     for (const name of ["bootstrapRepo", "bootstrapApp", "wilsonInterval", "bootstrapMedian", "bootstrap"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(!name.endsWith("Repo") && !name.endsWith("App"));
     // A planned home has no package to import yet, so its signatures do not break
     for (const name of ["graphemes", "parseArgs"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(false);
+  });
+});
+
+describe("license-file", () => {
+  const MIT = mitText(2026, "Mark Russell");
+
+  it("passes with a license file in each public package and at the root, and with no public package", () => {
+    const root = workspace({ license: "MIT" }, { LICENSE: MIT, "packages/a/package.json": { name: "a", license: "MIT" }, "packages/a/LICENSE": MIT, "packages/b/package.json": { name: "b", private: true } });
+    expect(rule(root, "license-file").status).toBe("pass");
+    expect(rule(workspace({}, { "packages/b/package.json": { name: "b", private: true } }), "license-file").status).toBe("pass");
+    expect(rule(fixture({ "package.json": { name: "one", license: "MIT" }, "LICENSE.md": MIT }), "license-file").status).toBe("pass");
+  });
+
+  it("breaks on a missing field, a missing file and a text of another license, and fix copies the license of the repository", () => {
+    const root = workspace({}, {
+      LICENSE: MIT,
+      "packages/a/package.json": { name: "a", license: "MIT" },
+      "packages/b/package.json": { name: "b" },
+      "packages/c/package.json": { name: "c", license: "MIT" },
+      "packages/c/LICENSE": "Apache License, Version 2.0\n",
+    });
+    const result = rule(root, "license-file");
+    expect(result.breaks.map((item) => item.file)).toEqual(["packages/a/LICENSE", "packages/b/package.json", "packages/c/LICENSE"]);
+    expect(result.breaks.map((item) => (item.edits ?? []).length)).toEqual([1, 0, 0]);
+    runFix({ root, only: ["license-file"] });
+    expect(readFileSync(join(root, "packages/a/LICENSE"), "utf8")).toBe(MIT);
+  });
+
+  it("writes the MIT text with the author when the repository has no license file", () => {
+    const root = workspace({}, { "packages/a/package.json": { name: "a", license: "MIT", author: "Mark Russell (https://github.com/mark1russell7)" } });
+    expect(rule(root, "license-file").breaks.map((item) => item.file)).toEqual(["packages/a/LICENSE", "LICENSE"]);
+    runFix({ root, only: ["license-file"] });
+    for (const file of ["LICENSE", "packages/a/LICENSE"]) expect(readFileSync(join(root, file), "utf8")).toMatch(/^MIT License\n\nCopyright \(c\) \d{4} Mark Russell\n/);
+    expect(rule(root, "license-file").status).toBe("pass");
+    expect([authorOf("A B <a@b.c> (https://x)"), authorOf({ name: "C" }), authorOf(""), authorOf(3)]).toEqual(["A B", "C", undefined, undefined]);
   });
 });
