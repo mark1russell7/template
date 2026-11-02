@@ -237,6 +237,9 @@ if (${argv} !== undefined && resolve(${argv}) === fileURLToPath(${meta}.url)) aw
       "scripts/real.mjs": `import { realpathSync } from "node:fs";
 ${real}`,
       "scripts/other.ts": other,
+      // A record of the two values compares nothing
+      "scripts/record.ts": `export const row = { version: 1, argv1: ${argv}, url: ${meta}.url };
+`,
     });
     const checked = runChecks({ root, only: ["main-check"] }).rules[0];
     expect(checked?.breaks.map((item) => `${item.file}:${String(item.line)}:${String(item.edits !== undefined)}`).sort()).toEqual([

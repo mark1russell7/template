@@ -28,6 +28,8 @@ const PATH_NAMES = ["fileURLToPath", "pathToFileURL", "resolve", "realpathSync"]
 /** This function tells if a text compares `process.argv[1]` with the path of the module, without a real path of each side. */
 export function isPathCompare(text: string): boolean {
   if (!text.includes("process.argv[1]") || !/import\.meta\.(url|filename|dirname)\b/.test(text)) return false;
+  // A text with no compare only uses the two values, for example a record of them in a test
+  if (!/[!=]=|\.(?:endsWith|startsWith|includes)\(/.test(text)) return false;
   // Two real paths are equal through a link too
   return (text.match(/realpathSync\s*\(/g) ?? []).length < 2;
 }
