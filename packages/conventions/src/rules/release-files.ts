@@ -60,7 +60,7 @@ export const releaseFiles: Rule = {
   title: "A pull request changes `.github/workflows/release.yml` or `scripts/release/` only with a `Release-Edit: <reason>` line.",
   reason:
     "The release flow publishes to npm with trusted publishing. A change of its files by a session that does not own the release can stop or break each release.",
-  fix: "Revert the change of the release files. When the owner asked for the change, add the line `Release-Edit: <reason>` to the last commit message or to the body of the pull request.",
+  fix: "Revert the change of the release files. When the owner asked for the change, add the line `Release-Edit: <reason>` to the last commit message or to the body of the pull request. A re-run of a job reads the body of the event that started the run, so after a change of the body, push a commit.",
   sources: [
     { repo: "coeval", rule: "no-release-edit", doc: "CLAUDE.md:40" },
     { repo: "coeval", rule: "no-release-edits", doc: "CLAUDE.md:40" },
