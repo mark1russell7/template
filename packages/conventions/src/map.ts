@@ -44,7 +44,7 @@ export const HOMES: readonly Home[] = [
     repo: "mark1russell7/rigor",
     state: "published",
     words: ["stats", "quantile", "median", "mean", "percentile", "bootstrap", "interval", "confidence", "p-value", "brier", "wilson", "holm", "spearman", "kendall", "noise", "stddev", "variance", "resample", "resampling", "bonferroni", "regression", "histogram", "pvalue", "significance", "welch", "ttest", "mann", "whitney", "pearson", "correlation"],
-    signatures: ["quantiles?", "percentiles?", "median(Of)?", "std[Dd]ev", "standardDeviation", "variance", "bootstrap[A-Za-z0-9]*", "wilson[A-Za-z0-9]*", "holm[A-Za-z0-9]*", "brier[A-Za-z0-9]*", "spearman[A-Za-z0-9]*", "kendall[A-Za-z0-9]*", "signTest", "pairedPermutation", "permutationTest", "noiseFloor", "iqr"],
+    signatures: ["quantiles?", "percentiles?", "median(Of)?", "std[Dd]ev", "standardDeviation", "variance", "bootstrap(?:Median|Mean|Interval|Ci|CI|Quantile|Percentile|Ratio|Diff|Difference|Samples?|Resamples?)?", "wilson[A-Za-z0-9]*", "holm[A-Za-z0-9]*", "brier[A-Za-z0-9]*", "spearman[A-Za-z0-9]*", "kendall[A-Za-z0-9]*", "signTest", "pairedPermutation", "permutationTest", "noiseFloor", "iqr"],
   },
   {
     area: "random",
@@ -80,7 +80,7 @@ export const HOMES: readonly Home[] = [
     area: "exact-math",
     title: "Expressions and exact arithmetic",
     covers: "expression documents, exact rationals, floats with error bounds, intervals, robust geometric predicates (orientation, in-circle)",
-    packages: ["@mark1russell7/expression"],
+    packages: ["@mark1russell7/expression", "@mark1russell7/rational"],
     repo: "mark1russell7/algebra",
     state: "unpublished",
     words: ["math", "arithmetic", "rational", "bigint", "interval", "error bound", "predicate", "orientation", "symbolic", "exact"],
