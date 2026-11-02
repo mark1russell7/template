@@ -9,7 +9,7 @@
 // the index is the published API, not the source of a branch. --check exits 1 when the index is not
 // current: a home has a new version or new exports. Run it again after each release of a home package.
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,7 +17,7 @@ import { packageReport } from "@mark1russell7/api-report";
 import { HOMES } from "../../packages/conventions/src/map.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-export const INDEX_FILE = join(ROOT, "packages/conventions/src/home-exports.ts");
+export const INDEX_FILE: string = join(ROOT, "packages/conventions/src/home-exports.ts");
 
 /** The exports of one home package at one version. */
 export interface PackageExports {
@@ -52,7 +52,7 @@ export function indexModule(index: Readonly<Record<string, PackageExports>>): st
 }
 
 async function exportsOf(name: string, temp: string): Promise<PackageExports> {
-  const response = await fetch(`https://registry.npmjs.org/${name.replace("/", "%2F")}/latest`);
+  const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}/latest`);
   if (!response.ok) throw new Error(`${name}: npm gives HTTP ${response.status}`);
   const meta = (await response.json()) as { version: string; dist: { tarball: string } };
   const tarball = await fetch(meta.dist.tarball);
@@ -95,6 +95,6 @@ async function main(args: readonly string[]): Promise<number> {
   return 0;
 }
 
-if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   process.exitCode = await main(process.argv.slice(2));
 }

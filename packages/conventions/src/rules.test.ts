@@ -880,6 +880,11 @@ describe("home-package", () => {
 
   it("knows the forms of a declaration", () => {
     expect(declaredName("export async function quantile(xs: number[], q: number) {")).toBe("quantile");
+    expect(declaredName("function* draws(seed: number) {")).toBe("draws");
+    // A long line with no declaration does not backtrack for a long time (CodeQL js/polynomial-redos)
+    const start = performance.now();
+    expect(declaredName(`function${" ".repeat(50_000)}(`)).toBeUndefined();
+    expect(performance.now() - start).toBeLessThan(500);
     expect(declaredName("const medianOf = (values: readonly number[]): number => 0;")).toBe("medianOf");
     expect(declaredName("export const mulberry32 = function (seed: number) {")).toBe("mulberry32");
     expect(declaredName("const total = values.length;")).toBeUndefined();

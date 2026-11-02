@@ -14,7 +14,7 @@ const CODE_FILE = /\.(?:[cm]?[jt]s|[jt]sx)$/;
 const SKIPPED = /(?:^|\/)(?:node_modules|build|dist|vendor)\/|\.d\.[cm]?ts$/;
 
 /** A declaration of a function: `function name`, or `const name = (` / `= function` / `= <T>(`, with `export` and `async`. */
-const DECLARATION = /^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)|^\s*(?:export\s+)?(?:const|let)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]+)?=\s*(?:async\s*)?(?:\(|function\b|<[A-Za-z])/;
+const DECLARATION = /^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s*(?:\*\s*)?([A-Za-z_$][\w$]*)|^\s*(?:export\s+)?(?:const|let)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]+)?=\s*(?:async\s*)?(?:\(|function\b|<[A-Za-z])/;
 
 /** One signature of a home, as a regular expression of a whole name. */
 interface Signature {
