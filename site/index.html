@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Template</title>
+<meta name="description" content="The template of the repositories of mark1russell7: shared CI, release and Pages workflows, and the packages that check the conventions.">
+<style>
+  :root {
+    --bg: #fbfaf7; --fg: #1d1c1a; --muted: #5f5b55; --line: #e4e0d8; --card: #ffffff; --accent: #2f5bd3;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.55;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161615; --fg: #ecebe8; --muted: #a29e97; --line: #2e2d2a; --card: #1e1e1c; --accent: #8aa8ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); }
+  main { max-width: 52rem; margin: 0 auto; padding: 3.5rem 1.25rem 4rem; }
+  h1 { font-size: clamp(2rem, 6vw, 2.75rem); letter-spacing: -0.02em; margin: 0 0 0.5rem; }
+  h2 { font-size: 1.05rem; margin: 2.5rem 0 0.75rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+  p.lead { font-size: 1.15rem; color: var(--muted); margin: 0 0 2rem; max-width: 40rem; }
+  a { color: var(--accent); }
+  .cards { display: grid; gap: 0.9rem; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
+  .card { display: block; padding: 1.1rem 1.2rem; border: 1px solid var(--line); border-radius: 0.75rem; background: var(--card); color: inherit; text-decoration: none; transition: border-color 0.15s, transform 0.15s; }
+  .card:hover, .card:focus-visible { border-color: var(--accent); transform: translateY(-1px); }
+  .card strong { display: block; font-size: 1.05rem; margin-bottom: 0.25rem; }
+  .card span { color: var(--muted); font-size: 0.95rem; }
+  ul.packages { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--line); }
+  ul.packages li { padding: 0.7rem 0; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; align-items: baseline; }
+  ul.packages code { font-size: 0.95rem; }
+  ul.packages span { color: var(--muted); font-size: 0.95rem; }
+  footer { margin-top: 3rem; color: var(--muted); font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Template</h1>
+  <p class="lead">The template of the repositories of mark1russell7. It holds the shared CI, release and Pages workflows, and the packages that check the conventions of each repository.</p>
+
+  <div class="cards">
+    <a class="card" href="./releases/"><strong>Releases</strong><span>The versions of each package, the newest first.</span></a>
+    <a class="card" href="./status/"><strong>Status</strong><span>The roadmap, the open pull requests and the open issues.</span></a>
+    <a class="card" href="https://github.com/mark1russell7/template"><strong>Source</strong><span>The repository on GitHub.</span></a>
+  </div>
+
+  <h2>Documents</h2>
+  <div class="cards">
+    <a class="card" href="https://github.com/mark1russell7/template/blob/main/CI.md"><strong>CI.md</strong><span>The shared workflows and actions, and their inputs.</span></a>
+    <a class="card" href="https://github.com/mark1russell7/template/blob/main/RELEASING.md"><strong>RELEASING.md</strong><span>How a release to npm operates.</span></a>
+  </div>
+
+  <h2>Packages</h2>
+  <ul class="packages">
+    <li><a href="https://www.npmjs.com/package/@mark1russell7/conventions"><code>@mark1russell7/conventions</code></a><span>One check in CI for the conventions of a repository.</span></li>
+    <li><a href="https://www.npmjs.com/package/@mark1russell7/site-pages"><code>@mark1russell7/site-pages</code></a><span>The Releases page and the Status page of a site.</span></li>
+    <li><a href="https://www.npmjs.com/package/@mark1russell7/api-report"><code>@mark1russell7/api-report</code></a><span>A report of the public API of a package.</span></li>
+    <li><a href="https://www.npmjs.com/package/@mark1russell7/boundaries"><code>@mark1russell7/boundaries</code></a><span>The import boundaries of a workspace.</span></li>
+    <li><a href="https://www.npmjs.com/package/@mark1russell7/template-cli"><code>@mark1russell7/template-cli</code></a><span>New repositories and packages from the template.</span></li>
+  </ul>
+
+  <footer>MIT License.</footer>
+</main>
+</body>
+</html>

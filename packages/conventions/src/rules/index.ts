@@ -9,6 +9,7 @@ import { licenseFile } from "./license-file.ts";
 import { mainCheck } from "./main-check.ts";
 import { noBuildOutput } from "./no-build-output.ts";
 import { noLocalPaths } from "./no-local-paths.ts";
+import { pagesSite } from "./pages-site.ts";
 import { pinnedGitDeps } from "./pinned-git-deps.ts";
 import { releaseFiles } from "./release-files.ts";
 import { requiredScripts } from "./required-scripts.ts";
@@ -43,6 +44,7 @@ export const RULES: readonly Rule[] = [
   gateTrigger,
   homePackage,
   licenseFile,
+  pagesSite,
 ];
 
-export { cuePreset, gateTrigger, homePackage, licenseFile, mainCheck, noBuildOutput, noLocalPaths, pinnedGitDeps, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, workspaceProtocol };
+export { cuePreset, gateTrigger, homePackage, licenseFile, mainCheck, noBuildOutput, noLocalPaths, pagesSite, pinnedGitDeps, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, workspaceProtocol };

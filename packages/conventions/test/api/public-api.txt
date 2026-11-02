@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 108 names
+## . (build/index.d.ts): 112 names
 
 ACTIONS_COMMIT: build/index.d.ts#ACTIONS_COMMIT
 type AuditSource: build/index.d.ts#AuditSource
@@ -29,7 +29,9 @@ type Manifest: build/index.d.ts#Manifest
 type OptionSpec: build/index.d.ts#OptionSpec
 type OptionValue: build/index.d.ts#OptionValue
 type Options: build/index.d.ts#Options
+PAGES_WORKFLOWS: build/index.d.ts#PAGES_WORKFLOWS
 type PackageInfo: build/index.d.ts#PackageInfo
+type PagesCall: build/index.d.ts#PagesCall
 type PathFilter: build/index.d.ts#PathFilter
 REAL_COMPARE: build/index.d.ts#REAL_COMPARE
 RULES: build/index.d.ts#RULES
@@ -79,6 +81,8 @@ mitText: build/index.d.ts#mitText
 noBuildOutput: build/index.d.ts#noBuildOutput
 noLocalPaths: build/index.d.ts#noLocalPaths
 packageFolders: build/index.d.ts#packageFolders
+pagesCalls: build/index.d.ts#pagesCalls
+pagesSite: build/index.d.ts#pagesSite
 parseConfig: build/index.d.ts#parseConfig
 parseJsonc: build/index.d.ts#parseJsonc
 pathsOf: build/index.d.ts#pathsOf
@@ -242,6 +246,9 @@ type OptionValue = string | number | boolean | readonly string[];
 ### build/index.d.ts#Options
 type Options = Readonly<Record<string, OptionValue>>;
 
+### build/index.d.ts#PAGES_WORKFLOWS
+export declare const PAGES_WORKFLOWS: readonly string[];
+
 ### build/index.d.ts#PackageInfo
 interface PackageInfo {
   readonly folder: string;
@@ -249,6 +256,12 @@ interface PackageInfo {
   readonly file: string;
   readonly text: string;
   readonly manifest: Manifest;
+}
+
+### build/index.d.ts#PagesCall
+interface PagesCall {
+  readonly line: number;
+  readonly deploys: boolean;
 }
 
 ### build/index.d.ts#PathFilter
@@ -436,6 +449,12 @@ export declare const noLocalPaths: Rule;
 
 ### build/index.d.ts#packageFolders
 export declare function packageFolders(root: string, globs?: readonly string[] | undefined): string[];
+
+### build/index.d.ts#pagesCalls
+export declare function pagesCalls(text: string, workflows?: readonly string[]): PagesCall[];
+
+### build/index.d.ts#pagesSite
+export declare const pagesSite: Rule;
 
 ### build/index.d.ts#parseConfig
 export declare function parseConfig(value: unknown, rules: readonly Rule[]): ConventionsConfig;
