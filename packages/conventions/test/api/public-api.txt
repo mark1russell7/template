@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 107 names
+## . (build/index.d.ts): 108 names
 
 ACTIONS_COMMIT: build/index.d.ts#ACTIONS_COMMIT
 type AuditSource: build/index.d.ts#AuditSource
@@ -90,6 +90,7 @@ readOverlay: build/index.d.ts#readOverlay
 releaseFiles: build/index.d.ts#releaseFiles
 replaceLine: build/index.d.ts#replaceLine
 repoOf: build/index.d.ts#repoOf
+repositoryIsPublic: build/index.d.ts#repositoryIsPublic
 repositoryOfRemote: build/index.d.ts#repositoryOfRemote
 requiredScripts: build/index.d.ts#requiredScripts
 roadmapOfLine: build/index.d.ts#roadmapOfLine
@@ -468,6 +469,9 @@ export declare function replaceLine(text: string, line: number, lines: readonly 
 
 ### build/index.d.ts#repoOf
 export declare function repoOf(context: RuleContext): string | undefined;
+
+### build/index.d.ts#repositoryIsPublic
+export declare function repositoryIsPublic(context: RuleContext): boolean | undefined;
 
 ### build/index.d.ts#repositoryOfRemote
 export declare function repositoryOfRemote(url: string): string | undefined;

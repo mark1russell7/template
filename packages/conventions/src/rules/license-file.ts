@@ -4,7 +4,7 @@
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { codePackages, inFolder, lineOf, type Break, type PackageInfo, type Rule } from "../rule.ts";
+import { codePackages, inFolder, lineOf, type Break, type PackageInfo, type Rule, type RuleContext } from "../rule.ts";
 
 /** The names of a license file, without case. */
 const LICENSE_NAME = /^licen[cs]e(?:\.(?:md|txt))?$/i;
@@ -62,19 +62,38 @@ SOFTWARE.
 
 const isPublic = (pkg: PackageInfo): boolean => pkg.manifest["private"] !== true;
 
+/**
+ * This function tells if the repository is public, from the event file of a GitHub Actions run. Outside a run, or with no
+ * field `repository.private` in the event, it gives undefined.
+ */
+export function repositoryIsPublic(context: RuleContext): boolean | undefined {
+  const file = context.env["GITHUB_EVENT_PATH"];
+  if (file === undefined || file === "" || !existsSync(file)) return undefined;
+  try {
+    const event = JSON.parse(readFileSync(file, "utf8")) as { repository?: { private?: unknown } };
+    return typeof event.repository?.private === "boolean" ? !event.repository.private : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export const licenseFile: Rule = {
   id: "license-file",
-  title: "Each public package has a license field and, in its own folder, a license file with the same license. A repository with a public package has a license file at its root.",
+  title: "Each public package has a license field and, in its own folder, a license file with the same license. A public repository, or a repository with a public package, has a license file at its root.",
   reason:
     "npm packs the license file of the folder of the package only, and GitHub reads the license file of the root only. On 2026-11-02 five public repositories (packing, rigor, layout-contract, typeset, template) had no license file at the root, so GitHub showed them as without a license while their packages on npm said MIT.",
-  fix: "Add a license field to package.json (MIT is the license of each package of the fleet). `conventions fix` writes each missing license file: a copy of a license file of the repository with the same license, or else the MIT text with the author of the manifest. Correct a license file whose text is not the license of the field.",
+  fix: "Add a license field to package.json (the option `license`, MIT by default, is the license of the root of a public repository with no public package). `conventions fix` writes each missing license file: a copy of a license file of the repository with the same license, or else the MIT text with the author of the manifest. Correct a license file whose text is not the license of the field.",
   sources: ["vex", "coeval", "client", "highways"].map((repo) => ({ repo, rule: "license-file", doc: "LICENSE (MIT, at the root, with license MIT in each package.json)" })),
-  options: {},
-  check(context) {
+  options: {
+    license: { type: "string", default: "MIT", description: "The license of the root of a public repository with no public package." },
+  },
+  check(context, options) {
     const all = [context.rootPackage, ...codePackages(context)];
     const unique = all.filter((pkg, index) => all.findIndex((other) => other.file === pkg.file) === index);
     const published = unique.filter(isPublic);
-    if (published.length === 0) return [];
+    // A public repository needs a license file at its root, also with no public package (typeset, 11-02)
+    const publicRepo = repositoryIsPublic(context) === true;
+    if (published.length === 0 && !publicRepo) return [];
     const breaks: Break[] = [];
     // The license files that exist, by license, as the source of a copy
     const texts = new Map<string, string>();
@@ -112,7 +131,7 @@ export const licenseFile: Rule = {
       }
     }
     if (!published.includes(context.rootPackage) && licenseFileOf(context.root) === undefined) {
-      const license = published.map(licenseOf).find((item) => item !== undefined);
+      const license = published.map(licenseOf).find((item) => item !== undefined) ?? (publicRepo ? String(options["license"]) : undefined);
       if (license !== undefined) missing("", license, published[0]?.manifest["author"], "GitHub reads only the license file of the root.");
     }
     return breaks;
