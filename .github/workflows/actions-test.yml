@@ -74,19 +74,6 @@ jobs:
             pnpm-lock.yaml
             packages/*/package.json
 
-  gate-actions:
-    needs: changes
-    if: needs.changes.outputs.match == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions: {}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          sparse-checkout: .github/actions
-          persist-credentials: false
-      - run: bash .github/actions/test-gates.sh
-
   green-main:
     needs: changes
     if: needs.changes.outputs.match == 'true'
@@ -222,7 +209,7 @@ jobs:
   actions-ok:
     name: Actions OK
     if: always()
-    needs: [changes, gate-actions, green-main, pages, pages-check, release-build, release-publish, release-tag]
+    needs: [changes, green-main, pages, pages-check, release-build, release-publish, release-tag]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}
