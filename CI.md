@@ -75,9 +75,59 @@ The ruleset names only the summary checks. Thus it does not change when a job is
 
 - Add each new job of the gate to `needs` of `ci-ok`.
 - `release.yml` uses `ci.yml` with `contents: read` only. A called job cannot get more permissions than its caller. Thus a gate job that needs more (the scans need `security-events: write`, a download of an artifact of another run needs `actions: read`) stays in its own workflow, with its own summary job.
-- A gate workflow must start on each pull request, with no `paths` filter. Otherwise its summary check does not start, and the ruleset blocks the pull request. To skip the work, add a job that examines the changes. Then add an `if` on the other jobs.
+- A gate workflow must start on each pull request, with no `paths` filter. Otherwise its summary check does not start, and the ruleset blocks the pull request. To skip the work, use the action `changes` and an `if` on the other jobs ("A gate with paths").
 - Set the ruleset once with `node scripts/workflows/ruleset-ci-ok.ts <owner/repo> --apply`. Without `--apply`, it only prints the changes. It reads the checks of the newest of the last 5 pull requests into the default branch where "CI OK" passed. It adds each check with a name `<Name> OK` that passed there and that no ruleset names. It skips a repository where "CI OK" did not pass on any of the 5. A check that starts only on a push to `main` is not added, because it does not start on a pull request.
 - To make the summary checks the only checks of the ruleset, add `--only-summary`. Then the script also removes each check that started in the same workflow run as that "CI OK", because "CI OK" covers it. It deletes a ruleset with no rule left. Then a repository can join or split the jobs of its CI, and its ruleset stays correct.
+
+### A gate with paths
+
+A gate that is only about some files (a bench of the core, a corpus) starts on each pull request too. Two shared actions do the rest:
+
+- `changes` reads the files of the pull request and gives `match`. It has the patterns of `on.pull_request.paths`: `*` does not match `/`, `**` matches each part of a path, and `!` takes files out. Each event other than a pull request is a match.
+- `gate-summary` is the step of the summary job. It passes when each job passed. When `changes` gives `match: false`, a skipped gate job passes too. A failure, a cancel or another skip fails it.
+
+```yaml
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths: ["packages/core/src/**"]
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      match: ${{ steps.changes.outputs.match }}
+    steps:
+      - id: changes
+        uses: mark1russell7/template/.github/actions/changes@<commit> # main
+        with:
+          paths: |
+            packages/core/src/**
+            .github/workflows/bench.yml
+
+  bench:
+    needs: changes
+    if: needs.changes.outputs.match == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - run: pnpm bench
+
+  bench-ok:
+    name: Bench OK
+    if: always()
+    needs: [changes, bench]
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - uses: mark1russell7/template/.github/actions/gate-summary@<commit> # main
+        with:
+          needs: ${{ toJSON(needs) }}
+```
+
+A `push` filter can stay, because the ruleset reads only pull requests. With the patterns of the old filter, the gate runs on the same pull requests as before. `changes` also reads the old name of a moved file, so a move out of the gate paths starts the gate too. A pull request with 3000 files or more always starts the gate, because the API gives no more files. The conventions rule `gate-trigger` finds a pull request trigger with `paths` or `paths-ignore`. `actions-test.yml` of the template is an example.
 
 ## Release
 
