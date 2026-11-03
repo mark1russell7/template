@@ -8,7 +8,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { blockHash, sharedDocsRule, type HomeFetch } from "./rules/shared-docs.ts";
 import { authorOf, convertGate, declaredName, hasTests, HOMES, mitText, pagesCalls, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, unreleasedChangeRule, type CheckOptions, type RegistryAnswer, type RuleResult } from "./index.ts";
 import { minuteField } from "./rules/runner-budget.ts";
-import { startsOnPush } from "./rules/main-runs-finish.ts";
+import { runsOnMain, startsOnPush } from "./rules/main-runs-finish.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-rules-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -1387,6 +1387,9 @@ describe("main-runs-finish", () => {
     expect(startsOnPush(["on:", "  pull_request:", "  workflow_dispatch:"])).toBe(false);
     expect(startsOnPush(["on: [pull_request, push_tag]"])).toBe(false);
     expect(startsOnPush(["on:", "  workflow_call:"])).toBe(false);
+    expect(runsOnMain(["on:", "  workflow_call:", "    inputs:"])).toBe(true);
+    expect(runsOnMain(["on: [workflow_call]"])).toBe(true);
+    expect(runsOnMain(["on: workflow_dispatch"])).toBe(false);
   });
 
   it("reports a push workflow that cancels a run in progress, and the fix cancels only a pull request run", () => {
@@ -1396,18 +1399,21 @@ describe("main-runs-finish", () => {
       ".github/workflows/good.yml": flow(["on: [push, pull_request]"], PR),
       ".github/workflows/off.yml": flow(["on: push"], "false"),
       ".github/workflows/pr.yml": flow(["on: pull_request"], "true"),
+      ".github/workflows/time-gate.yml": flow(["on:", "  workflow_call:", "  workflow_dispatch:"], "true"),
     });
     commitAll(root);
-    expect(rule(root, "main-runs-finish").breaks.map((item) => `${item.file}:${String(item.line)}`)).toEqual([".github/workflows/ci.yml:6"]);
+    expect(rule(root, "main-runs-finish").breaks.map((item) => `${item.file}:${String(item.line)}`)).toEqual([".github/workflows/ci.yml:6", ".github/workflows/time-gate.yml:6"]);
     const fixed = runFix({ root, only: ["main-runs-finish"] });
-    expect(fixed.changed).toEqual([".github/workflows/ci.yml"]);
+    expect(fixed.changed).toEqual([".github/workflows/ci.yml", ".github/workflows/time-gate.yml"]);
+    expect(readFileSync(join(root, ".github/workflows/time-gate.yml"), "utf8")).toContain(`  cancel-in-progress: ${PR}
+`);
     expect(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8")).toContain(`  cancel-in-progress: ${PR}\n`);
     expect(rule(root, "main-runs-finish").breaks).toEqual([]);
   });
 
-  it("skips a repository with no push workflow", () => {
+  it("skips a repository with no push or called workflow", () => {
     const root = fixture({ "package.json": { name: "one" }, ".github/workflows/pr.yml": flow(["on: pull_request"], "true") });
     commitAll(root);
-    expect(rule(root, "main-runs-finish")).toMatchObject({ status: "skipped", note: "no workflow starts on push" });
+    expect(rule(root, "main-runs-finish")).toMatchObject({ status: "skipped", note: "no workflow starts on push or on workflow_call" });
   });
 });
