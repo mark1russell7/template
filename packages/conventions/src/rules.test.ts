@@ -813,8 +813,8 @@ describe("gate-trigger", () => {
     if (!("text" in converted)) throw new Error(converted.reason);
     expect(converted.text).toContain("          paths: |\n            **\n          paths-ignore: |\n            docs/**\n");
     expect(converted.text).toContain("  text-bench-ok:\n    name: Text bench OK\n");
-    expect(converted.text).toContain("    concurrency:\n      group: ${{ github.workflow }}-changes-${{ github.ref }}\n");
-    expect(converted.text).toContain("    concurrency:\n      group: ${{ github.workflow }}-text-bench-ok-${{ github.ref }}\n");
+    expect(converted.text).toContain("    concurrency:\n      group: ${{ github.workflow }}-changes-${{ github.event_name == 'pull_request' && github.ref || github.sha }}\n");
+    expect(converted.text).toContain("    concurrency:\n      group: ${{ github.workflow }}-text-bench-ok-${{ github.event_name == 'pull_request' && github.ref || github.sha }}\n");
     expect(["HTTP", "search objective", "Harness (cells)", "", "- x -"].map(summaryName)).toEqual(["HTTP OK", "Search objective OK", "Harness cells OK", "Gate OK", "X OK"]);
   });
 
@@ -1377,7 +1377,8 @@ describe("changelog-version", () => {
 
 describe("main-runs-finish", () => {
   const PR = "${{ github.event_name == 'pull_request' }}";
-  const flow = (on: string[], cancel: string): string => [...on, "concurrency:", "  group: ci-${{ github.ref }}", `  cancel-in-progress: ${cancel}`, "jobs:", "  a:", "    runs-on: ubuntu-latest", ""].join("\n");
+  const OWN = "${{ github.event_name == 'pull_request' && github.ref || github.sha }}";
+  const flow = (on: string[], cancel: string, group: string = OWN): string => [...on, "concurrency:", `  group: ci-${group}`, `  cancel-in-progress: ${cancel}`, "jobs:", "  a:", "    runs-on: ubuntu-latest", ""].join("\n");
 
   it("knows the forms of a push trigger", () => {
     expect(startsOnPush(["on: push"])).toBe(true);
@@ -1408,6 +1409,25 @@ describe("main-runs-finish", () => {
     expect(readFileSync(join(root, ".github/workflows/time-gate.yml"), "utf8")).toContain(`  cancel-in-progress: ${PR}
 `);
     expect(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8")).toContain(`  cancel-in-progress: ${PR}\n`);
+    expect(rule(root, "main-runs-finish").breaks).toEqual([]);
+  });
+
+  it("reports a group that runs of main share, and the fix gives each commit its own group", () => {
+    const shared = "${{ github.ref }}";
+    const root = fixture({
+      "package.json": { name: "one" },
+      ".github/workflows/ci.yml": flow(["on: [push, pull_request]"], PR, shared),
+      ".github/workflows/both.yml": flow(["on: push"], "true", shared),
+      ".github/workflows/own.yml": flow(["on: [push, pull_request]"], PR),
+      ".github/workflows/pr.yml": flow(["on: pull_request"], "true", shared),
+      ".github/workflows/fixed-name.yml": flow(["on: push"], "false", "pages"),
+    });
+    commitAll(root);
+    expect(rule(root, "main-runs-finish").breaks.map((item) => `${item.file}:${String(item.line)}`)).toEqual([".github/workflows/both.yml:3", ".github/workflows/both.yml:4", ".github/workflows/ci.yml:3"]);
+    const fixed = runFix({ root, only: ["main-runs-finish"] });
+    expect(fixed.changed).toEqual([".github/workflows/both.yml", ".github/workflows/ci.yml"]);
+    expect(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8")).toContain(`  group: ci-${OWN}\n`);
+    expect(readFileSync(join(root, ".github/workflows/both.yml"), "utf8")).toContain(`  group: ci-${OWN}\n  cancel-in-progress: ${PR}\n`);
     expect(rule(root, "main-runs-finish").breaks).toEqual([]);
   });
 

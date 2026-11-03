@@ -1,6 +1,7 @@
 /**
  * The rule `main-runs-finish`: a workflow that starts on `push` or on `workflow_call` does not cancel a run in progress.
- * Only the run of a pull request is cancelled by a newer push.
+ * Only the run of a pull request is cancelled by a newer push. Each commit of main has its own concurrency group, because
+ * GitHub keeps only the newest run that waits in a group.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -10,6 +11,12 @@ import { WORKFLOW, childKeys, indentOf, keyValue, workflowLines } from "../workf
 
 /** The value of `cancel-in-progress` that cancels only the run of a pull request. */
 export const PULL_REQUEST_ONLY = "${{ github.event_name == 'pull_request' }}";
+
+/** The end of a concurrency group: a pull request has one group, and each other run has the group of its commit. */
+export const OWN_GROUP = "${{ github.event_name == 'pull_request' && github.ref || github.sha }}";
+
+/** The end of a concurrency group that one run of main can share with the next run. */
+const SHARED_GROUP = "${{ github.ref }}";
 
 /** This function tells if the workflow starts on the event: `on: <event>`, `on: [<event>, ...]` or a key `<event>` under `on`. */
 export function startsOn(lines: readonly string[], event: string): boolean {
@@ -38,12 +45,13 @@ export function runsOnMain(lines: readonly string[]): boolean {
 
 export const mainRunsFinish: Rule = {
   id: "main-runs-finish",
-  title: "A workflow that starts on push or on workflow_call does not cancel a run in progress. A newer push cancels only the run of a pull request.",
+  title: "A workflow that starts on push or on workflow_call does not cancel a run in progress, and each commit of main has its own concurrency group. A newer push cancels only the run of a pull request.",
   reason:
     "On 2026-11-03 the next merge cancelled the CI run of a commit on main, so the main check of that commit had no result. A shared concurrency group also cancelled a bench run on main, and its claim had no measurement. The CI workflow of the template had `cancel-in-progress: true`, and each repository copied it. A called workflow gets the event of its caller, so a `true` in a workflow that starts on `workflow_call` cancels the run of main too (packing, time-gate.yml, 2026-11-03).",
-  fix: `Set \`cancel-in-progress: ${PULL_REQUEST_ONLY}\`. A newer run of main then waits for the older run, and GitHub keeps only the newest run that waits.`,
+  fix: `Set \`cancel-in-progress: ${PULL_REQUEST_ONLY}\`, and end the concurrency group with \`${OWN_GROUP}\`. In one group, GitHub cancels a run that waits when a newer run comes, whatever \`cancel-in-progress\` says.`,
   sources: [
     { repo: "fleet", rule: "main-runs-finish", doc: "docs/STRATEGY.md (2026-11-03, a run of main ends)" },
+    { repo: "client", rule: "release", doc: "the release of 0.47.0 (2026-11-03): four waiting CI runs of main were cancelled, so the version commit had no result" },
     { repo: "algebra", rule: "main-check", doc: "the A2 and A5 results (2026-11-03): a cancelled main run, and a cancelled bench run" },
   ],
   options: {},
@@ -64,6 +72,16 @@ export const mainRunsFinish: Rule = {
       if (!runsOnMain(lines)) continue;
       pushed += 1;
       lines.forEach((line, index) => {
+        if (keyValue(line, "group")?.includes(SHARED_GROUP) === true) {
+          const original = text.split(/\r?\n/)[index] ?? line;
+          breaks.push({
+            file,
+            line: index + 1,
+            message: `${file} starts on push or on workflow_call, and its concurrency group ends with the ref. Runs of main share the group, so a newer push cancels a run that waits, and that commit gets no result.`,
+            edits: [{ file, before: text, after: replaceLine(text, index + 1, [original.replace(SHARED_GROUP, () => OWN_GROUP)]) }],
+          });
+          return;
+        }
         if (keyValue(line, "cancel-in-progress") !== "true") return;
         const original = text.split(/\r?\n/)[index] ?? line;
         const after = replaceLine(text, index + 1, [original.replace(/cancel-in-progress:\s*["']?true["']?/, () => `cancel-in-progress: ${PULL_REQUEST_ONLY}`)]);

@@ -12,9 +12,9 @@ on:
 permissions:
   contents: read
 
-# A newer push cancels the run of a pull request. A run of main ends, so each commit of main has a result (main-runs-finish).
+# A newer push cancels the run of a pull request. Each commit of main has its own group, so its run ends with a result (main-runs-finish).
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
