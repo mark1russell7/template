@@ -291,6 +291,7 @@ export declare const RULES: readonly Rule[];
 ### build/index.d.ts#RegistryAnswer
 type RegistryAnswer = {
   readonly versions: readonly string[];
+  readonly times?: Readonly<Record<string, string>>;
 } | {
   readonly error: string;
 };

@@ -126,9 +126,11 @@ jobs:
           persist-credentials: false
           fetch-depth: ${{ inputs.fetch-depth }}
       # The checkout of a pull request of more than one commit ends inside the change. The rule release-files of
-      # check:conventions reads each commit of the change, so this step deepens the checkout to the merge base.
+      # check:conventions reads each commit of the change, so this step deepens the checkout to the merge base. The rule
+      # unreleased-change reads the version at the merge base, which a pull request of one commit also needs when main
+      # moved after the start of its branch. When the checkout has the merge base, the step ends at once.
       - name: Deepen to the merge base
-        if: inputs.fetch-depth != 0 && github.event.pull_request.commits > 1
+        if: inputs.fetch-depth != 0 && github.event.pull_request.commits > 0
         env:
           TOKEN: ${{ github.token }}
         run: |

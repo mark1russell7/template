@@ -1,13 +1,17 @@
 /**
- * The rule `unreleased-change`: a change of the files that a published package ships also raises its version, when npm
- * has that version already. Else the release workflow skips the version, and the change does not get to npm.
+ * The rule `unreleased-change`: a change does not set a version that npm has. With the option `versionEachChange`, a
+ * change of the files that a published package ships also raises its version. Else the release skips the change.
  */
 import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { rangeOf } from "../change.ts";
 import { cleanPath, codePackages, hasFile, lineOf, matchesAny, type Break, type Manifest, type PackageInfo, type Rule, type RuleContext } from "../rule.ts";
 
-/** The answer of the registry for one package: each version that npm has or had (none for a new package), or an error. */
-export type RegistryAnswer = { readonly versions: readonly string[] } | { readonly error: string };
+/**
+ * The answer of the registry for one package, or an error. The answer has each version that npm has or had (none for a
+ * new package) and the time of each publish (ISO 8601).
+ */
+export type RegistryAnswer = { readonly versions: readonly string[]; readonly times?: Readonly<Record<string, string>> } | { readonly error: string };
 
 /** This function gives the answer of the registry at the URL `registry` for each package name of `names`. */
 export type RegistryLookup = (names: readonly string[], registry: string) => ReadonlyMap<string, RegistryAnswer>;
@@ -46,8 +50,8 @@ Promise.all(names.map(async (name) => {
     if (response.status === 404) return [name, { versions: [] }];
     if (!response.ok) return [name, { error: "HTTP " + response.status }];
     const data = await response.json();
-    const times = Object.keys(data.time ?? {}).filter((key) => key !== "created" && key !== "modified");
-    return [name, { versions: [...new Set([...Object.keys(data.versions ?? {}), ...times])] }];
+    const times = Object.fromEntries(Object.entries(data.time ?? {}).filter(([key]) => key !== "created" && key !== "modified"));
+    return [name, { versions: [...new Set([...Object.keys(data.versions ?? {}), ...Object.keys(times)])], times }];
   } catch (error) {
     return [name, { error: String(error && error.message ? error.message : error) }];
   }
@@ -70,15 +74,6 @@ export const npmLookup: RegistryLookup = (names, registry) => {
     return fail("the lookup gave no JSON");
   }
 };
-
-/** A published package of the change: its name, its version at HEAD and at the start of the change, and its shipped changed files. */
-interface Candidate {
-  readonly pkg: PackageInfo;
-  readonly name: string;
-  readonly version: string;
-  readonly before: string | undefined;
-  readonly files: readonly string[];
-}
 
 /** This function gives the strings of a field of `package.json` that is a list of strings. */
 const stringsOf = (manifest: Manifest, field: string): readonly string[] => {
@@ -117,28 +112,81 @@ function publishedOf(context: RuleContext): readonly PackageInfo[] {
     .filter((pkg) => pkg.manifest["private"] !== true && typeof pkg.manifest["name"] === "string" && typeof pkg.manifest["version"] === "string");
 }
 
+/** A published package of the change: its versions, and the shipped files that the change changes. */
+interface Candidate {
+  readonly pkg: PackageInfo;
+  readonly name: string;
+  /** The version at HEAD. */
+  readonly version: string;
+  /** The version that the commits of the change set, from the merge base to the head of the change, or undefined. */
+  readonly sets: string | undefined;
+  /** The version at the start of the range: the base branch, or the commit before the push. */
+  readonly start: string | undefined;
+  /** The shipped files that the change changes, relative to the folder. Only the option `versionEachChange` reads them. */
+  readonly files: readonly string[];
+}
+
+/** This function gives the time of the push in milliseconds, from the field `repository.pushed_at` of the event file. */
+function pushedAt(context: RuleContext): number | undefined {
+  const file = context.env["GITHUB_EVENT_PATH"];
+  if (file === undefined || file === "" || !existsSync(file)) return undefined;
+  try {
+    const event = JSON.parse(readFileSync(file, "utf8")) as { repository?: { pushed_at?: unknown } };
+    const value = event.repository?.pushed_at;
+    if (typeof value === "number") return value * 1000;
+    return typeof value === "string" && !Number.isNaN(Date.parse(value)) ? Date.parse(value) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** This function gives the shipped files of `pkg` in the list `changed`, relative to the folder of the package. */
+function shippedFiles(pkg: PackageInfo, changed: readonly string[], before: Manifest | undefined, context: RuleContext, unshipped: readonly string[], fields: readonly string[]): string[] {
+  const folders = context.packages.map((other) => other.folder).filter((folder) => folder !== "");
+  // The root package does not have the files of the packages of the workspace
+  const own = (path: string): boolean => inside(pkg.folder, path) && (pkg.folder !== "" || !folders.some((folder) => inside(folder, path)));
+  const relative = (path: string): string => (pkg.folder === "" ? path : path.slice(pkg.folder.length + 1));
+  // An entry of `files` that git does not track is build output, which comes from each source file
+  const entries = stringsOf(pkg.manifest, "files");
+  const positive = entries.filter((entry) => !entry.startsWith("!"));
+  const negative = entries.filter((entry) => entry.startsWith("!")).flatMap((entry) => entryGlobs(entry.slice(1)));
+  const ownTracked = (context.gitFiles() ?? []).filter(own).map(relative);
+  const whitelist = positive.length > 0 && positive.every((entry) => ownTracked.some((path) => matchesAny(path, entryGlobs(entry))));
+  const ships = (path: string): boolean =>
+    path !== "package.json" && !matchesAny(path, unshipped) && (!whitelist || (positive.some((entry) => matchesAny(path, entryGlobs(entry))) && !matchesAny(path, negative)));
+  const files = changed.filter(own).map(relative).filter(ships);
+  if (changed.includes(pkg.file) && before !== undefined && fields.some((field) => JSON.stringify(before[field]) !== JSON.stringify(pkg.manifest[field]))) files.push("package.json");
+  return files;
+}
+
 /** This function makes the rule with the registry lookup `lookup`. The tests give a fake lookup. */
 export function unreleasedChangeRule(lookup: RegistryLookup = npmLookup): Rule {
   return {
     id: "unreleased-change",
-    title: "A change of the files that a published package ships raises its version, when npm has that version already.",
+    title: "A change does not set a version that npm has. With `versionEachChange`, a change of the shipped files also raises the version.",
     reason:
-      "The release workflow publishes each version that npm does not have, and it skips the others. When two pull requests set the same version, the second merge changes the code but no version: the release does not publish it, and nothing fails (rigor #18 and #20, 2026-11-02).",
-    fix: "Raise the version of the package in a pull request, with the SemVer rules (RELEASING.md). Then the release workflow publishes the change.",
+      "The release workflow publishes each version that npm does not have, and it skips the others. When two pull requests set the same version, the second merge changes the code but no version, and nothing fails (rigor #18 and #20, 2026-11-02).",
+    fix: "Raise the version of the package in a pull request to a version that npm does not have, with the SemVer rules (RELEASING.md). Then the release workflow publishes the change.",
     sources: [
       { repo: "rigor", rule: "unreleased-change", doc: "pull requests #18 and #20 (2026-11-02): two pull requests set the same version" },
       ...["crawler", "coeval", "template"].map((repo) => ({ repo, rule: "unreleased-change", doc: ".github/workflows/release.yml (it starts on a change of a version, and it skips each version that npm has)" })),
     ],
     options: {
+      versionEachChange: {
+        type: "boolean",
+        default: false,
+        description:
+          "True when each pull request sets its version: a change of the shipped files with a version that npm has breaks, also on a push. False when a separate pull request raises the version.",
+      },
       unshipped: {
         type: "strings",
         default: UNSHIPPED_FILES,
-        description: "The globs of the files of a package, relative to its folder, that do not ship. A change of only these files needs no release.",
+        description: "With `versionEachChange`: the globs of the files of a package, relative to its folder, that do not ship.",
       },
       fields: {
         type: "strings",
         default: SHIPPED_FIELDS,
-        description: "The fields of `package.json` whose change ships. A change of only the other fields (for example the dependencies) needs no release.",
+        description: "With `versionEachChange`: the fields of `package.json` whose change ships. The dependencies are not in the default list.",
       },
       registry: { type: "string", default: NPM_REGISTRY, description: "The URL of the registry that has the versions." },
     },
@@ -148,71 +196,72 @@ export function unreleasedChangeRule(lookup: RegistryLookup = npmLookup): Rule {
       if (published.length === 0) return { skipped: "the repository has no published package with a release version" };
       const range = rangeOf(context, { push: true });
       if ("skipped" in range) return range;
-      const out = context.git(["diff", "--name-only", "--no-renames", ...range.diff]);
+      const strict = options["versionEachChange"] === true;
+      const push = context.base === undefined && context.env["GITHUB_EVENT_NAME"] === "push";
+      const out = strict ? context.git(["diff", "--name-only", "--no-renames", ...range.diff]) : "";
       if (out === undefined) return { skipped: "git cannot give the changed files of the change" };
       const changed = out.split(/\r?\n/).filter((file) => file !== "");
       const unshipped = Array.isArray(options["unshipped"]) ? (options["unshipped"] as readonly string[]) : UNSHIPPED_FILES;
       const fields = Array.isArray(options["fields"]) ? (options["fields"] as readonly string[]) : SHIPPED_FIELDS;
       const registry = typeof options["registry"] === "string" ? options["registry"] : NPM_REGISTRY;
-      const tracked = context.gitFiles() ?? [];
-      const folders = context.packages.map((pkg) => pkg.folder).filter((folder) => folder !== "");
+      // The commits of the change itself go from the merge base to the head of the change. A push starts at the commit
+      // before it. The version of the merge commit is not the version of the change: the base branch can change it too.
+      const fork = push ? range.ends[0] : context.git(["merge-base", ...range.ends])?.trim();
+      const notes: string[] = [];
+      if (fork === undefined) notes.push(`the checkout does not have the merge base of ${range.ends.join(" and ")}, so the rule cannot tell if the change sets a version`);
+      const manifestAt = (ref: string, pkg: PackageInfo): Manifest | undefined => (ref === "HEAD" ? pkg.manifest : parseManifest(context.git(["show", `${ref}:${pkg.file}`])));
+      const versionOf = (manifest: Manifest | undefined): string | undefined => (typeof manifest?.["version"] === "string" ? manifest["version"] : undefined);
 
       const candidates: Candidate[] = [];
       for (const pkg of published) {
-        // The root package does not have the files of the packages of the workspace
-        const own = (path: string): boolean => inside(pkg.folder, path) && (pkg.folder !== "" || !folders.some((folder) => inside(folder, path)));
-        const relative = (path: string): string => (pkg.folder === "" ? path : path.slice(pkg.folder.length + 1));
-        // An entry of `files` that git does not track is build output, which comes from each source file
-        const entries = stringsOf(pkg.manifest, "files");
-        const positive = entries.filter((entry) => !entry.startsWith("!"));
-        const negative = entries.filter((entry) => entry.startsWith("!")).flatMap((entry) => entryGlobs(entry.slice(1)));
-        const ownTracked = tracked.filter(own).map(relative);
-        const whitelist = positive.length > 0 && positive.every((entry) => ownTracked.some((path) => matchesAny(path, entryGlobs(entry))));
-        const ships = (path: string): boolean =>
-          path !== "package.json" &&
-          !matchesAny(path, unshipped) &&
-          (!whitelist || (positive.some((entry) => matchesAny(path, entryGlobs(entry))) && !matchesAny(path, negative)));
-        const files = changed.filter(own).map(relative).filter(ships);
-        const beforeText = context.git(["show", `${range.ends[0]}:${pkg.file}`]);
-        const beforeManifest = parseManifest(beforeText);
-        if (changed.includes(pkg.file) && beforeManifest !== undefined && fields.some((field) => JSON.stringify(beforeManifest[field]) !== JSON.stringify(pkg.manifest[field]))) {
-          files.push("package.json");
-        }
-        if (files.length === 0) continue;
-        const before = typeof beforeManifest?.["version"] === "string" ? beforeManifest["version"] : undefined;
-        candidates.push({ pkg, name: String(pkg.manifest["name"]), version: String(pkg.manifest["version"]), before, files });
+        const atStart = manifestAt(range.ends[0], pkg);
+        const set = versionOf(manifestAt(range.ends[1], pkg));
+        const before = fork === undefined ? undefined : versionOf(fork === range.ends[0] ? atStart : manifestAt(fork, pkg));
+        const sets = fork !== undefined && set !== undefined && !isPlaceholder(set) && set !== before ? set : undefined;
+        const files = strict ? shippedFiles(pkg, changed, atStart, context, unshipped, fields) : [];
+        if (sets === undefined && files.length === 0) continue;
+        candidates.push({ pkg, name: String(pkg.manifest["name"]), version: String(pkg.manifest["version"]), sets, start: versionOf(atStart), files });
       }
-      if (candidates.length === 0) return [];
+      if (candidates.length === 0) return notes.length > 0 ? { skipped: notes.join("; ") } : [];
 
       const answers = lookup(
         candidates.map((candidate) => candidate.name),
         registry,
       );
-      // On a push, a version that the push changes can be on npm already: the release of the same push published it
-      const push = context.base === undefined && context.env["GITHUB_EVENT_NAME"] === "push";
+      const pushTime = push ? pushedAt(context) : undefined;
       const breaks: Break[] = [];
-      const errors: string[] = [];
       for (const candidate of candidates) {
         const answer = answers.get(candidate.name) ?? { error: "no answer" };
         if ("error" in answer) {
-          errors.push(`${candidate.name}: ${answer.error}`);
+          notes.push(`the registry did not answer for ${candidate.name}: ${answer.error}`);
           continue;
         }
-        if (!answer.versions.includes(candidate.version)) continue;
-        const raised = candidate.before !== candidate.version;
-        if (raised && push) continue;
-        const shown = candidate.files.slice(0, 3).map((file) => (candidate.pkg.folder === "" ? file : `${candidate.pkg.folder}/${file}`));
-        const more = candidate.files.length > shown.length ? ` and ${String(candidate.files.length - shown.length)} more` : "";
         const line = lineOf(candidate.pkg.text, '"version"');
-        breaks.push({
-          file: candidate.pkg.file,
-          ...(line === undefined ? {} : { line }),
-          message: raised
-            ? `${candidate.name}: the change sets the version ${candidate.version}, but ${candidate.version} is on npm already. Raise the version (SemVer) in a pull request. The change ships ${shown.join(", ")}${more}.`
-            : `${candidate.name}: the change is not released, because ${candidate.version} is on npm already. Raise the version (SemVer) in a pull request. The change ships ${shown.join(", ")}${more}.`,
-        });
+        const at = { file: candidate.pkg.file, ...(line === undefined ? {} : { line }) };
+        if (candidate.sets !== undefined) {
+          const sets = candidate.sets;
+          if (!answer.versions.includes(sets)) continue;
+          // On a push, the release of the same push can publish the version that the push sets. Only a version that npm
+          // had before the push is a break.
+          if (push) {
+            const time = Date.parse(answer.times?.[sets] ?? "");
+            if (pushTime === undefined || Number.isNaN(time)) {
+              notes.push(`the rule cannot tell if npm had ${candidate.name}@${sets} before the push`);
+              continue;
+            }
+            if (time >= pushTime) continue;
+          }
+          breaks.push({ ...at, message: `${candidate.name}: the change sets the version ${sets}, but ${sets} is on npm already. Raise the version (SemVer) in a pull request.` });
+        } else if (strict && candidate.files.length > 0 && candidate.start === candidate.version && answer.versions.includes(candidate.version)) {
+          const shown = candidate.files.slice(0, 3).map((file) => (candidate.pkg.folder === "" ? file : `${candidate.pkg.folder}/${file}`));
+          const more = candidate.files.length > shown.length ? ` and ${String(candidate.files.length - shown.length)} more` : "";
+          breaks.push({
+            ...at,
+            message: `${candidate.name}: the change is not released, because ${candidate.version} is on npm already. Raise the version (SemVer) in a pull request. The change ships ${shown.join(", ")}${more}.`,
+          });
+        }
       }
-      if (breaks.length === 0 && errors.length > 0) return { skipped: `the registry did not answer, so the rule cannot tell if npm has the versions: ${errors.join("; ")}` };
+      if (breaks.length === 0 && notes.length > 0) return { skipped: notes.join("; ") };
       return breaks;
     },
   };
