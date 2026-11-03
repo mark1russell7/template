@@ -1,6 +1,5 @@
-/* The shared cue of a box that scrolls sideways. The published name is @mark1russell7/site-pages/scroll-cue.css.
-   In the workspace, the package has no exports field, so this import names the file. */
-@import "@mark1russell7/site-pages/styles/scroll-cue.css";
+/* The shared cue of a box that scrolls sideways. The workspace and npm give it by the same name. */
+@import "@mark1russell7/site-pages/scroll-cue.css";
 
 :root {
   --bg: #f6f4ef;

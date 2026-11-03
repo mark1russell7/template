@@ -30,45 +30,10 @@ export interface ScaffoldData {
   readonly presets: readonly ScaffoldPreset[];
 }
 
-/** An input of a shared workflow (`on.workflow_call.inputs`). */
-export interface WorkflowInput {
-  readonly name: string;
-  readonly type: string;
-  readonly description: string;
-  /** The default value, as YAML text. An empty text is no default. */
-  readonly default: string;
-  readonly required: boolean;
-}
+/** The shared workflows of the repository, as the reader of `@mark1russell7/conventions` gives them. */
+import type { Workflow } from "@mark1russell7/conventions";
 
-/** A step of a job. */
-export interface WorkflowStep {
-  /** The name of the step, or else its action, its id or its first command. */
-  readonly label: string;
-  /** The condition of the step (`if`), or an empty text. */
-  readonly if: string;
-  /** The action of the step (`uses`), with no pin, or an empty text. */
-  readonly uses: string;
-}
-
-/** A job of a workflow. */
-export interface WorkflowJob {
-  readonly id: string;
-  readonly if: string;
-  readonly needs: readonly string[];
-  readonly steps: readonly WorkflowStep[];
-}
-
-/** A shared workflow of the repository. */
-export interface Workflow {
-  /** The file name, for example `reusable-pages.yml`. */
-  readonly file: string;
-  /** The value of `name`. */
-  readonly name: string;
-  /** The first lines of the comment at the top of the file. */
-  readonly summary: string;
-  readonly inputs: readonly WorkflowInput[];
-  readonly jobs: readonly WorkflowJob[];
-}
+export type { Workflow, WorkflowInput, WorkflowJob, WorkflowStep } from "@mark1russell7/conventions";
 
 /** All the data of the site. */
 export interface SiteData {

@@ -4,6 +4,5 @@ export { compareFiles, conditionInputs, contextValue, EVENTS, explore, inputDefa
 export type { EventName, FileMark, JobView, RunState, StepView, TreeRow } from "./model.ts";
 export { evaluate, stateOf, truthy, UNKNOWN } from "./expr.ts";
 export type { Reference, Result, Value } from "./expr.ts";
-export { readWorkflow, valueOf } from "./workflow.ts";
 export { highlight } from "./highlight.ts";
 export type * from "./types.ts";

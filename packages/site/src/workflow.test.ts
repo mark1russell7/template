@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readWorkflows } from "./node/data.ts";
-import { readWorkflow } from "./workflow.ts";
+import { readWorkflow } from "@mark1russell7/conventions";
 
 describe("the reader of the shared workflows", () => {
   const workflows = readWorkflows();

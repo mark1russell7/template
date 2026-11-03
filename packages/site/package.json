@@ -15,6 +15,7 @@
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json"
   },
   "devDependencies": {
+    "@mark1russell7/conventions": "workspace:*",
     "@mark1russell7/cue": "^1.0.2",
     "@mark1russell7/site-pages": "workspace:*",
     "@mark1russell7/template-cli": "workspace:*",

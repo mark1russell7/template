@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 126 names
+## . (build/index.d.ts): 131 names
 
 ACTIONS_COMMIT: build/index.d.ts#ACTIONS_COMMIT
 type AuditSource: build/index.d.ts#AuditSource
@@ -51,6 +51,10 @@ STRICT_OPTIONS: build/index.d.ts#STRICT_OPTIONS
 TRAIN_SCOPES: build/index.d.ts#TRAIN_SCOPES
 UNSHIPPED_FILES: build/index.d.ts#UNSHIPPED_FILES
 USAGE: build/index.d.ts#USAGE
+type Workflow: build/index.d.ts#Workflow
+type WorkflowInput: build/index.d.ts#WorkflowInput
+type WorkflowJob: build/index.d.ts#WorkflowJob
+type WorkflowStep: build/index.d.ts#WorkflowStep
 annotations: build/index.d.ts#annotations
 authorOf: build/index.d.ts#authorOf
 blockHash: build/index.d.ts#blockHash
@@ -102,6 +106,7 @@ prPathFilters: build/index.d.ts#prPathFilters
 readConfig: build/index.d.ts#readConfig
 readJsonc: build/index.d.ts#readJsonc
 readOverlay: build/index.d.ts#readOverlay
+readWorkflow: build/index.d.ts#readWorkflow
 releaseFiles: build/index.d.ts#releaseFiles
 replaceLine: build/index.d.ts#replaceLine
 repoOf: build/index.d.ts#repoOf
@@ -379,6 +384,39 @@ export declare const UNSHIPPED_FILES: readonly string[];
 ### build/index.d.ts#USAGE
 export declare const USAGE: string;
 
+### build/index.d.ts#Workflow
+interface Workflow {
+  readonly file: string;
+  readonly name: string;
+  readonly summary: string;
+  readonly inputs: readonly WorkflowInput[];
+  readonly jobs: readonly WorkflowJob[];
+}
+
+### build/index.d.ts#WorkflowInput
+interface WorkflowInput {
+  readonly name: string;
+  readonly type: string;
+  readonly description: string;
+  readonly default: string;
+  readonly required: boolean;
+}
+
+### build/index.d.ts#WorkflowJob
+interface WorkflowJob {
+  readonly id: string;
+  readonly if: string;
+  readonly needs: readonly string[];
+  readonly steps: readonly WorkflowStep[];
+}
+
+### build/index.d.ts#WorkflowStep
+interface WorkflowStep {
+  readonly label: string;
+  readonly if: string;
+  readonly uses: string;
+}
+
 ### build/index.d.ts#annotations
 export declare function annotations(result: CheckResult): string;
 
@@ -535,6 +573,9 @@ export declare function readJsonc(file: string): unknown;
 
 ### build/index.d.ts#readOverlay
 export declare function readOverlay(file: string): readonly Home[];
+
+### build/index.d.ts#readWorkflow
+export declare function readWorkflow(file: string, text: string): Workflow;
 
 ### build/index.d.ts#releaseFiles
 export declare const releaseFiles: Rule;

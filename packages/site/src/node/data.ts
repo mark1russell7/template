@@ -7,7 +7,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SiteData } from "../types.ts";
-import { readWorkflow } from "../workflow.ts";
+import { readWorkflow } from "@mark1russell7/conventions";
 import { scaffoldData } from "./scaffold.ts";
 
 /** The root folder of the repository, from the folder of this module. */
