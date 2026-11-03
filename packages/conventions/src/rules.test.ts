@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
+import { blockHash, sharedDocsRule, type HomeFetch } from "./rules/shared-docs.ts";
 import { authorOf, convertGate, declaredName, hasTests, HOMES, mitText, pagesCalls, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, unreleasedChangeRule, type CheckOptions, type RegistryAnswer, type RuleResult } from "./index.ts";
 import { minuteField } from "./rules/runner-budget.ts";
 
@@ -1252,5 +1253,85 @@ describe("unreleased-change", () => {
       // With no publish time, the rule cannot tell the release of the push from an older publish
       expect(check(root, { "@x/a": ["1.0.0", "1.1.0"] }, { env: pushed(second) }).note).toBe("the rule cannot tell if npm had @x/a@1.1.0 before the push");
     });
+  });
+});
+
+describe("shared-docs", () => {
+  const body = ["A shared rule.", "", "It has two lines."];
+  const doc = (...parts: string[]): string => `# Promotion\n\n${parts.join("\n\n")}\n`;
+  const sharedBlock = (id: string, lines: readonly string[] = body): string => [`<!-- shared:${id} -->`, ...lines, `<!-- /shared:${id} -->`].join("\n");
+  const HOME = { repo: "o/home", path: "docs/HOME.md", commit: SHA, sha256: blockHash(body) };
+  const link = `https://github.com/o/home/blob/${SHA}/docs/HOME.md`;
+  const linkedBlock = (id: string, url = link): string => [`<!-- linked:${id} -->`, `The home of this block is [docs/HOME.md](${url}).`, `<!-- /linked:${id} -->`].join("\n");
+  const repo = (text: string, lock: unknown): string => {
+    const root = fixture({ "package.json": { name: "one" }, "docs/PROMOTION.md": text, "docs/shared.lock.json": lock });
+    commitAll(root);
+    return root;
+  };
+  /** A fake download that gives `text` for each URL, or the error `error`, and counts the URLs. */
+  const homes = (answer: { text: string } | { error: string }): { fetch: HomeFetch; urls: string[] } => {
+    const urls: string[] = [];
+    return { urls, fetch: (asked) => (urls.push(...asked), new Map(asked.map((url) => [url, answer]))) };
+  };
+  const check = (root: string, fetch: HomeFetch, env: Record<string, string> = {}): RuleResult => rule(root, "shared-docs", { rules: [sharedDocsRule(fetch)], env });
+  const none: HomeFetch = () => {
+    throw new Error("no download expected");
+  };
+
+  it("skips a repository with no lock, and passes blocks that agree with the lock", () => {
+    const empty = fixture({ "package.json": { name: "one" } });
+    commitAll(empty);
+    expect(check(empty, none).status).toBe("skipped");
+    const root = repo(doc(sharedBlock("a"), sharedBlock("b", ["Other text."])), { file: "docs/PROMOTION.md", blocks: { a: blockHash(body), b: blockHash(["Other text."]) } });
+    expect(check(root, none).breaks).toEqual([]);
+  });
+
+  it("breaks on a changed block, a block that the lock does not have, and a block that the document does not have", () => {
+    const root = repo(doc(sharedBlock("a", ["Changed."]), sharedBlock("new")), { file: "docs/PROMOTION.md", blocks: { a: blockHash(body), gone: blockHash(body) } });
+    const messages = check(root, none).breaks.map((b) => b.message);
+    expect(messages).toHaveLength(3);
+    expect(messages.some((m) => m.includes('"a" differs'))).toBe(true);
+    expect(messages.some((m) => m.includes('"gone"') && m.includes("missing"))).toBe(true);
+    expect(messages.some((m) => m.includes('"new" is not in'))).toBe(true);
+  });
+
+  it("breaks on a lock that locks nothing, and on markers that do not close", () => {
+    const nothing = repo(doc(sharedBlock("a")), { file: "docs/PROMOTION.md" });
+    expect(check(nothing, none).breaks.map((b) => b.message)).toEqual(['docs/shared.lock.json has no field "blocks" and no field "linked", so it locks nothing.']);
+    const open = repo(doc("<!-- shared:a -->", "text"), { file: "docs/PROMOTION.md", blocks: {} });
+    expect(check(open, none).breaks.some((b) => b.message.includes("has no end marker") && b.line === 3)).toBe(true);
+  });
+
+  it("passes a linked block with its link, without a download outside CI", () => {
+    const root = repo(doc(linkedBlock("win-test")), { file: "docs/PROMOTION.md", linked: { "win-test": HOME } });
+    expect(check(root, none).breaks).toEqual([]);
+  });
+
+  it("breaks on a linked block with a copy, a short commit or a link to another commit", () => {
+    const copy = repo(doc(sharedBlock("win-test"), linkedBlock("win-test")), { file: "docs/PROMOTION.md", blocks: {}, linked: { "win-test": HOME } });
+    expect(check(copy, none).breaks.map((b) => b.message)).toContain('the linked block "win-test" also has a copy in docs/PROMOTION.md. Remove the copy.');
+    const short = repo(doc(linkedBlock("win-test")), { file: "docs/PROMOTION.md", linked: { "win-test": { ...HOME, commit: "0123abc" } } });
+    expect(check(short, none).breaks.some((b) => b.message.includes("40 hex digits"))).toBe(true);
+    const other = repo(doc(linkedBlock("win-test", link.replace(SHA, "f".repeat(40)))), { file: "docs/PROMOTION.md", linked: { "win-test": HOME } });
+    expect(check(other, none).breaks.some((b) => b.message.includes("does not contain the link"))).toBe(true);
+  });
+
+  it("in CI, downloads the home at the pinned commit and compares the hash", () => {
+    const root = repo(doc(linkedBlock("win-test")), { file: "docs/PROMOTION.md", linked: { "win-test": HOME } });
+    const same = homes({ text: doc(sharedBlock("win-test")) });
+    expect(check(root, same.fetch, { CI: "true" }).breaks).toEqual([]);
+    expect(same.urls).toEqual([`https://raw.githubusercontent.com/o/home/${SHA}/docs/HOME.md`]);
+    const changed = homes({ text: doc(sharedBlock("win-test", ["Another rule."])) });
+    expect(check(root, changed.fetch, { CI: "true" }).breaks.some((b) => b.message.includes("not the hash of"))).toBe(true);
+    const missing = homes({ text: doc(sharedBlock("other")) });
+    expect(check(root, missing.fetch, { CI: "true" }).breaks.some((b) => b.message.includes('has no shared block "win-test"'))).toBe(true);
+  });
+
+  it("fails closed: a home that does not answer is a break", () => {
+    const root = repo(doc(linkedBlock("win-test")), { file: "docs/PROMOTION.md", linked: { "win-test": HOME } });
+    const down = homes({ error: "The operation was aborted due to timeout" });
+    const result = check(root, down.fetch, { CI: "true" });
+    expect(result.status).toBe("break");
+    expect(result.breaks[0]?.message).toContain("did not answer");
   });
 });
