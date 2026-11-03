@@ -139,6 +139,20 @@ jobs:
             git -c "http.extraheader=$auth" fetch --quiet --no-tags --deepen="$depth" origin "$base" "$head"
           done
           git merge-base "$base" "$head" > /dev/null || git -c "http.extraheader=$auth" fetch --quiet --no-tags --unshallow origin "$base" "$head"
+      # On a push to the default branch, the rule unreleased-change of check:conventions compares the commit before the
+      # push with HEAD. A push of more commits than the depth of the checkout does not have that commit, so this step
+      # fetches it. A failed fetch only makes the rule skip.
+      - name: Fetch the commit before the push
+        if: >-
+          inputs.fetch-depth != 0 && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+          && github.event.before != '0000000000000000000000000000000000000000'
+        env:
+          TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          git cat-file -e "$BEFORE^{commit}" 2> /dev/null && exit 0
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+          git -c "http.extraheader=$auth" fetch --quiet --no-tags --depth=1 origin "$BEFORE" || echo "::notice::The checkout does not have $BEFORE, the commit before the push."
       # The pnpm version comes from "packageManager" in package.json
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:

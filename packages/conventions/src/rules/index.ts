@@ -21,6 +21,7 @@ import { tsconfigTest } from "./tsconfig-test.ts";
 import { typedFiles } from "./typed-files.ts";
 import { typedScripts } from "./typed-scripts.ts";
 import { trustPolicy } from "./trust-policy.ts";
+import { unreleasedChange } from "./unreleased-change.ts";
 import { workspaceProtocol } from "./workspace-protocol.ts";
 
 /** Each rule of the check. */
@@ -35,6 +36,7 @@ export const RULES: readonly Rule[] = [
   noBuildOutput,
   noLocalPaths,
   releaseFiles,
+  unreleasedChange,
   typedScripts,
   typedFiles,
   mainCheck,
@@ -47,4 +49,4 @@ export const RULES: readonly Rule[] = [
   pagesSite,
 ];
 
-export { cuePreset, gateTrigger, homePackage, licenseFile, mainCheck, noBuildOutput, noLocalPaths, pagesSite, pinnedGitDeps, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, workspaceProtocol };
+export { cuePreset, gateTrigger, homePackage, licenseFile, mainCheck, noBuildOutput, noLocalPaths, pagesSite, pinnedGitDeps, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, workspaceProtocol };

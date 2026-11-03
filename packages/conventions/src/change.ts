@@ -1,7 +1,8 @@
 /**
- * The change that a check examines: the option `--base`, or the merge commit of a pull request.
- * The rule release-files reads its changed files, and the runner reads the files that it adds.
+ * The change that a check examines: the option `--base`, the merge commit of a pull request, or a push to the default
+ * branch. The rule release-files reads its changed files, and the runner reads the files that it adds.
  */
+import { existsSync, readFileSync } from "node:fs";
 import type { RuleContext } from "./rule.ts";
 
 /** The range of commits of the change. */
@@ -14,13 +15,53 @@ export interface Range {
   readonly ends: readonly [string, string];
 }
 
-/** This function gives the range of the change: the option `--base`, or the merge commit of a pull request. */
-export function rangeOf(context: RuleContext): Range | { readonly skipped: string } {
+/** The options of `rangeOf`. */
+export interface RangeOptions {
+  /**
+   * When true, a push to the default branch also has a range: the commits of the push. The default is false, because
+   * the body of a pull request and the files that it adds are not facts of a push.
+   */
+  readonly push?: boolean;
+}
+
+/** The facts of a push in the event file of GitHub Actions. */
+interface PushEvent {
+  readonly before?: unknown;
+  readonly ref?: unknown;
+  readonly repository?: { readonly default_branch?: unknown };
+}
+
+/** This function gives the range of the commits of a push to the default branch, from the event file of GitHub Actions. */
+function pushRange(context: RuleContext): Range | { readonly skipped: string } {
+  const file = context.env["GITHUB_EVENT_PATH"];
+  let event: PushEvent | undefined;
+  try {
+    event = file === undefined || file === "" || !existsSync(file) ? undefined : (JSON.parse(readFileSync(file, "utf8")) as PushEvent);
+  } catch {
+    event = undefined;
+  }
+  if (event === undefined) return { skipped: "the push has no event file (GITHUB_EVENT_PATH)" };
+  const branch = event.repository?.default_branch;
+  if (typeof branch !== "string" || event.ref !== `refs/heads/${branch}`) return { skipped: "the push is not to the default branch: the pull request of the branch has the change" };
+  const before = typeof event.before === "string" ? event.before : "";
+  if (!/^[0-9a-f]{40,64}$/.test(before) || /^0+$/.test(before)) return { skipped: "the push has no commit before it" };
+  if (context.git(["rev-parse", "--verify", "--quiet", `${before}^{commit}`]) === undefined) {
+    return { skipped: `the checkout does not have ${before}, the commit before the push: fetch it, or set fetch-depth to 0` };
+  }
+  return { diff: [before, "HEAD"], log: [`${before}..HEAD`], ends: [before, "HEAD"] };
+}
+
+/**
+ * This function gives the range of the change: the option `--base`, or the merge commit of a pull request. With the
+ * option `push`, a push to the default branch gives the commits of the push: from the commit before the push to HEAD.
+ */
+export function rangeOf(context: RuleContext, options: RangeOptions = {}): Range | { readonly skipped: string } {
   if (context.base !== undefined) {
     if (context.git(["rev-parse", "--verify", "--quiet", `${context.base}^{commit}`]) === undefined) return { skipped: `git does not know the base ${context.base}` };
     return { diff: [`${context.base}...HEAD`], log: [`${context.base}..HEAD`], ends: [context.base, "HEAD"] };
   }
   const event = context.env["GITHUB_EVENT_NAME"];
+  if (event === "push" && options.push === true) return pushRange(context);
   if (event !== "pull_request" && event !== "pull_request_target") return { skipped: "no base: the rule runs on a pull request, or with --base <ref>" };
   // The checkout of a pull request is a merge commit: its first parent is the base, its second parent the head
   const parents = context.git(["rev-list", "--parents", "-n", "1", "HEAD"])?.trim().split(/\s+/) ?? [];
