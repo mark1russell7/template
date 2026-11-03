@@ -50,7 +50,7 @@
     "@clack/prompts": "^1.8.1"
   },
   "devDependencies": {
-    "@mark1russell7/cue": "^1.0.2",
+    "@mark1russell7/cue": "^2.0.0",
     "@mark1russell7/service": "^0.6.0",
     "@types/node": "^26.6.4",
     "tsdown": "^0.23.1",
