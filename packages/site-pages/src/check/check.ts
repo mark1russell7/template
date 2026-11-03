@@ -13,6 +13,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { findBrowser, launch, type Page } from "./browser.ts";
 import { MEASURE, probeExpression, type Measure, type ProbeCheck } from "./measure.ts";
+import { probeScript, TYPESCRIPT_PROBE } from "./probe.ts";
 import { serve } from "./serve.ts";
 
 /** The options of `checkSite`. */
@@ -263,7 +264,8 @@ Options:
   --schemes <list>     light, dark or both (default: light,dark)
   --probe <file>       A JavaScript file: the body of an async function with check(name, ok, detail),
                        wait, until, $, $$, type and click. It runs on the first page, in the first
-                       scheme, at each width.
+                       scheme, at each width. A .ts, .mts or .cts file is TypeScript: the check
+                       removes its types and its line export {}.
   --shots <dir>        The folder for the screenshots, report.json and summary.md
   --browser <file>     The Chromium executable (default: $SITE_CHECK_BROWSER, the Chromium of
                        Playwright, else Chrome or Edge)
@@ -341,6 +343,13 @@ export async function runCheckCli(argv: readonly string[], io: CheckIo): Promise
       probe = readFileSync(at(probeFile), "utf8");
     } catch (error) {
       return usage(`the probe file ${probeFile} cannot be read: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (TYPESCRIPT_PROBE.test(probeFile)) {
+      try {
+        probe = probeScript(probe);
+      } catch (error) {
+        return usage(`the types of the probe file ${probeFile} cannot be removed: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
   }
   const shots = text("shots");
