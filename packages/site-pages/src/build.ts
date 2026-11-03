@@ -131,6 +131,11 @@ Options:
   --site-name <name>    The name of the site in the header (default: the repository name)
   --data-only           Write only the JSON data, not the pages
   -h, --help            Show this help
+
+Usage: site-pages check (--out <dir> | --url <url>) [options]
+
+Opens the pages of the site in a headless Chromium at phone and desktop widths. Start
+"site-pages check --help" for its options.
 `;
 
 /** The input and output of `runCli`. A test gives its own values. */
