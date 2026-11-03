@@ -4,7 +4,8 @@
  *
  * A view fails when the page is wider than the screen or an element goes past the right edge. It
  * also fails when a text area hides its text or the page shows no text. A console error, an
- * exception, a failed request of the site, a script that does not load and a failed check of the probe also fail it. The command
+ * exception and a failed request of the site also fail it. A script that does not load and a failed check of the probe
+ * fail it too. The command
  * writes a screenshot of each view.
  */
 
@@ -119,7 +120,7 @@ export async function checkSite(options: CheckOptions): Promise<CheckResult> {
 
 /**
  * A script that each page starts before its own scripts. A script or a style sheet that does not load fires `error` on its
- * element, and this script writes it as a console error. Thus a module script whose imports do not load is a problem too:
+ * element. This script writes that event as a console error. Thus a module script whose imports do not load is a problem too:
  * it throws no exception, and its failed request can be to another origin (for example `node:perf_hooks` in a page bundle).
  */
 export const LOAD_WATCH = `addEventListener("error", (event) => {

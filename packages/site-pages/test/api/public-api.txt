@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 109 names
+## . (build/index.d.ts): 111 names
 
 BASE_CSS: build/index.d.ts#BASE_CSS
 type BoardIssue: build/index.d.ts#BoardIssue
@@ -55,6 +55,7 @@ STATUS_SCRIPT: build/index.d.ts#STATUS_SCRIPT
 type StatusBoardData: build/index.d.ts#StatusBoardData
 type StatusBoardInput: build/index.d.ts#StatusBoardInput
 type StatusClass: build/index.d.ts#StatusClass
+TYPESCRIPT_PROBE: build/index.d.ts#TYPESCRIPT_PROBE
 type TagDate: build/index.d.ts#TagDate
 type TagVersion: build/index.d.ts#TagVersion
 type TimelineBand: build/index.d.ts#TimelineBand
@@ -95,6 +96,7 @@ parseChangelog: build/index.d.ts#parseChangelog
 parseRoadmap: build/index.d.ts#parseRoadmap
 parseVersion: build/index.d.ts#parseVersion
 plainText: build/index.d.ts#plainText
+probeScript: build/index.d.ts#probeScript
 readChangelogs: build/index.d.ts#readChangelogs
 readReleases: build/index.d.ts#readReleases
 readStatusBoard: build/index.d.ts#readStatusBoard
@@ -499,6 +501,9 @@ interface StatusBoardInput {
 ### build/index.d.ts#StatusClass
 type StatusClass = "waiting" | "blocked" | "progress" | "open" | "later" | "done";
 
+### build/index.d.ts#TYPESCRIPT_PROBE
+export declare const TYPESCRIPT_PROBE: RegExp;
+
 ### build/index.d.ts#TagDate
 interface TagDate {
   tag: string;
@@ -665,6 +670,9 @@ export declare function parseVersion(version: string): ParsedVersion | null;
 
 ### build/index.d.ts#plainText
 export declare function plainText(markdown: string | null | undefined): string;
+
+### build/index.d.ts#probeScript
+export declare function probeScript(source: string): string;
 
 ### build/index.d.ts#readChangelogs
 export declare function readChangelogs(repoDir: string, pattern?: string): ChangelogSource[];
