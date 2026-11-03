@@ -14,7 +14,7 @@ export const INDEXNOW_ENDPOINT = "https://api.indexnow.org/indexnow";
 export const INDEXNOW_MAX_URLS = 10_000;
 
 /** A key of the protocol: 8 to 128 characters, each a letter, a digit or a dash. */
-export const INDEXNOW_KEY = /^[A-Za-z0-9-]{8,128}$/;
+export const INDEXNOW_KEY: RegExp = /^[A-Za-z0-9-]{8,128}$/;
 
 /** The request body of the protocol. */
 export interface IndexNowRequest {
