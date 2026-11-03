@@ -253,7 +253,7 @@ importers:
         version: 1.1.0
       '@mark1russell7/service':
         specifier: ^0.6.0
-        version: 0.6.3(zod@4.6.7)
+        version: 0.6.4(zod@4.6.7)
       '@types/node':
         specifier: ^26.6.4
         version: 26.6.6
@@ -518,8 +518,25 @@ packages:
       zod:
         optional: true
 
-  '@mark1russell7/service@0.6.3':
-    resolution: {integrity: sha512-PN8dNgqh6SyCyKN5r+x/ilr5GXyq8d0lxQJsTEDIGBSe42n3edmsK/5qcqAQ4iMI7iLBRv97aF4AIXJxTbnyLw==}
+  '@mark1russell7/quantity@0.3.0':
+    resolution: {integrity: sha512-psfyKmVrOz5ynHgr2ED7WM5Pa/XVy6DR28jCaSGY42gvV0CJEq7HJRpV6sgkvWx8s3Et7evJWR56aG5tjCHZIw==}
+    engines: {node: '>=22.19'}
+    peerDependencies:
+      zod: ^4.1.0
+    peerDependenciesMeta:
+      zod:
+        optional: true
+
+  '@mark1russell7/rational@0.1.0':
+    resolution: {integrity: sha512-kYUuKI9STA4mlCpJCx/FpUSe8sokryDJzSuyd/Abev9Len7lotztPEOPH4A8WoxLvEsKEwHA33kg7lbLVjGZWw==}
+    engines: {node: '>=22'}
+
+  '@mark1russell7/rigor-generators@0.1.1':
+    resolution: {integrity: sha512-N5o3II0AClHgsWCWtzuBzckQdReydJnLUS8Kdt9hWXVpTzb0dxucrN1bWdDN+75YompOR1rAmsIX8zuHqoQdqA==}
+    engines: {node: '>=22'}
+
+  '@mark1russell7/service@0.6.4':
+    resolution: {integrity: sha512-bw0FV7rlAgx5RzKxKZK6X3GYITp1WxE7tBCcxwMLONeutcmetB5ALVn+tZnCjYGizYX1A0LcLjmmwSyPVuiylQ==}
     engines: {node: '>=22.19'}
     peerDependencies:
       '@grpc/grpc-js': ^1.14.6
@@ -1705,10 +1722,21 @@ snapshots:
     optionalDependencies:
       zod: 4.6.7
 
-  '@mark1russell7/service@0.6.3(zod@4.6.7)':
+  '@mark1russell7/quantity@0.3.0(zod@4.6.7)':
+    dependencies:
+      '@mark1russell7/rational': 0.1.0
+    optionalDependencies:
+      zod: 4.6.7
+
+  '@mark1russell7/rational@0.1.0': {}
+
+  '@mark1russell7/rigor-generators@0.1.1': {}
+
+  '@mark1russell7/service@0.6.4(zod@4.6.7)':
     dependencies:
       '@mark1russell7/algebra': 0.8.0(zod@4.6.7)
-      '@mark1russell7/quantity': 0.2.0(zod@4.6.7)
+      '@mark1russell7/quantity': 0.3.0(zod@4.6.7)
+      '@mark1russell7/rigor-generators': 0.1.1
     optionalDependencies:
       zod: 4.6.7
 
