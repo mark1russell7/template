@@ -120,8 +120,8 @@ export async function checkSite(options: CheckOptions): Promise<CheckResult> {
 
 /**
  * A script that each page starts before its own scripts. A script or a style sheet that does not load fires `error` on its
- * element. This script writes that event as a console error. Thus a module script whose imports do not load is a problem too:
- * it throws no exception, and its failed request can be to another origin (for example `node:perf_hooks` in a page bundle).
+ * element. This script writes that event as a console error. Thus a module script whose imports do not load is a problem too.
+ * Such a script throws no exception. Its failed request can go to another origin, for example `node:perf_hooks` in a page bundle.
  */
 export const LOAD_WATCH = `addEventListener("error", (event) => {
   const element = event.target;
