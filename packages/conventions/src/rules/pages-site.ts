@@ -41,7 +41,7 @@ export const pagesSite: Rule = {
   reason:
     "Each public project has a site with its Releases page and its Status page, so a reader sees the versions and the open work. On 2026-11-02 eight public repositories had no site: typeset, algebra, headroom, release-train, optional, ste-lint, lag-hud and template.",
   fix: 'Add `.github/workflows/pages.yml` with a job `uses: mark1russell7/template/.github/workflows/reusable-pages.yml@<commit> # main` and the permissions of CI.md ("Pages"). Give `build`, `out` and `roadmap: docs/ROADMAP.md`. After the build, the job starts `site-pages build`, which adds the Releases page and the Status page. Then set the Pages source to "GitHub Actions": `gh api -X POST repos/<owner>/<repo>/pages -f build_type=workflow`.',
-  sources: ["vex", "crawler", "client", "coeval"].map((repo) => ({ repo, rule: "pages-site", doc: ".github/workflows/pages.yml (a call of reusable-pages.yml of the template)" })),
+  sources: ["vex", "crawler", "coeval"].map((repo) => ({ repo, rule: "pages-site", doc: ".github/workflows/pages.yml (a call of reusable-pages.yml of the template)" })),
   options: {
     workflows: { type: "strings", default: PAGES_WORKFLOWS, description: "The workflows that deploy a site, without the ref after `@`." },
   },

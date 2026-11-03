@@ -120,6 +120,10 @@ on:
         description: "false: build and upload the artifact, but do not deploy it."
         type: boolean
         default: true
+      indexnow-key:
+        description: "A key of IndexNow. After each deploy that is not scheduled, the job indexnow sends the URLs of sitemap.xml to the engines. The site serves <key>.txt with the key."
+        type: string
+        default: ""
       timeout-minutes:
         description: The time limit of the build job.
         type: number
@@ -299,3 +303,30 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+  # Tell the search engines of IndexNow (Bing and others) about the pages of the new deploy. A failure here does not
+  # fail the deploy. A scheduled deploy changes only the Status page, so it sends nothing.
+  indexnow:
+    needs: deploy
+    if: inputs.deploy && inputs.indexnow-key != '' && github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .shared-actions
+          sparse-checkout: packages/site-pages/src/indexnow
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: IndexNow
+        env:
+          SITE: ${{ needs.deploy.outputs.page-url }}
+          KEY: ${{ inputs.indexnow-key }}
+        run: node .shared-actions/packages/site-pages/src/indexnow/main.ts --site "${SITE%/}/" --key "$KEY"

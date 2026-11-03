@@ -15,8 +15,9 @@ describe("the reader of the shared workflows", () => {
     const pages = workflows.find((w) => w.file === "reusable-pages.yml");
     expect(pages?.inputs.find((i) => i.name === "site-check")).toMatchObject({ type: "boolean", default: "false" });
     expect(pages?.inputs.find((i) => i.name === "deploy")).toMatchObject({ type: "boolean", default: "true" });
-    expect(pages?.jobs.map((j) => j.id)).toEqual(["build", "deploy"]);
+    expect(pages?.jobs.map((j) => j.id)).toEqual(["build", "deploy", "indexnow"]);
     expect(pages?.jobs[1]).toMatchObject({ if: "inputs.deploy", needs: ["build"] });
+    expect(pages?.jobs[2]).toMatchObject({ if: "inputs.deploy && inputs.indexnow-key != '' && github.event_name != 'schedule'", needs: ["deploy"] });
     const steps = pages?.jobs[0]?.steps ?? [];
     expect(steps.find((s) => s.label === "Site check")?.if).toBe("inputs.site-check");
     expect(steps.find((s) => s.label === "actions/checkout")).toBeDefined();
