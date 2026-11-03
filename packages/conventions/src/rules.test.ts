@@ -206,7 +206,7 @@ describe("tsconfig-test", () => {
 });
 
 describe("cue-preset", () => {
-  const preset = { compilerOptions: { strict: true, noUncheckedIndexedAccess: true, exactOptionalPropertyTypes: false } };
+  const preset = { compilerOptions: { strict: true, noUncheckedIndexedAccess: true, erasableSyntaxOnly: true, exactOptionalPropertyTypes: false } };
 
   it("accepts a package that extends a preset, and an option that the preset also turns off", () => {
     const root = workspace(
@@ -232,13 +232,14 @@ describe("cue-preset", () => {
         "packages/a/tsconfig.json": { compilerOptions: { strict: true } },
         "packages/b/package.json": { name: "b" },
         "packages/b/tsconfig.json": { extends: "@mark1russell7/cue/ts/config/node.json" },
-        "packages/b/tsconfig.test.json": { extends: "./tsconfig.json", compilerOptions: { strictNullChecks: false, noUncheckedIndexedAccess: false } },
+        "packages/b/tsconfig.test.json": { extends: "./tsconfig.json", compilerOptions: { strictNullChecks: false, noUncheckedIndexedAccess: false, erasableSyntaxOnly: false } },
       },
     );
     expect(rule(root, "cue-preset").breaks.map((item) => `${item.file}: ${item.message}`)).toEqual([
       "packages/a/tsconfig.json: tsconfig.json does not extend a preset of @mark1russell7/cue.",
       "packages/b/tsconfig.test.json: tsconfig.test.json turns off the strict option strictNullChecks.",
       "packages/b/tsconfig.test.json: tsconfig.test.json turns off the strict option noUncheckedIndexedAccess.",
+      "packages/b/tsconfig.test.json: tsconfig.test.json turns off the strict option erasableSyntaxOnly.",
     ]);
   });
 

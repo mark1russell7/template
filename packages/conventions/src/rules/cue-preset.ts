@@ -25,6 +25,7 @@ export const STRICT_OPTIONS = [
   "noImplicitReturns",
   "noFallthroughCasesInSwitch",
   "noPropertyAccessFromIndexSignature",
+  "erasableSyntaxOnly",
 ] as const;
 
 /** The options that `strict` turns on when a config does not set them. */

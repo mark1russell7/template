@@ -373,7 +373,7 @@ interface RuleResult {
 export declare const SHIPPED_FIELDS: readonly string[];
 
 ### build/index.d.ts#STRICT_OPTIONS
-export declare const STRICT_OPTIONS: readonly ["strict", "noImplicitAny", "strictNullChecks", "strictFunctionTypes", "strictBindCallApply", "strictPropertyInitialization", "strictBuiltinIteratorReturn", "noImplicitThis", "useUnknownInCatchVariables", "alwaysStrict", "noUncheckedIndexedAccess", "exactOptionalPropertyTypes", "noImplicitOverride", "noImplicitReturns", "noFallthroughCasesInSwitch", "noPropertyAccessFromIndexSignature"];
+export declare const STRICT_OPTIONS: readonly ["strict", "noImplicitAny", "strictNullChecks", "strictFunctionTypes", "strictBindCallApply", "strictPropertyInitialization", "strictBuiltinIteratorReturn", "noImplicitThis", "useUnknownInCatchVariables", "alwaysStrict", "noUncheckedIndexedAccess", "exactOptionalPropertyTypes", "noImplicitOverride", "noImplicitReturns", "noFallthroughCasesInSwitch", "noPropertyAccessFromIndexSignature", "erasableSyntaxOnly"];
 
 ### build/index.d.ts#TRAIN_SCOPES
 export declare const TRAIN_SCOPES: readonly ["@mark1russell7/*", "@procedures/*"];
