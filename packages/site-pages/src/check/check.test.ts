@@ -24,6 +24,8 @@ beforeAll(() => {
   write("broken/index.html", page(`<h1>Broken</h1><img src="missing.png" alt=""><script>console.error("bad thing")</script>`));
   write("throws/index.html", page(`<h1>Throws</h1><script>throw new Error("boom")</script>`));
   write("empty/index.html", page(``));
+  write("module/index.html", page(`<h1>Module</h1><p>A module script that imports a Node.js module</p><script type="module" src="page.js"></script>`));
+  write("module/page.js", `import "node:perf_hooks";\ndocument.querySelector("p").textContent = "ran";`);
   write("clip/index.html", page(`<h1>Clip</h1><textarea id="ed" style="overflow: hidden; height: 2em">${"a line\n".repeat(20)}</textarea>`));
   write("404.html", page(`<h1>Not found</h1>`));
 });
@@ -137,7 +139,7 @@ describe.skipIf(browser === undefined)("checkSite in a browser", () => {
   }, 120_000);
 
   it("fails each kind of problem", async () => {
-    const result = await checkSite(options(["/wide/", "/broken/", "/throws/", "/empty/", "/clip/", "/nothing/"], { widths: [360], schemes: ["light"] }));
+    const result = await checkSite(options(["/wide/", "/broken/", "/throws/", "/empty/", "/clip/", "/module/", "/nothing/"], { widths: [360], schemes: ["light"] }));
     const problems = Object.fromEntries(result.views.map((view) => [view.page, view.problems.join("\n")]));
     expect(result.ok).toBe(false);
     expect(problems["/wide/"]).toMatch(/wider than the screen: 9\d\d > 360/);
@@ -147,6 +149,7 @@ describe.skipIf(browser === undefined)("checkSite in a browser", () => {
     expect(problems["/throws/"]).toContain("exception: Error: boom");
     expect(problems["/empty/"]).toContain("the page shows no text");
     expect(problems["/clip/"]).toContain("a text area hides its text: textarea#ed");
+    expect(problems["/module/"]).toContain("console.error: failed to load script: page.js");
     expect(problems["/nothing/"]).toMatch(/HTTP 404: .*\/nothing\//);
   }, 120_000);
 

@@ -66,6 +66,7 @@ A view fails for each of these problems:
 - The page shows no text.
 - The page writes a console error, or a script throws an exception.
 - A request to the site fails, or gets a status of 400 or more.
+- A script or a style sheet does not load, from any origin. An example is a module script that imports `node:perf_hooks`.
 - A check of the probe fails, or the probe makes no check.
 
 The probe is a JavaScript file or a TypeScript file (`.ts`, `.mts` or `.cts`). Its code is the body of an async function. These functions are available:
