@@ -1,3 +1,7 @@
+/* The shared cue of a box that scrolls sideways. The published name is @mark1russell7/site-pages/scroll-cue.css.
+   In the workspace, the package has no exports field, so this import names the file. */
+@import "@mark1russell7/site-pages/styles/scroll-cue.css";
+
 :root {
   --bg: #f6f4ef;
   --fg: #1b1a17;
@@ -144,9 +148,7 @@ h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.07em; colo
 .viewer-head code { font-weight: 700; }
 
 /* A box that scrolls sideways shows a fade at its right edge while more is to the right. */
-.scroll-x { position: relative; overflow-x: auto; }
-.scroll-x[data-more="right"] { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent); }
-.code-box { flex: 1; min-height: 15rem; max-height: 26rem; overflow-y: auto; }
+.code-box { --scroll-cue-bg: var(--card); flex: 1; min-height: 15rem; max-height: 26rem; overflow-y: auto; }
 .code { margin: 0; padding: 0.5rem 0; font-size: 0.84rem; line-height: 1.6; display: grid; min-width: max-content; }
 .code .line { display: flex; padding-right: 1.5rem; }
 .code .line.diff { background: var(--add-bg); box-shadow: inset 3px 0 0 var(--add); }
@@ -163,8 +165,8 @@ h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.07em; colo
 .after { margin-top: 0.85rem; font-size: 0.9rem; }
 .after strong { display: block; margin-bottom: 0.35rem; }
 .install { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3rem; min-width: 0; }
-.install li.scroll-x { max-width: 100%; justify-self: start; }
-.install code { display: inline-block; white-space: pre; background: var(--sunk); border: 1px solid var(--line); border-radius: 0.35rem; padding: 0.1rem 0.4rem; }
+.install li.scroll-cue { --scroll-cue-bg: var(--sunk); max-width: 100%; justify-self: start; border: 1px solid var(--line); border-radius: 0.35rem; padding: 0.1rem 0.4rem; }
+.install code { display: inline-block; white-space: pre; background: none; border: 0; padding: 0; }
 
 /* The workflow explorer */
 .wf-controls { display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; align-items: center; }
@@ -198,7 +200,7 @@ h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.07em; colo
 .pill.runs { color: var(--add); background: var(--add-bg); }
 .pill.skipped { color: var(--muted); background: var(--sunk); border: 1px solid var(--line); }
 .pill.unknown { color: var(--chg); background: var(--chg-bg); }
-.cond-box { margin-top: 0.45rem; background: var(--sunk); border-radius: 0.4rem; }
+.cond-box { --scroll-cue-bg: var(--sunk); margin-top: 0.45rem; border-radius: 0.4rem; }
 .cond { display: block; white-space: pre; padding: 0.3rem 0.5rem; font-size: 0.78rem; color: var(--muted); width: max-content; }
 .why { margin: 0.4rem 0 0; font-size: 0.82rem; color: var(--muted); }
 .steps { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.15rem; }

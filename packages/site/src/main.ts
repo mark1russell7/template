@@ -43,16 +43,6 @@ themeButton.addEventListener("click", () => {
 });
 showTheme();
 
-/** This function shows a fade at the right edge of a box that scrolls sideways, while more content is to the right. */
-function scrollCue(box: HTMLElement): () => void {
-  const update = (): void => {
-    box.dataset["more"] = box.scrollWidth - box.clientWidth - box.scrollLeft > 2 ? "right" : "";
-  };
-  box.addEventListener("scroll", update, { passive: true });
-  new ResizeObserver(update).observe(box);
-  return update;
-}
-
 // ---- The package preview ----
 
 const scaffold = data.scaffold;
@@ -71,7 +61,6 @@ const scopeInput = $<HTMLInputElement>("pkg-scope");
 const compareSelect = $<HTMLSelectElement>("compare");
 const presetBox = $("presets");
 const codeBox = $("code-box");
-const updateCue = scrollCue(codeBox);
 
 compareSelect.append(h("option", { value: "" }, "nothing"), ...scaffold.presets.map((preset) => h("option", { value: preset.name }, preset.name)));
 compareSelect.value = state.compare;
@@ -186,15 +175,13 @@ function render(): void {
     }),
   );
   codeBox.scrollLeft = 0;
-  updateCue();
 
   const install = $("install");
   install.replaceChildren(
     ...(own.install.length > 0
-      ? [...own.install.map((command) => h("li", { class: "scroll-x" }, h("code", {}, command))), h("li", { class: "muted" }, "These commands put the newest versions in package.json, and install the workspace.")]
+      ? [...own.install.map((command) => h("li", { class: "scroll-cue" }, h("code", {}, command))), h("li", { class: "muted" }, "These commands put the newest versions in package.json, and install the workspace.")]
       : [h("li", { class: "muted" }, "The CLI installs nothing. Start ", h("code", {}, "pnpm install"), " to connect the new package.")]),
   );
-  for (const box of install.querySelectorAll<HTMLElement>(".scroll-x")) scrollCue(box)();
 }
 
 nameInput.addEventListener("input", () => {
@@ -331,7 +318,7 @@ function renderWorkflow(): void {
           h("span", { class: `pill ${job.state}` }, STATE_TEXT[job.state]),
           job.needs.length > 0 ? h("span", { class: "needs" }, `needs ${job.needs.join(", ")}`) : "",
         ),
-        job.if ? h("div", { class: "scroll-x cond-box" }, h("code", { class: "cond" }, `if: ${job.if}`)) : "",
+        job.if ? h("div", { class: "scroll-cue cond-box" }, h("code", { class: "cond" }, `if: ${job.if}`)) : "",
         job.blockedBy ? h("p", { class: "why" }, job.blockedBy) : job.refs.some((ref) => ref.value !== null) ? h("p", { class: "why" }, refsText(job.refs.filter((ref) => ref.value !== null))) : "",
         h(
           "ol",
@@ -348,7 +335,6 @@ function renderWorkflow(): void {
       ),
     ),
   );
-  for (const box of document.querySelectorAll<HTMLElement>("#wf-jobs .scroll-x")) scrollCue(box)();
 }
 
 $("wf-list").replaceChildren(
