@@ -260,7 +260,7 @@ jobs:
 - A page fails when it is wider than the screen, or an element goes past the right edge.
 - A page also fails when it shows no text, or a text area hides its text.
 - A console error, an exception or a failed request also fails the page.
-- `site-check-probe` is a JavaScript file that tests the interactive core of the home. Its checks run at each width. `site-pages check --help` tells its functions.
+- `site-check-probe` is a JavaScript or TypeScript file that tests the interactive core of the home. Its checks run at each width. The check removes the types of a `.ts` file, so the site needs no build step for its probe. `site-pages check --help` tells its functions.
 - The check uses the Chromium of `playwright-core` at `site-check-playwright`, from the action `setup-playwright`. The artifact `site-check` has the screenshots and `report.json`.
 - The check runs from `packages/site-pages/src/check` of the template commit of the workflow. It needs Node.js 22.18 or later.
 - The workflow `site-audit.yml` of the template checks the live home of each public site each Monday. Start it by hand from the Actions tab.

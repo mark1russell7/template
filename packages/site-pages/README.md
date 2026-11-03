@@ -66,9 +66,10 @@ A view fails for each of these problems:
 - The page shows no text.
 - The page writes a console error, or a script throws an exception.
 - A request to the site fails, or gets a status of 400 or more.
+- A script or a style sheet does not load, from any origin. An example is a module script that imports `node:perf_hooks`.
 - A check of the probe fails, or the probe makes no check.
 
-The probe is a JavaScript file. Its code is the body of an async function. These functions are available:
+The probe is a JavaScript file or a TypeScript file (`.ts`, `.mts` or `.cts`). Its code is the body of an async function. These functions are available:
 
 | Function | Operation |
 | --- | --- |
@@ -81,6 +82,8 @@ The probe is a JavaScript file. Its code is the body of an async function. These
 type("#editor", "Utilize the cache.");
 check("the linter finds a word", await until(() => $$(".finding").length === 1), $$(".finding").length);
 ```
+
+For a TypeScript probe, the check removes the types and the line `export {};` before it runs the probe. Thus the typecheck of the site examines the probe, and the site needs no build step for it. Each line stays at its position, so the line of an error is the line of the source. Declare the functions of the table with `declare const`, and add `export {};` at the end, so the file is a module. `probeScript` does the same operation for a script of your own.
 
 The check runs the probe on the first page, in the first scheme, at each width. The folder of `--shots` gets a screenshot of each view, `report.json` and `summary.md`. The exit code is 0 when each view passes, 1 when a view fails, and 2 for an incorrect command line.
 

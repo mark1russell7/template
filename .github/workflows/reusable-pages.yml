@@ -109,7 +109,7 @@ on:
         type: string
         default: ""
       site-check-probe:
-        description: A JavaScript file of the repository that tests the interactive core of the home (the probe of site-pages check).
+        description: A JavaScript or TypeScript file of the repository that tests the interactive core of the home (the probe of site-pages check).
         type: string
         default: ""
       site-check-playwright:

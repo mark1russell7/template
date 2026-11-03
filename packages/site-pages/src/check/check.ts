@@ -4,7 +4,8 @@
  *
  * A view fails when the page is wider than the screen or an element goes past the right edge. It
  * also fails when a text area hides its text or the page shows no text. A console error, an
- * exception, a failed request of the site and a failed check of the probe also fail it. The command
+ * exception and a failed request of the site also fail it. A script that does not load and a failed check of the probe
+ * fail it too. The command
  * writes a screenshot of each view.
  */
 
@@ -13,6 +14,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { findBrowser, launch, type Page } from "./browser.ts";
 import { MEASURE, probeExpression, type Measure, type ProbeCheck } from "./measure.ts";
+import { probeScript, TYPESCRIPT_PROBE } from "./probe.ts";
 import { serve } from "./serve.ts";
 
 /** The options of `checkSite`. */
@@ -91,6 +93,7 @@ export async function checkSite(options: CheckOptions): Promise<CheckResult> {
     const { page } = browser;
     const events = watch(page, homeUrl.origin);
     await Promise.all([page.send("Page.enable"), page.send("Runtime.enable"), page.send("Network.enable")]);
+    await page.send("Page.addScriptToEvaluateOnNewDocument", { source: LOAD_WATCH });
     if (options.shots) mkdirSync(options.shots, { recursive: true });
     for (const [index, path] of options.pages.entries()) {
       const target = new URL(path.replace(/^\/+/, ""), homeUrl).href;
@@ -114,6 +117,17 @@ export async function checkSite(options: CheckOptions): Promise<CheckResult> {
   }
   return result;
 }
+
+/**
+ * A script that each page starts before its own scripts. A script or a style sheet that does not load fires `error` on its
+ * element. This script writes that event as a console error. Thus a module script whose imports do not load is a problem too.
+ * Such a script throws no exception. Its failed request can go to another origin, for example `node:perf_hooks` in a page bundle.
+ */
+export const LOAD_WATCH = `addEventListener("error", (event) => {
+  const element = event.target;
+  if (!(element instanceof HTMLScriptElement || element instanceof HTMLLinkElement)) return;
+  console.error("failed to load " + element.tagName.toLowerCase() + ": " + (element.getAttribute("src") ?? element.getAttribute("href") ?? "(inline)"));
+}, true);`;
 
 /** The problems that the events of the page gave, since the last `reset`. */
 interface Events {
@@ -151,7 +165,8 @@ function watch(page: Page, origin: string): Events {
   });
   page.on("Network.loadingFailed", (params) => {
     const url = urls.get(String(params["requestId"])) ?? "";
-    if (own(url) && params["canceled"] !== true) problems.push(`request failed (${String(params["errorText"])}): ${url}`);
+    // A script of any origin counts: without it, the page does not work.
+    if ((own(url) || params["type"] === "Script") && params["canceled"] !== true) problems.push(`request failed (${String(params["errorText"])}): ${url}`);
   });
   return {
     reset: () => {
@@ -251,7 +266,7 @@ export const CHECK_HELP = `Usage: site-pages check (--out <dir> | --url <url>) [
 Opens the pages of the site in a headless Chromium at phone and desktop widths, in the light and
 the dark scheme, and fails when a page is wider than the screen, an element goes past the right
 edge, a text area hides its text, a page shows no text, or on a console error, an exception, a
-failed request of the site or a failed check of the probe.
+failed request of the site, a script that does not load or a failed check of the probe.
 
 Options:
   --out <dir>          The built site folder. The check serves it at --base.
@@ -263,7 +278,8 @@ Options:
   --schemes <list>     light, dark or both (default: light,dark)
   --probe <file>       A JavaScript file: the body of an async function with check(name, ok, detail),
                        wait, until, $, $$, type and click. It runs on the first page, in the first
-                       scheme, at each width.
+                       scheme, at each width. A .ts, .mts or .cts file is TypeScript: the check
+                       removes its types and its line export {}.
   --shots <dir>        The folder for the screenshots, report.json and summary.md
   --browser <file>     The Chromium executable (default: $SITE_CHECK_BROWSER, the Chromium of
                        Playwright, else Chrome or Edge)
@@ -341,6 +357,13 @@ export async function runCheckCli(argv: readonly string[], io: CheckIo): Promise
       probe = readFileSync(at(probeFile), "utf8");
     } catch (error) {
       return usage(`the probe file ${probeFile} cannot be read: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (TYPESCRIPT_PROBE.test(probeFile)) {
+      try {
+        probe = probeScript(probe);
+      } catch (error) {
+        return usage(`the types of the probe file ${probeFile} cannot be removed: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
   }
   const shots = text("shots");
