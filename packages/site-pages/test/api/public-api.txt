@@ -118,6 +118,22 @@ timelineLayout: build/index.d.ts#timelineLayout
 utcDay: build/index.d.ts#utcDay
 versionOfTag: build/index.d.ts#versionOfTag
 
+## ./chrome (build/chrome.d.ts): 13 names
+
+AttributeValue: build/chrome.d.ts#AttributeValue
+Child: build/chrome.d.ts#Child
+CopyTextOptions: build/chrome.d.ts#CopyTextOptions
+THEMES: build/chrome.d.ts#THEMES
+Theme: build/chrome.d.ts#Theme
+applyTheme: build/chrome.d.ts#applyTheme
+byId: build/chrome.d.ts#byId
+copyText: build/chrome.d.ts#copyText
+copyToClipboard: build/chrome.d.ts#copyToClipboard
+currentTheme: build/chrome.d.ts#currentTheme
+h: build/chrome.d.ts#h
+nextTheme: build/chrome.d.ts#nextTheme
+setupTheme: build/chrome.d.ts#setupTheme
+
 ## ./scroll-cue.css: no declaration file for ./styles/scroll-cue.css
 
 file ./scroll-cue.css: styles/scroll-cue.css
@@ -127,6 +143,49 @@ file ./scroll-cue.css: styles/scroll-cue.css
 site-pages: ./build/cli.js
 
 ## Declarations
+
+### build/chrome.d.ts#AttributeValue
+export type AttributeValue = string | number | boolean | null | undefined;
+
+### build/chrome.d.ts#Child
+export type Child = Node | string | null | undefined | false;
+
+### build/chrome.d.ts#CopyTextOptions
+export interface CopyTextOptions {
+  readonly copied?: string;
+  readonly failed?: string;
+  readonly ms?: number;
+}
+
+### build/chrome.d.ts#THEMES
+export declare const THEMES: readonly ["auto", "light", "dark"];
+
+### build/chrome.d.ts#Theme
+export type Theme = (typeof THEMES)[number];
+
+### build/chrome.d.ts#applyTheme
+export declare function applyTheme(theme: Theme, storageKey: string): void;
+
+### build/chrome.d.ts#byId
+export declare function byId<T extends HTMLElement = HTMLElement>(id: string): T;
+
+### build/chrome.d.ts#copyText
+export declare function copyText(button: HTMLButtonElement, text: string, options?: CopyTextOptions): Promise<boolean>;
+
+### build/chrome.d.ts#copyToClipboard
+export declare function copyToClipboard(text: string): Promise<boolean>;
+
+### build/chrome.d.ts#currentTheme
+export declare function currentTheme(): Theme;
+
+### build/chrome.d.ts#h
+export declare function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs?: Readonly<Record<string, AttributeValue>>, ...children: readonly (Child | readonly Child[])[]): HTMLElementTagNameMap[K];
+
+### build/chrome.d.ts#nextTheme
+export declare function nextTheme(storageKey: string): Theme;
+
+### build/chrome.d.ts#setupTheme
+export declare function setupTheme(button: HTMLButtonElement, storageKey: string): void;
 
 ### build/index.d.ts#BASE_CSS
 export declare const BASE_CSS: string;

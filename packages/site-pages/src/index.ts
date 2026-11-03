@@ -1,6 +1,7 @@
 /**
  * `@mark1russell7/site-pages`: a release timeline page and a live status page for the site of a
  * GitHub repository. The data functions make the JSON, and the render functions make the HTML.
+ * The page helpers are for the browser. Only the entry `./chrome` exports them, so the root has no DOM types.
  */
 
 export type * from "./data/types.ts";
