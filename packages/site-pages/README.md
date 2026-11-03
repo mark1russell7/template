@@ -50,6 +50,42 @@ A failure of GitHub or npm does not stop the build. Without a token, or when Git
 
 Give the token in the environment variable `GITHUB_TOKEN`, not with `--token`. Other processes can see a command line.
 
+## The check of a site
+
+The command `site-pages check` opens the pages of a site in a headless Chromium. It examines each page at phone and desktop widths, in the light and the dark scheme.
+
+```sh
+site-pages check --out dist --repo owner/name --pages /,/releases/ --probe site-probe.js --shots shots
+site-pages check --url https://owner.github.io/name/
+```
+
+A view fails for each of these problems:
+
+- The page is wider than the screen, or an element goes past the right edge. A container that scrolls or clips is not a problem.
+- A text area hides a part of its text.
+- The page shows no text.
+- The page writes a console error, or a script throws an exception.
+- A request to the site fails, or gets a status of 400 or more.
+- A check of the probe fails, or the probe makes no check.
+
+The probe is a JavaScript file. Its code is the body of an async function. These functions are available:
+
+| Function | Operation |
+| --- | --- |
+| `check(name, ok, detail)` | Records a check. A false `ok` fails it, and `detail` tells why. |
+| `$(selector)`, `$$(selector)` | Find one element, or all of them |
+| `click(element)`, `type(element, text)` | Click an element, or write text into a field with an `input` event |
+| `wait(ms)`, `until(fn, ms)` | Wait, or wait until `fn` gives a true value |
+
+```js
+type("#editor", "Utilize the cache.");
+check("the linter finds a word", await until(() => $$(".finding").length === 1), $$(".finding").length);
+```
+
+The check runs the probe on the first page, in the first scheme, at each width. The folder of `--shots` gets a screenshot of each view, `report.json` and `summary.md`. The exit code is 0 when each view passes, 1 when a view fails, and 2 for an incorrect command line.
+
+The check finds a browser in this order: `--browser`, `$SITE_CHECK_BROWSER`, the newest Chromium of Playwright, and then Chrome or Edge. The folder `src/check` imports only Node.js. Thus Node.js 22.18 or later can start `src/check/main.ts` with no install. The workflow `reusable-pages.yml` of the template uses it this way.
+
 ## The releases
 
 The command merges four sources by version:

@@ -255,6 +255,14 @@ jobs:
 - The inputs of `site-pages` go to the action: `site-pages-version`, `roadmap`, `base`, `packages`, `changesets`, `group`, `css`, `site-name` and `data-only`.
 - `site-pages: false` builds the site without the Releases page and the Status page.
 - Without `roadmap`, the Status page shows only the open pull requests and issues. The rule `roadmap-parses` of `@mark1russell7/conventions` thus needs `roadmap` in each call, or `site-pages: false`.
+- `site-check: true` checks the built pages in a headless Chromium before the upload. A failed check stops the deploy. The next list tells the check.
+- The check opens each page of `site-check-pages` (default: the home) at the widths 360, 400 and 1280, in light and dark.
+- A page fails when it is wider than the screen, or an element goes past the right edge.
+- A page also fails when it shows no text, or a text area hides its text.
+- A console error, an exception or a failed request also fails the page.
+- `site-check-probe` is a JavaScript file that tests the interactive core of the home. Its checks run at each width. `site-pages check --help` tells its functions.
+- The check uses the Chromium of `playwright-core` at `site-check-playwright`, from the action `setup-playwright`. The artifact `site-check` has the screenshots and `report.json`.
+- The check runs from `packages/site-pages/src/check` of the template commit of the workflow. It needs Node.js 22.18 or later.
 - `deploy: false` builds and uploads the artifact, with no deploy.
 - `github-token: true` gives the build `GITHUB_TOKEN`, with the read permissions of the build job.
 - The workflow gets the actions of the same template commit as the workflow file. A second checkout gets them.
