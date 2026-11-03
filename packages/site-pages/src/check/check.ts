@@ -214,6 +214,11 @@ async function checkView(page: Page, events: Events, input: ViewInput): Promise<
   return view;
 }
 
+/** This function makes a text safe for a cell of a Markdown table. It escapes `\`, `|`, `<` and `>`. It changes each new line to a space. */
+export function cell(text: string): string {
+  return text.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\r?\n/g, " ");
+}
+
 /** This function gives the Markdown summary of a result, for the job summary of a workflow. */
 export function summary(result: CheckResult): string {
   const failed = result.views.filter((view) => !view.ok);
@@ -226,7 +231,7 @@ export function summary(result: CheckResult): string {
     "| --- | ---: | --- | --- | --- |",
     ...result.views.map(
       (view) =>
-        `| \`${view.page}\` | ${view.width} | ${view.scheme} | ${view.ok ? "pass" : "**fail**"}${view.probe ? ` (probe ${view.probe.filter((c) => c.ok).length}/${view.probe.length})` : ""} | ${view.problems.map((p) => p.replace(/\|/g, "\\|")).join("<br>")} |`,
+        `| \`${view.page}\` | ${view.width} | ${view.scheme} | ${view.ok ? "pass" : "**fail**"}${view.probe ? ` (probe ${view.probe.filter((c) => c.ok).length}/${view.probe.length})` : ""} | ${view.problems.map(cell).join("<br>")} |`,
     ),
     "",
   ];

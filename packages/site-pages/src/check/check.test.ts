@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { findBrowser } from "./browser.ts";
-import { checkSite, pageSlug, runCheckCli, type CheckOptions } from "./check.ts";
+import { cell, checkSite, pageSlug, runCheckCli, type CheckOptions } from "./check.ts";
 import { resolveFile, serve } from "./serve.ts";
 
 let root: string;
@@ -75,6 +75,12 @@ describe("pageSlug", () => {
     expect(pageSlug("/")).toBe("home");
     expect(pageSlug("/releases/")).toBe("releases");
     expect(pageSlug("docs/a b/")).toBe("docs_a_b");
+  });
+});
+
+describe("cell", () => {
+  it("escapes the text for a Markdown table cell", () => {
+    expect(cell("a|b \\| c <x>\nd")).toBe("a\\|b \\\\\\| c &lt;x&gt; d");
   });
 });
 
