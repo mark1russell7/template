@@ -46,7 +46,7 @@ permissions:
 # A new push cancels the older run of the same ref, so the runs of old commits free their runners
 concurrency:
   group: actions-test-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changes:
