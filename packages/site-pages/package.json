@@ -26,6 +26,11 @@
   "author": "Mark Russell (https://github.com/mark1russell7)",
   "type": "module",
   "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./scroll-cue.css": "./styles/scroll-cue.css",
+    "./package.json": "./package.json"
+  },
   "bin": {
     "site-pages": "./src/cli.ts"
   },
