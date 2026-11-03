@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Template</title>
+<meta name="description" content="The template of the repositories of mark1russell7. See the files of a new package for each preset, and which jobs of the shared workflows run.">
+<script>
+  // The theme before the first paint: the choice of the visitor, else the theme of the system.
+  try { const t = localStorage.getItem("theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}
+</script>
+<link rel="stylesheet" href="./src/style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="./"><span class="mark" aria-hidden="true">{ }</span> template</a>
+  <nav aria-label="Site">
+    <a href="./releases/">Releases</a>
+    <a href="./status/">Status</a>
+    <a href="https://github.com/mark1russell7/template">GitHub</a>
+    <button id="theme" class="theme" type="button" aria-label="Change the theme"><span aria-hidden="true">◐</span></button>
+  </nav>
+</header>
+
+<main>
+  <section class="hero">
+    <h1>See each file of a new package before you make it.</h1>
+    <p class="lead">Type a name and pick a preset. The page shows the files that <code>pnpm package add</code> writes. The build of this page started the real CLI for each preset.</p>
+  </section>
+
+  <section class="card core" id="scaffold" aria-label="Package preview">
+    <div class="command" aria-label="The command">
+      <span class="prompt" aria-hidden="true">$</span>
+      <span class="cmd">pnpm package add</span>
+      <label class="sr" for="pkg-name">Package name</label>
+      <input id="pkg-name" class="name" value="web" spellcheck="false" autocomplete="off" autocapitalize="off" aria-describedby="name-error">
+      <span class="cmd">--preset=<b id="cmd-preset">react</b></span>
+      <button id="copy" class="ghost small" type="button">Copy</button>
+    </div>
+    <p id="name-error" class="error" hidden></p>
+
+    <div class="presets" role="radiogroup" aria-label="Preset" id="presets"></div>
+
+    <div class="options">
+      <label>Scope <span class="at">@</span><input id="pkg-scope" class="scope" value="acme" spellcheck="false" autocomplete="off" autocapitalize="off"></label>
+      <label>Compare with <select id="compare"></select></label>
+      <span class="legend"><i class="dot added"></i>new file <i class="dot changed"></i>changed</span>
+    </div>
+
+    <div class="explorer">
+      <div class="tree-box">
+        <div class="tree-head"><span id="tree-root">packages/web/</span><span id="tree-count" class="muted"></span></div>
+        <ul id="tree" class="tree" role="listbox" aria-label="Files"></ul>
+      </div>
+      <div class="viewer">
+        <div class="viewer-head"><code id="file-path">package.json</code><span id="file-note" class="muted"></span></div>
+        <div class="scroll-cue code-box" id="code-box"><pre id="code" class="code" tabindex="0"></pre></div>
+      </div>
+    </div>
+
+    <div class="after">
+      <strong>After it writes the files</strong>
+      <ul id="install" class="install"></ul>
+    </div>
+  </section>
+
+  <section class="section" id="workflows" aria-labelledby="wf-title">
+    <h2 id="wf-title">Which jobs and steps run?</h2>
+    <p class="lead small">Pick a shared workflow, the event of the caller and the inputs. The page reads each <code>if</code> of the workflow file.</p>
+    <div class="card wf">
+      <div class="wf-controls">
+        <label>Workflow <select id="wf-file"></select></label>
+        <div class="events" role="radiogroup" aria-label="Event of the caller" id="wf-events"></div>
+      </div>
+      <p id="wf-summary" class="muted wf-about"></p>
+      <div id="wf-inputs" class="wf-inputs"></div>
+      <p id="wf-count" class="wf-count" aria-live="polite"></p>
+      <div id="wf-jobs" class="jobs"></div>
+      <p class="muted fine">The explorer supposes that each step passes. A value that only the run knows, for example the output of a step, makes a step <span class="pill unknown">run decides</span>.</p>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="holds-title">
+    <h2 id="holds-title">What the template holds</h2>
+    <div class="cards">
+      <a class="tile" href="./releases/"><strong>Releases</strong><span>The versions of each package, the newest first.</span></a>
+      <a class="tile" href="./status/"><strong>Status</strong><span>The roadmap, the open pull requests and the open issues.</span></a>
+      <a class="tile" href="https://github.com/mark1russell7/template/blob/main/CI.md"><strong>CI.md</strong><span>The shared workflows and actions, and their inputs.</span></a>
+      <a class="tile" href="https://github.com/mark1russell7/template/blob/main/RELEASING.md"><strong>RELEASING.md</strong><span>How a release to npm operates.</span></a>
+    </div>
+
+    <h3>Shared workflows</h3>
+    <ul id="wf-list" class="rows"></ul>
+
+    <h3>Packages</h3>
+    <ul class="rows">
+      <li><a href="https://www.npmjs.com/package/@mark1russell7/conventions"><code>@mark1russell7/conventions</code></a><span>One check in CI for the conventions of a repository.</span></li>
+      <li><a href="https://www.npmjs.com/package/@mark1russell7/site-pages"><code>@mark1russell7/site-pages</code></a><span>The Releases page and the Status page of a site, and the site check.</span></li>
+      <li><a href="https://www.npmjs.com/package/@mark1russell7/api-report"><code>@mark1russell7/api-report</code></a><span>A report of the public API of a package.</span></li>
+      <li><a href="https://www.npmjs.com/package/@mark1russell7/boundaries"><code>@mark1russell7/boundaries</code></a><span>The import boundaries of a workspace.</span></li>
+      <li><a href="https://www.npmjs.com/package/@mark1russell7/template-cli"><code>@mark1russell7/template-cli</code></a><span>New repositories and packages from the template.</span></li>
+    </ul>
+  </section>
+</main>
+
+<footer class="foot">
+  <span id="build-info"></span>
+  <span>MIT License.</span>
+</footer>
+<script type="module" src="./src/main.ts"></script>
+</body>
+</html>
