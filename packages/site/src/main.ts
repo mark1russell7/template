@@ -191,9 +191,10 @@ function render(): void {
   const install = $("install");
   install.replaceChildren(
     ...(own.install.length > 0
-      ? [...own.install.map((command) => h("li", {}, h("code", {}, command))), h("li", { class: "muted" }, "These commands put the newest versions in package.json, and install the workspace.")]
+      ? [...own.install.map((command) => h("li", { class: "scroll-x" }, h("code", {}, command))), h("li", { class: "muted" }, "These commands put the newest versions in package.json, and install the workspace.")]
       : [h("li", { class: "muted" }, "The CLI installs nothing. Start ", h("code", {}, "pnpm install"), " to connect the new package.")]),
   );
+  for (const box of install.querySelectorAll<HTMLElement>(".scroll-x")) scrollCue(box)();
 }
 
 nameInput.addEventListener("input", () => {
@@ -331,7 +332,7 @@ function renderWorkflow(): void {
           job.needs.length > 0 ? h("span", { class: "needs" }, `needs ${job.needs.join(", ")}`) : "",
         ),
         job.if ? h("div", { class: "scroll-x cond-box" }, h("code", { class: "cond" }, `if: ${job.if}`)) : "",
-        job.blockedBy ? h("p", { class: "why" }, job.blockedBy) : job.refs.length > 0 ? h("p", { class: "why" }, refsText(job.refs)) : "",
+        job.blockedBy ? h("p", { class: "why" }, job.blockedBy) : job.refs.some((ref) => ref.value !== null) ? h("p", { class: "why" }, refsText(job.refs.filter((ref) => ref.value !== null))) : "",
         h(
           "ol",
           { class: "steps" },
@@ -340,7 +341,7 @@ function renderWorkflow(): void {
               "li",
               { class: `step ${step.state}`, "data-step": step.label, title: step.if ? `if: ${step.if}` : "" },
               h("span", { class: "icon", "aria-label": STATE_TEXT[step.state] }, STATE_ICON[step.state]),
-              h("span", { class: "label" }, step.label, step.if ? h("small", {}, step.refs.length > 0 ? refsText(step.refs) : `if: ${step.if}`) : ""),
+              h("span", { class: "label" }, h("span", { class: "text" }, step.label), step.if ? h("small", {}, step.refs.length > 0 ? refsText(step.refs) : `if: ${step.if}`) : ""),
             ),
           ),
         ),

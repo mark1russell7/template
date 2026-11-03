@@ -111,7 +111,7 @@ h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.07em; colo
 .preset .delta { font-size: 0.75rem; color: var(--chg); font-weight: 600; }
 
 .options { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1.25rem; font-size: 0.9rem; color: var(--muted); margin-bottom: 0.75rem; }
-.options label { display: inline-flex; align-items: center; gap: 0.4rem; }
+.options label { white-space: nowrap; display: inline-flex; align-items: center; gap: 0.4rem; }
 .options .at { font-family: var(--mono); margin-right: -0.3rem; }
 .options input, .options select { border: 1px solid var(--line); background: var(--card); border-radius: 0.4rem; padding: 0.2rem 0.4rem; color: var(--fg); }
 .options input.scope { font-family: var(--mono); width: 7rem; }
@@ -121,7 +121,7 @@ h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.07em; colo
 .dot.changed { background: var(--chg); }
 
 /* The tree and the file */
-.explorer { display: grid; grid-template-columns: minmax(13rem, 16rem) minmax(0, 1fr); border: 1px solid var(--line); border-radius: 0.75rem; overflow: hidden; }
+.explorer { display: grid; grid-template-columns: minmax(15rem, 17rem) minmax(0, 1fr); border: 1px solid var(--line); border-radius: 0.75rem; overflow: hidden; }
 .tree-box { border-right: 1px solid var(--line); background: var(--sunk); min-width: 0; }
 .tree-head, .viewer-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--line); font-size: 0.85rem; }
 .tree-head span:first-child { font-family: var(--mono); font-weight: 600; }
@@ -132,7 +132,7 @@ h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.07em; colo
 .tree .file { cursor: pointer; border-left: 3px solid transparent; }
 .tree .file:hover { background: var(--accent-soft); }
 .tree .file[aria-selected="true"] { background: var(--accent-soft); border-left-color: var(--accent); font-weight: 700; }
-.tree .file .name { flex: 1; min-width: 0; }
+.tree .file .name { flex: 1; min-width: 0; overflow-wrap: normal; white-space: nowrap; }
 .tree .tag { font-family: system-ui, sans-serif; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; border-radius: 0.3rem; padding: 0 0.3rem; }
 .tree .added .tag { color: var(--add); background: var(--add-bg); }
 .tree .changed .tag { color: var(--chg); background: var(--chg-bg); }
@@ -160,13 +160,15 @@ h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.07em; colo
 :root[data-theme="dark"] .t-w { color: #e08ad8; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .t-w { color: #e08ad8; } }
 
-.after { margin-top: 0.85rem; display: flex; flex-wrap: wrap; gap: 0.35rem 0.85rem; align-items: baseline; font-size: 0.9rem; }
-.install { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3rem; flex: 1; min-width: 0; }
-.install code { background: var(--sunk); border: 1px solid var(--line); border-radius: 0.35rem; padding: 0.1rem 0.4rem; }
+.after { margin-top: 0.85rem; font-size: 0.9rem; }
+.after strong { display: block; margin-bottom: 0.35rem; }
+.install { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3rem; min-width: 0; }
+.install li.scroll-x { max-width: 100%; justify-self: start; }
+.install code { display: inline-block; white-space: pre; background: var(--sunk); border: 1px solid var(--line); border-radius: 0.35rem; padding: 0.1rem 0.4rem; }
 
 /* The workflow explorer */
 .wf-controls { display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; align-items: center; }
-.wf-controls label { display: inline-flex; gap: 0.5rem; align-items: center; font-size: 0.9rem; color: var(--muted); }
+.wf-controls label { white-space: nowrap; display: inline-flex; gap: 0.5rem; align-items: center; font-size: 0.9rem; color: var(--muted); }
 .wf-controls select { font-family: var(--mono); border: 1px solid var(--line); background: var(--card); border-radius: 0.4rem; padding: 0.25rem 0.4rem; color: var(--fg); max-width: 100%; }
 .events { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 .chip { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 0.25rem 0.75rem; cursor: pointer; font-size: 0.88rem; }
@@ -204,7 +206,7 @@ h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.07em; colo
 .step .icon { flex: none; width: 1.2rem; height: 1.2rem; border-radius: 50%; display: grid; place-items: center; font-size: 0.72rem; font-weight: 800; margin-top: 0.05rem; }
 .step.runs .icon { background: var(--add-bg); color: var(--add); }
 .step.skipped { color: var(--muted); }
-.step.skipped .label { text-decoration: line-through; text-decoration-color: var(--skip); }
+.step.skipped .text { text-decoration: line-through; text-decoration-color: var(--skip); }
 .step.skipped .icon { background: var(--sunk); color: var(--skip); border: 1px solid var(--line); }
 .step.unknown .icon { background: var(--chg-bg); color: var(--chg); }
 .step .label { min-width: 0; }

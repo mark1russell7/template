@@ -48,10 +48,10 @@ function entries(lines: readonly string[], start: number, end: number, indent: n
     let text = line;
     if (i === start && line.trimStart().startsWith("- ")) text = " ".repeat(indentOf(line) + 2) + line.trimStart().slice(2);
     if (indentOf(text) !== indent) continue;
-    const match = /^\s*("[^"]+"|'[^']+'|[^\s:][^:]*):(?:\s+(.*))?$/.exec(text);
+    const match = /^\s*("[^"]+"|'[^']+'|[^\s:][^:]*):(?:\s(.*))?$/.exec(text);
     if (!match?.[1]) continue;
     const key = match[1].replace(/^["']|["']$/g, "");
-    const raw = valueOf(match[2] ?? "");
+    const raw = valueOf((match[2] ?? "").trim());
     map.set(key, { line: i, value: /^[|>][-+]?$/.test(raw) ? scalar(lines, i, raw) : raw });
   }
   return map;
@@ -88,7 +88,7 @@ function listOf(lines: readonly string[], entry: Entry | undefined): string[] {
 }
 
 /** This function gives an action of a `uses` value with no pin: `actions/checkout@<sha> # v7` gives `actions/checkout`. */
-const actionOf = (uses: string): string => uses.replace(/@.*$/, "");
+const actionOf = (uses: string): string => uses.split("@", 1)[0] ?? uses;
 
 /** This function gives the label of a step: its name, else its action, its id or its first command. */
 function stepLabel(step: Map<string, Entry>): string {

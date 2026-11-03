@@ -27,7 +27,8 @@ check("the page shows the six presets of the CLI", await until(() => $$("#preset
 click('[data-preset="react"]');
 type(field("#pkg-name"), "probe-web");
 check("the preset react writes package.json, tsconfig.json and src/index.ts", await until(() => ["package.json", "tsconfig.json", "src/index.ts"].every((path) => files().includes(path))), files().join(", "));
-check("the command names the package and the preset", ($(".command")?.textContent ?? "").includes("probe-web") && $("#cmd-preset")?.textContent === "react", $(".command")?.textContent);
+const typed = ($("#pkg-name") as HTMLInputElement | null)?.value;
+check("the command names the package and the preset", typed === "probe-web" && $("#cmd-preset")?.textContent === "react", `${typed} --preset=${$("#cmd-preset")?.textContent}`);
 
 click('#tree [data-path="package.json"]');
 check("package.json names the typed package name", await until(() => code().includes('"name": "@acme/probe-web"')), code().slice(0, 200));
