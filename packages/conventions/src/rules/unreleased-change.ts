@@ -43,7 +43,8 @@ export const SHIPPED_FIELDS: readonly string[] = ["main", "module", "types", "ty
 /** The script that `npmLookup` starts in a child process of Node, so that the rule stays synchronous. */
 const LOOKUP_SCRIPT = `
 const [registry, ...names] = process.argv.slice(1);
-const base = registry.replace(/\\/+$/, "");
+let base = registry;
+while (base.endsWith("/")) base = base.slice(0, -1);
 Promise.all(names.map(async (name) => {
   try {
     const response = await fetch(base + "/" + name.replace("/", "%2f"), { headers: { accept: "application/json" }, signal: AbortSignal.timeout(20000) });
@@ -86,7 +87,8 @@ const inside = (folder: string, path: string): boolean => folder === "" || path.
 
 /** This function gives the globs of an entry of the field `files`: the entry, and each path under it. */
 const entryGlobs = (entry: string): readonly string[] => {
-  const glob = cleanPath(entry).replace(/\/+$/, "");
+  let glob = cleanPath(entry);
+  while (glob.endsWith("/")) glob = glob.slice(0, -1);
   return [glob, `${glob}/**`];
 };
 
