@@ -7,6 +7,8 @@
 // Without --apply, the script only prints what it would do. For each repository:
 //   1. It reads the check runs of the head commits of the last 5 pull requests that merged into the default
 //      branch. It uses the newest one where "CI OK" passed, and keeps each summary check that passed there.
+//      A pull request with a summary check that has not ended yet is not used: a pull request can merge before
+//      its checks end, and a check that has not ended is not proof.
 //      (A pull request whose checks ran before "CI OK" came to main can merge later without it.) A ruleset applies to pull requests, so
 //      this is the proof that each check starts on a pull request. A check that starts only on a push
 //      to main never runs on a pull request, and a rule for it blocks each pull request. A repository
@@ -85,6 +87,7 @@ function passedSummaries(repo: string, branch: string): Proof {
   const merged = pulls.filter((p) => p.merged_at !== null).sort((a, b) => (b.merged_at as string).localeCompare(a.merged_at as string)).slice(0, 5);
   for (const pull of merged) {
     const runs = json<{ check_runs: CheckRun[] }>(["api", `repos/${repo}/commits/${pull.head.sha}/check-runs?per_page=100`]);
+    if (runs.check_runs.some((r) => SUMMARY.test(r.name) && r.conclusion === null)) continue;
     for (const r of runs.check_runs) if (SUMMARY.test(r.name) && r.conclusion === "success") passed.add(r.name);
     const ok = runs.check_runs.find((r) => r.name === CHECK && r.conclusion === "success");
     if (ok) {
