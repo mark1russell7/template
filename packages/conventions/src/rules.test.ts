@@ -8,6 +8,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { blockHash, sharedDocsRule, type HomeFetch } from "./rules/shared-docs.ts";
 import { authorOf, convertGate, declaredName, hasTests, HOMES, mitText, pagesCalls, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, unreleasedChangeRule, type CheckOptions, type RegistryAnswer, type RuleResult } from "./index.ts";
 import { minuteField } from "./rules/runner-budget.ts";
+import { startsOnPush } from "./rules/main-runs-finish.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-rules-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -1370,5 +1371,42 @@ describe("changelog-version", () => {
       "packages/b/CHANGELOG.md": log("0.9.0"),
     });
     expect(rule(root, "changelog-version").breaks.map((b) => b.file)).toEqual(["packages/a/CHANGELOG.md"]);
+  });
+});
+
+describe("main-runs-finish", () => {
+  const PR = "${{ github.event_name == 'pull_request' }}";
+  const flow = (on: string[], cancel: string): string => [...on, "concurrency:", "  group: ci-${{ github.ref }}", `  cancel-in-progress: ${cancel}`, "jobs:", "  a:", "    runs-on: ubuntu-latest", ""].join("\n");
+
+  it("knows the forms of a push trigger", () => {
+    expect(startsOnPush(["on: push"])).toBe(true);
+    expect(startsOnPush(["on: [pull_request, push]"])).toBe(true);
+    expect(startsOnPush(["on:", "  push:", "    branches: [main]"])).toBe(true);
+    expect(startsOnPush(['"on":', "  push:"])).toBe(true);
+    expect(startsOnPush(["on:", "  pull_request:", "  workflow_dispatch:"])).toBe(false);
+    expect(startsOnPush(["on: [pull_request, push_tag]"])).toBe(false);
+    expect(startsOnPush(["on:", "  workflow_call:"])).toBe(false);
+  });
+
+  it("reports a push workflow that cancels a run in progress, and the fix cancels only a pull request run", () => {
+    const root = fixture({
+      "package.json": { name: "one" },
+      ".github/workflows/ci.yml": flow(["on:", "  push:", "  pull_request:"], "true"),
+      ".github/workflows/good.yml": flow(["on: [push, pull_request]"], PR),
+      ".github/workflows/off.yml": flow(["on: push"], "false"),
+      ".github/workflows/pr.yml": flow(["on: pull_request"], "true"),
+    });
+    commitAll(root);
+    expect(rule(root, "main-runs-finish").breaks.map((item) => `${item.file}:${String(item.line)}`)).toEqual([".github/workflows/ci.yml:6"]);
+    const fixed = runFix({ root, only: ["main-runs-finish"] });
+    expect(fixed.changed).toEqual([".github/workflows/ci.yml"]);
+    expect(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8")).toContain(`  cancel-in-progress: ${PR}\n`);
+    expect(rule(root, "main-runs-finish").breaks).toEqual([]);
+  });
+
+  it("skips a repository with no push workflow", () => {
+    const root = fixture({ "package.json": { name: "one" }, ".github/workflows/pr.yml": flow(["on: pull_request"], "true") });
+    commitAll(root);
+    expect(rule(root, "main-runs-finish")).toMatchObject({ status: "skipped", note: "no workflow starts on push" });
   });
 });
