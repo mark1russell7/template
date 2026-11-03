@@ -19,10 +19,6 @@ on:
         description: The repositories to skip, with commas.
         type: string
         default: "typeset"
-  # A change of this file runs the audit, as its test
-  pull_request:
-    paths:
-      - .github/workflows/site-audit.yml
   # Each Monday, so the ranking of the sites stays current
   schedule:
     - cron: "28 5 * * 1"
