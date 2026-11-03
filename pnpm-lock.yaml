@@ -253,7 +253,7 @@ importers:
         version: 1.1.0
       '@mark1russell7/service':
         specifier: ^0.6.0
-        version: 0.6.4(zod@4.6.7)
+        version: 0.6.5(zod@4.6.7)
       '@types/node':
         specifier: ^26.6.4
         version: 26.6.6
@@ -522,8 +522,8 @@ packages:
   '@loaderkit/resolve@1.0.6':
     resolution: {integrity: sha512-G8FdIoF5CypfwmD9rl8BXod5HDn8JqB0CCNBXDTaRZ+yRYhARrrSToX1zg1zy9jX3zLqigsELwhT4gNtkdQAUg==}
 
-  '@mark1russell7/algebra@0.8.0':
-    resolution: {integrity: sha512-kCNLkjbjF+zzVLPO8wBwsoxCal9v60sPpp0H6DqKxfbJM4C4o7FqU2x68gOhzp7zsiNN9PSkQqolrAJDy/4uWw==}
+  '@mark1russell7/algebra@0.8.1':
+    resolution: {integrity: sha512-lpuX4jO56Ht7F6ugymJwPCoL1F6fMVX/HAfuWaxfxBUCTrZxpSwD8qVk6O9M0fqaiyj2XUE+D5fz1XQP6BQlRA==}
     engines: {node: '>=22.19'}
     peerDependencies:
       zod: ^4.1.0
@@ -535,15 +535,6 @@ packages:
     resolution: {integrity: sha512-R9pjuWNFqd/LSfOI8uY7w8E2Dri8UQFGLodBuV4d2E0pwzWM5ISVXWVhC7+aYgrR1GXSMzbyo5ZLWvqyQCwdIg==}
     engines: {node: '>=22'}
     hasBin: true
-
-  '@mark1russell7/quantity@0.2.0':
-    resolution: {integrity: sha512-pE2OganjbhstZgoeLVu5YRVQq6bOnV/5T4GYuJhIu0+PF77+DwpfrIZonhNNfEZHz/P4ioiwFowbIwxPq9VkSA==}
-    engines: {node: '>=22.19'}
-    peerDependencies:
-      zod: ^4.1.0
-    peerDependenciesMeta:
-      zod:
-        optional: true
 
   '@mark1russell7/quantity@0.3.0':
     resolution: {integrity: sha512-psfyKmVrOz5ynHgr2ED7WM5Pa/XVy6DR28jCaSGY42gvV0CJEq7HJRpV6sgkvWx8s3Et7evJWR56aG5tjCHZIw==}
@@ -562,8 +553,8 @@ packages:
     resolution: {integrity: sha512-N5o3II0AClHgsWCWtzuBzckQdReydJnLUS8Kdt9hWXVpTzb0dxucrN1bWdDN+75YompOR1rAmsIX8zuHqoQdqA==}
     engines: {node: '>=22'}
 
-  '@mark1russell7/service@0.6.4':
-    resolution: {integrity: sha512-bw0FV7rlAgx5RzKxKZK6X3GYITp1WxE7tBCcxwMLONeutcmetB5ALVn+tZnCjYGizYX1A0LcLjmmwSyPVuiylQ==}
+  '@mark1russell7/service@0.6.5':
+    resolution: {integrity: sha512-USBAaZX8lQ3nmBzaTycF+6xQJyIQ51ZTWIxw9rZnZ5bhaqZe5FydTgVPYr92/gb8VWcOG4jxWsPnLPBBEaxzSA==}
     engines: {node: '>=22.19'}
     peerDependencies:
       '@grpc/grpc-js': ^1.14.6
@@ -1737,17 +1728,13 @@ snapshots:
       '@braidai/lang': 1.1.2
     optional: true
 
-  '@mark1russell7/algebra@0.8.0(zod@4.6.7)':
+  '@mark1russell7/algebra@0.8.1(zod@4.6.7)':
     dependencies:
-      '@mark1russell7/quantity': 0.2.0(zod@4.6.7)
+      '@mark1russell7/quantity': 0.3.0(zod@4.6.7)
     optionalDependencies:
       zod: 4.6.7
 
   '@mark1russell7/cue@1.1.0': {}
-
-  '@mark1russell7/quantity@0.2.0(zod@4.6.7)':
-    optionalDependencies:
-      zod: 4.6.7
 
   '@mark1russell7/quantity@0.3.0(zod@4.6.7)':
     dependencies:
@@ -1759,9 +1746,9 @@ snapshots:
 
   '@mark1russell7/rigor-generators@0.1.1': {}
 
-  '@mark1russell7/service@0.6.4(zod@4.6.7)':
+  '@mark1russell7/service@0.6.5(zod@4.6.7)':
     dependencies:
-      '@mark1russell7/algebra': 0.8.0(zod@4.6.7)
+      '@mark1russell7/algebra': 0.8.1(zod@4.6.7)
       '@mark1russell7/quantity': 0.3.0(zod@4.6.7)
       '@mark1russell7/rigor-generators': 0.1.1
     optionalDependencies:
