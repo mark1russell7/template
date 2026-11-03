@@ -180,7 +180,7 @@ importers:
         version: 1.1.0
       '@mark1russell7/ste-lint':
         specifier: ^0.1.1
-        version: 0.1.1
+        version: 0.1.2
       '@swc/core':
         specifier: ^1.15.0
         version: 1.16.20
@@ -562,8 +562,8 @@ packages:
       zod:
         optional: true
 
-  '@mark1russell7/ste-lint@0.1.1':
-    resolution: {integrity: sha512-NXRB3PimE1PfXT+SuGZAEXt35EdWAXQMd4Dyn6Ep+6Yzf7YBvpHN0+xo4vHpYhmg3CHNGuNvCmspLodXi8/JQg==}
+  '@mark1russell7/ste-lint@0.1.2':
+    resolution: {integrity: sha512-Gq7XrLLBbuaGp+a6HbmikoPR2KmU06w/XZh8TFVmG9qbMsknMjOhh50lcZ1kEpYStI++uhlxrNv+sOkOqgnN5w==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -1740,7 +1740,7 @@ snapshots:
     optionalDependencies:
       zod: 4.6.7
 
-  '@mark1russell7/ste-lint@0.1.1':
+  '@mark1russell7/ste-lint@0.1.2':
     dependencies:
       typescript: 6.0.3
 
