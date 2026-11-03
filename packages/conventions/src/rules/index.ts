@@ -15,6 +15,7 @@ import { releaseFiles } from "./release-files.ts";
 import { requiredScripts } from "./required-scripts.ts";
 import { roadmapParses } from "./roadmap-parses.ts";
 import { runnerBudget } from "./runner-budget.ts";
+import { sharedDocs } from "./shared-docs.ts";
 import { sourceMain } from "./source-main.ts";
 import { testsRequired } from "./tests-required.ts";
 import { tsconfigTest } from "./tsconfig-test.ts";
@@ -47,6 +48,7 @@ export const RULES: readonly Rule[] = [
   homePackage,
   licenseFile,
   pagesSite,
+  sharedDocs,
 ];
 
-export { cuePreset, gateTrigger, homePackage, licenseFile, mainCheck, noBuildOutput, noLocalPaths, pagesSite, pinnedGitDeps, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, workspaceProtocol };
+export { cuePreset, gateTrigger, homePackage, licenseFile, mainCheck, noBuildOutput, noLocalPaths, pagesSite, pinnedGitDeps, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, workspaceProtocol };

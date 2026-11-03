@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 120 names
+## . (build/index.d.ts): 126 names
 
 ACTIONS_COMMIT: build/index.d.ts#ACTIONS_COMMIT
 type AuditSource: build/index.d.ts#AuditSource
@@ -20,7 +20,10 @@ type FixResult: build/index.d.ts#FixResult
 HOMES: build/index.d.ts#HOMES
 HOME_EXPORTS: build/index.d.ts#HOME_EXPORTS
 HOME_PATTERNS: build/index.d.ts#HOME_PATTERNS
+HOME_TIMEOUT_MS: build/index.d.ts#HOME_TIMEOUT_MS
 type Home: build/index.d.ts#Home
+type HomeAnswer: build/index.d.ts#HomeAnswer
+type HomeFetch: build/index.d.ts#HomeFetch
 type HomeState: build/index.d.ts#HomeState
 IGNORE_AFTER: build/index.d.ts#IGNORE_AFTER
 LICENSE_TEXTS: build/index.d.ts#LICENSE_TEXTS
@@ -50,6 +53,7 @@ UNSHIPPED_FILES: build/index.d.ts#UNSHIPPED_FILES
 USAGE: build/index.d.ts#USAGE
 annotations: build/index.d.ts#annotations
 authorOf: build/index.d.ts#authorOf
+blockHash: build/index.d.ts#blockHash
 cleanPath: build/index.d.ts#cleanPath
 codePackages: build/index.d.ts#codePackages
 configsOfScript: build/index.d.ts#configsOfScript
@@ -61,6 +65,7 @@ defaultOptions: build/index.d.ts#defaultOptions
 findHomes: build/index.d.ts#findHomes
 formatResult: build/index.d.ts#formatResult
 gateTrigger: build/index.d.ts#gateTrigger
+githubFetch: build/index.d.ts#githubFetch
 globFolders: build/index.d.ts#globFolders
 globToRegExp: build/index.d.ts#globToRegExp
 hasFile: build/index.d.ts#hasFile
@@ -112,6 +117,7 @@ runGit: build/index.d.ts#runGit
 runnerBudget: build/index.d.ts#runnerBudget
 scheduleMinute: build/index.d.ts#scheduleMinute
 scriptsOf: build/index.d.ts#scriptsOf
+sharedDocsRule: build/index.d.ts#sharedDocsRule
 signaturesOf: build/index.d.ts#signaturesOf
 sourceMain: build/index.d.ts#sourceMain
 specifiersOf: build/index.d.ts#specifiersOf
@@ -213,6 +219,9 @@ export declare const HOME_EXPORTS: Readonly<Record<string, {
 ### build/index.d.ts#HOME_PATTERNS
 export declare const HOME_PATTERNS: readonly RegExp[];
 
+### build/index.d.ts#HOME_TIMEOUT_MS
+export declare const HOME_TIMEOUT_MS = 3e4;
+
 ### build/index.d.ts#Home
 interface Home {
   readonly area: string;
@@ -225,6 +234,16 @@ interface Home {
   readonly signatures?: readonly string[];
   readonly note?: string;
 }
+
+### build/index.d.ts#HomeAnswer
+type HomeAnswer = {
+  readonly text: string;
+} | {
+  readonly error: string;
+};
+
+### build/index.d.ts#HomeFetch
+type HomeFetch = (urls: readonly string[]) => ReadonlyMap<string, HomeAnswer>;
 
 ### build/index.d.ts#HomeState
 type HomeState = "published" | "unpublished" | "planned" | "none";
@@ -366,6 +385,9 @@ export declare function annotations(result: CheckResult): string;
 ### build/index.d.ts#authorOf
 export declare function authorOf(author: unknown): string | undefined;
 
+### build/index.d.ts#blockHash
+export declare const blockHash: (body: readonly string[]) => string;
+
 ### build/index.d.ts#cleanPath
 export declare const cleanPath: (path: string) => string;
 
@@ -402,6 +424,9 @@ export declare function formatResult(result: CheckResult): string;
 
 ### build/index.d.ts#gateTrigger
 export declare const gateTrigger: Rule;
+
+### build/index.d.ts#githubFetch
+export declare const githubFetch: HomeFetch;
 
 ### build/index.d.ts#globFolders
 export declare function globFolders(root: string, glob: string): string[];
@@ -555,6 +580,9 @@ export declare function scheduleMinute(repository: string, file: string): number
 
 ### build/index.d.ts#scriptsOf
 export declare function scriptsOf(scripts: Readonly<Record<string, unknown>>, name: string, seen?: Set<string>): string[];
+
+### build/index.d.ts#sharedDocsRule
+export declare function sharedDocsRule(fetchHomes?: HomeFetch): Rule;
 
 ### build/index.d.ts#signaturesOf
 export declare function signaturesOf(homes: readonly Home[]): Signature[];

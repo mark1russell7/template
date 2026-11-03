@@ -77,6 +77,7 @@ export { hasTests } from "./rules/tsconfig-test.ts";
 export { IGNORE_AFTER, TRAIN_SCOPES } from "./rules/trust-policy.ts";
 export { configsOfScript, scriptsOf } from "./rules/typed-files.ts";
 export { NPM_REGISTRY, npmLookup, SHIPPED_FIELDS, UNSHIPPED_FILES, unreleasedChangeRule, type RegistryAnswer, type RegistryLookup } from "./rules/unreleased-change.ts";
+export { blockHash, githubFetch, HOME_TIMEOUT_MS, sharedDocsRule, type HomeAnswer, type HomeFetch } from "./rules/shared-docs.ts";
 export {
   annotations,
   createContext,
