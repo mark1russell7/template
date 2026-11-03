@@ -297,6 +297,39 @@ The class sets `overflow-x: auto` and the background color of the box. Set `--sc
 }
 ```
 
+## The page helpers
+
+The entry `@mark1russell7/site-pages/chrome` has small helpers for the script of a page. It imports no Node.js module, so a site can bundle it for the browser. The package root also exports these helpers, but the root has Node.js code. Thus a site imports them from `/chrome`.
+
+| Function | Operation |
+| --- | --- |
+| `h(tag, attrs, ...children)` | Makes an element. The attribute `class` sets the class name. `false`, `null` and `undefined` give no attribute and no child. |
+| `byId(id)` | Gives the element with the ID. It throws when the page has no such element. |
+| `setupTheme(button, storageKey)` | Makes a theme button: auto, light, dark, in turn. It sets `data-theme` on the `html` element and keeps the choice in `localStorage`. |
+| `currentTheme()`, `nextTheme(storageKey)`, `applyTheme(theme, storageKey)` | Read the theme, set the next theme, or set one theme. A site with its own button, for example a React component, uses them. |
+| `copyText(button, text, options)` | Copies a text. The button shows "Copied" or "Copy failed" for 1600 ms. |
+| `copyToClipboard(text)` | Copies a text with the Clipboard API, else with `document.execCommand`. It gives `true` after a copy. |
+
+```ts
+import { byId, copyText, h, setupTheme } from "@mark1russell7/site-pages/chrome";
+
+setupTheme(byId<HTMLButtonElement>("theme"), "my-site-theme");
+const copy = h("button", { type: "button", class: "copy" }, "Copy");
+copy.addEventListener("click", () => void copyText(copy, "pnpm add my-package"));
+byId("install").append(copy);
+```
+
+The theme `auto` removes `data-theme`, and the CSS of the site then obeys `prefers-color-scheme`. Put this script in the `head` of the page, with the same key. It sets the theme before the first paint, so a dark page does not show white for a moment:
+
+```html
+<script>
+  try {
+    const t = localStorage.getItem("my-site-theme");
+    if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+  } catch {}
+</script>
+```
+
 ## A GitHub Pages workflow
 
 This workflow builds the site, adds the two pages, and deploys. It also starts every 3 hours, so the status page stays current without a push. A scheduled run builds the newest commit of `main` that passed CI.

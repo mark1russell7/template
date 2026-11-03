@@ -4,8 +4,9 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 111 names
+## . (build/index.d.ts): 124 names
 
+type AttributeValue: build/chrome.d.ts#AttributeValue
 BASE_CSS: build/index.d.ts#BASE_CSS
 type BoardIssue: build/index.d.ts#BoardIssue
 type BoardItem: build/index.d.ts#BoardItem
@@ -17,7 +18,9 @@ type ChangelogEntry: build/index.d.ts#ChangelogEntry
 type ChangelogSection: build/index.d.ts#ChangelogSection
 type ChangelogSource: build/index.d.ts#ChangelogSource
 type CheckState: build/index.d.ts#CheckState
+type Child: build/chrome.d.ts#Child
 type CliIo: build/index.d.ts#CliIo
+type CopyTextOptions: build/chrome.d.ts#CopyTextOptions
 DEFAULT_CHANGELOGS: build/index.d.ts#DEFAULT_CHANGELOGS
 GITHUB_API: build/index.d.ts#GITHUB_API
 GITHUB_GRAPHQL: build/index.d.ts#GITHUB_GRAPHQL
@@ -55,19 +58,26 @@ STATUS_SCRIPT: build/index.d.ts#STATUS_SCRIPT
 type StatusBoardData: build/index.d.ts#StatusBoardData
 type StatusBoardInput: build/index.d.ts#StatusBoardInput
 type StatusClass: build/index.d.ts#StatusClass
+THEMES: build/chrome.d.ts#THEMES
 TYPESCRIPT_PROBE: build/index.d.ts#TYPESCRIPT_PROBE
 type TagDate: build/index.d.ts#TagDate
 type TagVersion: build/index.d.ts#TagVersion
+type Theme: build/chrome.d.ts#Theme
 type TimelineBand: build/index.d.ts#TimelineBand
 type TimelineLayout: build/index.d.ts#TimelineLayout
 type TimelineMark: build/index.d.ts#TimelineMark
 type TimelineOptions: build/index.d.ts#TimelineOptions
 UsageError: build/index.d.ts#UsageError
+applyTheme: build/chrome.d.ts#applyTheme
 build: build/index.d.ts#build
 buildStatusBoard: build/index.d.ts#buildStatusBoard
+byId: build/chrome.d.ts#byId
 checkStateOf: build/index.d.ts#checkStateOf
 classCounts: build/index.d.ts#classCounts
 compareVersions: build/index.d.ts#compareVersions
+copyText: build/chrome.d.ts#copyText
+copyToClipboard: build/chrome.d.ts#copyToClipboard
+currentTheme: build/chrome.d.ts#currentTheme
 dayRange: build/index.d.ts#dayRange
 escapeHtml: build/index.d.ts#escapeHtml
 firstSentence: build/index.d.ts#firstSentence
@@ -75,6 +85,7 @@ gitTagDates: build/index.d.ts#gitTagDates
 githubOpenWork: build/index.d.ts#githubOpenWork
 githubReleases: build/index.d.ts#githubReleases
 globFiles: build/index.d.ts#globFiles
+h: build/chrome.d.ts#h
 headCommit: build/index.d.ts#headCommit
 headingAnchor: build/index.d.ts#headingAnchor
 headingDate: build/index.d.ts#headingDate
@@ -86,6 +97,7 @@ linksOf: build/index.d.ts#linksOf
 longDate: build/index.d.ts#longDate
 markdownTables: build/index.d.ts#markdownTables
 mergeReleases: build/index.d.ts#mergeReleases
+nextTheme: build/chrome.d.ts#nextTheme
 npmPublishTimes: build/index.d.ts#npmPublishTimes
 oldestFirst: build/index.d.ts#oldestFirst
 openGroups: build/index.d.ts#openGroups
@@ -109,6 +121,7 @@ roadmapItems: build/index.d.ts#roadmapItems
 runCli: build/index.d.ts#runCli
 safeUrl: build/index.d.ts#safeUrl
 sectionsOf: build/index.d.ts#sectionsOf
+setupTheme: build/chrome.d.ts#setupTheme
 shortDate: build/index.d.ts#shortDate
 slugOf: build/index.d.ts#slugOf
 splitRow: build/index.d.ts#splitRow
@@ -117,6 +130,22 @@ statusLead: build/index.d.ts#statusLead
 timelineLayout: build/index.d.ts#timelineLayout
 utcDay: build/index.d.ts#utcDay
 versionOfTag: build/index.d.ts#versionOfTag
+
+## ./chrome (build/chrome.d.ts): 13 names
+
+AttributeValue: build/chrome.d.ts#AttributeValue
+Child: build/chrome.d.ts#Child
+CopyTextOptions: build/chrome.d.ts#CopyTextOptions
+THEMES: build/chrome.d.ts#THEMES
+Theme: build/chrome.d.ts#Theme
+applyTheme: build/chrome.d.ts#applyTheme
+byId: build/chrome.d.ts#byId
+copyText: build/chrome.d.ts#copyText
+copyToClipboard: build/chrome.d.ts#copyToClipboard
+currentTheme: build/chrome.d.ts#currentTheme
+h: build/chrome.d.ts#h
+nextTheme: build/chrome.d.ts#nextTheme
+setupTheme: build/chrome.d.ts#setupTheme
 
 ## ./scroll-cue.css: no declaration file for ./styles/scroll-cue.css
 
@@ -127,6 +156,49 @@ file ./scroll-cue.css: styles/scroll-cue.css
 site-pages: ./build/cli.js
 
 ## Declarations
+
+### build/chrome.d.ts#AttributeValue
+export type AttributeValue = string | number | boolean | null | undefined;
+
+### build/chrome.d.ts#Child
+export type Child = Node | string | null | undefined | false;
+
+### build/chrome.d.ts#CopyTextOptions
+export interface CopyTextOptions {
+  readonly copied?: string;
+  readonly failed?: string;
+  readonly ms?: number;
+}
+
+### build/chrome.d.ts#THEMES
+export declare const THEMES: readonly ["auto", "light", "dark"];
+
+### build/chrome.d.ts#Theme
+export type Theme = (typeof THEMES)[number];
+
+### build/chrome.d.ts#applyTheme
+export declare function applyTheme(theme: Theme, storageKey: string): void;
+
+### build/chrome.d.ts#byId
+export declare function byId<T extends HTMLElement = HTMLElement>(id: string): T;
+
+### build/chrome.d.ts#copyText
+export declare function copyText(button: HTMLButtonElement, text: string, options?: CopyTextOptions): Promise<boolean>;
+
+### build/chrome.d.ts#copyToClipboard
+export declare function copyToClipboard(text: string): Promise<boolean>;
+
+### build/chrome.d.ts#currentTheme
+export declare function currentTheme(): Theme;
+
+### build/chrome.d.ts#h
+export declare function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs?: Readonly<Record<string, AttributeValue>>, ...children: readonly (Child | readonly Child[])[]): HTMLElementTagNameMap[K];
+
+### build/chrome.d.ts#nextTheme
+export declare function nextTheme(storageKey: string): Theme;
+
+### build/chrome.d.ts#setupTheme
+export declare function setupTheme(button: HTMLButtonElement, storageKey: string): void;
 
 ### build/index.d.ts#BASE_CSS
 export declare const BASE_CSS: string;

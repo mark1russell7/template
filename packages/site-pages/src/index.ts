@@ -1,6 +1,7 @@
 /**
  * `@mark1russell7/site-pages`: a release timeline page and a live status page for the site of a
  * GitHub repository. The data functions make the JSON, and the render functions make the HTML.
+ * The page helpers of `./chrome.ts` are for the browser. A site imports them from the entry `./chrome`.
  */
 
 export type * from "./data/types.ts";
@@ -56,4 +57,19 @@ export {
 export { releasesLead, renderReleasesPage, RELEASES_SCRIPT } from "./render/releases.ts";
 export { classCounts, openGroups, renderStatusPage, sectionsOf, slugOf, statusLead, STATUS_SCRIPT, type BoardSection, type ItemGroup } from "./render/status.ts";
 export { probeScript, TYPESCRIPT_PROBE } from "./check/probe.ts";
+export {
+  applyTheme,
+  byId,
+  copyText,
+  copyToClipboard,
+  currentTheme,
+  h,
+  nextTheme,
+  setupTheme,
+  THEMES,
+  type AttributeValue,
+  type Child,
+  type CopyTextOptions,
+  type Theme,
+} from "./chrome.ts";
 export { build, HELP, parseBuildArgs, runCli, UsageError, type BuildOptions, type BuildResult, type CliIo } from "./build.ts";

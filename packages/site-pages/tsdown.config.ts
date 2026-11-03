@@ -1,9 +1,10 @@
 import { defineConfig } from "tsdown";
 
-// The build for npm: ES modules in build/. index.js is the library with its types, and cli.js is the
-// bin with the shebang of the source. The workspace imports the source (main is src/index.ts).
+// The build for npm: ES modules in build/. index.js is the library with its types, chrome.js is the
+// browser entry with no Node.js import, and cli.js is the bin with the shebang of the source. The
+// workspace imports the source (main is src/index.ts).
 export default defineConfig({
-  entry: ["src/index.ts", "src/cli.ts"],
+  entry: ["src/index.ts", "src/chrome.ts", "src/cli.ts"],
   outDir: "build",
   format: "esm",
   platform: "node",

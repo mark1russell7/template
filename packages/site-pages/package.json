@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package",
   "name": "@mark1russell7/site-pages",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "A release timeline page and a live status page for the site of a GitHub repository: JSON data and standalone HTML, made at deploy time.",
   "keywords": [
     "github-pages",
@@ -28,6 +28,7 @@
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./chrome": "./src/chrome.ts",
     "./scroll-cue.css": "./styles/scroll-cue.css",
     "./package.json": "./package.json"
   },
@@ -46,6 +47,10 @@
       ".": {
         "types": "./build/index.d.ts",
         "import": "./build/index.js"
+      },
+      "./chrome": {
+        "types": "./build/chrome.d.ts",
+        "import": "./build/chrome.js"
       },
       "./scroll-cue.css": "./styles/scroll-cue.css",
       "./package.json": "./package.json"
