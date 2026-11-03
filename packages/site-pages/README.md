@@ -269,6 +269,31 @@ The variables are `--sp-bg`, `--sp-surface`, `--sp-sunken`, `--sp-fg`, `--sp-fg-
 
 The pages operate at a width of 390 px without horizontal scroll. The timeline scrolls in its own box. The keyboard operates all controls: the arrow keys, Home and End move between the versions, and Enter or Space selects one. Without JavaScript, the releases page shows all versions.
 
+## A cue on a box that scrolls
+
+A wide code block or table on a narrow screen scrolls sideways. Without a cue, its text looks cut. The file `scroll-cue.css` of the package gives a cue:
+
+- A shade shows at each edge that has more content. At an end of the box, the shade of that end goes.
+- The cue uses only CSS. It needs no JavaScript.
+
+Import the file in the site, and give the class `scroll-cue` to the box:
+
+```ts
+import "@mark1russell7/site-pages/scroll-cue.css";
+```
+
+```html
+<pre class="scroll-cue">pnpm add @mark1russell7/site-pages</pre>
+```
+
+The class sets `overflow-x: auto` and the background color of the box. Set `--scroll-cue-bg` to the background color of the box, and `--scroll-cue-shade` to the color of the shade:
+
+```css
+.code {
+  --scroll-cue-bg: var(--code-bg);
+}
+```
+
 ## A GitHub Pages workflow
 
 This workflow builds the site, adds the two pages, and deploys. It also starts every 3 hours, so the status page stays current without a push. A scheduled run builds the newest commit of `main` that passed CI.

@@ -116,6 +116,10 @@ timelineLayout: build/index.d.ts#timelineLayout
 utcDay: build/index.d.ts#utcDay
 versionOfTag: build/index.d.ts#versionOfTag
 
+## ./scroll-cue.css: no declaration file for ./styles/scroll-cue.css
+
+file ./scroll-cue.css: styles/scroll-cue.css
+
 ## bin: 1 commands
 
 site-pages: ./build/cli.js
