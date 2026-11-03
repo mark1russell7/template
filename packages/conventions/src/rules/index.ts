@@ -8,6 +8,7 @@ import { gateTrigger } from "./gate-trigger.ts";
 import { homePackage } from "./home-package.ts";
 import { licenseFile } from "./license-file.ts";
 import { mainCheck } from "./main-check.ts";
+import { mainRunsFinish } from "./main-runs-finish.ts";
 import { noBuildOutput } from "./no-build-output.ts";
 import { noLocalPaths } from "./no-local-paths.ts";
 import { pagesSite } from "./pages-site.ts";
@@ -46,6 +47,7 @@ export const RULES: readonly Rule[] = [
   testsRequired,
   roadmapParses,
   runnerBudget,
+  mainRunsFinish,
   gateTrigger,
   homePackage,
   licenseFile,
@@ -53,4 +55,4 @@ export const RULES: readonly Rule[] = [
   sharedDocs,
 ];
 
-export { changelogVersion, cuePreset, gateTrigger, homePackage, licenseFile, mainCheck, noBuildOutput, noLocalPaths, pagesSite, pinnedGitDeps, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, workspaceProtocol };
+export { changelogVersion, cuePreset, gateTrigger, homePackage, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, pagesSite, pinnedGitDeps, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, workspaceProtocol };

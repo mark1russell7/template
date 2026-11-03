@@ -178,7 +178,7 @@ export const runnerBudget: Rule = {
   title: "Each matrix has a max-parallel of 3 or less, each workflow has a concurrency group, and each schedule starts at the minute that the repository and the file give.",
   reason:
     "All repositories of the account share 40 runners, and heavy work keeps at most 28 of them. On 2026-10-30, a matrix with no max-parallel and the sync pull requests of about 20 repositories filled 39 of the 40 runners, with 88 jobs in the queue. Each repository copied the weekly scan at `23 5 * * 1`, so all scans started at the same minute. A workflow with no concurrency group starts a new run on each push, and the old runs keep their runners.",
-  fix: 'Add `max-parallel: 3` (or less) under `strategy`. Add a concurrency group at the top of the workflow (`concurrency: { group: <name>-${{ github.ref }}, cancel-in-progress: true }`), or in each job. Change the minute of each `cron` to the minute that the message gives; the hour and the days stay.',
+  fix: "Add `max-parallel: 3` (or less) under `strategy`. Add a concurrency group at the top of the workflow (`concurrency: { group: <name>-${{ github.ref }}, cancel-in-progress: ${{ github.event_name == 'pull_request' }} }`), or in each job. Change the minute of each `cron` to the minute that the message gives; the hour and the days stay.",
   sources: [{ repo: "fleet", rule: "runner-slots", doc: "docs/STRATEGY.md (2026-10-30, the runner slots: a cap of 40, heavy work at most 28)" }],
   options: {
     maxParallel: { type: "number", default: 3, description: "The largest max-parallel of a matrix." },
