@@ -1,6 +1,5 @@
 import { defineConfig, type Plugin } from "vite";
 import { siteData } from "./src/node/data.ts";
-import { readProbe } from "./src/node/probe-script.ts";
 
 // The Pages workflow sets SITE_BASE to "/template". A local build uses the root.
 const env = process.env;
@@ -21,19 +20,8 @@ function data(): Plugin {
   };
 }
 
-/** This plugin writes the probe of the site check to `dist/check-probe.js`, as JavaScript. */
-function probe(): Plugin {
-  return {
-    name: "template-site-probe",
-    apply: "build",
-    generateBundle() {
-      this.emitFile({ type: "asset", fileName: "check-probe.js", source: readProbe() });
-    },
-  };
-}
-
 export default defineConfig({
   base,
-  plugins: [data(), probe()],
+  plugins: [data()],
   build: { target: "es2022" },
 });

@@ -51,8 +51,8 @@ jobs:
       # The open items for the Status page. check:conventions parses the file on each pull request (roadmap-parses).
       roadmap: docs/ROADMAP.md
       # The check opens each page in a browser at 360, 400 and 1280 pixels, in light and dark.
-      # The probe drives the package preview and the workflow explorer. The build writes it from
-      # packages/site/src/check-probe.ts.
+      # The probe drives the package preview and the workflow explorer. The check reads the TypeScript source
+      # and removes its types.
       site-check: true
       site-check-pages: /,/releases/,/status/
-      site-check-probe: packages/site/dist/check-probe.js
+      site-check-probe: packages/site/src/check-probe.ts

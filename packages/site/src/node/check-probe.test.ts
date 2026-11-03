@@ -1,10 +1,12 @@
+import { readFileSync } from "node:fs";
+import { probeScript } from "@mark1russell7/site-pages";
 import { describe, expect, it } from "vitest";
-import { readProbe } from "./probe-script.ts";
 
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (...args: string[]) => (...values: unknown[]) => Promise<void>;
 
+// The site check reads `check-probe.ts` directly. This test removes the types with the same function of site-pages.
 describe("the script of the site probe", () => {
-  const script = readProbe();
+  const script = probeScript(readFileSync(new URL("../check-probe.ts", import.meta.url), "utf8"));
 
   it("has no types and no export", () => {
     expect(script).not.toMatch(/^export /m);
