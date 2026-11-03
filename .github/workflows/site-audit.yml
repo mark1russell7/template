@@ -25,7 +25,7 @@ on:
       - .github/workflows/site-audit.yml
   # Each Monday, so the ranking of the sites stays current
   schedule:
-    - cron: "17 5 * * 1"
+    - cron: "28 5 * * 1"
 
 permissions: {}
 
@@ -88,8 +88,9 @@ jobs:
           while read -r repo; do
             [ -n "$repo" ] || continue
             if [ "${repo,,}" = "$owner.github.io" ]; then url="https://$owner.github.io/"; else url="https://$owner.github.io/$repo/"; fi
-            node packages/site-pages/src/check/main.ts --url "$url" --widths "$WIDTHS" --shots "$out/$repo" --timeout 45000 > "$out/$repo.log" 2>&1
-            code=$?
+            # The shell of the step has -e: a failed site must not end the loop.
+            code=0
+            node packages/site-pages/src/check/main.ts --url "$url" --widths "$WIDTHS" --shots "$out/$repo" --timeout 45000 > "$out/$repo.log" 2>&1 || code=$?
             echo "$repo $code $url" >> "$out/codes.txt"
             echo "$repo: exit $code, $(tail -1 "$out/$repo.log")"
             # Exit code 2 is a wrong command line: the audit itself is wrong, not the site.
