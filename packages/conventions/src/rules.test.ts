@@ -1335,3 +1335,40 @@ describe("shared-docs", () => {
     expect(result.breaks[0]?.message).toContain("did not answer");
   });
 });
+
+describe("changelog-version", () => {
+  const log = (...versions: string[]): string => `# Changelog\n\n${versions.map((v) => `## ${v}\n\n- A change.\n`).join("\n")}`;
+  const one = (version: string, changelog: string | undefined, options: Record<string, unknown> = {}): string =>
+    fixture({ "package.json": { name: "@x/a", version, conventions: { rules: { "changelog-version": options } } }, ...(changelog === undefined ? {} : { "CHANGELOG.md": changelog }) });
+
+  it("skips a repository with no changelog, and passes a top section at the version or below it", () => {
+    expect(rule(one("1.0.0", undefined), "changelog-version").status).toBe("skipped");
+    expect(rule(one("0.5.0", log("0.5.0", "0.4.1")), "changelog-version").breaks).toEqual([]);
+    expect(rule(one("0.4.2", log("0.4.1")), "changelog-version").breaks).toEqual([]);
+    expect(rule(one("0.4.1", log("Unreleased", "0.4.1")), "changelog-version").breaks).toEqual([]);
+    expect(rule(one("1.0.0", "# Changelog\n\n## [1.0.0] - 2026-11-03\n\n- First.\n"), "changelog-version").breaks).toEqual([]);
+  });
+
+  it("breaks on a top section above the version, with its line (packing 0.5.0 at 0.4.1)", () => {
+    const result = rule(one("0.4.1", log("0.5.0", "0.4.1")), "changelog-version");
+    expect(result.breaks).toHaveLength(1);
+    expect(result.breaks[0]?.line).toBe(3);
+    expect(result.breaks[0]?.message).toContain("has the section 0.5.0, and package.json is still at 0.4.1");
+    expect(rule(one("1.0.0-rc.1", log("1.0.0")), "changelog-version").status).toBe("break");
+  });
+
+  it("with everyVersion, breaks on a version with no section", () => {
+    expect(rule(one("0.4.2", log("0.4.1"), { everyVersion: true, reason: "each version has its notes" }), "changelog-version").breaks[0]?.message).toContain("Add the section 0.4.2");
+    expect(rule(one("0.4.2", "# Changelog\n", { everyVersion: true, reason: "each version has its notes" }), "changelog-version").status).toBe("break");
+  });
+
+  it("reads the changelog of each package of a workspace, and not of a private package", () => {
+    const root = workspace({}, {
+      "packages/a/package.json": { name: "@x/a", version: "0.1.0" },
+      "packages/a/CHANGELOG.md": log("0.2.0"),
+      "packages/b/package.json": { name: "@x/b", version: "0.1.0", private: true },
+      "packages/b/CHANGELOG.md": log("0.9.0"),
+    });
+    expect(rule(root, "changelog-version").breaks.map((b) => b.file)).toEqual(["packages/a/CHANGELOG.md"]);
+  });
+});

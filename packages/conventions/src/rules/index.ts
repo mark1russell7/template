@@ -2,6 +2,7 @@
  * The list of the rules, in the order of the output.
  */
 import type { Rule } from "../rule.ts";
+import { changelogVersion } from "./changelog-version.ts";
 import { cuePreset } from "./cue-preset.ts";
 import { gateTrigger } from "./gate-trigger.ts";
 import { homePackage } from "./home-package.ts";
@@ -38,6 +39,7 @@ export const RULES: readonly Rule[] = [
   noLocalPaths,
   releaseFiles,
   unreleasedChange,
+  changelogVersion,
   typedScripts,
   typedFiles,
   mainCheck,
@@ -51,4 +53,4 @@ export const RULES: readonly Rule[] = [
   sharedDocs,
 ];
 
-export { cuePreset, gateTrigger, homePackage, licenseFile, mainCheck, noBuildOutput, noLocalPaths, pagesSite, pinnedGitDeps, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, workspaceProtocol };
+export { changelogVersion, cuePreset, gateTrigger, homePackage, licenseFile, mainCheck, noBuildOutput, noLocalPaths, pagesSite, pinnedGitDeps, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, workspaceProtocol };
