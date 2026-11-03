@@ -302,6 +302,83 @@ describe("no-build-output", () => {
   });
 });
 
+describe("no-stray-lockfiles", () => {
+  const PNPM = { "package.json": { name: "one", packageManager: "pnpm@12.10.1" }, "pnpm-lock.yaml": "lockfileVersion: '9.0'\n" };
+
+  /** This function makes a git repository of `files`, and gives its root. */
+  const committed = (files: Record<string, unknown>): string => {
+    const root = fixture(files);
+    commitAll(root);
+    return root;
+  };
+
+  it("reports a stray package-lock.json in a pnpm repository by its path, with the fix", () => {
+    const result = rule(committed({ ...PNPM, "packages/a/package-lock.json": "{}\n" }), "no-stray-lockfiles");
+    expect(result.status).toBe("break");
+    expect(result.breaks).toEqual([
+      {
+        file: "packages/a/package-lock.json",
+        message: "Git keeps the lock file packages/a/package-lock.json in a repository that uses pnpm.",
+        fix: "Remove packages/a/package-lock.json: this repository uses pnpm",
+      },
+    ]);
+  });
+
+  it("reports a stray yarn.lock in a pnpm repository, and each stray file", () => {
+    const result = rule(committed({ ...PNPM, "yarn.lock": "", "tools/package-lock.json": "{}\n" }), "no-stray-lockfiles");
+    expect(result.status).toBe("break");
+    expect(result.breaks.map((item) => item.file)).toEqual(["tools/package-lock.json", "yarn.lock"]);
+  });
+
+  it("finds pnpm from the root pnpm-lock.yaml alone, and from the field packageManager alone", () => {
+    const byLock = committed({ "package.json": { name: "one" }, "pnpm-lock.yaml": "", "package-lock.json": "{}\n" });
+    expect(rule(byLock, "no-stray-lockfiles").breaks.map((item) => item.file)).toEqual(["package-lock.json"]);
+    const byField = committed({ "package.json": { name: "one", packageManager: "pnpm@12.10.1" }, "yarn.lock": "" });
+    expect(rule(byField, "no-stray-lockfiles").breaks.map((item) => item.file)).toEqual(["yarn.lock"]);
+  });
+
+  it("passes a clean pnpm repository", () => {
+    expect(rule(committed({ ...PNPM, "src/index.ts": "export {};\n" }), "no-stray-lockfiles")).toMatchObject({ status: "pass", breaks: [] });
+  });
+
+  it("passes an npm repository with a package-lock.json", () => {
+    const named = committed({ "package.json": { name: "one", packageManager: "npm@11.0.0" }, "package-lock.json": "{}\n" });
+    expect(rule(named, "no-stray-lockfiles")).toMatchObject({ status: "pass", breaks: [] });
+    const unnamed = committed({ "package.json": { name: "one" }, "package-lock.json": "{}\n" });
+    expect(rule(unnamed, "no-stray-lockfiles")).toMatchObject({ status: "pass", breaks: [] });
+  });
+
+  it("does not take a pnpm-lock.yaml in a package folder as the use of pnpm", () => {
+    const root = committed({ "package.json": { name: "one" }, "package-lock.json": "{}\n", "examples/a/pnpm-lock.yaml": "" });
+    expect(rule(root, "no-stray-lockfiles")).toMatchObject({ status: "pass", breaks: [] });
+  });
+
+  it("ignores a file inside node_modules", () => {
+    const root = committed(PNPM);
+    const inside = ["node_modules/a/package-lock.json", "packages/a/node_modules/b/yarn.lock"];
+    for (const file of inside) {
+      mkdirSync(dirname(join(root, file)), { recursive: true });
+      writeFileSync(join(root, file), "");
+    }
+    // A global ignore file of git can hide node_modules, so the test adds the files by force and shows that git has them
+    git(root, "add", "-f", ...inside);
+    expect(git(root, "ls-files", "--", ...inside).trim().split("\n")).toEqual(inside);
+    expect(rule(root, "no-stray-lockfiles")).toMatchObject({ status: "pass", breaks: [] });
+  });
+
+  it("keeps an exception with a reason, and an entry that matches no break is stale", () => {
+    const manifest = (glob: string) => ({ name: "one", conventions: { rules: { "no-stray-lockfiles": { ignore: [glob], reason: "a fixture of an npm project" } } } });
+    const files = { "pnpm-lock.yaml": "", "test/fixtures/npm/package-lock.json": "{}\n" };
+    expect(rule(committed({ ...files, "package.json": manifest("test/fixtures/**") }), "no-stray-lockfiles")).toMatchObject({ status: "pass", ignored: 1 });
+    const stale = rule(committed({ ...files, "package.json": manifest("other/**") }), "no-stray-lockfiles");
+    expect(stale.breaks.map((item) => item.file)).toEqual(["test/fixtures/npm/package-lock.json", "package.json"]);
+  });
+
+  it("skips a pnpm repository that is not in git", () => {
+    expect(rule(fixture({ ...PNPM, "package-lock.json": "{}\n" }), "no-stray-lockfiles")).toMatchObject({ status: "skipped", note: "the root is not in a git repository" });
+  });
+});
+
 describe("no-local-paths", () => {
   const windows = ["C:", "Users", "alice", "repo"].join("\\");
   const linux = ["", "home", "bob", "x"].join("/");

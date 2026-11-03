@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 131 names
+## . (build/index.d.ts): 132 names
 
 ACTIONS_COMMIT: build/index.d.ts#ACTIONS_COMMIT
 type AuditSource: build/index.d.ts#AuditSource
@@ -94,6 +94,7 @@ messageOf: build/index.d.ts#messageOf
 mitText: build/index.d.ts#mitText
 noBuildOutput: build/index.d.ts#noBuildOutput
 noLocalPaths: build/index.d.ts#noLocalPaths
+noStrayLockfiles: build/index.d.ts#noStrayLockfiles
 npmLookup: build/index.d.ts#npmLookup
 packageFolders: build/index.d.ts#packageFolders
 pagesCalls: build/index.d.ts#pagesCalls
@@ -538,6 +539,9 @@ export declare const noBuildOutput: Rule;
 
 ### build/index.d.ts#noLocalPaths
 export declare const noLocalPaths: Rule;
+
+### build/index.d.ts#noStrayLockfiles
+export declare const noStrayLockfiles: Rule;
 
 ### build/index.d.ts#npmLookup
 export declare const npmLookup: RegistryLookup;
