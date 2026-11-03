@@ -1,0 +1,128 @@
+# The audit of the live sites: `site-pages check --url` on the home of each public site of the account.
+# The check opens each home at the widths, in light and dark, and finds overflow, errors and empty pages.
+# The artifact site-audit has the screenshots, report.json of each site and audit.json for all sites.
+# A failed site does not fail the run: the audit is a report. A run that cannot check a site fails.
+name: Site audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      sites:
+        description: "The repositories to examine, with commas. Empty: each public repository of the account that has a Pages site."
+        type: string
+        default: ""
+      widths:
+        description: The widths of the views, in CSS pixels, with commas.
+        type: string
+        default: "360,1280"
+      skip:
+        description: The repositories to skip, with commas.
+        type: string
+        default: "typeset"
+  # A change of this file runs the audit, as its test
+  pull_request:
+    paths:
+      - .github/workflows/site-audit.yml
+  # Each Monday, so the ranking of the sites stays current
+  schedule:
+    - cron: "17 5 * * 1"
+
+permissions: {}
+
+concurrency:
+  group: site-audit
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            .github/actions
+            packages/site-pages/src/check
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Playwright for the site check
+        shell: bash
+        run: npm install --prefix "$RUNNER_TEMP/site-check-playwright" --no-save --no-package-lock --no-audit --no-fund "playwright-core@1.64.1"
+      - uses: ./.github/actions/setup-playwright
+        with:
+          command: ${{ runner.temp }}/site-check-playwright/node_modules/.bin/playwright-core
+          browsers: chromium
+      - name: The sites
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+          SITES: ${{ inputs.sites }}
+          SKIP: ${{ github.event_name == 'workflow_dispatch' && inputs.skip || 'typeset' }}
+        run: |
+          set -euo pipefail
+          if [ -n "$SITES" ]; then
+            tr ',' '\n' <<< "$SITES" | sed 's/^ *//;s/ *$//' | grep -v '^$' > "$RUNNER_TEMP/sites.txt"
+          else
+            gh api --paginate "users/$OWNER/repos?per_page=100" \
+              --jq '.[] | select(.has_pages and (.private | not) and (.archived | not)) | .name' | sort > "$RUNNER_TEMP/sites.txt"
+          fi
+          tr ',' '\n' <<< "$SKIP" | sed 's/^ *//;s/ *$//' | grep -v '^$' > "$RUNNER_TEMP/skip.txt" || true
+          grep -vxF -f "$RUNNER_TEMP/skip.txt" "$RUNNER_TEMP/sites.txt" > "$RUNNER_TEMP/audit-sites.txt" || true
+          echo "$(wc -l < "$RUNNER_TEMP/audit-sites.txt") sites: $(tr '\n' ' ' < "$RUNNER_TEMP/audit-sites.txt")"
+      - name: Site audit
+        shell: bash
+        env:
+          OWNER: ${{ github.repository_owner }}
+          WIDTHS: ${{ inputs.widths || '360,1280' }}
+        run: |
+          set -uo pipefail
+          out="$RUNNER_TEMP/site-audit"
+          mkdir -p "$out"
+          owner="${OWNER,,}"
+          broken=0
+          while read -r repo; do
+            [ -n "$repo" ] || continue
+            if [ "${repo,,}" = "$owner.github.io" ]; then url="https://$owner.github.io/"; else url="https://$owner.github.io/$repo/"; fi
+            node packages/site-pages/src/check/main.ts --url "$url" --widths "$WIDTHS" --shots "$out/$repo" --timeout 45000 > "$out/$repo.log" 2>&1
+            code=$?
+            echo "$repo $code $url" >> "$out/codes.txt"
+            echo "$repo: exit $code, $(tail -1 "$out/$repo.log")"
+            # Exit code 2 is a wrong command line: the audit itself is wrong, not the site.
+            [ "$code" -ne 2 ] || broken=1
+          done < "$RUNNER_TEMP/audit-sites.txt"
+          node - "$out" <<'EOF'
+          const { readFileSync, existsSync, writeFileSync, appendFileSync } = require("node:fs");
+          const { join } = require("node:path");
+          const out = process.argv[2];
+          const rows = readFileSync(join(out, "codes.txt"), "utf8").trim().split("\n").filter(Boolean).map((line) => {
+            const [repo, code, url] = line.split(" ");
+            const file = join(out, repo, "report.json");
+            const report = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : null;
+            const views = report?.views ?? [];
+            const problems = [...new Set(views.flatMap((view) => view.problems))];
+            return { repo, url, code: Number(code), ok: report?.ok ?? false, views: views.length, failed: views.filter((view) => !view.ok).length, problems };
+          });
+          rows.sort((a, b) => b.failed - a.failed || b.problems.length - a.problems.length || a.repo.localeCompare(b.repo));
+          writeFileSync(join(out, "audit.json"), JSON.stringify({ date: new Date().toISOString(), sites: rows }, null, 2) + "\n");
+          const cell = (text) => String(text).replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\r?\n/g, " ");
+          const lines = [
+            `## Site audit: ${rows.filter((row) => row.ok).length} of ${rows.length} sites pass`, "",
+            "| Site | Views that fail | Problems |", "| --- | --- | --- |",
+            ...rows.map((row) => `| [${row.repo}](${row.url}) | ${row.failed} of ${row.views} | ${row.problems.slice(0, 4).map(cell).join("<br>") || "none"} |`),
+          ];
+          if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
+          console.log(lines.join("\n"));
+          EOF
+          exit "$broken"
+      - name: Screenshots and reports of the audit
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: site-audit
+          path: ${{ runner.temp }}/site-audit
+          if-no-files-found: warn

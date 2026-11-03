@@ -263,6 +263,8 @@ jobs:
 - `site-check-probe` is a JavaScript file that tests the interactive core of the home. Its checks run at each width. `site-pages check --help` tells its functions.
 - The check uses the Chromium of `playwright-core` at `site-check-playwright`, from the action `setup-playwright`. The artifact `site-check` has the screenshots and `report.json`.
 - The check runs from `packages/site-pages/src/check` of the template commit of the workflow. It needs Node.js 22.18 or later.
+- The workflow `site-audit.yml` of the template checks the live home of each public site each Monday. Start it by hand from the Actions tab.
+- The audit does not fail for a bad site. Its artifact `site-audit` has the screenshots, `report.json` of each site and `audit.json`.
 - `deploy: false` builds and uploads the artifact, with no deploy.
 - `github-token: true` gives the build `GITHUB_TOKEN`, with the read permissions of the build job.
 - The workflow gets the actions of the same template commit as the workflow file. A second checkout gets them.
