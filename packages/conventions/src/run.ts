@@ -122,6 +122,14 @@ export function runChecks(options: CheckOptions): CheckResult {
       else if (added?.has(item.file) === true) breaks.push({ ...item, message: `${item.message} The change adds this file, so \`ignore\` does not cover it.` });
     }
     const ignored = outcome.length - breaks.length;
+    // An entry of `ignore` that matches no break is stale. A converted file stays on the list, and a new file with
+    // the same name later passes with no check (fleet, 11-03).
+    if (rule.changeScoped !== true) {
+      for (const glob of ruleConfig.ignore) {
+        if (outcome.some((item) => matchesAny(item.file, [glob]))) continue;
+        breaks.push({ file: "package.json", message: `The entry \`${glob}\` of \`ignore\` matches no break of this rule. Remove it from the field \`conventions\`.` });
+      }
+    }
     const note = ruleConfig.reason === undefined ? {} : { note: ruleConfig.reason };
     results.push({ ...base, status: breaks.length > 0 ? "break" : "pass", breaks, ignored, ...note });
   }

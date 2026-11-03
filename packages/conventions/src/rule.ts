@@ -111,6 +111,11 @@ export interface Rule {
   readonly sources: readonly AuditSource[];
   /** The options of the rule, with their defaults. */
   readonly options: Readonly<Record<string, OptionSpec>>;
+  /**
+   * The value `true` tells that the breaks of the rule depend on the change (the files that a pull request changes).
+   * Then an entry of `ignore` that matches no break is not stale, because a later change can match it.
+   */
+  readonly changeScoped?: boolean;
   check(context: RuleContext, options: Options): RuleOutcome;
 }
 

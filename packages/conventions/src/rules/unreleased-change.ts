@@ -165,6 +165,7 @@ function shippedFiles(pkg: PackageInfo, changed: readonly string[], before: Mani
 export function unreleasedChangeRule(lookup: RegistryLookup = npmLookup): Rule {
   return {
     id: "unreleased-change",
+    changeScoped: true,
     title: "A change does not set a version that npm has. With `versionEachChange`, a change of the shipped files also raises the version.",
     reason:
       "The release workflow publishes each version that npm does not have, and it skips the others. When two pull requests set the same version, the second merge changes the code but no version, and nothing fails (rigor #18 and #20, 2026-11-02).",

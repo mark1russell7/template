@@ -331,6 +331,7 @@ interface Rule {
   readonly fix: string;
   readonly sources: readonly AuditSource[];
   readonly options: Readonly<Record<string, OptionSpec>>;
+  readonly changeScoped?: boolean;
   check(context: RuleContext, options: Options): RuleOutcome;
 }
 

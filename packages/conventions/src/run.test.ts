@@ -84,6 +84,15 @@ describe("the configuration", () => {
     expect(result.failed).toBe(false);
   });
 
+  it("fails on an entry of ignore that matches no break, and keeps the entries that match", () => {
+    const root = broken({ rules: { "tsconfig-test": { ignore: ["packages/a/**", "packages/gone/**"], reason: "a has no tests" } } });
+    const rule = runChecks({ root, only: ["tsconfig-test"] }).rules[0];
+    expect(rule).toMatchObject({ status: "break", ignored: 1 });
+    expect(rule?.breaks).toEqual([
+      { file: "package.json", message: "The entry `packages/gone/**` of `ignore` matches no break of this rule. Remove it from the field `conventions`." },
+    ]);
+  });
+
   it("does not ignore a file that the change adds, and ignores the files that exist and a renamed file", () => {
     const conventions = { rules: { "typed-scripts": { ignore: ["scripts/*.mjs"], reason: "old scripts" } } };
     const root = fixture({ "package.json": { name: "root", private: true, conventions }, "scripts/old.mjs": "export {};\n", "scripts/moved.mjs": "export const moved = \"a script that moves\";\n" });
