@@ -99,6 +99,53 @@ describe("the kinds of the statements", () => {
     expect([...info.references].sort()).toEqual(["./a.js", "./b.js", "./c.js"]);
   });
 
+  it("knows the names that are not ASCII, as the ECMAScript grammar gives them", () => {
+    const info = parseDeclarations(
+      [
+        'import é from "./a.js";',
+        'import { naïve as λ2 } from "./b.js";',
+        'import * as 名 from "./c.js";',
+        'import ü = require("./d.js");',
+        'export import Ω = 名.x;',
+        "declare const café: 1;",
+        "declare function naïve(): void;",
+        "interface 日本 {\n    a: 1;\n}",
+        "export { café, naïve as λ, type 日本 };",
+        "export declare const Δt: number, π2: number;",
+        "export declare let x‍: 1;",
+        "export declare function $名(): void;",
+        "export declare class _ñ {\n    private ünseen;\n    kept: 1;\n}",
+        "export type ö = 1;",
+        "export interface Æ {\n}",
+        "export declare enum Ł {\n    A = 0\n}",
+        "export declare namespace 空 {\n    const c: 1;\n}",
+        'export * as 名前 from "./e.js";',
+        "export default café;",
+        "export as namespace Ünï;",
+      ].join("\n"),
+    );
+    expect([...info.exported.keys()]).toEqual(["Ω", "café", "λ", "日本", "Δt", "π2", "x‍", "$名", "_ñ", "ö", "Æ", "Ł", "空", "default"]);
+    expect(info.exported.get("λ")).toEqual({ local: "naïve", typeOnly: false });
+    expect(info.exported.get("日本")).toEqual({ local: "日本", typeOnly: true });
+    expect(info.exported.get("default")).toEqual({ local: "café", typeOnly: false });
+    expect(info.locals.get("_ñ")).toEqual(["export declare class _ñ {\n    kept: 1;\n}"]);
+    expect([...info.imports]).toEqual([
+      ["é", { from: "./a.js", imported: "default", typeOnly: false }],
+      ["λ2", { from: "./b.js", imported: "naïve", typeOnly: false }],
+      ["名", { from: "./c.js", imported: "*", typeOnly: false }],
+      ["ü", { from: "./d.js", imported: "export=", typeOnly: false }],
+    ]);
+    expect(info.namespaces).toEqual([{ name: "名前", from: "./e.js", typeOnly: false }]);
+    expect([...info.ambient.keys()]).toEqual(["export as namespace Ünï"]);
+  });
+
+  it("reads a name to its last letter, and knows the start and the continue letters of a name", () => {
+    expect(parseDeclarations("export default class extendsé {\n}").exported.get("default")?.local).toBe("extendsé");
+    expect(parseDeclarations("export declare class Kλ {\n    private naïve;\n}").locals.get("Kλ")).toEqual(["export declare class Kλ {\n}"]);
+    expect(() => parseDeclarations("export { 2a };")).toThrow(/An export list part that the report does not know: 2a/);
+    expect(() => parseDeclarations("export { a·b, ·c };")).toThrow(/An export list part that the report does not know: ·c/);
+  });
+
   it("throws at an unknown form of statement", () => {
     expect(() => parseDeclarations("something else;", "x.d.ts")).toThrow(/A statement that the report does not know, in x\.d\.ts/);
   });
@@ -276,6 +323,18 @@ describe("the report of a package", () => {
         "ns.one: ns.d.ts#one",
       ].join("\n"),
     );
+  });
+
+  it("lists the names that are not ASCII of an export list, a re-export and export *", () => {
+    const report = body({
+      "package.json": { name: "p", types: "./index.d.ts" },
+      "index.d.ts": ['export { café as naïve, type 日本 } from "./b.js";', 'export * from "./c.js";', "declare const π2: 2;", "export { π2 as $π };"].join("\n"),
+      "b.d.ts": "export declare const café: 1;\nexport interface 日本 {\n    x‍: 1;\n}\n",
+      "c.d.ts": "export declare function λ(): void;\nexport type Δt = number;\n",
+    });
+    expect(report).toContain(["$π: index.d.ts#π2", "naïve: b.d.ts#café", "Δt: c.d.ts#Δt", "λ: c.d.ts#λ", "type 日本: b.d.ts#日本"].join("\n"));
+    expect(report).toContain("### b.d.ts#日本\nexport interface 日本 {\n    x‍: 1;\n}\n");
+    expect(report).toContain("### c.d.ts#λ\nexport declare function λ(): void;\n");
   });
 
   it("gives each name of export type * and export type * as as a type", () => {
