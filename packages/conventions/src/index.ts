@@ -45,6 +45,7 @@ export {
   mainCheck,
   noBuildOutput,
   noLocalPaths,
+  noStrayLockfiles,
   pagesSite,
   pinnedGitDeps,
   releaseFiles,
