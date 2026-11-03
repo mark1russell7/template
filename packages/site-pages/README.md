@@ -299,7 +299,7 @@ The class sets `overflow-x: auto` and the background color of the box. Set `--sc
 
 ## The page helpers
 
-The entry `@mark1russell7/site-pages/chrome` has small helpers for the script of a page. It imports no Node.js module, so a site can bundle it for the browser. The package root also exports these helpers, but the root has Node.js code. Thus a site imports them from `/chrome`.
+The entry `@mark1russell7/site-pages/chrome` has small helpers for the script of a page. It imports no Node.js module, so a site can bundle it for the browser. The package root does not export these helpers. Thus a Node.js program that imports the root gets no DOM types.
 
 | Function | Operation |
 | --- | --- |
