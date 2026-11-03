@@ -58,6 +58,7 @@ export {
   tsconfigTest,
   typedFiles,
   typedScripts,
+  unreleasedChange,
   workspaceProtocol,
 } from "./rules/index.ts";
 export { DEFAULT_ALLOWED, HOME_PATTERNS } from "./rules/no-local-paths.ts";
@@ -75,6 +76,7 @@ export { STRICT_OPTIONS } from "./rules/cue-preset.ts";
 export { hasTests } from "./rules/tsconfig-test.ts";
 export { IGNORE_AFTER, TRAIN_SCOPES } from "./rules/trust-policy.ts";
 export { configsOfScript, scriptsOf } from "./rules/typed-files.ts";
+export { NPM_REGISTRY, npmLookup, SHIPPED_FIELDS, UNSHIPPED_FILES, unreleasedChangeRule, type RegistryAnswer, type RegistryLookup } from "./rules/unreleased-change.ts";
 export {
   annotations,
   createContext,

@@ -86,6 +86,10 @@ The push to `main` starts `release.yml`. The workflow starts the CI gates, build
 
 `scripts/release/pack.ts` stops the release when a version is not SemVer. It also stops when a version is not greater than the `latest` version on npm. The registry does not accept a version two times, also after a removal. Thus a bad release gets a new PATCH, and `npm deprecate` marks the bad version.
 
+The rule `unreleased-change` of `@mark1russell7/conventions` fails a pull request that sets a version that npm has. The release skips such a version.
+
+When two pull requests set the same version, the second merge changes no version. Then `release.yml` does not start, and the change does not get to npm. In a repository where each pull request sets its version, set the option `versionEachChange` of the rule. Then the CI of that push to `main` fails. Raise the version in a new pull request.
+
 To publish again after a failure, start the workflow by hand: `gh workflow run release.yml --ref main`. It skips each version that is on npm.
 
 ## Only a commit on main

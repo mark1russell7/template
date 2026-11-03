@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 112 names
+## . (build/index.d.ts): 120 names
 
 ACTIONS_COMMIT: build/index.d.ts#ACTIONS_COMMIT
 type AuditSource: build/index.d.ts#AuditSource
@@ -26,6 +26,7 @@ IGNORE_AFTER: build/index.d.ts#IGNORE_AFTER
 LICENSE_TEXTS: build/index.d.ts#LICENSE_TEXTS
 MAP_RULE: build/index.d.ts#MAP_RULE
 type Manifest: build/index.d.ts#Manifest
+NPM_REGISTRY: build/index.d.ts#NPM_REGISTRY
 type OptionSpec: build/index.d.ts#OptionSpec
 type OptionValue: build/index.d.ts#OptionValue
 type Options: build/index.d.ts#Options
@@ -35,13 +36,17 @@ type PagesCall: build/index.d.ts#PagesCall
 type PathFilter: build/index.d.ts#PathFilter
 REAL_COMPARE: build/index.d.ts#REAL_COMPARE
 RULES: build/index.d.ts#RULES
+type RegistryAnswer: build/index.d.ts#RegistryAnswer
+type RegistryLookup: build/index.d.ts#RegistryLookup
 type Rule: build/index.d.ts#Rule
 type RuleConfig: build/index.d.ts#RuleConfig
 type RuleContext: build/index.d.ts#RuleContext
 type RuleOutcome: build/index.d.ts#RuleOutcome
 type RuleResult: build/index.d.ts#RuleResult
+SHIPPED_FIELDS: build/index.d.ts#SHIPPED_FIELDS
 STRICT_OPTIONS: build/index.d.ts#STRICT_OPTIONS
 TRAIN_SCOPES: build/index.d.ts#TRAIN_SCOPES
+UNSHIPPED_FILES: build/index.d.ts#UNSHIPPED_FILES
 USAGE: build/index.d.ts#USAGE
 annotations: build/index.d.ts#annotations
 authorOf: build/index.d.ts#authorOf
@@ -80,6 +85,7 @@ messageOf: build/index.d.ts#messageOf
 mitText: build/index.d.ts#mitText
 noBuildOutput: build/index.d.ts#noBuildOutput
 noLocalPaths: build/index.d.ts#noLocalPaths
+npmLookup: build/index.d.ts#npmLookup
 packageFolders: build/index.d.ts#packageFolders
 pagesCalls: build/index.d.ts#pagesCalls
 pagesSite: build/index.d.ts#pagesSite
@@ -116,6 +122,8 @@ trustPolicy: build/index.d.ts#trustPolicy
 tsconfigTest: build/index.d.ts#tsconfigTest
 typedFiles: build/index.d.ts#typedFiles
 typedScripts: build/index.d.ts#typedScripts
+unreleasedChange: build/index.d.ts#unreleasedChange
+unreleasedChangeRule: build/index.d.ts#unreleasedChangeRule
 workspaceGlobs: build/index.d.ts#workspaceGlobs
 workspaceProtocol: build/index.d.ts#workspaceProtocol
 
@@ -233,6 +241,9 @@ export declare const MAP_RULE = "Before you write a helper, find its home in thi
 ### build/index.d.ts#Manifest
 type Manifest = Readonly<Record<string, unknown>>;
 
+### build/index.d.ts#NPM_REGISTRY
+export declare const NPM_REGISTRY = "https://registry.npmjs.org";
+
 ### build/index.d.ts#OptionSpec
 interface OptionSpec {
   readonly type: "string" | "number" | "boolean" | "strings";
@@ -276,6 +287,17 @@ export declare const REAL_COMPARE = "process.argv[1] !== undefined && realpathSy
 
 ### build/index.d.ts#RULES
 export declare const RULES: readonly Rule[];
+
+### build/index.d.ts#RegistryAnswer
+type RegistryAnswer = {
+  readonly versions: readonly string[];
+  readonly times?: Readonly<Record<string, string>>;
+} | {
+  readonly error: string;
+};
+
+### build/index.d.ts#RegistryLookup
+type RegistryLookup = (names: readonly string[], registry: string) => ReadonlyMap<string, RegistryAnswer>;
 
 ### build/index.d.ts#Rule
 interface Rule {
@@ -323,11 +345,17 @@ interface RuleResult {
   readonly note?: string;
 }
 
+### build/index.d.ts#SHIPPED_FIELDS
+export declare const SHIPPED_FIELDS: readonly string[];
+
 ### build/index.d.ts#STRICT_OPTIONS
 export declare const STRICT_OPTIONS: readonly ["strict", "noImplicitAny", "strictNullChecks", "strictFunctionTypes", "strictBindCallApply", "strictPropertyInitialization", "strictBuiltinIteratorReturn", "noImplicitThis", "useUnknownInCatchVariables", "alwaysStrict", "noUncheckedIndexedAccess", "exactOptionalPropertyTypes", "noImplicitOverride", "noImplicitReturns", "noFallthroughCasesInSwitch", "noPropertyAccessFromIndexSignature"];
 
 ### build/index.d.ts#TRAIN_SCOPES
 export declare const TRAIN_SCOPES: readonly ["@mark1russell7/*", "@procedures/*"];
+
+### build/index.d.ts#UNSHIPPED_FILES
+export declare const UNSHIPPED_FILES: readonly string[];
 
 ### build/index.d.ts#USAGE
 export declare const USAGE: string;
@@ -447,6 +475,9 @@ export declare const noBuildOutput: Rule;
 ### build/index.d.ts#noLocalPaths
 export declare const noLocalPaths: Rule;
 
+### build/index.d.ts#npmLookup
+export declare const npmLookup: RegistryLookup;
+
 ### build/index.d.ts#packageFolders
 export declare function packageFolders(root: string, globs?: readonly string[] | undefined): string[];
 
@@ -554,6 +585,12 @@ export declare const typedFiles: Rule;
 
 ### build/index.d.ts#typedScripts
 export declare const typedScripts: Rule;
+
+### build/index.d.ts#unreleasedChange
+export declare const unreleasedChange: Rule;
+
+### build/index.d.ts#unreleasedChangeRule
+export declare function unreleasedChangeRule(lookup?: RegistryLookup): Rule;
 
 ### build/index.d.ts#workspaceGlobs
 export declare function workspaceGlobs(root: string): string[] | undefined;

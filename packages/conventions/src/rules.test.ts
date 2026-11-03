@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
-import { authorOf, convertGate, declaredName, hasTests, HOMES, mitText, pagesCalls, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, type CheckOptions, type RuleResult } from "./index.ts";
+import { authorOf, convertGate, declaredName, hasTests, HOMES, mitText, pagesCalls, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, unreleasedChangeRule, type CheckOptions, type RegistryAnswer, type RuleResult } from "./index.ts";
 import { minuteField } from "./rules/runner-budget.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-rules-"));
@@ -1014,5 +1014,243 @@ describe("pages-site", () => {
     const none = fixture({ "package.json": { name: "one" } });
     commitAll(none);
     expect(rule(none, "pages-site", { env: event({ private: false }) }).breaks.map((item) => item.message)).toEqual(["The repository is public, and no workflow deploys its site with the Pages workflow of the template."]);
+  });
+});
+
+describe("unreleased-change", () => {
+  /** The versions of a package on the fake registry: a list, the publish time of each version, or an error. */
+  type Fake = readonly string[] | Readonly<Record<string, string>> | Error;
+  /** A fake registry: the versions of each name, or an error. It keeps the names of each lookup. */
+  function registry(answers: Record<string, Fake>): { lookup: (names: readonly string[]) => ReadonlyMap<string, RegistryAnswer>; asked: string[][] } {
+    const asked: string[][] = [];
+    const lookup = (names: readonly string[]): ReadonlyMap<string, RegistryAnswer> => {
+      asked.push([...names]);
+      return new Map(
+        names.map((name): [string, RegistryAnswer] => {
+          const answer = answers[name] ?? [];
+          if (answer instanceof Error) return [name, { error: answer.message }];
+          if (Array.isArray(answer)) return [name, { versions: answer as readonly string[] }];
+          const times = answer as Readonly<Record<string, string>>;
+          return [name, { versions: Object.keys(times), times }];
+        }),
+      );
+    };
+    return { lookup, asked };
+  }
+  /** A workspace with one published package `@x/a` at `version`, committed and tagged `base`. The option sets the mode. */
+  function repo(version: string, extra: Record<string, unknown> = {}, manifest: Record<string, unknown> = {}, strict = true): string {
+    const conventions = strict ? { conventions: { rules: { "unreleased-change": { versionEachChange: true, reason: "each pull request sets its version" } } } } : {};
+    const root = workspace(conventions, {
+      "packages/a/package.json": { name: "@x/a", version, ...manifest },
+      "packages/a/src/index.ts": "export const a = 1;\n",
+      "packages/a/src/index.test.ts": "test\n",
+      "packages/a/README.md": "# a\n",
+      "packages/b/package.json": { name: "@x/b", private: true, version: "1.0.0" },
+      "packages/b/src/index.ts": "export const b = 1;\n",
+      ...extra,
+    });
+    commitAll(root);
+    git(root, "tag", "base");
+    return root;
+  }
+  /** This function writes each file and commits the change. */
+  function change(root: string, files: Record<string, unknown>, message = "change"): void {
+    for (const [file, text] of Object.entries(files)) {
+      mkdirSync(dirname(join(root, file)), { recursive: true });
+      writeFileSync(join(root, file), typeof text === "string" ? text : `${JSON.stringify(text, null, 2)}\n`);
+    }
+    git(root, "add", "-A");
+    git(root, "commit", "-q", "-m", message);
+  }
+  /** This function starts the rule with a fake registry. */
+  const check = (root: string, answers: Record<string, Fake>, options: Omit<CheckOptions, "root" | "only" | "rules"> = { base: "base" }): RuleResult =>
+    rule(root, "unreleased-change", { rules: [unreleasedChangeRule(registry(answers).lookup)], ...options });
+  /** This function writes the event file of a push, and gives its environment. */
+  const pushed = (before: string, ref = "refs/heads/main", pushedAt = 1_800_000_000): Record<string, string> => {
+    const event = join(temp, `event-${String(fixtures++)}.json`);
+    writeFileSync(event, JSON.stringify({ before, ref, repository: { default_branch: "main", pushed_at: pushedAt } }));
+    return { GITHUB_EVENT_NAME: "push", GITHUB_EVENT_PATH: event };
+  };
+  /** The ISO time `seconds` after the push of `pushed`. */
+  const after = (seconds: number): string => new Date((1_800_000_000 + seconds) * 1000).toISOString();
+  /** This function makes the checkout of a pull request of GitHub. main moves after the branch `pr`, and HEAD is the merge commit of `pr`. */
+  function mergeRef(root: string, mainFiles: Record<string, unknown>): void {
+    git(root, "switch", "-q", "main");
+    if (Object.keys(mainFiles).length > 0) change(root, mainFiles, "main moves");
+    git(root, "switch", "-q", "--detach", "main");
+    git(root, "merge", "-q", "--no-ff", "-m", "merge pr", "pr");
+  }
+
+  describe("with versionEachChange", () => {
+    it("breaks when a shipped file changes and npm has the version, and names the files", () => {
+      const root = repo("1.0.0");
+      change(root, { "packages/a/src/index.ts": "export const a = 2;\n", "packages/b/src/index.ts": "export const b = 2;\n" });
+      const fake = registry({ "@x/a": ["0.9.0", "1.0.0"] });
+      const result = rule(root, "unreleased-change", { rules: [unreleasedChangeRule(fake.lookup)], base: "base" });
+      expect(result.status).toBe("break");
+      expect(result.breaks.map((item) => `${item.file}:${String(item.line)}: ${item.message}`)).toEqual([
+        "packages/a/package.json:3: @x/a: the change is not released, because 1.0.0 is on npm already. Raise the version (SemVer) in a pull request. The change ships packages/a/src/index.ts.",
+      ]);
+      // The private package is not a question for the registry
+      expect(fake.asked).toEqual([["@x/a"]]);
+    });
+
+    it("passes a change of only tests, docs, configs and dependencies, and does not ask the registry", () => {
+      const root = repo("1.0.0");
+      change(root, {
+        "packages/a/src/index.test.ts": "test 2\n",
+        "packages/a/README.md": "# a 2\n",
+        "packages/a/test/fixtures/x.json": "{}\n",
+        "packages/a/tsconfig.json": "{}\n",
+        "packages/a/vitest.config.ts": "export default {};\n",
+        "packages/a/package.json": { name: "@x/a", version: "1.0.0", devDependencies: { vitest: "^5.0.0" }, dependencies: { other: "^1.0.0" } },
+        ".github/workflows/ci.yml": "on: push\n",
+        "docs/ROADMAP.md": "x\n",
+      });
+      const fake = registry({ "@x/a": ["1.0.0"] });
+      expect(rule(root, "unreleased-change", { rules: [unreleasedChangeRule(fake.lookup)], base: "base" }).status).toBe("pass");
+      expect(fake.asked).toEqual([]);
+    });
+
+    it("breaks on a change of a shipped field of package.json", () => {
+      const root = repo("1.0.0");
+      change(root, { "packages/a/package.json": { name: "@x/a", version: "1.0.0", exports: { ".": "./src/index.ts" } } });
+      expect(check(root, { "@x/a": ["1.0.0"] }).breaks.map((item) => item.message)).toEqual([
+        "@x/a: the change is not released, because 1.0.0 is on npm already. Raise the version (SemVer) in a pull request. The change ships packages/a/package.json.",
+      ]);
+    });
+
+    it("passes a version that npm does not have, and breaks a raised version that npm has", () => {
+      const root = repo("1.0.0");
+      change(root, { "packages/a/src/index.ts": "export const a = 2;\n", "packages/a/package.json": { name: "@x/a", version: "1.1.0" } });
+      expect(check(root, { "@x/a": ["1.0.0"] }).status).toBe("pass");
+      expect(check(root, { "@x/a": ["1.0.0", "1.1.0"] }).breaks.map((item) => item.message)).toEqual([
+        "@x/a: the change sets the version 1.1.0, but 1.1.0 is on npm already. Raise the version (SemVer) in a pull request.",
+      ]);
+      // A new package: npm has no version
+      expect(check(root, {}).status).toBe("pass");
+    });
+
+    it("uses the field files when git tracks its entries, and else counts each source file", () => {
+      const listed = repo("1.0.0", { "packages/a/tools/gen.ts": "1\n" }, { files: ["src", "!src/internal"] });
+      change(listed, { "packages/a/tools/gen.ts": "2\n" });
+      expect(check(listed, { "@x/a": ["1.0.0"] }).status).toBe("pass");
+      change(listed, { "packages/a/src/internal/x.ts": "2\n" });
+      expect(check(listed, { "@x/a": ["1.0.0"] }).status).toBe("pass");
+      const built = repo("1.0.0", { "packages/a/tools/gen.ts": "1\n" }, { files: ["build"] });
+      change(built, { "packages/a/tools/gen.ts": "2\n" });
+      expect(check(built, { "@x/a": ["1.0.0"] }).breaks.map((item) => item.file)).toEqual(["packages/a/package.json"]);
+    });
+
+    it("skips a Changesets repository, a placeholder version, a registry error and a run with no change", () => {
+      const changesets = repo("1.0.0", { ".changeset/config.json": "{}\n" });
+      change(changesets, { "packages/a/src/index.ts": "export const a = 2;\n" });
+      expect(check(changesets, { "@x/a": ["1.0.0"] }).status).toBe("skipped");
+
+      const placeholder = repo("0.0.0-stage");
+      change(placeholder, { "packages/a/src/index.ts": "export const a = 2;\n" });
+      const fake = registry({ "@x/a": ["0.0.0-stage"] });
+      expect(rule(placeholder, "unreleased-change", { rules: [unreleasedChangeRule(fake.lookup)], base: "base" }).status).toBe("skipped");
+      expect(fake.asked).toEqual([]);
+
+      const offline = repo("1.0.0");
+      change(offline, { "packages/a/src/index.ts": "export const a = 2;\n" });
+      const result = check(offline, { "@x/a": new Error("fetch failed") });
+      expect(result.status).toBe("skipped");
+      expect(result.note).toBe("the registry did not answer for @x/a: fetch failed");
+      expect(check(offline, { "@x/a": ["1.0.0"] }, {}).status).toBe("skipped");
+    });
+
+    it("finds the change of two pull requests that set the same version on the push to main", () => {
+      // main has 0.1.3. Two pull requests each change a source file and set 0.1.4.
+      const root = repo("0.1.3");
+      git(root, "switch", "-q", "-c", "first");
+      change(root, { "packages/a/src/first.ts": "1\n", "packages/a/package.json": { name: "@x/a", version: "0.1.4" } });
+      git(root, "switch", "-q", "-c", "second", "base");
+      change(root, { "packages/a/src/second.ts": "1\n", "packages/a/package.json": { name: "@x/a", version: "0.1.4" } });
+      // The release of the first push publishes 0.1.4, 3 minutes after the push
+      const published = { "@x/a": { "0.1.3": after(-86_400), "0.1.4": after(180) } };
+
+      // The pull request of the second change, before the first merge: it raises 0.1.3 to 0.1.4, and npm does not have 0.1.4
+      git(root, "switch", "-q", "--detach", "main");
+      git(root, "merge", "-q", "--no-ff", "-m", "merge second", "second");
+      expect(check(root, { "@x/a": ["0.1.3"] }, { env: { GITHUB_EVENT_NAME: "pull_request" } }).status).toBe("pass");
+      git(root, "switch", "-q", "main");
+
+      // The first merge, and its release: on its push, npm can have 0.1.4 already, from the release of the same push
+      const start = git(root, "rev-parse", "HEAD").trim();
+      git(root, "merge", "-q", "--no-ff", "-m", "merge first", "first");
+      expect(check(root, published, { env: pushed(start) }).status).toBe("pass");
+      // A version that npm had before the push breaks
+      expect(check(root, { "@x/a": { "0.1.3": after(-86_400), "0.1.4": after(-60) } }, { env: pushed(start) }).breaks.map((item) => item.message)).toEqual([
+        "@x/a: the change sets the version 0.1.4, but 0.1.4 is on npm already. Raise the version (SemVer) in a pull request.",
+      ]);
+
+      // The second merge: the version stays 0.1.4, which npm has, so the second change is not released
+      const middle = git(root, "rev-parse", "HEAD").trim();
+      git(root, "merge", "-q", "--no-ff", "-m", "merge second", "second");
+      expect(check(root, published, { env: pushed(middle) }).breaks.map((item) => item.message)).toEqual([
+        "@x/a: the change is not released, because 0.1.4 is on npm already. Raise the version (SemVer) in a pull request. The change ships packages/a/src/second.ts.",
+      ]);
+
+      // A push to another branch, a new branch and a commit that the checkout does not have skip
+      expect(check(root, published, { env: pushed(middle, "refs/heads/other") }).status).toBe("skipped");
+      expect(check(root, published, { env: pushed("0".repeat(40)) }).note).toBe("the push has no commit before it");
+      expect(check(root, published, { env: pushed("f".repeat(40)) }).note).toMatch(/the checkout does not have f+, the commit before the push/);
+    });
+
+    it("examines the root package of a repository of one package, without the files of the repository tools", () => {
+      const strict = { conventions: { rules: { "unreleased-change": { versionEachChange: true, reason: "each pull request sets its version" } } } };
+      const root = fixture({ "package.json": { name: "one", version: "2.0.0", ...strict }, "src/index.ts": "1\n", "scripts/tool.ts": "1\n" });
+      commitAll(root);
+      git(root, "tag", "base");
+      change(root, { "scripts/tool.ts": "2\n", ".github/workflows/ci.yml": "on: push\n", "CHANGELOG.md": "x\n" });
+      expect(check(root, { one: ["2.0.0"] }).status).toBe("pass");
+      change(root, { "src/index.ts": "2\n" });
+      expect(check(root, { one: ["2.0.0"] }).breaks.map((item) => item.file)).toEqual(["package.json"]);
+    });
+  });
+
+  describe("without versionEachChange (a repository that collects changes)", () => {
+    it("passes a feature pull request with no version change, and does not ask the registry", () => {
+      const root = repo("1.0.0", {}, {}, false);
+      git(root, "switch", "-q", "-c", "pr");
+      change(root, { "packages/a/src/index.ts": "export const a = 2;\n" });
+      // main gets a version pull request after the branch starts: the merge commit has its version, but the change does not set it
+      mergeRef(root, { "packages/a/package.json": { name: "@x/a", version: "1.1.0" } });
+      const fake = registry({ "@x/a": ["1.0.0", "1.1.0"] });
+      expect(rule(root, "unreleased-change", { rules: [unreleasedChangeRule(fake.lookup)], env: { GITHUB_EVENT_NAME: "pull_request" } }).status).toBe("pass");
+      expect(fake.asked).toEqual([]);
+    });
+
+    it("breaks a pull request that sets a version that npm has, also when main has that version", () => {
+      const root = repo("1.0.0", {}, {}, false);
+      git(root, "switch", "-q", "-c", "pr");
+      change(root, { "packages/a/package.json": { name: "@x/a", version: "1.1.0" } });
+      // Another pull request set 1.1.0 first, and its release published it
+      mergeRef(root, { "packages/a/src/index.ts": "export const a = 3;\n", "packages/a/package.json": { name: "@x/a", version: "1.1.0" } });
+      const env = { GITHUB_EVENT_NAME: "pull_request" };
+      expect(check(root, { "@x/a": ["1.0.0", "1.1.0"] }, { env }).breaks.map((item) => `${item.file}: ${item.message}`)).toEqual([
+        "packages/a/package.json: @x/a: the change sets the version 1.1.0, but 1.1.0 is on npm already. Raise the version (SemVer) in a pull request.",
+      ]);
+      expect(check(root, { "@x/a": ["1.0.0"] }, { env }).status).toBe("pass");
+    });
+
+    it("passes the pushes of a repository that collects changes, and breaks a push that sets a version that npm had", () => {
+      const root = repo("1.0.0", {}, {}, false);
+      const first = git(root, "rev-parse", "HEAD").trim();
+      change(root, { "packages/a/src/index.ts": "export const a = 2;\n" });
+      const second = git(root, "rev-parse", "HEAD").trim();
+      // A feature merge: no version change, and npm has 1.0.0
+      expect(check(root, { "@x/a": { "1.0.0": after(-86_400) } }, { env: pushed(first) }).status).toBe("pass");
+      // The version merge: its own release publishes 1.1.0 after the push
+      change(root, { "packages/a/package.json": { name: "@x/a", version: "1.1.0" } });
+      expect(check(root, { "@x/a": { "1.0.0": after(-86_400), "1.1.0": after(120) } }, { env: pushed(second) }).status).toBe("pass");
+      expect(check(root, { "@x/a": { "1.0.0": after(-86_400), "1.1.0": after(-120) } }, { env: pushed(second) }).breaks.map((item) => item.message)).toEqual([
+        "@x/a: the change sets the version 1.1.0, but 1.1.0 is on npm already. Raise the version (SemVer) in a pull request.",
+      ]);
+      // With no publish time, the rule cannot tell the release of the push from an older publish
+      expect(check(root, { "@x/a": ["1.0.0", "1.1.0"] }, { env: pushed(second) }).note).toBe("the rule cannot tell if npm had @x/a@1.1.0 before the push");
+    });
   });
 });
