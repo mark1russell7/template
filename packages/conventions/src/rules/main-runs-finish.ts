@@ -30,8 +30,8 @@ export const mainRunsFinish: Rule = {
     "On 2026-11-03 the next merge cancelled the CI run of a commit on main, so the main check of that commit had no result. A shared concurrency group also cancelled a bench run on main, and its claim had no measurement. The CI workflow of the template had `cancel-in-progress: true`, and each repository copied it.",
   fix: `Set \`cancel-in-progress: ${PULL_REQUEST_ONLY}\`. A newer run of main then waits for the older run, and GitHub keeps only the newest run that waits.`,
   sources: [
-    { repo: "fleet", rule: "main-check", doc: "the algebra notes of 2026-11-03: a cancelled main run made the check of the head void, and a bench run was cancelled" },
-    { repo: "template", rule: "runner-budget", doc: "the fix of runner-budget already writes this value" },
+    { repo: "fleet", rule: "main-runs-finish", doc: "docs/STRATEGY.md (2026-11-03, a run of main ends)" },
+    { repo: "algebra", rule: "main-check", doc: "the A2 and A5 results (2026-11-03): a cancelled main run, and a cancelled bench run" },
   ],
   options: {},
   check(context) {
