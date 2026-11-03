@@ -53,6 +53,31 @@ type Mode = { readonly kind: "template" } | { readonly kind: "part"; readonly de
 
 const BLOCK_HEADER = /^(?:export\s+)?(?:default\s+)?(?:declare\s+)?(?:abstract\s+class|class|interface|const\s+enum|enum|namespace|module|global)\b/;
 
+// A name of the ECMAScript grammar: a start letter, then continue letters. The letters include the letters that are not ASCII.
+const NAME_START = String.raw`[\p{ID_Start}$_]`;
+const NAME_PART = String.raw`[\p{ID_Continue}$‌‍]`;
+const NAME = `${NAME_START}${NAME_PART}*`;
+
+/** This tag makes a pattern with the flag `u` from raw text. The `\p{...}` classes of a name need that flag. */
+function unicode(strings: TemplateStringsArray, ...parts: string[]): RegExp {
+  return new RegExp(String.raw({ raw: strings.raw }, ...parts), "u");
+}
+
+const SPECIFIER = unicode`^(type\s+)?(${NAME})(?:\s+as\s+(${NAME}|"[^"]*"))?$`;
+const PRIVATE_MEMBER = unicode`^\s+(?:private\s+(?:static\s+)?(?:readonly\s+)?${NAME}\??;|#private;)$`;
+const DEFAULT_IMPORT = unicode`^(${NAME})\s*(?:,|$)`;
+const NAMESPACE_IMPORT = unicode`^\* as (${NAME})$`;
+const IMPORT_REQUIRE = unicode`^(export )?import (type )?(${NAME}) = require\(["']([^"']+)["']\);?$`;
+const IMPORT_ALIAS = unicode`^(export )?import (${NAME}) = ${NAME}(?:\.${NAME})*;?$`;
+const NAMESPACE_EXPORT = unicode`^export (type )?\* as (${NAME}) from ["']([^"']+)["'];?$`;
+const EXPORT_ASSIGNMENT = unicode`^export = (${NAME});?$`;
+const EXPORT_AS_NAMESPACE = unicode`^export as namespace (${NAME});?$`;
+const DEFAULT_NAME = unicode`^export default (${NAME});?$`;
+// The negative lookahead stops `classX` as a keyword. The name is empty for a default function or class without a name.
+const NAMELESS_DEFAULT = unicode`^export default (?:declare )?(?:abstract )?(?:class|function\*?)(?!${NAME_PART})\s*((?:${NAME})?)`;
+const DECLARATOR = unicode`^\s*(${NAME})`;
+const DECLARATION = unicode`^(export )?(default )?(?:declare )?(?:abstract )?(?:const (?=enum))?(?:function|class|interface|type|enum|namespace|module) (${NAME})`;
+
 /**
  * This function splits the text of a declaration file into its top-level statements. It removes the
  * comments, the blank lines and the spaces at the ends of the lines.
@@ -181,7 +206,7 @@ function specifiersOf(list: string, typeOnly: boolean): { imported: string; expo
     .map((part) => part.trim())
     .filter((part) => part !== "")
     .map((part) => {
-      const match = /^(type\s+)?([\w$]+)(?:\s+as\s+([\w$]+|"[^"]*"))?$/.exec(part);
+      const match = SPECIFIER.exec(part);
       if (!match?.[2]) throw new Error(`An export list part that the report does not know: ${part}`);
       return { imported: match[2], exported: match[3] ?? match[2], typeOnly: typeOnly || match[1] !== undefined };
     });
@@ -191,7 +216,7 @@ function specifiersOf(list: string, typeOnly: boolean): { imported: string; expo
 function withoutPrivateMembers(statement: string): string {
   return statement
     .split("\n")
-    .filter((line) => !/^\s+(?:private\s+(?:static\s+)?(?:readonly\s+)?[\w$]+\??;|#private;)$/.test(line))
+    .filter((line) => !PRIVATE_MEMBER.test(line))
     .join("\n");
 }
 
@@ -228,12 +253,12 @@ export function parseDeclarations(source: string, file = "<text>"): DeclarationI
       const from = group(match, 3);
       info.references.add(from);
       let clause = group(match, 2).trim();
-      const defaultName = /^([\w$]+)\s*(?:,|$)/.exec(clause);
+      const defaultName = DEFAULT_IMPORT.exec(clause);
       if (defaultName) {
         info.imports.set(group(defaultName, 1), { from, imported: "default", typeOnly });
         clause = clause.slice(defaultName[0].length).trim();
       }
-      const namespace = /^\* as ([\w$]+)$/.exec(clause);
+      const namespace = NAMESPACE_IMPORT.exec(clause);
       if (namespace) info.imports.set(group(namespace, 1), { from, imported: "*", typeOnly });
       const braces = /^\{(.*)\}$/.exec(clause);
       if (braces) {
@@ -248,7 +273,7 @@ export function parseDeclarations(source: string, file = "<text>"): DeclarationI
       continue;
     }
     // `import x = require("y")`: the name is the `export =` of the module
-    if ((match = /^(export )?import (type )?([\w$]+) = require\(["']([^"']+)["']\);?$/.exec(flat))) {
+    if ((match = IMPORT_REQUIRE.exec(flat))) {
       const name = group(match, 3);
       info.references.add(group(match, 4));
       info.imports.set(name, { from: group(match, 4), imported: "export=", typeOnly: match[2] !== undefined });
@@ -256,13 +281,13 @@ export function parseDeclarations(source: string, file = "<text>"): DeclarationI
       continue;
     }
     // `import A = N.B`: an alias of a name of a namespace
-    if ((match = /^(export )?import ([\w$]+) = [\w$.]+;?$/.exec(flat))) {
+    if ((match = IMPORT_ALIAS.exec(flat))) {
       const name = group(match, 2);
       addLocal(name, statement);
       if (match[1] !== undefined) info.exported.set(name, { local: name, typeOnly: false });
       continue;
     }
-    if ((match = /^export (type )?\* as ([\w$]+) from ["']([^"']+)["'];?$/.exec(flat))) {
+    if ((match = NAMESPACE_EXPORT.exec(flat))) {
       info.references.add(group(match, 3));
       info.namespaces.push({ name: group(match, 2), from: group(match, 3), typeOnly: match[1] !== undefined });
       continue;
@@ -285,7 +310,7 @@ export function parseDeclarations(source: string, file = "<text>"): DeclarationI
       continue;
     }
     // `export = X`: the module is the value X (CommonJS)
-    if ((match = /^export = ([\w$]+);?$/.exec(flat))) {
+    if ((match = EXPORT_ASSIGNMENT.exec(flat))) {
       info.exported.set("export=", { local: group(match, 1), typeOnly: false });
       continue;
     }
@@ -302,17 +327,17 @@ export function parseDeclarations(source: string, file = "<text>"): DeclarationI
       addAmbient("declare global", statement);
       continue;
     }
-    if ((match = /^export as namespace ([\w$]+);?$/.exec(flat))) {
+    if ((match = EXPORT_AS_NAMESPACE.exec(flat))) {
       addAmbient(`export as namespace ${group(match, 1)}`, statement);
       continue;
     }
     // `export default x`: the default export is a name of the module
-    if ((match = /^export default ([\w$]+);?$/.exec(flat))) {
+    if ((match = DEFAULT_NAME.exec(flat))) {
       info.exported.set("default", { local: group(match, 1), typeOnly: false });
       continue;
     }
     // A default function or class without a name
-    match = /^export default (?:declare )?(?:abstract )?(?:class|function\*?)(?![\w$])\s*([\w$]*)/.exec(flat);
+    match = NAMELESS_DEFAULT.exec(flat);
     if (match && (match[1] === "" || match[1] === "extends" || match[1] === "implements")) {
       addLocal("default", withoutPrivateMembers(statement));
       info.exported.set("default", { local: "default", typeOnly: false });
@@ -322,14 +347,14 @@ export function parseDeclarations(source: string, file = "<text>"): DeclarationI
     if ((match = /^(export )?(?:declare )?(?:const|let|var) (?!enum\b)(.*?);?$/.exec(flat))) {
       const exported = match[1] !== undefined;
       for (const part of splitTopLevel(group(match, 2))) {
-        const name = /^\s*([\w$]+)/.exec(part);
+        const name = DECLARATOR.exec(part);
         if (!name) throw new Error(`A declaration that the report does not know, in ${file}:\n${statement}`);
         addLocal(group(name, 1), statement);
         if (exported) info.exported.set(group(name, 1), { local: group(name, 1), typeOnly: false });
       }
       continue;
     }
-    match = /^(export )?(default )?(?:declare )?(?:abstract )?(?:const (?=enum))?(?:function|class|interface|type|enum|namespace|module) ([\w$]+)/.exec(flat);
+    match = DECLARATION.exec(flat);
     if (match) {
       const name = group(match, 3);
       addLocal(name, withoutPrivateMembers(statement));
