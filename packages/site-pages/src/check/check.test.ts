@@ -60,6 +60,7 @@ beforeAll(() => {
         `<nav style="overflow-x: auto; ${NOWRAP}">${LONG}</nav>`,
         `<div data-overflow-ok style="overflow-x: auto"><table style="min-width: 46rem"><tr><td>${LONG}</td></tr></table></div>`,
         `<div style="overflow-x: auto"><table data-overflow-ok style="min-width: 46rem"><tr><td>${LONG}</td></tr></table></div>`,
+        `<div class="scroll-cue" style="overflow-x: auto"><table style="min-width: 46rem"><tr><td>${LONG}</td></tr></table></div>`,
         `<div data-overflow-ok style="overflow: hidden"><div style="${NOWRAP}">${LONG}</div></div>`,
         `<p id="ellipsis" style="overflow: hidden; text-overflow: ellipsis; ${NOWRAP}">${LONG}</p>`,
         `<div style="overflow: hidden"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); ${NOWRAP}">${LONG}</span></div>`,
@@ -135,7 +136,7 @@ describe("cutProblems", () => {
   const cut = (kind: Cut["kind"]): Cut => ({ kind, box: "div.card", element: "table.api", scrollWidth: 736, clientWidth: 302, text: "runMigrations" });
 
   it("tells the element, the box, the widths, the width of the view and the two fixes", () => {
-    expect(cutProblems([cut("table")], 360)).toEqual([`a table goes out of view at 360 px: table.api in div.card: content of 736 px in a box of 302 px, "runMigrations". Make the table fit, or add data-overflow-ok to the box.`]);
+    expect(cutProblems([cut("table")], 360)).toEqual([`a table goes out of view at 360 px: table.api in div.card: content of 736 px in a box of 302 px, "runMigrations". Make the table fit, give the box the class scroll-cue, or add data-overflow-ok to the box.`]);
     expect(cutProblems([cut("clip")], 400)).toEqual([`a box cuts text at 400 px: table.api in div.card: content of 736 px in a box of 302 px, "runMigrations". Make the content fit, or add data-overflow-ok to the box.`]);
   });
   it("reports a clip at each width, and a table in a scroller only on a phone", () => {

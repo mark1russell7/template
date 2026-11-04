@@ -74,13 +74,14 @@ A view fails for each of these problems:
 The text of the problem has the element, the box, the two widths, the width of the view and the start of the text. For example:
 
 ```text
-a table goes out of view at 360 px: table.api-table in div.table-scroll: content of 736 px in a box of 344 px, "Note". Make the table fit, or add data-overflow-ok to the box.
+a table goes out of view at 360 px: table.api-table in div.table-scroll: content of 736 px in a box of 344 px, "Note". Make the table fit, give the box the class scroll-cue, or add data-overflow-ok to the box.
 ```
 
 The rule for a box that scrolls examines only tables, for these reasons:
 
 - A code block, a hex view, a row of tabs and a carousel are meant to scroll, and a visitor sees that they scroll.
 - A table in a box that scrolls looks complete on a phone, with no scroll bar. The visitor does not see the last columns.
+- The class `scroll-cue` shows a shade at the edge of the box, so a table in such a box does not count. The shade shows only when the cells have no background color of their own.
 - A false alarm costs more than a miss, because each false alarm needs an exception in the site.
 
 A table is `table`, `role="table"` or `role="grid"`. A desktop view has a scroll bar, so a table in a box that scrolls is not a problem there. `report.json` still shows the table in `measure.cut`.
@@ -102,6 +103,8 @@ The attribute `data-overflow-ok` marks a box that is meant to scroll or to clip.
 ```
 
 Use the attribute for a data table with many columns, a marquee or a slider. For an API table, the better fix is a layout that fits the phone.
+
+A passing check proves what it asserts, not the page. Read the screenshots at full size before a merge. When a read finds a fault that a script can find, add it to this check.
 
 The probe is a JavaScript file or a TypeScript file (`.ts`, `.mts` or `.cts`). Its code is the body of an async function. These functions are available:
 

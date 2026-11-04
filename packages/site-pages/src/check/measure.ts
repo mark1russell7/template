@@ -58,6 +58,7 @@ export interface Measure {
  * A box that clips counts for each text, because a visitor cannot reach that text. These texts do not count:
  * - a text in a box with `text-overflow` other than `clip` (a person chose the ellipsis),
  * - a text in an element with `data-overflow-ok`, or in that element itself (a person chose the overflow),
+ * - a text in a box with the class `scroll-cue` that scrolls (a shade shows the visitor that it scrolls),
  * - a text in `.sr`, `.sr-only`, `.visually-hidden`, `.skip`, `[aria-hidden="true"]`, `select`, `textarea` or `svg`,
  * - a text in a fixed element, which the box does not clip,
  * - a text that is not visible, or with an element around it of 1 px or less or with `opacity: 0`.
@@ -127,7 +128,7 @@ export const MEASURE = `(() => {
     range.selectNodeContents(t);
     const end = Math.max(...[...range.getClientRects()].filter((r) => r.width > 0).map((r) => r.right));
     if (end <= left + box.clientWidth + 1) continue;
-    if (e.closest("[data-overflow-ok]") || !shown(e)) continue;
+    if (e.closest("[data-overflow-ok]") || (scrolls && box.classList.contains("scroll-cue")) || !shown(e)) continue;
     cuts.set(box, { kind: scrolls ? "table" : "clip", box: name(box), element: name(scrolls ? table : e), scrollWidth: Math.max(box.scrollWidth, Math.ceil(end - left)), clientWidth: box.clientWidth, text: t.data.trim().replace(/\\s+/g, " ").slice(0, 40) });
   }
   return {
