@@ -316,6 +316,9 @@ jobs:
 - The check opens each page of `site-check-pages` (default: the home) at the widths 360, 400 and 1280, in light and dark.
 - A page fails when it is wider than the screen, or an element goes past the right edge.
 - A page also fails when it shows no text, or a text area hides its text.
+- A page also fails when a box with `overflow-x: hidden` or `clip` cuts text.
+- A page also fails when a table in a box that scrolls goes out of view at a phone width.
+- The attribute `data-overflow-ok` marks a box that is meant to scroll or to clip. The `README.md` of `site-pages` tells the rule and what does not count.
 - A console error, an exception or a failed request also fails the page.
 - `site-check-probe` is a JavaScript or TypeScript file that tests the interactive core of the home. Its checks run at each width. The check removes the types of a `.ts` file, so the site needs no build step for its probe. `site-pages check --help` tells its functions.
 - The check uses the Chromium of `playwright-core` at `site-check-playwright`, from the action `setup-playwright`. The artifact `site-check` has the screenshots and `report.json`.
