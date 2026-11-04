@@ -1,5 +1,7 @@
 /* The shared cue of a box that scrolls sideways. The workspace and npm give it by the same name. */
 @import "@mark1russell7/site-pages/scroll-cue.css";
+/* The style of the response explorer. */
+@import "@mark1russell7/site-pages/explorer.css";
 
 :root {
   --bg: #f6f4ef;

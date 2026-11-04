@@ -69,6 +69,34 @@ check("site-check off: the step Site check does not run", await until(() => step
 click('[data-event="schedule"]');
 check("a scheduled build runs the step of green-main", await until(() => step("Shared actions (green-main)").includes("runs")), step("Shared actions (green-main)"));
 
+// The response explorer: a curve, a surface, panels, and a dimension of one strategy only.
+const rx = (selector: string): Element[] => $$(`#response-explorer ${selector}`);
+const rxText = (selector: string): string => $(`#response-explorer ${selector}`)?.textContent ?? "";
+const rxBox = (key: string): HTMLSelectElement => field(`#response-explorer [data-key="${key}"]`) as HTMLSelectElement;
+const rxChoose = (key: string, value: string): void => {
+  const box = rxBox(key);
+  box.value = value;
+  box.dispatchEvent(new Event("change", { bubbles: true }));
+};
+const rxChip = (text: string): HTMLInputElement | null => (rx(".rx-chip").find((chip) => chip.textContent === text)?.querySelector("input") ?? null) as HTMLInputElement | null;
+const rxCells = (): number => rx("rect").filter((cell) => /\brx-h\d\b/.test(cell.getAttribute("class") ?? "")).length;
+check("the explorer draws a band and the measured points", await until(() => rx("path.rx-band").length === 1 && rx("circle.rx-dot").length > 0), `${rx("circle.rx-dot").length} points`);
+check("the explorer tells the held-out error and the folds", /\b5 folds\b/.test(rxText(".rx-error")), rxText(".rx-error"));
+const rxOptions = [...rxBox("x").options];
+check("the explorer labels a dimension that does not apply", rxOptions.some((option) => option.disabled && (option.textContent ?? "").includes("only when Strategy is maxrects")), rxOptions.map((option) => option.textContent).join(", "));
+rxChoose("y", "spread");
+check("the explorer draws a surface over two dimensions", await until(() => rxCells() > 100), `${rxCells()} cells`);
+rxChoose("y", "");
+rxChoose("facet", "strategy");
+check("the explorer draws one panel for each strategy", await until(() => rx("figure.rx-panel").length === 5), `${rx("figure.rx-panel").length} panels`);
+rxChoose("facet", "");
+const rxMaxrects = rxChip("maxrects");
+if (rxMaxrects !== null) click(rxMaxrects);
+check("the strategy maxrects opens its rule", await until(() => rxChip("cp")?.disabled === false), rxChip("cp")?.disabled);
+const rxSkyline = rxChip("skyline");
+if (rxSkyline !== null) click(rxSkyline);
+check("the strategy skyline closes the rule of maxrects", await until(() => rxChip("cp")?.disabled === true), rxChip("cp")?.disabled);
+
 const before = document.documentElement.dataset["theme"] ?? "";
 click("#theme");
 check("the theme button changes the theme", (document.documentElement.dataset["theme"] ?? "") !== before, document.documentElement.dataset["theme"]);

@@ -413,6 +413,41 @@ The file sets no look for the content. Buttons, cards, code and tables stay in t
 
 A site with its own look does not import `shell.css`. It uses only the plugin and `showBuild`, or nothing from this section.
 
+## The response explorer
+
+The entry `@mark1russell7/site-pages/explorer` shows a measured response in the browser. A visitor chooses a measure, varies one or two dimensions, and holds or facets the others. The view shows the measured points, the fitted curve or surface, and its held-out error in plain words. The record has the format `response-records/1` of `@mark1russell7/rigor-statistics`.
+
+```ts
+import { mountExplorer } from "@mark1russell7/site-pages/explorer";
+import "@mark1russell7/site-pages/explorer.css";
+import record from "./record.json";
+
+mountExplorer(document.getElementById("chart")!, record, { initial: { x: "boxes" } });
+```
+
+| Argument | Use |
+| --- | --- |
+| `host` | The element for the explorer |
+| `recordJson` | The record, as JSON text or as parsed data |
+| `options.initial` | The first measure, axes, panels and held values. The explorer corrects a value that does not apply. |
+| `options.budgetMs` | The time limit of one surface, in milliseconds. The default is 50. |
+| `options.now` | The clock, for tests |
+
+`mountExplorer` gives a handle: `state()` reads the current state, and `destroy()` removes the view.
+
+The explorer obeys these rules:
+
+- **A bad record.** The explorer reads a record only through `parseResponseRecord`. It shows each fault with its path, and it does not throw.
+- **Conditions.** A dimension with `when` has its parent at a level inside `when`. The controls disable a choice that a view refuses, and they tell why.
+- **The band.** The band shows `low` to `high`. It fades with the distance from the nearest measured point.
+- **The time of a surface.** The field `nearest` reads each point at each place. So `planSteps` bounds the grid from the point count before the call. After a surface that passes the budget, `nextStepsCap` makes the next grid smaller.
+- **A table model.** A table model has no smooth surface, so the view shows cells.
+- **No model.** A measure with no valid model shows only the points, and the view says so.
+
+The view draws SVG, and it needs no framework, no font and no script from another server. It reads the tokens of a site when they exist, and it has its own colors for the light and the dark scheme. The keyboard reaches each control, and the arrow keys move a cursor on a chart. "Show the numbers" opens a table of the values.
+
+The entry also exports the pure core, for a site with its own view: `settle`, `viewOf`, `axisChoices`, `facetChoices`, `holdControls`, `setMeasure`, `setAxis`, `setFacet`, `setHold`, `planSteps`, `nextStepsCap`, `openRecord` and `numberTable`.
+
 ## A GitHub Pages workflow
 
 This workflow builds the site, adds the two pages, and deploys. It also starts every 3 hours, so the status page stays current without a push. A scheduled run builds the newest commit of `main` that passed CI.

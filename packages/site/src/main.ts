@@ -15,6 +15,11 @@ const $ = <T extends HTMLElement>(id: string): T => {
   return el as T;
 };
 
+// The response explorer and its record load after the first paint, so the rest of the page does not wait for them.
+void Promise.all([import("@mark1russell7/site-pages/explorer"), import("./packing-record.json")]).then(([explorer, record]) => {
+  explorer.mountExplorer($("response-explorer"), record.default, { initial: { x: "boxes", hold: { strategy: "skyline" } } });
+});
+
 /** This function makes an element with some attributes and children. */
 function h(tag: string, attrs: Record<string, string | boolean | undefined> = {}, ...children: (Node | string)[]): HTMLElement {
   const el = document.createElement(tag);
