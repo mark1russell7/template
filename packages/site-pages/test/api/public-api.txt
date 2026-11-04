@@ -384,6 +384,7 @@ interface KpiMeasure {
   id: string;
   value: number;
   unit?: string;
+  at?: string;
 }
 
 ### build/chunks/kpi.d.ts#Link

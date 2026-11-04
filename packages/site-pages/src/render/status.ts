@@ -202,20 +202,25 @@ function openWork(data: StatusBoardData): string {
   );
 }
 
-/** This function renders the measures of `kpi.json`: their values, the date of the data and the engines that made it. */
+/**
+ * This function renders the measures of `kpi.json`: their values, the date of the data and the engines that made it.
+ * A measure with its own date shows that date in a column, so that the line above the table stays true.
+ */
 function measures(data: StatusBoardData): string {
   const { kpi } = data;
   if (kpi === undefined) return "";
+  const ownDates = kpi.measures.some((measure) => measure.at !== undefined);
+  const dateCell = (at: string): string => (ownDates ? `<td><time datetime="${escapeHtml(at)}">${escapeHtml(longDate(at))}</time></td>` : "");
   const rows = kpi.measures
-    .map((measure) => `<tr><th scope="row">${escapeHtml(measure.id)}</th><td>${measure.value}${measure.unit === undefined ? "" : ` ${escapeHtml(measure.unit)}`}</td></tr>`)
+    .map((measure) => `<tr><th scope="row">${escapeHtml(measure.id)}</th><td>${measure.value}${measure.unit === undefined ? "" : ` ${escapeHtml(measure.unit)}`}</td>${dateCell(measure.at ?? kpi.at)}</tr>`)
     .join("");
   const engines = kpi.engines ?? [];
   const commit = link(`https://github.com/${data.source.github}/commit/${kpi.commit}`, `<code>${kpi.commit.slice(0, 7)}</code>`);
   return (
     `<section class="sp-section" aria-labelledby="measures"><h2 id="measures">Measures</h2>` +
-    `<p>The data of these numbers is from <time datetime="${escapeHtml(kpi.at)}" data-sp-data-date>${escapeHtml(longDate(kpi.at))}</time>. The build of ${commit} published them.</p>` +
+    `<p>${ownDates ? "The data date of the file is" : "The data of these numbers is from"} <time datetime="${escapeHtml(kpi.at)}" data-sp-data-date>${escapeHtml(longDate(kpi.at))}</time>. The build of ${commit} published them.</p>` +
     (engines.length > 0 ? `<p>The engines of the data: ${listText(engines.map((engine) => `<code>${escapeHtml(engine.name)}</code> ${escapeHtml(engine.version)}`))}.</p>` : "") +
-    `<div class="sp-table-box" tabindex="0" role="region" aria-label="Measures"><table class="sp-table"><thead><tr><th scope="col">Measure</th><th scope="col">Value</th></tr></thead><tbody>${rows}</tbody></table></div>` +
+    `<div class="sp-table-box" tabindex="0" role="region" aria-label="Measures"><table class="sp-table"><thead><tr><th scope="col">Measure</th><th scope="col">Value</th>${ownDates ? '<th scope="col">Data date</th>' : ""}</tr></thead><tbody>${rows}</tbody></table></div>` +
     "</section>"
   );
 }

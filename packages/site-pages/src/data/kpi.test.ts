@@ -30,6 +30,13 @@ describe("kpiFile", () => {
     expect(file.measures).toEqual([{ id: "cases", value: 3 }]);
   });
 
+  it("keeps the time of a measure, after its unit", () => {
+    const measures = [{ at: "2026-11-04T08:00:00Z", unit: "cases", value: 3, id: "cases" }];
+    const [measure] = kpiFile({ ...INPUT, measures }, NOW).measures;
+    expect(measure).toEqual({ id: "cases", value: 3, unit: "cases", at: "2026-11-04T08:00:00Z" });
+    expect(Object.keys(measure ?? {})).toEqual(["id", "value", "unit", "at"]);
+  });
+
   it("throws an error with each fault", () => {
     const error = (() => {
       try {
@@ -56,6 +63,16 @@ describe("kpiProblems", () => {
     expect(faults({ at: "2026-13-40T12:00:00Z" })).toHaveLength(1);
     expect(faults({ at: "2026-11-04" })).toHaveLength(1);
     expect(faults({ at: "2026-11-04T12:06:00Z" })[0]).toContain("after the time of the check");
+  });
+
+  it("accepts a correct time on a measure, and a measure with no time", () => {
+    expect(faults({ measures: [{ id: "cases", value: 1, at: "2026-11-04T08:00Z" }, { id: "drift", value: 2 }] })).toEqual([]);
+  });
+
+  it("refuses a time on a measure with the rules of the time of the file", () => {
+    expect(faults({ measures: [{ id: "cases", value: 1, at: "2026-11-04" }] })[0]).toContain("The field at of measure 0");
+    expect(faults({ measures: [{ id: "cases", value: 1, at: 3 }] })).toHaveLength(1);
+    expect(faults({ measures: [{ id: "cases", value: 1, at: "2026-11-04T12:06:00Z" }] })[0]).toContain("after the time of the check");
   });
 
   it("accepts a small difference of the clocks", () => {
@@ -99,6 +116,11 @@ describe("readKpi", () => {
   it("reads the text that kpiText writes", () => {
     const file = kpiFile({ ...INPUT, engines: [{ name: "a", version: "1.0.0" }] }, NOW);
     expect(readKpi(kpiText(file), NOW)).toEqual(file);
+  });
+
+  it("keeps the time of a measure", () => {
+    const file = kpiFile({ ...INPUT, measures: [{ id: "cases", value: 1, at: "2026-11-04T08:00:00Z" }] }, NOW);
+    expect(readKpi(kpiText(file), NOW).measures[0]?.at).toBe("2026-11-04T08:00:00Z");
   });
 
   it("refuses a text that is not JSON and a file of a new format", () => {
