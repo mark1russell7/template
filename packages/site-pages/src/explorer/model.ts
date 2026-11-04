@@ -35,7 +35,8 @@ export const MAX_STEPS = 33;
 export const MIN_STEPS = 5;
 /**
  * The largest number of point reads of one view. The field `nearest` of each place reads each point, so the cost of a
- * view is its number of places times the number of points. This number keeps a view under approximately 50 ms on a slow phone.
+ * view is its number of places times the number of points. This number is a first bound, not a measured time.
+ * `SURFACE_BUDGET_MS` corrects the grid when a surface takes too long on the device.
  */
 export const READ_BUDGET = 400_000;
 /** The time of one surface in milliseconds. A longer surface gives a smaller grid for the next surface. */
