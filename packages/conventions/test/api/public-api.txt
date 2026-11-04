@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 137 names
+## . (build/index.d.ts): 138 names
 
 ACTIONS_COMMIT: build/index.d.ts#ACTIONS_COMMIT
 type AuditSource: build/index.d.ts#AuditSource
@@ -57,6 +57,7 @@ type WorkflowInput: build/index.d.ts#WorkflowInput
 type WorkflowJob: build/index.d.ts#WorkflowJob
 type WorkflowStep: build/index.d.ts#WorkflowStep
 annotations: build/index.d.ts#annotations
+apiReportScript: build/index.d.ts#apiReportScript
 authorOf: build/index.d.ts#authorOf
 blockHash: build/index.d.ts#blockHash
 changelogSection: build/index.d.ts#changelogSection
@@ -429,6 +430,9 @@ interface WorkflowStep {
 
 ### build/index.d.ts#annotations
 export declare function annotations(result: CheckResult): string;
+
+### build/index.d.ts#apiReportScript
+export declare const apiReportScript: Rule;
 
 ### build/index.d.ts#authorOf
 export declare function authorOf(author: unknown): string | undefined;
