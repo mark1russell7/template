@@ -259,44 +259,16 @@ jobs:
           css: ${{ inputs.css }}
           site-name: ${{ inputs.site-name }}
           data-only: ${{ inputs.data-only }}
-      # The check uses the Chromium of a pinned Playwright, not the Chrome of the runner image, so each run
-      # checks with the same browser. playwright-core goes into its own folder, as the tool of site-pages does.
-      - name: Playwright for the site check
-        if: inputs.site-check
-        shell: bash
-        env:
-          VERSION: ${{ inputs.site-check-playwright }}
-        run: npm install --prefix "$RUNNER_TEMP/site-check-playwright" --no-save --no-package-lock --no-audit --no-fund "playwright-core@$VERSION"
-      - if: inputs.site-check
-        uses: ./.shared-actions/.github/actions/setup-playwright
-        with:
-          command: ${{ runner.temp }}/site-check-playwright/node_modules/.bin/playwright-core
-          browsers: chromium
       - name: Site check
         if: inputs.site-check
-        shell: bash
-        env:
-          OUT: ${{ inputs.out }}
-          BASE: ${{ inputs.base }}
-          PAGES: ${{ inputs.site-check-pages }}
-          WIDTHS: ${{ inputs.site-check-widths }}
-          PROBE: ${{ inputs.site-check-probe }}
-        run: |
-          args=(--out "$OUT" --repo "$GITHUB_REPOSITORY" --shots "$RUNNER_TEMP/site-check")
-          [ -z "$BASE" ] || args+=(--base "$BASE")
-          [ -z "$PAGES" ] || args+=(--pages "$PAGES")
-          [ -z "$WIDTHS" ] || args+=(--widths "$WIDTHS")
-          [ -z "$PROBE" ] || args+=(--probe "$PROBE")
-          node .shared-actions/packages/site-pages/src/check/main.ts "${args[@]}"
-      # The screenshots, report.json and summary.md, also of a failed check, for a review of the site.
-      - name: Screenshots of the site check
-        if: always() && inputs.site-check
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: ./.shared-actions/.github/actions/site-check
         with:
-          name: site-check
-          path: ${{ runner.temp }}/site-check
-          if-no-files-found: warn
-          retention-days: 14
+          out: ${{ inputs.out }}
+          base: ${{ inputs.base }}
+          site-check-pages: ${{ inputs.site-check-pages }}
+          site-check-widths: ${{ inputs.site-check-widths }}
+          site-check-probe: ${{ inputs.site-check-probe }}
+          site-check-playwright: ${{ inputs.site-check-playwright }}
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: ${{ inputs.out }}
