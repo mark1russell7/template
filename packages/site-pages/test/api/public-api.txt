@@ -570,7 +570,7 @@ export declare const DATA_STAMP_SCHEMA = "data-stamp/1";
 export declare const DEFAULT_CHANGELOGS: readonly string[];
 
 ### build/index.d.ts#DataRun
-export interface DataRun {
+interface DataRun {
   readonly id: string;
   readonly url: string;
   readonly date: string;
@@ -578,13 +578,13 @@ export interface DataRun {
 }
 
 ### build/index.d.ts#DataStamps
-export interface DataStamps {
+interface DataStamps {
   readonly schema: typeof DATA_STAMP_SCHEMA;
   readonly pages: readonly PageStamp[];
 }
 
 ### build/index.d.ts#DataStampsParse
-export type DataStampsParse = {
+type DataStampsParse = {
   readonly ok: true;
   readonly stamps: DataStamps;
 } | {
@@ -593,13 +593,13 @@ export type DataStampsParse = {
 };
 
 ### build/index.d.ts#FreshnessCheck
-export interface FreshnessCheck {
+interface FreshnessCheck {
   readonly faults: readonly string[];
   readonly notRun: readonly string[];
 }
 
 ### build/index.d.ts#FreshnessOptions
-export interface FreshnessOptions {
+interface FreshnessOptions {
   readonly now: string;
   readonly times: readonly NpmVersionTime[];
   readonly maxAgeDays?: number;
@@ -743,7 +743,7 @@ interface PageParts {
 }
 
 ### build/index.d.ts#PageStamp
-export interface PageStamp {
+interface PageStamp {
   readonly page: string;
   readonly runs: readonly DataRun[];
   readonly inFlight?: DataRun;

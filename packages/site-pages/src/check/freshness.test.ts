@@ -148,7 +148,7 @@ describe("runFreshnessCli", () => {
   const start = async (argv: readonly string[]): Promise<{ code: number; out: string; err: string }> => {
     let out = "";
     let err = "";
-    const fetcher = (async () => new Response(JSON.stringify({ time: Object.fromEntries(times.map((t) => [t.version, t.date])) }))) as typeof fetch;
+    const fetcher = (async () => new Response(JSON.stringify({ versions: Object.fromEntries(times.map((t) => [t.version, {}])), time: Object.fromEntries(times.map((t) => [t.version, t.date])) }))) as typeof fetch;
     const code = await runFreshnessCli(argv, { cwd: dir, env: {}, stdout: (t) => (out += t), stderr: (t) => (err += t) }, fetcher);
     return { code, out, err };
   };
