@@ -39,7 +39,7 @@ export const HOMES: readonly Home[] = [
   {
     area: "statistics",
     title: "Statistics",
-    covers: "quantiles, medians, means, SD, bootstrap intervals, sign and permutation tests, Holm, Wilson, Brier, calibration, correlation, noise floors",
+    covers: "quantiles, medians, means, SD, bootstrap intervals, sign and permutation tests, Holm, Wilson, Brier, calibration, correlation, noise floors, fits of laws to values, likelihoods, mixtures",
     packages: ["@mark1russell7/rigor-statistics"],
     repo: "mark1russell7/rigor",
     state: "published",
