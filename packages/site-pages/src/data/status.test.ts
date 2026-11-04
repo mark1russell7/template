@@ -38,7 +38,7 @@ Text with a table that is not an item table:
 |---|---|---|---|---|---|---|
 | O1 | Docs | The guide \\| the index | waiting for Mark | O2 | \`client\` | [client PR #7](https://github.com/acme/widgets/pull/7), [the contract](./CONTRACT.md#rules) |
 | O2 | Systems | A cell | blocked | R3 | — | — |
-| O3 | Apps | A later thing | deferred | — | \`apps\` | jarvis PRs #28, #29 and #30 |
+| O3 | Apps | A later thing | deferred | — | \`apps\` | widgets PRs #28, #29 and #30 |
 | O4 | Apps | The next thing | next | — | — | — |
 | O5 | Apps | Not done yet | not started | — | — | — |
 | — | Apps | A row without an ID | open | — | — | — |
@@ -87,7 +87,7 @@ describe("the roadmap items", () => {
       { label: "client PR #7", url: "https://github.com/acme/widgets/pull/7" },
       { label: "the contract", url: "https://github.com/acme/widgets/blob/abc1234/docs/CONTRACT.md#rules" },
     ]);
-    expect(items[5]!.links.map((link) => link.url)).toEqual([28, 29, 30].map((number) => `https://github.com/acme/jarvis/pull/${number}`));
+    expect(items[5]!.links.map((link) => link.url)).toEqual([28, 29, 30].map((number) => `https://github.com/acme/widgets/pull/${number}`));
     expect(items[2]!.links).toEqual([]);
   });
 
