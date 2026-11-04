@@ -5,7 +5,7 @@ inputs:
     description: The built output folder of the site, for example packages/site/dist.
     required: true
   version:
-    description: The version range of @mark1russell7/site-pages. Empty gives the default range, ^0.1.0.
+    description: The version range of @mark1russell7/site-pages. Empty gives the default range, ^0.2.0.
     default: ""
   roadmap:
     description: The roadmap file. Without it, the Status page has only the open pull requests and issues.
@@ -65,5 +65,5 @@ runs:
         # workspace package with no build), and then the bin is missing. The default range is here, so that an empty
         # input (from reusable-pages.yml) also gets it.
         tool="$RUNNER_TEMP/site-pages-tool"
-        npm install --prefix "$tool" --no-save --no-package-lock --no-audit --no-fund "@mark1russell7/site-pages@${SP_VERSION:-^0.1.0}"
+        npm install --prefix "$tool" --no-save --no-package-lock --no-audit --no-fund "@mark1russell7/site-pages@${SP_VERSION:-^0.2.0}"
         "$tool/node_modules/.bin/site-pages" "${args[@]}"
