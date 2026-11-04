@@ -96,6 +96,10 @@ on:
         description: "true: write only the JSON data of the pages (the input of site-pages)."
         type: boolean
         default: false
+      data-stamps:
+        description: The file of data stamps of the measured pages (schema data-stamp/1). The job fails on a page with no versions or no run date, on old data with no newer run in flight, and on a run that started behind npm. Empty runs no gate.
+        type: string
+        default: ""
       site-check:
         description: "true: before the upload, check the built pages in a headless Chromium at phone and desktop widths, in light and dark (site-pages check). A failed check stops the deploy."
         type: boolean
@@ -221,10 +225,10 @@ jobs:
           if [ -n "$TOKEN" ]; then export GITHUB_TOKEN="$TOKEN"; fi
           unset TOKEN
           eval "$COMMAND"
-      # The site check runs from the source of the same template commit (packages/site-pages/src/check imports
-      # only Node.js), so it needs no npm release of site-pages.
+      # The site check and the freshness gate run from the source of the same template commit (packages/site-pages/src/check
+      # imports only Node.js and packages/site-pages/src/data), so they need no npm release of site-pages.
       - name: Shared actions (site-pages and the site check)
-        if: inputs.site-pages || inputs.site-check
+        if: inputs.site-pages || inputs.site-check || inputs.data-stamps != ''
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
@@ -233,7 +237,14 @@ jobs:
           sparse-checkout: |
             .github/actions
             packages/site-pages/src/check
+            packages/site-pages/src/data
           persist-credentials: false
+      - name: Data stamps of the measured pages
+        if: inputs.data-stamps != ''
+        shell: bash
+        env:
+          STAMPS: ${{ inputs.data-stamps }}
+        run: node .shared-actions/packages/site-pages/src/check/freshness-main.ts --stamps "$STAMPS"
       # The Releases page and the Status page (releases/, status/ and their data/*.json), at deploy time
       - if: inputs.site-pages
         uses: ./.shared-actions/.github/actions/site-pages

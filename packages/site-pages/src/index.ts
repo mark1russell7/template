@@ -57,4 +57,20 @@ export {
 export { releasesLead, renderReleasesPage, RELEASES_SCRIPT } from "./render/releases.ts";
 export { classCounts, openGroups, renderStatusPage, sectionsOf, slugOf, statusLead, STATUS_SCRIPT, type BoardSection, type ItemGroup } from "./render/status.ts";
 export { probeScript, TYPESCRIPT_PROBE } from "./check/probe.ts";
+export {
+  checkFreshness,
+  DATA_STAMP_SCHEMA,
+  latestAt,
+  MAX_DATA_AGE_DAYS,
+  MAX_MINORS_BEHIND,
+  minorsBehind,
+  parseDataStamps,
+  type DataRun,
+  type DataStamps,
+  type DataStampsParse,
+  type FreshnessCheck,
+  type FreshnessOptions,
+  type PageStamp,
+} from "./check/freshness.ts";
+export { renderDataStamp } from "./render/data-stamp.ts";
 export { build, HELP, parseBuildArgs, runCli, UsageError, type BuildOptions, type BuildResult, type CliIo } from "./build.ts";

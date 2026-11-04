@@ -136,6 +136,11 @@ Usage: site-pages check (--out <dir> | --url <url>) [options]
 
 Opens the pages of the site in a headless Chromium at phone and desktop widths. Start
 "site-pages check --help" for its options.
+
+Usage: site-pages freshness --stamps <file> [options]
+
+Examine the data stamps of the measured pages of a site. See
+"site-pages freshness --help" for its options.
 `;
 
 /** The input and output of `runCli`. A test gives its own values. */

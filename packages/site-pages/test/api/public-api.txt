@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 111 names
+## . (build/index.d.ts): 125 names
 
 BASE_CSS: build/index.d.ts#BASE_CSS
 type BoardIssue: build/index.d.ts#BoardIssue
@@ -18,7 +18,13 @@ type ChangelogSection: build/index.d.ts#ChangelogSection
 type ChangelogSource: build/index.d.ts#ChangelogSource
 type CheckState: build/index.d.ts#CheckState
 type CliIo: build/index.d.ts#CliIo
+DATA_STAMP_SCHEMA: build/index.d.ts#DATA_STAMP_SCHEMA
 DEFAULT_CHANGELOGS: build/index.d.ts#DEFAULT_CHANGELOGS
+type DataRun: build/index.d.ts#DataRun
+type DataStamps: build/index.d.ts#DataStamps
+type DataStampsParse: build/index.d.ts#DataStampsParse
+type FreshnessCheck: build/index.d.ts#FreshnessCheck
+type FreshnessOptions: build/index.d.ts#FreshnessOptions
 GITHUB_API: build/index.d.ts#GITHUB_API
 GITHUB_GRAPHQL: build/index.d.ts#GITHUB_GRAPHQL
 type GitHubOpenWork: build/index.d.ts#GitHubOpenWork
@@ -29,6 +35,8 @@ HELP: build/index.d.ts#HELP
 type ItemGroup: build/index.d.ts#ItemGroup
 type Link: build/index.d.ts#Link
 type LinkOptions: build/index.d.ts#LinkOptions
+MAX_DATA_AGE_DAYS: build/index.d.ts#MAX_DATA_AGE_DAYS
+MAX_MINORS_BEHIND: build/index.d.ts#MAX_MINORS_BEHIND
 type MarkdownTable: build/index.d.ts#MarkdownTable
 NPM_REGISTRY: build/index.d.ts#NPM_REGISTRY
 type NpmOptions: build/index.d.ts#NpmOptions
@@ -38,6 +46,7 @@ OPEN_CLASSES: build/index.d.ts#OPEN_CLASSES
 type OpenWorkTotals: build/index.d.ts#OpenWorkTotals
 type PageOptions: build/index.d.ts#PageOptions
 type PageParts: build/index.d.ts#PageParts
+type PageStamp: build/index.d.ts#PageStamp
 type ParsedVersion: build/index.d.ts#ParsedVersion
 RELEASES_SCRIPT: build/index.d.ts#RELEASES_SCRIPT
 type ReadReleasesOptions: build/index.d.ts#ReadReleasesOptions
@@ -65,6 +74,7 @@ type TimelineOptions: build/index.d.ts#TimelineOptions
 UsageError: build/index.d.ts#UsageError
 build: build/index.d.ts#build
 buildStatusBoard: build/index.d.ts#buildStatusBoard
+checkFreshness: build/index.d.ts#checkFreshness
 checkStateOf: build/index.d.ts#checkStateOf
 classCounts: build/index.d.ts#classCounts
 compareVersions: build/index.d.ts#compareVersions
@@ -82,10 +92,12 @@ inlineMarkdown: build/index.d.ts#inlineMarkdown
 isShallow: build/index.d.ts#isShallow
 kindOf: build/index.d.ts#kindOf
 laneCenter: build/index.d.ts#laneCenter
+latestAt: build/index.d.ts#latestAt
 linksOf: build/index.d.ts#linksOf
 longDate: build/index.d.ts#longDate
 markdownTables: build/index.d.ts#markdownTables
 mergeReleases: build/index.d.ts#mergeReleases
+minorsBehind: build/index.d.ts#minorsBehind
 npmPublishTimes: build/index.d.ts#npmPublishTimes
 oldestFirst: build/index.d.ts#oldestFirst
 openGroups: build/index.d.ts#openGroups
@@ -93,6 +105,7 @@ originRepository: build/index.d.ts#originRepository
 pageShell: build/index.d.ts#pageShell
 parseBuildArgs: build/index.d.ts#parseBuildArgs
 parseChangelog: build/index.d.ts#parseChangelog
+parseDataStamps: build/index.d.ts#parseDataStamps
 parseRoadmap: build/index.d.ts#parseRoadmap
 parseVersion: build/index.d.ts#parseVersion
 plainText: build/index.d.ts#plainText
@@ -103,6 +116,7 @@ readStatusBoard: build/index.d.ts#readStatusBoard
 releaseBodyEntries: build/index.d.ts#releaseBodyEntries
 releaseSummary: build/index.d.ts#releaseSummary
 releasesLead: build/index.d.ts#releasesLead
+renderDataStamp: build/index.d.ts#renderDataStamp
 renderReleasesPage: build/index.d.ts#renderReleasesPage
 renderStatusPage: build/index.d.ts#renderStatusPage
 roadmapItems: build/index.d.ts#roadmapItems
@@ -549,8 +563,48 @@ interface CliIo {
   now?: string;
 }
 
+### build/index.d.ts#DATA_STAMP_SCHEMA
+export declare const DATA_STAMP_SCHEMA = "data-stamp/1";
+
 ### build/index.d.ts#DEFAULT_CHANGELOGS
 export declare const DEFAULT_CHANGELOGS: readonly string[];
+
+### build/index.d.ts#DataRun
+export interface DataRun {
+  readonly id: string;
+  readonly url: string;
+  readonly date: string;
+  readonly engines: Readonly<Record<string, string>>;
+}
+
+### build/index.d.ts#DataStamps
+export interface DataStamps {
+  readonly schema: typeof DATA_STAMP_SCHEMA;
+  readonly pages: readonly PageStamp[];
+}
+
+### build/index.d.ts#DataStampsParse
+export type DataStampsParse = {
+  readonly ok: true;
+  readonly stamps: DataStamps;
+} | {
+  readonly ok: false;
+  readonly faults: readonly string[];
+};
+
+### build/index.d.ts#FreshnessCheck
+export interface FreshnessCheck {
+  readonly faults: readonly string[];
+  readonly notRun: readonly string[];
+}
+
+### build/index.d.ts#FreshnessOptions
+export interface FreshnessOptions {
+  readonly now: string;
+  readonly times: readonly NpmVersionTime[];
+  readonly maxAgeDays?: number;
+  readonly maxMinorsBehind?: number;
+}
 
 ### build/index.d.ts#GITHUB_API
 export declare const GITHUB_API = "https://api.github.com";
@@ -598,7 +652,7 @@ type GitHubReleases = {
 };
 
 ### build/index.d.ts#HELP
-export declare const HELP = "Usage: site-pages build --out <dir> [options]\n\nWrites <out>/data/releases.json, <out>/data/status.json, <out>/releases/index.html\nand <out>/status/index.html. Start it in the repository, after the build of the site.\n\nOptions:\n  --out <dir>           The built output folder of the site (necessary)\n  --repo <owner/name>   The GitHub repository (default: $GITHUB_REPOSITORY, else the remote \"origin\")\n  --base </name/>       The path of the site home (default: \"/<name>/\", or \"/\" for <owner>.github.io)\n  --roadmap <file>      The roadmap file (default: none, the status page has only the GitHub part)\n  --packages <names>    npm names or a @scope, separated by commas, for the npm dates\n  --changesets <glob>   The changelog files (default: packages/*/CHANGELOG.md, else CHANGELOG.md)\n  --group <name>        The npm name of the package whose changelog gives the versions\n  --token <token>       A GitHub token with read access (default: $GITHUB_TOKEN)\n  --css <file>          A CSS file for the pages, after the default CSS\n  --site-name <name>    The name of the site in the header (default: the repository name)\n  --data-only           Write only the JSON data, not the pages\n  -h, --help            Show this help\n\nUsage: site-pages check (--out <dir> | --url <url>) [options]\n\nOpens the pages of the site in a headless Chromium at phone and desktop widths. Start\n\"site-pages check --help\" for its options.\n";
+export declare const HELP = "Usage: site-pages build --out <dir> [options]\n\nWrites <out>/data/releases.json, <out>/data/status.json, <out>/releases/index.html\nand <out>/status/index.html. Start it in the repository, after the build of the site.\n\nOptions:\n  --out <dir>           The built output folder of the site (necessary)\n  --repo <owner/name>   The GitHub repository (default: $GITHUB_REPOSITORY, else the remote \"origin\")\n  --base </name/>       The path of the site home (default: \"/<name>/\", or \"/\" for <owner>.github.io)\n  --roadmap <file>      The roadmap file (default: none, the status page has only the GitHub part)\n  --packages <names>    npm names or a @scope, separated by commas, for the npm dates\n  --changesets <glob>   The changelog files (default: packages/*/CHANGELOG.md, else CHANGELOG.md)\n  --group <name>        The npm name of the package whose changelog gives the versions\n  --token <token>       A GitHub token with read access (default: $GITHUB_TOKEN)\n  --css <file>          A CSS file for the pages, after the default CSS\n  --site-name <name>    The name of the site in the header (default: the repository name)\n  --data-only           Write only the JSON data, not the pages\n  -h, --help            Show this help\n\nUsage: site-pages check (--out <dir> | --url <url>) [options]\n\nOpens the pages of the site in a headless Chromium at phone and desktop widths. Start\n\"site-pages check --help\" for its options.\n\nUsage: site-pages freshness --stamps <file> [options]\n\nExamine the data stamps of the measured pages of a site. See\n\"site-pages freshness --help\" for its options.\n";
 
 ### build/index.d.ts#ItemGroup
 interface ItemGroup {
@@ -618,6 +672,12 @@ interface LinkOptions {
   repository?: string;
   ref?: string;
 }
+
+### build/index.d.ts#MAX_DATA_AGE_DAYS
+export declare const MAX_DATA_AGE_DAYS = 3;
+
+### build/index.d.ts#MAX_MINORS_BEHIND
+export declare const MAX_MINORS_BEHIND = 1;
 
 ### build/index.d.ts#MarkdownTable
 interface MarkdownTable {
@@ -680,6 +740,13 @@ interface PageParts {
   current: "releases" | "status";
   main: string;
   script: string;
+}
+
+### build/index.d.ts#PageStamp
+export interface PageStamp {
+  readonly page: string;
+  readonly runs: readonly DataRun[];
+  readonly inFlight?: DataRun;
 }
 
 ### build/index.d.ts#ParsedVersion
@@ -878,6 +945,9 @@ export declare function build(options: BuildOptions): Promise<BuildResult>;
 ### build/index.d.ts#buildStatusBoard
 export declare function buildStatusBoard(input: StatusBoardInput): StatusBoardData;
 
+### build/index.d.ts#checkFreshness
+export declare function checkFreshness(stamps: DataStamps, options: FreshnessOptions): FreshnessCheck;
+
 ### build/index.d.ts#checkStateOf
 export declare function checkStateOf(rollup: {
   state?: string | null;
@@ -940,6 +1010,9 @@ export declare function laneCenter(layout: {
   laneHeight: number;
 }, lane: number): number;
 
+### build/index.d.ts#latestAt
+export declare function latestAt(times: readonly NpmVersionTime[], name: string, date: string): string | undefined;
+
 ### build/index.d.ts#linksOf
 export declare function linksOf(cell: string | null | undefined, options?: LinkOptions): Link[];
 
@@ -951,6 +1024,9 @@ export declare function markdownTables(markdown: string): MarkdownTable[];
 
 ### build/index.d.ts#mergeReleases
 export declare function mergeReleases(sources: ReleaseSources): Release[];
+
+### build/index.d.ts#minorsBehind
+export declare function minorsBehind(used: string, latest: string): number;
 
 ### build/index.d.ts#npmPublishTimes
 export declare function npmPublishTimes(options: NpmOptions): Promise<NpmPublishTimes>;
@@ -972,6 +1048,9 @@ export declare function parseBuildArgs(argv: readonly string[], io: Pick<CliIo, 
 
 ### build/index.d.ts#parseChangelog
 export declare function parseChangelog(markdown: string): ChangelogSection[];
+
+### build/index.d.ts#parseDataStamps
+export declare function parseDataStamps(raw: unknown): DataStampsParse;
 
 ### build/index.d.ts#parseRoadmap
 export declare function parseRoadmap(markdown: string, options?: LinkOptions): BoardItem[];
@@ -1002,6 +1081,9 @@ export declare function releaseSummary(releases: readonly ReleasePoint[]): Relea
 
 ### build/index.d.ts#releasesLead
 export declare function releasesLead(releases: readonly Release[]): string;
+
+### build/index.d.ts#renderDataStamp
+export declare function renderDataStamp(stamp: PageStamp): string;
 
 ### build/index.d.ts#renderReleasesPage
 export declare function renderReleasesPage(releases: readonly Release[], options: PageOptions): string;
