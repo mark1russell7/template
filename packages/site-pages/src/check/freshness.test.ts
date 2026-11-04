@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { NpmVersionTime } from "../data/types.ts";
-import { checkFreshness, DATA_STAMP_SCHEMA, latestAt, minorsBehind, parseDataStamps, runFreshnessCli, type DataRun, type DataStamps } from "./freshness.ts";
+import { checkFreshness, DATA_STAMP_SCHEMA, latestAt, minorsBehind, parseDataStamps, runFreshnessCli, scheduleGapDays, type DataLimit, type DataRun, type DataStamps, type PageStamp } from "./freshness.ts";
 
 const ENGINE = "@scope/engine";
 const NOW = "2026-11-10T12:00:00Z";
@@ -139,6 +139,101 @@ describe("checkFreshness", () => {
   });
 });
 
+describe("a fixed study", () => {
+  const page = (over: Partial<PageStamp>): DataStamps => ({ schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", runs: [run({ date: "2026-01-01T00:00:00Z", engines: { [ENGINE]: "0.1.0" } })], ...over }] });
+
+  it("has no age limit and no limit of the engines", () => {
+    expect(check(page({ study: true }))).toEqual({ faults: [], notRun: [] });
+  });
+
+  it("fails on the same old data with no field study", () => {
+    expect(check(page({})).faults.length).toBeGreaterThan(0);
+  });
+
+  it("still fails on a date after the check", () => {
+    const future: DataStamps = { schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", runs: [run({ date: "2027-01-01T00:00:00Z" })], study: true }] };
+    expect(check(future).faults[0]).toContain("a date after the check");
+  });
+
+  it("refuses a limit and a run in flight", () => {
+    const limit: DataLimit = { days: 7, reason: "Weekly.", workflow: "w.yml" };
+    expect(parseDataStamps(page({ study: true, limit }))).toMatchObject({ ok: false, faults: ["index.html: a fixed study has no limit."] });
+    expect(parseDataStamps(page({ study: true, inFlight: run() }))).toMatchObject({ ok: false, faults: ["index.html: a fixed study has no run in flight."] });
+  });
+});
+
+describe("the limit of a page", () => {
+  const WORKFLOW = ".github/workflows/scan.yml";
+  const limit: DataLimit = { days: 7, reason: "The scan is weekly.", workflow: WORKFLOW };
+  const aged = (days: number): DataRun => run({ date: new Date(Date.parse(NOW) - days * 86_400_000).toISOString() });
+  const page = (runs: readonly DataRun[], over: Partial<DataLimit> = {}): DataStamps => ({ schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", runs, limit: { ...limit, ...over } }] });
+
+  it("replaces the default age, when the schedule meets it", () => {
+    expect(checkFreshness(page([aged(6)]), { now: NOW, times, schedules: { [WORKFLOW]: 7 } }).faults).toEqual([]);
+  });
+
+  it("fails on data over the limit", () => {
+    expect(checkFreshness(page([aged(8)]), { now: NOW, times, schedules: { [WORKFLOW]: 7 } }).faults[0]).toContain("over the limit of 7");
+  });
+
+  it("fails on a limit with no schedule", () => {
+    expect(checkFreshness(page([aged(1)]), { now: NOW, times, schedules: {} }).faults[0]).toContain("has no schedule that the gate can read");
+  });
+
+  it("fails on a schedule slower than the limit", () => {
+    expect(checkFreshness(page([aged(1)]), { now: NOW, times, schedules: { [WORKFLOW]: 31 } }).faults[0]).toContain("a gap of 31.0 days, over the limit of 7");
+  });
+
+  it("needs a ruling for a limit over 14 days", () => {
+    expect(parseDataStamps(page([aged(1)], { days: 15 }))).toMatchObject({ ok: false, faults: ["index.html: a limit over 14 days needs a ruling for this site."] });
+    expect(parseDataStamps(page([aged(1)], { days: 15, ruling: "https://example.com/ruling" })).ok).toBe(true);
+    expect(parseDataStamps(page([aged(1)], { days: 14 })).ok).toBe(true);
+  });
+
+  it("refuses a limit with no reason, no days or no workflow", () => {
+    expect(parseDataStamps(page([aged(1)], { reason: " " }))).toMatchObject({ ok: false, faults: ["index.html: the limit has no reason."] });
+    expect(parseDataStamps(page([aged(1)], { days: 0 }))).toMatchObject({ ok: false, faults: ["index.html: the limit has no count of days."] });
+    expect(parseDataStamps(page([aged(1)], { workflow: "" }))).toMatchObject({ ok: false, faults: ["index.html: the limit names no workflow."] });
+  });
+});
+
+describe("scheduleGapDays", () => {
+  const workflow = (...lines: readonly string[]): string => `on:\n  schedule:\n${lines.map((line) => `    - cron: "${line}"`).join("\n")}\n`;
+
+  it("gives 1 for a daily schedule", () => {
+    expect(scheduleGapDays(workflow("40 5 * * *"))).toBe(1);
+  });
+
+  it("gives 7 for a weekly schedule", () => {
+    expect(scheduleGapDays(workflow("23 6 * * 1"))).toBe(7);
+  });
+
+  it("gives the longest month for a monthly schedule", () => {
+    expect(scheduleGapDays(workflow("0 0 1 * *"))).toBe(31);
+  });
+
+  it("joins the lines of a workflow", () => {
+    expect(scheduleGapDays(workflow("0 0 * * 1", "0 0 * * 4"))).toBe(4);
+  });
+
+  it("reads lists, ranges and steps", () => {
+    expect(scheduleGapDays(workflow("0 0 * * 1,3,5"))).toBe(3);
+    expect(scheduleGapDays(workflow("0 0 * * 1-5"))).toBe(3);
+    expect(scheduleGapDays(workflow("0 0 */2 * *"))).toBe(2);
+  });
+
+  it("starts on a day that matches one of the two day fields", () => {
+    expect(scheduleGapDays(workflow("0 0 1 * 1"))).toBeLessThanOrEqual(7);
+  });
+
+  it("gives no value with no schedule, for a comment, and for a form that it cannot read", () => {
+    expect(scheduleGapDays("on:\n  push:\n")).toBeUndefined();
+    expect(scheduleGapDays('on:\n  # - cron: "0 0 * * *"\n  push:\n')).toBeUndefined();
+    expect(scheduleGapDays(workflow("0 0 * * MON"))).toBeUndefined();
+    expect(scheduleGapDays(workflow("0 0 * *"))).toBeUndefined();
+  });
+});
+
 describe("runFreshnessCli", () => {
   const dir = mkdtempSync(join(tmpdir(), "stamps-"));
   const file = (name: string, content: unknown): string => {
@@ -152,6 +247,16 @@ describe("runFreshnessCli", () => {
     const code = await runFreshnessCli(argv, { cwd: dir, env: {}, stdout: (t) => (out += t), stderr: (t) => (err += t) }, fetcher);
     return { code, out, err };
   };
+
+  it("reads the schedule of a limit from the workflow file", async () => {
+    file("scan.yml", 'on:\n  schedule:\n    - cron: "23 6 * * 1"\n');
+    const limit: DataLimit = { days: 7, reason: "The scan is weekly.", workflow: "scan.yml" };
+    const good = await start(["--stamps", file("limit.json", { schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", runs: [run()], limit }] }), "--now", NOW]);
+    expect(good.code).toBe(0);
+    const lost = await start(["--stamps", file("lost.json", { schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", runs: [run()], limit: { ...limit, workflow: "gone.yml" } }] }), "--now", NOW]);
+    expect(lost.code).toBe(1);
+    expect(lost.err).toContain("no schedule that the gate can read in gone.yml");
+  });
 
   it("exits with 0 on correct stamps, and reads npm", async () => {
     const { code, out } = await start(["--stamps", file("good.json", stamps([run()])), "--now", NOW]);

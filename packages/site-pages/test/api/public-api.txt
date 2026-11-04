@@ -522,22 +522,34 @@ interface StatusBoardData {
   kpi?: KpiFile;
 }
 
-### build/chunks/kpi.d.ts#StatusClass
+### build/chunks/freshness.d.ts#StatusClass
 type StatusClass = "waiting" | "blocked" | "progress" | "open" | "later" | "done";
 
-### build/chunks/kpi.d.ts#kpiFile
+### build/chunks/freshness.d.ts#checkFreshness
+declare function checkFreshness(stamps: DataStamps, options: FreshnessOptions): FreshnessCheck;
+
+### build/chunks/freshness.d.ts#kpiFile
 declare function kpiFile(input: KpiInput, now?: number): KpiFile;
 
-### build/chunks/kpi.d.ts#kpiProblems
+### build/chunks/freshness.d.ts#kpiProblems
 declare function kpiProblems(value: unknown, now?: number): string[];
 
-### build/chunks/kpi.d.ts#kpiText
+### build/chunks/freshness.d.ts#kpiText
 declare function kpiText(file: KpiFile): string;
 
-### build/chunks/kpi.d.ts#readKpi
+### build/chunks/freshness.d.ts#latestAt
+declare function latestAt(times: readonly NpmVersionTime[], name: string, date: string): string | undefined;
+
+### build/chunks/freshness.d.ts#minorsBehind
+declare function minorsBehind(used: string, latest: string): number;
+
+### build/chunks/freshness.d.ts#parseDataStamps
+declare function parseDataStamps(raw: unknown): DataStampsParse;
+
+### build/chunks/freshness.d.ts#readKpi
 declare function readKpi(text: string, now?: number): KpiFile;
 
-### build/chunks/kpi.d.ts#writeKpi
+### build/chunks/freshness.d.ts#writeKpi
 declare function writeKpi(out: string, input: KpiInput, now?: number): string;
 
 ### build/explorer/index.d.ts#AxisSlot
@@ -787,48 +799,8 @@ interface CliIo {
   now?: string;
 }
 
-### build/index.d.ts#DATA_STAMP_SCHEMA
-export declare const DATA_STAMP_SCHEMA = "data-stamp/1";
-
 ### build/index.d.ts#DEFAULT_CHANGELOGS
 export declare const DEFAULT_CHANGELOGS: readonly string[];
-
-### build/index.d.ts#DataRun
-interface DataRun {
-  readonly id: string;
-  readonly url: string;
-  readonly date: string;
-  readonly engines: Readonly<Record<string, string>>;
-}
-
-### build/index.d.ts#DataStamps
-interface DataStamps {
-  readonly schema: typeof DATA_STAMP_SCHEMA;
-  readonly pages: readonly PageStamp[];
-}
-
-### build/index.d.ts#DataStampsParse
-type DataStampsParse = {
-  readonly ok: true;
-  readonly stamps: DataStamps;
-} | {
-  readonly ok: false;
-  readonly faults: readonly string[];
-};
-
-### build/index.d.ts#FreshnessCheck
-interface FreshnessCheck {
-  readonly faults: readonly string[];
-  readonly notRun: readonly string[];
-}
-
-### build/index.d.ts#FreshnessOptions
-interface FreshnessOptions {
-  readonly now: string;
-  readonly times: readonly NpmVersionTime[];
-  readonly maxAgeDays?: number;
-  readonly maxMinorsBehind?: number;
-}
 
 ### build/index.d.ts#GITHUB_API
 export declare const GITHUB_API = "https://api.github.com";
@@ -860,12 +832,6 @@ interface LinkOptions {
   repository?: string;
   ref?: string;
 }
-
-### build/index.d.ts#MAX_DATA_AGE_DAYS
-export declare const MAX_DATA_AGE_DAYS = 3;
-
-### build/index.d.ts#MAX_MINORS_BEHIND
-export declare const MAX_MINORS_BEHIND = 1;
 
 ### build/index.d.ts#MarkdownTable
 interface MarkdownTable {
@@ -909,13 +875,6 @@ interface PageParts {
   current: "releases" | "status";
   main: string;
   script: string;
-}
-
-### build/index.d.ts#PageStamp
-interface PageStamp {
-  readonly page: string;
-  readonly runs: readonly DataRun[];
-  readonly inFlight?: DataRun;
 }
 
 ### build/index.d.ts#ParsedVersion
@@ -1074,9 +1033,6 @@ export declare function build(options: BuildOptions): Promise<BuildResult>;
 ### build/index.d.ts#buildStatusBoard
 export declare function buildStatusBoard(input: StatusBoardInput): StatusBoardData;
 
-### build/index.d.ts#checkFreshness
-export declare function checkFreshness(stamps: DataStamps, options: FreshnessOptions): FreshnessCheck;
-
 ### build/index.d.ts#checkStateOf
 export declare function checkStateOf(rollup: {
   state?: string | null;
@@ -1139,9 +1095,6 @@ export declare function laneCenter(layout: {
   laneHeight: number;
 }, lane: number): number;
 
-### build/index.d.ts#latestAt
-export declare function latestAt(times: readonly NpmVersionTime[], name: string, date: string): string | undefined;
-
 ### build/index.d.ts#linksOf
 export declare function linksOf(cell: string | null | undefined, options?: LinkOptions): Link[];
 
@@ -1153,9 +1106,6 @@ export declare function markdownTables(markdown: string): MarkdownTable[];
 
 ### build/index.d.ts#mergeReleases
 export declare function mergeReleases(sources: ReleaseSources): Release[];
-
-### build/index.d.ts#minorsBehind
-export declare function minorsBehind(used: string, latest: string): number;
 
 ### build/index.d.ts#npmPublishTimes
 export declare function npmPublishTimes(options: NpmOptions): Promise<NpmPublishTimes>;
@@ -1177,9 +1127,6 @@ export declare function parseBuildArgs(argv: readonly string[], io: Pick<CliIo, 
 
 ### build/index.d.ts#parseChangelog
 export declare function parseChangelog(markdown: string): ChangelogSection[];
-
-### build/index.d.ts#parseDataStamps
-export declare function parseDataStamps(raw: unknown): DataStampsParse;
 
 ### build/index.d.ts#parseRoadmap
 export declare function parseRoadmap(markdown: string, options?: LinkOptions): BoardItem[];
@@ -1256,6 +1203,12 @@ export declare function utcDay(time: number): number;
 ### build/index.d.ts#versionOfTag
 export declare function versionOfTag(tag: string): TagVersion | null;
 
+### build/vite.d.ts#STAMPS_FILE
+export declare const STAMPS_FILE = "data-stamps.json";
+
+### build/vite.d.ts#STAMP_MARK
+export declare const STAMP_MARK = "<!-- data-stamp -->";
+
 ### build/vite.d.ts#SiteEnv
 export type SiteEnv = Readonly<Record<string, string | undefined>>;
 
@@ -1316,6 +1269,22 @@ export interface SiteShellTag {
   readonly tag: "script";
   readonly children: string;
   readonly injectTo: "head";
+}
+
+### build/vite.d.ts#SiteStampsPage
+export interface SiteStampsPage {
+  readonly path: string;
+}
+
+### build/vite.d.ts#SiteStampsPlugin
+export interface SiteStampsPlugin {
+  readonly name: string;
+  readonly apply: "build";
+  readonly transformIndexHtml: {
+    readonly order: "pre";
+    handler(html: string, page: SiteStampsPage): string;
+  };
+  generateBundle(this: SiteKpiContext): void;
 }
 
 ### build/vite.d.ts#SiteTarget
