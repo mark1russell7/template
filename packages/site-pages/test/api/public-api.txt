@@ -323,6 +323,7 @@ interface ExplorerView {
   readonly errorText: string;
   readonly modelText: string;
   readonly gridText: string;
+  readonly rangeText: string;
   readonly problem: string;
   readonly steps: number;
   readonly elapsedMs: number;
