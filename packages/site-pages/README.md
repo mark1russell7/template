@@ -395,7 +395,7 @@ interface KpiFile {
 - Give `at` from the record of the data. The writer has no default for this field, because a build time hides old data.
 - Give `at` on a measure when its data is from another time than the file. The Status page then shows a date for each measure.
 - Without `commit`, the plugin takes `GITHUB_SHA`, else the head of the repository.
-- A fault in the data stops the build, and the old site stays. A fault is a wrong form, a value that is not finite, a repeated id or a time after the check, on the file or on a measure.
+- A fault in the data stops the build, and the old site stays. A fault is a wrong form, a value that is not finite, a repeated id or a time after the check. The time rules apply to the file and to each measure.
 - A site with no Vite build calls `writeKpi(out, input)` from the root entry, before `site-pages build`.
 - `site-pages build` reads the file from the output folder. It adds the file to `data/status.json`, and the Status page shows the measures, the data date and the engines.
 
