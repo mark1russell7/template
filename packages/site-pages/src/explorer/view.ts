@@ -124,7 +124,7 @@ function xAxis(plot: Plot, axis: AxisSpec): SVGElement {
     const x = plot.left + tick.place * length;
     const label = turned
       ? s("text", { class: "rx-tick", x, y: plot.bottom + 14, "text-anchor": "end", transform: `rotate(-35 ${x} ${plot.bottom + 14})` }, tick.text)
-      : s("text", { class: "rx-tick", x, y: plot.bottom + 15, "text-anchor": "middle" }, tick.text);
+      : s("text", { class: "rx-tick", x, y: plot.bottom + 15, "text-anchor": x + (tick.text.length * CHAR_WIDTH) / 2 > plot.width ? "end" : "middle" }, tick.text);
     return s("g", {}, s("line", { class: "rx-axis", x1: x, x2: x, y1: plot.bottom, y2: plot.bottom + 4 }), label);
   });
   const name = s("text", { class: "rx-axis-name", x: (plot.left + plot.right) / 2, y: plot.height - 6, "text-anchor": "middle" }, axis.log ? `${axis.label}, log scale` : axis.label);
@@ -569,7 +569,7 @@ function mountRecord(host: HTMLElement, record: ResponseRecord, options: Explore
       "div",
       { class: "rx-axes" },
       dimensionSelect("Across", "x", axisChoices(record, state, "x"), state.x, null, (id) => update(setAxis(record, state, "x", id))),
-      dimensionSelect("Up", "y", axisChoices(record, state, "y"), state.y, "One dimension: a curve", (id) => update(setAxis(record, state, "y", id))),
+      dimensionSelect("Up", "y", axisChoices(record, state, "y"), state.y, "None (a curve)", (id) => update(setAxis(record, state, "y", id))),
       dimensionSelect("Panels", "facet", facetChoices(record, state), state.facet, "One panel", (id) => update(setFacet(record, state, id))),
     );
     const holds = holdControls(record, state).map((control) => {
