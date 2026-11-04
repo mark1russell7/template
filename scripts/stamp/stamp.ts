@@ -34,12 +34,6 @@ export const KEEP: readonly string[] = [
   "tsconfig.scripts.json",
 ];
 
-/**
- * The root scripts that stay out of a new repository until its first public package. `api-report check`
- * fails a run that finds no public package, and the first site is private.
- */
-export const AFTER_PUBLIC_PACKAGE: readonly string[] = ["check:api"];
-
 /** The form of the name of a new repository. */
 const NAME = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -64,7 +58,7 @@ const missingPaths = (command: string): string[] => [...command.matchAll(/(?:^|[
  * that does not exist.
  */
 export function rootScripts(scripts: Readonly<Record<string, string>>): Record<string, string> {
-  const gone = new Set(Object.keys(scripts).filter((name) => AFTER_PUBLIC_PACKAGE.includes(name) || missingPaths(scripts[name] ?? "").length > 0));
+  const gone = new Set(Object.keys(scripts).filter((name) => missingPaths(scripts[name] ?? "").length > 0));
   const kept: Record<string, string> = {};
   for (const [name, command] of Object.entries(scripts)) {
     if (gone.has(name)) continue;
@@ -80,7 +74,7 @@ export function rootScripts(scripts: Readonly<Record<string, string>>): Record<s
 
 /** The first roadmap of a new repository. The rule `roadmap-parses` refuses a table with no row, and the Status page reads this row. */
 export function firstRoadmap(name: string): string {
-  return `# Roadmap\n\nThis file is the plan of ${name}. The Status page of the site reads it, and the tracker of the project mirrors it.\n\n| ID | Item | Status | Summary |\n| --- | --- | --- | --- |\n| R1 | The first package | open | Make the first package with \`pnpm package add\`, and replace the first site with a demo. When a package is public, add the script \`check:api\`. |\n`;
+  return `# Roadmap\n\nThis file is the plan of ${name}. The Status page of the site reads it, and the tracker of the project mirrors it.\n\n| ID | Item | Status | Summary |\n| --- | --- | --- | --- |\n| R1 | The first package | open | Make the first package with \`pnpm package add\`, and replace the first site with a demo. |\n`;
 }
 
 /** The input of `stamp`. */
