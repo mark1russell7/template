@@ -38,7 +38,7 @@ beforeAll(() => {
   write("throws/index.html", page(`<h1>Throws</h1><script>throw new Error("boom")</script>`));
   write("empty/index.html", page(``));
   const OTHER_SITE = `<meta name="site-check-other-paths" content="^/site/other-[a-z]+/$">`;
-  const FETCH_OTHER = `<script>fetch("other-one/", { method: "HEAD" })</script><iframe src="other-two/" title="Other site"></iframe>`;
+  const FETCH_OTHER = `<script>fetch("../other-one/", { method: "HEAD" })</script><iframe src="../other-two/" title="Other site"></iframe>`;
   write("other-sites/index.html", page(`<h1>Other sites</h1>${FETCH_OTHER}`, OTHER_SITE));
   write("other-sites-own/index.html", page(`<h1>Other sites</h1><img src="missing.png" alt=""><script>fetch("../other-one/", { method: "HEAD" })</script>`, OTHER_SITE));
   write("other-sites-none/index.html", page(`<h1>Other sites</h1><script>fetch("../other-one/", { method: "HEAD" })</script>`));
