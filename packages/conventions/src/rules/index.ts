@@ -13,6 +13,7 @@ import { noBuildOutput } from "./no-build-output.ts";
 import { noLocalPaths } from "./no-local-paths.ts";
 import { pagesSite } from "./pages-site.ts";
 import { pinnedGitDeps } from "./pinned-git-deps.ts";
+import { pushMainOnly } from "./push-main-only.ts";
 import { releaseFiles } from "./release-files.ts";
 import { requiredScripts } from "./required-scripts.ts";
 import { roadmapParses } from "./roadmap-parses.ts";
@@ -48,6 +49,7 @@ export const RULES: readonly Rule[] = [
   roadmapParses,
   runnerBudget,
   mainRunsFinish,
+  pushMainOnly,
   gateTrigger,
   homePackage,
   licenseFile,
@@ -55,4 +57,4 @@ export const RULES: readonly Rule[] = [
   sharedDocs,
 ];
 
-export { changelogVersion, cuePreset, gateTrigger, homePackage, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, pagesSite, pinnedGitDeps, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, workspaceProtocol };
+export { changelogVersion, cuePreset, gateTrigger, homePackage, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, pagesSite, pinnedGitDeps, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, workspaceProtocol };

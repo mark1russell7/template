@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { byCode } from "../workspace.ts";
 import type { Break, Rule } from "../rule.ts";
-import { WORKFLOW, blockEnd, childIndent, childKeys, indentOf, keyValue, valueOf, workflowLines } from "../workflow.ts";
+import { WORKFLOW, applySplices, blockEnd, childIndent, childKeys, indentOf, keyValue, valueOf, workflowLines, type Splice } from "../workflow.ts";
 import { OWN_GROUP, PULL_REQUEST_ONLY } from "./main-runs-finish.ts";
 
 const TRIGGERS = ["pull_request", "pull_request_target"] as const;
@@ -43,15 +43,8 @@ export function prPathFilters(text: string): PathFilter[] {
 /** The commit of the template with the actions `changes` and `gate-summary`. Renovate updates the pins after the fix. */
 export const ACTIONS_COMMIT: string = "f05c6eeb35e33a040bdfdcd7d07a1d2c00640f8d";
 
-/** A change of the lines: at the index `at`, remove `remove` lines and put `insert` in their place. */
-interface Splice {
-  readonly at: number;
-  readonly remove: number;
-  readonly insert: readonly string[];
-}
-
 /** This function gives the items of a list value: the flow form `[a, "b"]`, or the block form under the line `index`. */
-function listItems(lines: readonly string[], index: number, value: string): { items: string[]; end: number } | undefined {
+export function listItems(lines: readonly string[], index: number, value: string): { items: string[]; end: number } | undefined {
   if (value.startsWith("[") && value.endsWith("]")) {
     const items = value.slice(1, -1).split(",").map((item) => valueOf(item)).filter((item) => item !== "");
     return { items, end: index + 1 };
@@ -92,8 +85,6 @@ const ifValue = (expression: string): string => {
  * person must convert the workflow.
  */
 export function convertGate(text: string, file: string, commit: string = ACTIONS_COMMIT): { text: string } | { reason: string } {
-  const eol = text.includes("\r\n") ? "\r\n" : "\n";
-  const original = text.split(/\r?\n/);
   const lines = workflowLines(text);
   const top = (key: string): number => lines.findIndex((line) => indentOf(line) === 0 && keyValue(line, key) !== undefined);
   const on = top("on");
@@ -226,11 +217,7 @@ export function convertGate(text: string, file: string, commit: string = ACTIONS
   while (last > jobsAt + 1 && (lines[last - 1] ?? "").trim() === "") last -= 1;
   splices.push({ at: first, remove: 0, insert: changes }, { at: last, remove: 0, insert: summary });
 
-  // From the end to the start, so each index stays correct. At one index, a splice that removes lines goes first, so it
-  // removes only the old lines. Then the inserts go in, the later one first, so they keep their order.
-  const out = [...original];
-  for (const item of splices.map((value, order) => ({ ...value, order })).sort((a, b) => b.at - a.at || b.remove - a.remove || b.order - a.order)) out.splice(item.at, item.remove, ...item.insert);
-  return { text: out.join(eol) };
+  return { text: applySplices(text, splices) };
 }
 
 export const gateTrigger: Rule = {
