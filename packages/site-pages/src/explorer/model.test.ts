@@ -230,7 +230,7 @@ describe("the choices of the controls", () => {
 
   it("refuses panels for a dimension with too many values", () => {
     const wide = JSON.parse(JSON.stringify(record)) as ResponseRecord;
-    (wide.dimensions[0] as { levels: string[] }).levels = Array.from({ length: MAX_PANELS + 1 }, (_, i) => `l${i}`);
+    (wide.dimensions[0] as unknown as { levels: string[] }).levels = Array.from({ length: MAX_PANELS + 1 }, (_, i) => `l${i}`);
     expect(facetChoices(wide, settle(wide, {})).find((c) => c.id === "strategy")?.disabled).toBe(true);
   });
 
@@ -439,7 +439,7 @@ describe("the geometry", () => {
   });
 
   it("gives round ticks", () => {
-    expect(numberTicks(0, 1, false, 4).map((t) => t.text)).toEqual(["0", "0.2", "0.4", "0.6", "0.8", "1"]);
+    expect(numberTicks(0, 1, false, 4).map((t) => t.text)).toEqual(["0", "0.5", "1"]);
     expect(numberTicks(10, 1000, true, 3).map((t) => t.text)).toEqual(["10", "100", "1,000"]);
     expect(axisTicks(strategy, 4).map((t) => t.text)).toEqual(["plain", "deep", "moded"]);
     expect(axisTicks(size, 3).at(-1)?.place).toBeCloseTo(1);

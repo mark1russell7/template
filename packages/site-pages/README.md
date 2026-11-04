@@ -446,7 +446,7 @@ The explorer obeys these rules:
 
 The view draws SVG, and it needs no framework, no font and no script from another server. It reads the tokens of a site when they exist, and it has its own colors for the light and the dark scheme. The keyboard reaches each control, and the arrow keys move a cursor on a chart. "Show the numbers" opens a table of the values.
 
-The entry also exports the pure core, for a site with its own view: `settle`, `viewOf`, `axisChoices`, `facetChoices`, `holdControls`, `setMeasure`, `setAxis`, `setFacet`, `setHold`, `planSteps`, `nextStepsCap`, `openRecord` and `numberTable`.
+The entry also exports the pure core, for a site with its own view. These functions are `settle`, `viewOf`, `axisChoices`, `facetChoices`, `holdControls`, `setMeasure`, `setAxis`, `setFacet`, `setHold`, `planSteps`, `nextStepsCap`, `openRecord` and `numberTable`.
 
 ## A GitHub Pages workflow
 

@@ -35,7 +35,7 @@ export const MAX_STEPS = 33;
 export const MIN_STEPS = 5;
 /**
  * The largest number of point reads of one view. The field `nearest` of each place reads each point, so the cost of a
- * view is its number of places times the number of points. This number keeps a view under about 50 ms on a slow phone.
+ * view is its number of places times the number of points. This number keeps a view under approximately 50 ms on a slow phone.
  */
 export const READ_BUDGET = 400_000;
 /** The time of one surface in milliseconds. A longer surface gives a smaller grid for the next surface. */
@@ -603,7 +603,7 @@ export function veilOf(nearest: number): number {
   return 0.8 * Math.min(1, nearest / FADE_END);
 }
 
-/** This function gives a round step for a range and a number of ticks: 1, 2 or 5 times a power of 10. */
+/** This function gives a round step for a range and a tick count: 1, 2 or 5 times a power of 10. */
 function roundStep(span: number, count: number): number {
   const raw = span / Math.max(1, count);
   const power = 10 ** Math.floor(Math.log10(raw));
@@ -611,7 +611,7 @@ function roundStep(span: number, count: number): number {
   return (share <= 1 ? 1 : share <= 2 ? 2 : share <= 5 ? 5 : 10) * power;
 }
 
-/** This function gives round numbers in a range, for about `count` ticks. */
+/** This function gives round numbers in a range, for approximately `count` ticks. */
 function roundNumbers(low: number, high: number, count: number): number[] {
   if (!(high > low)) return [low];
   const step = roundStep(high - low, count);
@@ -620,7 +620,7 @@ function roundNumbers(low: number, high: number, count: number): number[] {
   return out;
 }
 
-/** This function gives the values 1, 2 and 5 times each power of 10 in a range, for about `count` ticks. */
+/** This function gives the values 1, 2 and 5 times each power of 10 in a range, for approximately `count` ticks. */
 function logNumbers(low: number, high: number, count: number): number[] {
   const out: number[] = [];
   for (let power = Math.floor(Math.log10(low)); power <= Math.ceil(Math.log10(high)); power++) {
