@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { byCode } from "../workspace.ts";
 import type { Break, Rule } from "../rule.ts";
 import { WORKFLOW, blockEnd, childIndent, childKeys, indentOf, keyValue, valueOf, workflowLines } from "../workflow.ts";
-import { PULL_REQUEST_ONLY } from "./main-runs-finish.ts";
+import { OWN_GROUP, PULL_REQUEST_ONLY } from "./main-runs-finish.ts";
 
 const TRIGGERS = ["pull_request", "pull_request_target"] as const;
 const FILTERS = ["paths", "paths-ignore"] as const;
@@ -186,7 +186,7 @@ export function convertGate(text: string, file: string, commit: string = ACTIONS
   const job = jobIndent + unit;
   const step = job + unit;
   const grouped = top("concurrency") >= 0;
-  const group = (id: string): string[] => (grouped ? [] : [`${job}concurrency:`, `${job}${unit}group: \${{ github.workflow }}-${id}-\${{ github.ref }}`, `${job}${unit}cancel-in-progress: ${PULL_REQUEST_ONLY}`]);
+  const group = (id: string): string[] => (grouped ? [] : [`${job}concurrency:`, `${job}${unit}group: \${{ github.workflow }}-${id}-${OWN_GROUP}`, `${job}${unit}cancel-in-progress: ${PULL_REQUEST_ONLY}`]);
   const changes = [
     `${jobIndent}changes:`,
     `${job}runs-on: ubuntu-latest`,

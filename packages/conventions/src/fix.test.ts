@@ -107,7 +107,7 @@ describe("conventions fix", () => {
       `    - cron: "${String(minute)} 5 * * 1" # weekly`,
       `    - cron: "${String(minute)} 9 * * 3"`,
       "concurrency:",
-      "  group: ${{ github.workflow }}-${{ github.ref }}",
+      "  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}",
       "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
       "",
       "jobs:",
