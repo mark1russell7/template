@@ -9,8 +9,10 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { BuildInfo } from "./chrome.ts";
+import { parseDataStamps, type DataStamps } from "./check/freshness.ts";
 import { headCommit } from "./data/git.ts";
 import { KPI_FILE, kpiFile, kpiText, type KpiInput } from "./data/kpi.ts";
+import { renderDataStamp } from "./render/data-stamp.ts";
 
 export type { BuildInfo } from "./chrome.ts";
 
@@ -88,6 +90,70 @@ export function siteKpi(input: SiteKpiInput | (() => SiteKpiInput), env: SiteEnv
       const data = typeof input === "function" ? input() : input;
       const commit = data.commit ?? env["GITHUB_SHA"] ?? headCommit(process.cwd()) ?? "";
       this.emitFile({ type: "asset", fileName: KPI_FILE, source: kpiText(kpiFile({ ...data, commit })) });
+    },
+  };
+}
+
+/** The file that `siteStamps` adds to the root of a built site. The input `data-stamps` of `reusable-pages.yml` names it. */
+export const STAMPS_FILE = "data-stamps.json";
+
+/** The mark in the HTML of a measured page. `siteStamps` replaces it with the stamp line of the page. */
+export const STAMP_MARK = "<!-- data-stamp -->";
+
+/** The part of the context of a page that `siteStamps` uses. */
+export interface SiteStampsPage {
+  /** The path of the page from the root of the site, with a `/` at the start. */
+  readonly path: string;
+}
+
+/** The Vite plugin that `siteStamps` gives. */
+export interface SiteStampsPlugin {
+  readonly name: string;
+  readonly apply: "build";
+  readonly transformIndexHtml: { readonly order: "pre"; handler(html: string, page: SiteStampsPage): string };
+  generateBundle(this: SiteKpiContext): void;
+}
+
+/**
+ * This function gives the Vite plugin of the data stamps of a site. The plugin puts the stamp line in each measured page.
+ * It also adds `data-stamps.json` to the root of the site. So the page and the freshness gate read one record.
+ *
+ * A fault stops the build. A fault is a bad stamp, a mark with no stamp or a stamp with no mark. A stamp of a page that the build does not hold is also a fault.
+ *
+ * @param input - The stamps, or a function that reads them at the time of the build.
+ */
+export function siteStamps(input: DataStamps | (() => DataStamps)): SiteStampsPlugin {
+  let stamps: DataStamps | undefined;
+  const read = (): DataStamps => {
+    if (stamps !== undefined) return stamps;
+    const parsed = parseDataStamps(typeof input === "function" ? input() : input);
+    if (!parsed.ok) throw new Error(`The data stamps are not good:\n- ${parsed.faults.join("\n- ")}`);
+    stamps = parsed.stamps;
+    return stamps;
+  };
+  const seen = new Set<string>();
+  return {
+    name: "site-pages-stamps",
+    apply: "build",
+    transformIndexHtml: {
+      order: "pre",
+      handler(html, { path }) {
+        const name = path.replace(/^\//, "");
+        const stamp = read().pages.find((page) => page.page === name);
+        const marked = html.includes(STAMP_MARK);
+        if (stamp === undefined && marked) throw new Error(`The page ${name} has the mark of a data stamp, and the stamps have no page ${name}.`);
+        if (stamp === undefined) return html;
+        if (!marked) throw new Error(`The stamps have the page ${name}, and the page has no mark ${STAMP_MARK}.`);
+        seen.add(name);
+        return html.replace(STAMP_MARK, renderDataStamp(stamp));
+      },
+    },
+    generateBundle() {
+      const missing = read()
+        .pages.map((page) => page.page)
+        .filter((page) => !seen.has(page));
+      if (missing.length > 0) throw new Error(`The stamps have pages that the build does not hold: ${missing.join(", ")}.`);
+      this.emitFile({ type: "asset", fileName: STAMPS_FILE, source: `${JSON.stringify(read(), null, 2)}\n` });
     },
   };
 }

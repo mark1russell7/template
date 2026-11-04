@@ -200,7 +200,7 @@ setMeasure: build/explorer/index.d.ts#setMeasure
 settle: build/explorer/index.d.ts#settle
 viewOf: build/explorer/index.d.ts#viewOf
 
-## ./vite (build/vite.d.ts): 16 names
+## ./vite (build/vite.d.ts): 21 names
 
 type BuildInfo: build/chrome.d.ts#BuildInfo
 SiteEnv: build/vite.d.ts#SiteEnv
@@ -212,11 +212,16 @@ SiteShellConfigInput: build/vite.d.ts#SiteShellConfigInput
 SiteShellOptions: build/vite.d.ts#SiteShellOptions
 SiteShellPlugin: build/vite.d.ts#SiteShellPlugin
 SiteShellTag: build/vite.d.ts#SiteShellTag
+SiteStampsPage: build/vite.d.ts#SiteStampsPage
+SiteStampsPlugin: build/vite.d.ts#SiteStampsPlugin
 SiteTarget: build/vite.d.ts#SiteTarget
+STAMP_MARK: build/vite.d.ts#STAMP_MARK
+STAMPS_FILE: build/vite.d.ts#STAMPS_FILE
 buildInfo: build/vite.d.ts#buildInfo
 siteBase: build/vite.d.ts#siteBase
 siteKpi: build/vite.d.ts#siteKpi
 siteShell: build/vite.d.ts#siteShell
+siteStamps: build/vite.d.ts#siteStamps
 themeScript: build/vite.d.ts#themeScript
 
 ## ./scroll-cue.css: no declaration file for ./styles/scroll-cue.css

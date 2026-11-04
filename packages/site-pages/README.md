@@ -157,6 +157,20 @@ When npm does not answer, the gate prints the rule 3 under `Not run` and does no
 
 `renderDataStamp(stamp)` gives the line that the page shows with its data: the run, its date, its engine versions and the run in flight.
 
+A Vite site uses the plugin `siteStamps` from `@mark1russell7/site-pages/vite`. Give the stamps, or a function that reads them from the record of the run. The plugin replaces `<!-- data-stamp -->` in each measured page. It also adds `data-stamps.json` to the built site. So the page and the gate read one record:
+
+```ts
+export default defineConfig({
+  plugins: [siteStamps(() => stampsOf(readRun()))],
+});
+```
+
+```yaml
+      data-stamps: packages/site/dist/data-stamps.json
+```
+
+A fault stops the build. A fault is a bad stamp, a mark with no stamp or a stamp with no mark. A stamp of a page that the build does not hold is also a fault.
+
 ## The releases
 
 The command merges four sources by version:
@@ -458,6 +472,7 @@ showBuild(byId("build"), __BUILD__, "owner/my-site");
 | Export of `./vite` | Operation |
 | --- | --- |
 | `siteShell({ themeKey, packageFile })` | Makes the plugin. A `base` or a `build.target` in the config of the site has priority. |
+| `siteStamps(input)` | Makes the plugin of the data stamps of a site. |
 | `themeScript(storageKey)` | Gives the text of the theme script, for a page without the plugin. |
 | `siteBase(env)` | Gives `SITE_BASE` with one `/` at the end, or `/`. |
 | `buildInfo(version, env, now)` | Gives the data of `__BUILD__`: the short commit, the date and the version. |
