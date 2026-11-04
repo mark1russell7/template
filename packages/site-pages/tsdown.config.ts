@@ -1,10 +1,11 @@
 import { defineConfig } from "tsdown";
 
 // The build for npm: ES modules in build/. index.js is the library with its types, chrome.js is the
-// browser entry with no Node.js import, vite.js is the entry for vite.config.ts, and cli.js is the
-// bin with the shebang of the source. The workspace imports the source (main is src/index.ts).
+// browser entry with no Node.js import, explorer/index.js is the response explorer for the browser,
+// vite.js is the entry for vite.config.ts, and cli.js is the bin with the shebang of the source. The
+// workspace imports the source (main is src/index.ts).
 export default defineConfig({
-  entry: ["src/index.ts", "src/chrome.ts", "src/vite.ts", "src/cli.ts"],
+  entry: ["src/index.ts", "src/chrome.ts", "src/explorer/index.ts", "src/vite.ts", "src/cli.ts"],
   outDir: "build",
   format: "esm",
   platform: "node",

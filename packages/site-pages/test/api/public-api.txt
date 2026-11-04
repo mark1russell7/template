@@ -136,6 +136,44 @@ nextTheme: build/chrome.d.ts#nextTheme
 setupTheme: build/chrome.d.ts#setupTheme
 showBuild: build/chrome.d.ts#showBuild
 
+## ./explorer (build/explorer/index.d.ts): 35 names
+
+type AxisSlot: build/explorer/index.d.ts#AxisSlot
+type AxisSpec: build/explorer/index.d.ts#AxisSpec
+type CurvePanel: build/explorer/index.d.ts#CurvePanel
+type DimensionChoice: build/explorer/index.d.ts#DimensionChoice
+type ExplorerHandle: build/explorer/index.d.ts#ExplorerHandle
+type ExplorerOptions: build/explorer/index.d.ts#ExplorerOptions
+type ExplorerPanel: build/explorer/index.d.ts#ExplorerPanel
+type ExplorerState: build/explorer/index.d.ts#ExplorerState
+type ExplorerView: build/explorer/index.d.ts#ExplorerView
+type HoldControl: build/explorer/index.d.ts#HoldControl
+type HoldOption: build/explorer/index.d.ts#HoldOption
+MAX_PANELS: build/explorer/index.d.ts#MAX_PANELS
+MAX_STEPS: build/explorer/index.d.ts#MAX_STEPS
+MIN_STEPS: build/explorer/index.d.ts#MIN_STEPS
+type NumberTable: build/explorer/index.d.ts#NumberTable
+type PlainPoint: build/explorer/index.d.ts#PlainPoint
+type PointsPanel: build/explorer/index.d.ts#PointsPanel
+READ_BUDGET: build/explorer/index.d.ts#READ_BUDGET
+SURFACE_BUDGET_MS: build/explorer/index.d.ts#SURFACE_BUDGET_MS
+type SurfacePanel: build/explorer/index.d.ts#SurfacePanel
+type ViewOptions: build/explorer/index.d.ts#ViewOptions
+axisChoices: build/explorer/index.d.ts#axisChoices
+facetChoices: build/explorer/index.d.ts#facetChoices
+holdControls: build/explorer/index.d.ts#holdControls
+mountExplorer: build/explorer/index.d.ts#mountExplorer
+nextStepsCap: build/explorer/index.d.ts#nextStepsCap
+numberTable: build/explorer/index.d.ts#numberTable
+openRecord: build/explorer/index.d.ts#openRecord
+planSteps: build/explorer/index.d.ts#planSteps
+setAxis: build/explorer/index.d.ts#setAxis
+setFacet: build/explorer/index.d.ts#setFacet
+setHold: build/explorer/index.d.ts#setHold
+setMeasure: build/explorer/index.d.ts#setMeasure
+settle: build/explorer/index.d.ts#settle
+viewOf: build/explorer/index.d.ts#viewOf
+
 ## ./vite (build/vite.d.ts): 12 names
 
 type BuildInfo: build/chrome.d.ts#BuildInfo
@@ -158,6 +196,10 @@ file ./scroll-cue.css: styles/scroll-cue.css
 ## ./shell.css: no declaration file for ./styles/shell.css
 
 file ./shell.css: styles/shell.css
+
+## ./explorer.css: no declaration file for ./styles/explorer.css
+
+file ./explorer.css: styles/explorer.css
 
 ## bin: 1 commands
 
@@ -217,6 +259,184 @@ export declare function setupTheme(button: HTMLButtonElement, storageKey: string
 
 ### build/chrome.d.ts#showBuild
 export declare function showBuild(element: HTMLElement, build: BuildInfo, repository: string): void;
+
+### build/explorer/index.d.ts#AxisSlot
+type AxisSlot = "x" | "y";
+
+### build/explorer/index.d.ts#AxisSpec
+interface AxisSpec {
+  readonly id: string;
+  readonly label: string;
+  readonly kind: "number" | "levels";
+  readonly log: boolean;
+  readonly range: readonly [number, number];
+  readonly levels: readonly ResponseValue[];
+}
+
+### build/explorer/index.d.ts#CurvePanel
+interface CurvePanel extends PanelBase {
+  readonly kind: "curve";
+  readonly slice: ResponseSlice;
+}
+
+### build/explorer/index.d.ts#DimensionChoice
+interface DimensionChoice {
+  readonly id: string;
+  readonly label: string;
+  readonly disabled: boolean;
+  readonly reason: string;
+}
+
+### build/explorer/index.d.ts#ExplorerHandle
+interface ExplorerHandle {
+  state(): ExplorerState | null;
+  destroy(): void;
+}
+
+### build/explorer/index.d.ts#ExplorerOptions
+interface ExplorerOptions {
+  readonly initial?: Partial<ExplorerState>;
+  readonly budgetMs?: number;
+  readonly now?: () => number;
+}
+
+### build/explorer/index.d.ts#ExplorerPanel
+type ExplorerPanel = CurvePanel | SurfacePanel | PointsPanel;
+
+### build/explorer/index.d.ts#ExplorerState
+interface ExplorerState {
+  readonly measure: string;
+  readonly x: string;
+  readonly y: string | null;
+  readonly facet: string | null;
+  readonly hold: Readonly<Record<string, ResponseValue>>;
+}
+
+### build/explorer/index.d.ts#ExplorerView
+interface ExplorerView {
+  readonly measure: ResponseMeasure;
+  readonly x: AxisSpec;
+  readonly y: AxisSpec | null;
+  readonly panels: readonly ExplorerPanel[];
+  readonly log: boolean;
+  readonly error: ResponseHeldOutError | null;
+  readonly errorText: string;
+  readonly modelText: string;
+  readonly gridText: string;
+  readonly problem: string;
+  readonly steps: number;
+  readonly elapsedMs: number;
+  readonly nextCap: number;
+}
+
+### build/explorer/index.d.ts#HoldControl
+interface HoldControl {
+  readonly id: string;
+  readonly label: string;
+  readonly kind: "levels" | "stops";
+  readonly applies: boolean;
+  readonly note: string;
+  readonly options: readonly HoldOption[];
+  readonly value: ResponseValue;
+}
+
+### build/explorer/index.d.ts#HoldOption
+interface HoldOption {
+  readonly value: ResponseValue;
+  readonly text: string;
+  readonly disabled: boolean;
+  readonly reason: string;
+}
+
+### build/explorer/index.d.ts#MAX_PANELS
+export declare const MAX_PANELS = 8;
+
+### build/explorer/index.d.ts#MAX_STEPS
+export declare const MAX_STEPS = 33;
+
+### build/explorer/index.d.ts#MIN_STEPS
+export declare const MIN_STEPS = 5;
+
+### build/explorer/index.d.ts#NumberTable
+interface NumberTable {
+  readonly columns: readonly string[];
+  readonly rows: readonly (readonly string[])[];
+}
+
+### build/explorer/index.d.ts#PlainPoint
+interface PlainPoint {
+  readonly id: string;
+  readonly at: readonly ResponseValue[];
+  readonly value: number;
+}
+
+### build/explorer/index.d.ts#PointsPanel
+interface PointsPanel extends PanelBase {
+  readonly kind: "points";
+  readonly points: readonly PlainPoint[];
+}
+
+### build/explorer/index.d.ts#READ_BUDGET
+export declare const READ_BUDGET = 4e5;
+
+### build/explorer/index.d.ts#SURFACE_BUDGET_MS
+export declare const SURFACE_BUDGET_MS = 50;
+
+### build/explorer/index.d.ts#SurfacePanel
+interface SurfacePanel extends PanelBase {
+  readonly kind: "surface";
+  readonly cells: boolean;
+  readonly surface: ResponseSurface;
+}
+
+### build/explorer/index.d.ts#ViewOptions
+interface ViewOptions {
+  readonly stepsCap?: number;
+  readonly budgetMs?: number;
+  readonly now?: () => number;
+}
+
+### build/explorer/index.d.ts#axisChoices
+export declare function axisChoices(record: ResponseRecord, state: ExplorerState, slot: AxisSlot): readonly DimensionChoice[];
+
+### build/explorer/index.d.ts#facetChoices
+export declare function facetChoices(record: ResponseRecord, state: ExplorerState): readonly DimensionChoice[];
+
+### build/explorer/index.d.ts#holdControls
+export declare function holdControls(record: ResponseRecord, state: ExplorerState): readonly HoldControl[];
+
+### build/explorer/index.d.ts#mountExplorer
+export declare function mountExplorer(host: HTMLElement, recordJson: unknown, options?: ExplorerOptions): ExplorerHandle;
+
+### build/explorer/index.d.ts#nextStepsCap
+export declare function nextStepsCap(steps: number, elapsedMs: number, budgetMs: number): number;
+
+### build/explorer/index.d.ts#numberTable
+export declare function numberTable(view: ExplorerView, panel: ExplorerPanel): NumberTable;
+
+### build/explorer/index.d.ts#openRecord
+export declare function openRecord(value: unknown): ParsedResponseRecord;
+
+### build/explorer/index.d.ts#planSteps
+export declare function planSteps(points: number, panels: number, continuous: number, levels: number, cap?: number): number;
+
+### build/explorer/index.d.ts#setAxis
+export declare function setAxis(record: ResponseRecord, state: ExplorerState, slot: AxisSlot, id: string | null): ExplorerState;
+
+### build/explorer/index.d.ts#setFacet
+export declare function setFacet(record: ResponseRecord, state: ExplorerState, id: string | null): ExplorerState;
+
+### build/explorer/index.d.ts#setHold
+export declare function setHold(record: ResponseRecord, state: ExplorerState, id: string, value: ResponseValue): ExplorerState;
+
+### build/explorer/index.d.ts#setMeasure
+export declare function setMeasure(record: ResponseRecord, state: ExplorerState, measure: string): ExplorerState;
+
+### build/explorer/index.d.ts#settle
+export declare function settle(record: ResponseRecord, wanted?: Partial<ExplorerState>): ExplorerState;
+
+### build/explorer/index.d.ts#viewOf
+export declare function viewOf(record: ResponseRecord, state: ExplorerState, options?: ViewOptions): ExplorerView;
 
 ### build/index.d.ts#BASE_CSS
 export declare const BASE_CSS: string;

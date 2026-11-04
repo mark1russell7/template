@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package",
   "name": "@mark1russell7/site-pages",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A release timeline page and a live status page for the site of a GitHub repository: JSON data and standalone HTML, made at deploy time.",
   "keywords": [
     "github-pages",
@@ -29,9 +29,11 @@
   "exports": {
     ".": "./src/index.ts",
     "./chrome": "./src/chrome.ts",
+    "./explorer": "./src/explorer/index.ts",
     "./vite": "./src/vite.ts",
     "./scroll-cue.css": "./styles/scroll-cue.css",
     "./shell.css": "./styles/shell.css",
+    "./explorer.css": "./styles/explorer.css",
     "./package.json": "./package.json"
   },
   "bin": {
@@ -54,12 +56,17 @@
         "types": "./build/chrome.d.ts",
         "import": "./build/chrome.js"
       },
+      "./explorer": {
+        "types": "./build/explorer/index.d.ts",
+        "import": "./build/explorer/index.js"
+      },
       "./vite": {
         "types": "./build/vite.d.ts",
         "import": "./build/vite.js"
       },
       "./scroll-cue.css": "./styles/scroll-cue.css",
       "./shell.css": "./styles/shell.css",
+      "./explorer.css": "./styles/explorer.css",
       "./package.json": "./package.json"
     },
     "bin": {
@@ -74,6 +81,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@mark1russell7/rigor-statistics": "^0.1.7"
   },
   "devDependencies": {
     "@mark1russell7/cue": "^2.0.0",

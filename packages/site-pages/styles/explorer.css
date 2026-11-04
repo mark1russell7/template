@@ -1,0 +1,173 @@
+/*
+ * @mark1russell7/site-pages/explorer.css: the style of the response explorer.
+ *
+ * Use: import this file with the entry ./explorer.
+ *   import "@mark1russell7/site-pages/explorer.css";
+ *
+ * The explorer reads the tokens of a site when they exist: --card or --surface, --fg or --ink, --muted,
+ * --line or --rule, --sunk or --sunken, --accent or --focus and --mono. Without them, it uses its own colors.
+ * The two dark rules below keep the same values, as the rules of shell.css do.
+ */
+.response-explorer {
+  --rx-surface: var(--card, var(--surface, #ffffff));
+  --rx-sunken: var(--sunk, var(--sunken, #f1eee8));
+  --rx-ink: var(--fg, var(--ink, #1b1a17));
+  --rx-muted: var(--muted, #5d5952);
+  --rx-rule: var(--line, var(--rule, #e0dbd1));
+  --rx-accent: var(--accent, var(--focus, #2f5bd3));
+  --rx-error: var(--err, #b42318);
+  --rx-mono: var(--mono, ui-monospace, Menlo, Consolas, monospace);
+  --rx-veil: #8f8d86;
+  --rx-seq-0: #cde2fb;
+  --rx-seq-1: #b7d3f6;
+  --rx-seq-2: #9ec5f4;
+  --rx-seq-3: #6da7ec;
+  --rx-seq-4: #3987e5;
+  --rx-seq-5: #2a78d6;
+  --rx-seq-6: #1c5cab;
+  --rx-seq-7: #104281;
+  --rx-seq-8: #0d366b;
+  --rx-on-light: #0d2240;
+  --rx-on-dark: #f4f8fe;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  color: var(--rx-ink);
+  font-size: 0.95rem;
+  min-width: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .response-explorer {
+    --rx-veil: #55534e;
+    --rx-seq-0: #0d366b;
+    --rx-seq-1: #104281;
+    --rx-seq-2: #184f95;
+    --rx-seq-3: #1c5cab;
+    --rx-seq-4: #2a78d6;
+    --rx-seq-5: #5598e7;
+    --rx-seq-6: #86b6ef;
+    --rx-seq-7: #b7d3f6;
+    --rx-seq-8: #cde2fb;
+    --rx-on-light: #f4f8fe;
+    --rx-on-dark: #0d2240;
+  }
+}
+
+:root[data-theme="dark"] .response-explorer {
+  --rx-veil: #55534e;
+  --rx-seq-0: #0d366b;
+  --rx-seq-1: #104281;
+  --rx-seq-2: #184f95;
+  --rx-seq-3: #1c5cab;
+  --rx-seq-4: #2a78d6;
+  --rx-seq-5: #5598e7;
+  --rx-seq-6: #86b6ef;
+  --rx-seq-7: #b7d3f6;
+  --rx-seq-8: #cde2fb;
+  --rx-on-light: #f4f8fe;
+  --rx-on-dark: #0d2240;
+}
+
+@media (min-width: 60rem) {
+  .response-explorer { grid-template-columns: minmax(16rem, 20rem) minmax(0, 1fr); align-items: start; }
+}
+
+/* The controls */
+.rx-controls { display: grid; gap: 0.75rem; min-width: 0; }
+.rx-axes { display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); }
+.rx-field { display: grid; gap: 0.15rem; min-width: 0; font-size: 0.85rem; color: var(--rx-muted); }
+.rx-field select { width: 100%; min-height: 2.25rem; border: 1px solid var(--rx-rule); background: var(--rx-surface); border-radius: 0.4rem; padding: 0.2rem 0.35rem; color: var(--rx-ink); font: inherit; }
+.rx-field select:hover { border-color: var(--rx-accent); }
+.rx-hold { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: 0.25rem; }
+.rx-name, .rx-section { font-size: 0.85rem; color: var(--rx-muted); padding: 0; margin: 0; }
+.rx-section { text-transform: uppercase; letter-spacing: 0.07em; font-size: 0.75rem; border-top: 1px solid var(--rx-rule); padding-top: 0.6rem; }
+.rx-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.rx-chip { position: relative; display: inline-flex; cursor: pointer; }
+.rx-radio { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: inherit; }
+.rx-chip span { display: inline-flex; align-items: center; min-height: 2rem; border: 1px solid var(--rx-rule); background: var(--rx-surface); border-radius: 999px; padding: 0.1rem 0.7rem; font-size: 0.88rem; }
+.rx-chip:hover span { border-color: var(--rx-accent); }
+.rx-radio:checked + span { background: var(--rx-accent); border-color: var(--rx-accent); color: var(--rx-surface); font-weight: 600; }
+.rx-radio:focus-visible + span { outline: 2px solid var(--rx-accent); outline-offset: 2px; }
+.rx-radio:disabled + span { opacity: 0.45; border-style: dashed; }
+.rx-chip:has(.rx-radio:disabled) { cursor: not-allowed; }
+.rx-radio:disabled:checked + span { background: var(--rx-sunken); color: var(--rx-muted); border-color: var(--rx-rule); }
+.rx-slider-head { display: flex; justify-content: space-between; gap: 0.5rem; align-items: baseline; }
+.rx-value { font-variant-numeric: tabular-nums; font-weight: 600; }
+.rx-slider { width: 100%; margin: 0; min-height: 1.75rem; accent-color: var(--rx-accent); }
+.rx-slider:disabled { opacity: 0.45; }
+.rx-note { margin: 0; font-size: 0.82rem; color: var(--rx-muted); }
+
+/* The charts */
+.rx-chart { display: grid; gap: 0.5rem; min-width: 0; }
+.rx-error { margin: 0; padding: 0.5rem 0.7rem; background: var(--rx-sunken); border: 1px solid var(--rx-rule); border-radius: 0.5rem; font-size: 0.92rem; }
+.rx-error:empty { display: none; }
+.rx-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16.25rem), 1fr)); gap: 0.75rem; min-width: 0; }
+.rx-panel { margin: 0; min-width: 0; }
+.rx-panel-title { font-size: 0.88rem; font-weight: 600; }
+.rx-svg { display: block; max-width: 100%; height: auto; touch-action: pan-y; border-radius: 0.3rem; }
+.rx-svg:focus-visible { outline: 2px solid var(--rx-accent); outline-offset: 2px; }
+.rx-tick, .rx-axis-name, .rx-cell-text { font-size: 11px; font-family: inherit; font-variant-numeric: tabular-nums; }
+.rx-tick { fill: var(--rx-muted); }
+.rx-axis-name { fill: var(--rx-muted); font-size: 12px; }
+.rx-axis { stroke: var(--rx-muted); stroke-width: 1; }
+.rx-grid { stroke: var(--rx-rule); stroke-width: 1; }
+.rx-line { fill: none; stroke: var(--rx-accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.rx-band-stop { stop-color: var(--rx-accent); }
+.rx-band { fill-opacity: 0.28; stroke: none; }
+.rx-whisker { fill: var(--rx-accent); }
+.rx-dot { fill: var(--rx-ink); fill-opacity: 0.6; stroke: var(--rx-surface); stroke-width: 1; }
+.rx-dot-heat { fill: var(--rx-surface); fill-opacity: 0.9; stroke: var(--rx-ink); }
+.rx-ring-dot { stroke: var(--rx-surface); stroke-width: 2; }
+.rx-cursor { stroke: var(--rx-muted); stroke-width: 1; stroke-dasharray: 3 3; }
+.rx-ring { fill: var(--rx-surface); stroke: var(--rx-accent); stroke-width: 2; }
+.rx-cell-cursor { fill: none; stroke: var(--rx-ink); stroke-width: 2; }
+.rx-veil { fill: var(--rx-veil); }
+.rx-cell-text { pointer-events: none; }
+.rx-on-light { fill: var(--rx-on-light); }
+.rx-on-dark { fill: var(--rx-on-dark); }
+.rx-h0 { fill: var(--rx-seq-0); }
+.rx-h1 { fill: var(--rx-seq-1); }
+.rx-h2 { fill: var(--rx-seq-2); }
+.rx-h3 { fill: var(--rx-seq-3); }
+.rx-h4 { fill: var(--rx-seq-4); }
+.rx-h5 { fill: var(--rx-seq-5); }
+.rx-h6 { fill: var(--rx-seq-6); }
+.rx-h7 { fill: var(--rx-seq-7); }
+.rx-h8 { fill: var(--rx-seq-8); }
+
+/* The legend and the readout */
+.rx-legend { display: flex; flex-wrap: wrap; gap: 0.2rem 1rem; margin: 0; font-size: 0.82rem; color: var(--rx-muted); }
+.rx-key { display: inline-flex; align-items: center; gap: 0.35rem; font-variant-numeric: tabular-nums; }
+.rx-mark { display: inline-block; flex: none; width: 1.1rem; }
+.rx-mark-line { height: 2px; background: var(--rx-accent); }
+.rx-mark-band { height: 0.7rem; background: var(--rx-accent); opacity: 0.28; border-radius: 2px; }
+.rx-mark-dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--rx-ink); opacity: 0.6; }
+.rx-mark-veil { height: 0.7rem; background: var(--rx-veil); border-radius: 2px; }
+.rx-ramp { display: inline-flex; width: 6rem; height: 0.6rem; }
+.rx-ramp b { flex: 1; }
+.rx-s0 { background: var(--rx-seq-0); }
+.rx-s1 { background: var(--rx-seq-1); }
+.rx-s2 { background: var(--rx-seq-2); }
+.rx-s3 { background: var(--rx-seq-3); }
+.rx-s4 { background: var(--rx-seq-4); }
+.rx-s5 { background: var(--rx-seq-5); }
+.rx-s6 { background: var(--rx-seq-6); }
+.rx-s7 { background: var(--rx-seq-7); }
+.rx-s8 { background: var(--rx-seq-8); }
+.rx-readout { margin: 0; min-height: 2.6em; font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+
+/* The table of numbers */
+.rx-numbers summary { cursor: pointer; font-size: 0.88rem; color: var(--rx-accent); }
+.rx-numbers-body { display: grid; gap: 0.75rem; margin-top: 0.5rem; }
+.rx-table-box { --scroll-cue-bg: var(--rx-surface); max-height: 20rem; overflow: auto; }
+.rx-table { border-collapse: collapse; width: 100%; font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+.rx-table caption { text-align: left; font-weight: 600; padding-bottom: 0.25rem; }
+.rx-table th, .rx-table td { border-bottom: 1px solid var(--rx-rule); padding: 0.15rem 0.4rem; text-align: right; }
+.rx-table th:first-child, .rx-table td:first-child { text-align: left; }
+
+/* The faults of a bad record */
+.rx-faults { color: var(--rx-ink); border: 1px solid var(--rx-error); border-radius: 0.5rem; padding: 0.6rem 0.8rem; }
+.rx-faults-title { margin: 0 0 0.35rem; font-weight: 600; color: var(--rx-error); }
+.rx-faults ul { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.2rem; }
+.rx-faults code { font-family: var(--rx-mono); font-size: 0.85em; }
