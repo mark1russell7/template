@@ -187,7 +187,7 @@ export function checkFreshness(stamps: DataStamps, options: FreshnessOptions): F
 }
 
 /** The help of the command `site-pages freshness`. */
-export const FRESHNESS_HELP = `Usage: site-pages freshness --stamps <file> [options]
+export const FRESHNESS_HELP: string = `Usage: site-pages freshness --stamps <file> [options]
 
 Examine the data stamps of the measured pages of a site.
 
