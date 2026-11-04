@@ -5,6 +5,7 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
   # release.yml starts these gates before a release
   workflow_call:

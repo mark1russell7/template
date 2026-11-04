@@ -1375,6 +1375,36 @@ describe("changelog-version", () => {
   });
 });
 
+describe("push-runs-main", () => {
+  const flow = (on: string[]): string => ["name: ci", ...on, "jobs: {}", ""].join("\n");
+
+  it("reports a push with no filter beside a pull request, and the fix limits it to main", () => {
+    const root = fixture({
+      "package.json": { name: "one" },
+      ".github/workflows/block.yml": flow(["on:", "  push:", "  pull_request:", "  workflow_call:"]),
+      ".github/workflows/list.yml": flow(["on: [push, pull_request]"]),
+      ".github/workflows/paths.yml": flow(["on:", "  pull_request:", "  push:", "    paths:", "      - src/**"]),
+      ".github/workflows/main.yml": flow(["on:", "  pull_request:", "  push:", "    branches: [main]"]),
+      ".github/workflows/tags.yml": flow(["on:", "  pull_request:", "  push:", "    tags: ['v*']"]),
+      ".github/workflows/alone.yml": flow(["on: push"]),
+    });
+    commitAll(root);
+    expect(rule(root, "push-runs-main").breaks.map((item) => `${item.file}:${String(item.line)}`)).toEqual([".github/workflows/block.yml:3", ".github/workflows/list.yml:2", ".github/workflows/paths.yml:4"]);
+    const fixed = runFix({ root, only: ["push-runs-main"] });
+    expect(fixed.changed).toEqual([".github/workflows/block.yml", ".github/workflows/list.yml", ".github/workflows/paths.yml"]);
+    expect(readFileSync(join(root, ".github/workflows/block.yml"), "utf8")).toContain("on:\n  push:\n    branches: [main]\n  pull_request:\n  workflow_call:\n");
+    expect(readFileSync(join(root, ".github/workflows/list.yml"), "utf8")).toContain("on:\n  push:\n    branches: [main]\n  pull_request:\n");
+    expect(readFileSync(join(root, ".github/workflows/paths.yml"), "utf8")).toContain("  push:\n    branches: [main]\n    paths:\n");
+    expect(rule(root, "push-runs-main").breaks).toEqual([]);
+  });
+
+  it("skips a repository with no workflow on both events", () => {
+    const root = fixture({ "package.json": { name: "one" }, ".github/workflows/alone.yml": flow(["on: push"]) });
+    commitAll(root);
+    expect(rule(root, "push-runs-main")).toMatchObject({ status: "skipped", note: "no workflow starts on pull_request and on push" });
+  });
+});
+
 describe("main-runs-finish", () => {
   const PR = "${{ github.event_name == 'pull_request' }}";
   const OWN = "${{ github.event_name == 'pull_request' && github.ref || github.sha }}";

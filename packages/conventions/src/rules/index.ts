@@ -9,6 +9,7 @@ import { homePackage } from "./home-package.ts";
 import { licenseFile } from "./license-file.ts";
 import { mainCheck } from "./main-check.ts";
 import { mainRunsFinish } from "./main-runs-finish.ts";
+import { pushRunsMain } from "./push-runs-main.ts";
 import { noBuildOutput } from "./no-build-output.ts";
 import { noLocalPaths } from "./no-local-paths.ts";
 import { pagesSite } from "./pages-site.ts";
@@ -48,6 +49,7 @@ export const RULES: readonly Rule[] = [
   roadmapParses,
   runnerBudget,
   mainRunsFinish,
+  pushRunsMain,
   gateTrigger,
   homePackage,
   licenseFile,
