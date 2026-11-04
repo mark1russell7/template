@@ -139,7 +139,7 @@ describe("check and update", () => {
     expect(existsSync(join(root, "packages/a/test/api/public-api.txt"))).toBe(false);
   });
 
-  it("fails a run over all packages that finds no public package", () => {
+  it("passes a repository of private packages, in the two modes", () => {
     const root = fixture({
       "package.json": { name: "root", private: true },
       "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n',
@@ -147,14 +147,20 @@ describe("check and update", () => {
     });
     for (const mode of ["check", "update"]) {
       const result = cli(root, [mode]);
-      expect(result.code, mode).toBe(1);
-      expect(result.stdout).toContain("Errors:\n  .: no public package");
+      expect(result.code, mode).toBe(0);
+      expect(result.stdout).toContain("0 public packages with a report of the API, 1 private packages without a report.");
     }
+  });
+
+  it("passes a private package that is the whole repository", () => {
+    expect(cli(fixture({ "package.json": { name: "one", private: true } }), ["check"]).code).toBe(0);
   });
 
   it("fails a run over no package folder at all", () => {
     const root = fixture({ "package.json": { name: "root", private: true }, "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n' });
-    expect(cli(root, ["check"]).stdout).toContain("Errors:\n  .: no public package");
+    const result = cli(root, ["check"]);
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain("Errors:\n  .: no package");
   });
 
   it("finds a report that the run does not read, and update removes it", () => {

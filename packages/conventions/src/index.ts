@@ -38,6 +38,7 @@ export {
   type RuleOutcome,
 } from "./rule.ts";
 export {
+  apiReportScript,
   cuePreset,
   gateTrigger,
   homePackage,

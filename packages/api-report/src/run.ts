@@ -122,8 +122,9 @@ function globbedFolders(root: string, globs: readonly string[] | undefined): str
 
 /**
  * This function compares (`check`) or writes (`update`) the report of each package. It writes nothing
- * in `check` mode. Without named folders, a run that finds no public package fails: it examined
- * nothing, and that is not a pass. A report in a folder that the run does not read is `stale`.
+ * in `check` mode. Without named folders, a run that finds no package fails: it examined nothing,
+ * and that is not a pass. A repository of private packages passes: it has no public API to report.
+ * A report in a folder that the run does not read is `stale`.
  */
 export function runReports(options: RunOptions): RunResult {
   const root = resolve(options.root);
@@ -187,8 +188,8 @@ export function runReports(options: RunOptions): RunResult {
       if (options.mode === "update") rmSync(file);
       results.push({ folder: relativePath(root, folder), file: relativePath(root, file), status: "stale" });
     }
-    if (results.every((result) => result.status === "private" || result.status === "stale")) {
-      results.push({ folder: ".", file: report, status: "error", error: "no public package. The command read the globs of the workspace, or a package.json file in the root." });
+    if (results.every((result) => result.status === "stale")) {
+      results.push({ folder: ".", file: report, status: "error", error: "no package. The command read the globs of the workspace, or a package.json file in the root." });
     }
   }
   const failed = results.some(
@@ -255,7 +256,7 @@ export interface CliIo {
 export const USAGE: string = `Usage: api-report <check | update> [options] [<package folder>...]
 
   check                  Compare each report with the built .d.ts files. Exit code 1 when a report differs, is missing or has no
-                         package that the command reads, or when the command finds no public package.
+                         package that the command reads, or when the command finds no package.
   update                 Write each report again. Remove each report of a package that the command does not read.
 
   --root <folder>        The root of the repository. The default is the current folder.
