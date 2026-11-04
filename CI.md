@@ -320,6 +320,7 @@ jobs:
 - A page also fails when a table in a box that scrolls goes out of view at a phone width.
 - The attribute `data-overflow-ok` marks a box that is meant to scroll or to clip. The `README.md` of `site-pages` tells the rule and what does not count.
 - A console error, an exception or a failed request also fails the page.
+- A page that links to other sites of its origin names their paths in the meta tag `site-check-other-paths`. The `README.md` of `site-pages` tells the rule.
 - `site-check-probe` is a JavaScript or TypeScript file that tests the interactive core of the home. Its checks run at each width. The check removes the types of a `.ts` file, so the site needs no build step for its probe. `site-pages check --help` tells its functions.
 - The check uses the Chromium of `playwright-core` at `site-check-playwright`, from the action `setup-playwright`. The artifact `site-check` has the screenshots and `report.json`.
 - The check runs from `packages/site-pages/src/check` of the template commit of the workflow. It needs Node.js 22.18 or later.

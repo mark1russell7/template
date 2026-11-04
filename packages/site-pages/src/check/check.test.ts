@@ -37,6 +37,12 @@ beforeAll(() => {
   write("broken/index.html", page(`<h1>Broken</h1><img src="missing.png" alt=""><script>console.error("bad thing")</script>`));
   write("throws/index.html", page(`<h1>Throws</h1><script>throw new Error("boom")</script>`));
   write("empty/index.html", page(``));
+  const OTHER_SITE = `<meta name="site-check-other-paths" content="^/site/other-[a-z]+/$">`;
+  const FETCH_OTHER = `<script>fetch("other-one/", { method: "HEAD" })</script><iframe src="other-two/" title="Other site"></iframe>`;
+  write("other-sites/index.html", page(`<h1>Other sites</h1>${FETCH_OTHER}`, OTHER_SITE));
+  write("other-sites-own/index.html", page(`<h1>Other sites</h1><img src="missing.png" alt=""><script>fetch("../other-one/", { method: "HEAD" })</script>`, OTHER_SITE));
+  write("other-sites-none/index.html", page(`<h1>Other sites</h1><script>fetch("../other-one/", { method: "HEAD" })</script>`));
+  write("other-sites-bad/index.html", page(`<h1>Other sites</h1>`, `<meta name="site-check-other-paths" content="(">`));
   write("module/index.html", page(`<h1>Module</h1><p>A module script that imports a Node.js module</p><script type="module" src="page.js"></script>`));
   write("module/page.js", `import "node:perf_hooks";\ndocument.querySelector("p").textContent = "ran";`);
   write("clip/index.html", page(`<h1>Clip</h1><textarea id="ed" style="overflow: hidden; height: 2em">${"a line\n".repeat(20)}</textarea>`));
@@ -221,6 +227,20 @@ describe.skipIf(browser === undefined)("checkSite in a browser", () => {
     expect(problems["/clip/"]).toContain("a text area hides its text: textarea#ed");
     expect(problems["/module/"]).toContain("console.error: failed to load script: page.js");
     expect(problems["/nothing/"]).toMatch(/HTTP 404: .*\/nothing\//);
+  }, 120_000);
+
+  it("does not count a refused request to a path of another site that the page names", async () => {
+    const result = await checkSite(options(["/other-sites/"], { widths: [360], schemes: ["light"] }));
+    expect(result.views[0]?.problems).toEqual([]);
+  }, 120_000);
+
+  it("counts each other refused request, also on a page that names other sites", async () => {
+    const result = await checkSite(options(["/other-sites-own/", "/other-sites-none/", "/other-sites-bad/"], { widths: [360], schemes: ["light"] }));
+    const problems = Object.fromEntries(result.views.map((view) => [view.page, view.problems.join("\n")]));
+    expect(problems["/other-sites-own/"]).toMatch(/HTTP 404: .*missing\.png/);
+    expect(problems["/other-sites-own/"]).not.toContain("other-one");
+    expect(problems["/other-sites-none/"]).toMatch(/HTTP 404: .*other-one/);
+    expect(problems["/other-sites-bad/"]).toContain("Invalid regular expression");
   }, 120_000);
 
   it("finds the two real faults: an API table in a scroller at the phone widths", async () => {
