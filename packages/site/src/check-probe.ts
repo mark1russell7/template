@@ -82,6 +82,7 @@ const rxChip = (text: string): HTMLInputElement | null => (rx(".rx-chip").find((
 const rxCells = (): number => rx("rect").filter((cell) => /\brx-h\d\b/.test(cell.getAttribute("class") ?? "")).length;
 check("the explorer draws a band and the measured points", await until(() => rx("path.rx-band").length === 1 && rx("circle.rx-dot").length > 0), `${rx("circle.rx-dot").length} points`);
 check("the explorer tells the held-out error and the folds", /\b5 folds\b/.test(rxText(".rx-error")), rxText(".rx-error"));
+check("the explorer stops the band at the range of the fill", /the view stops at the range of the measure, 0 to 1\./.test(rxText(".rx-note")), rxText(".rx-note"));
 const rxOptions = [...rxBox("x").options];
 check("the explorer labels a dimension that does not apply", rxOptions.some((option) => option.disabled && (option.textContent ?? "").includes("only when Strategy is maxrects")), rxOptions.map((option) => option.textContent).join(", "));
 rxChoose("y", "spread");

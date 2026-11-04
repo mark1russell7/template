@@ -534,7 +534,7 @@ function mountRecord(host: HTMLElement, record: ResponseRecord, options: Explore
       const head = next.error === null ? null : h("strong", {}, "Held-out error. ");
       error.replaceChildren(...(head === null ? [] : [head]), next.errorText);
     }
-    model.textContent = [next.modelText, next.gridText].filter((text) => text !== "").join(" ");
+    model.textContent = [next.modelText, next.gridText, next.rangeText].filter((text) => text !== "").join(" ");
     legend.replaceChildren(legendOf(next));
     tell("Move over a chart, or focus it and use the arrow keys.");
     drawCharts();

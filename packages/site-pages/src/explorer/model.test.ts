@@ -348,6 +348,30 @@ describe("viewOf", () => {
     expect(view.gridText).toContain("100 ms");
   });
 
+  it("tells how many places a range moved, and it adds no text with no range", () => {
+    const state = settle(record, { x: "size" });
+    expect(viewOf(record, state).rangeText).toBe("");
+    const tight: ResponseRecord = { ...record, measures: record.measures.map((m) => (m.id === "score" ? { ...m, range: [11, 12] as const } : m)) };
+    const view = viewOf(tight, state);
+    const slice = (view.panels[0] as CurvePanel).slice;
+    expect(slice.clipped).toBeGreaterThan(0);
+    expect(view.rangeText).toBe(`At ${slice.clipped} places, the view stops at the range of the measure, 11 to 12.`);
+    expect(slice.curve.every((place) => place.low >= 11 && place.high <= 12)).toBe(true);
+  });
+
+  it("counts the places of a surface and of each panel", () => {
+    const tight: ResponseRecord = { ...record, measures: record.measures.map((m) => (m.id === "score" ? { ...m, range: [11, 12] as const } : m)) };
+    const surface = (viewOf(tight, settle(tight, { x: "size", y: "width" })).panels[0] as SurfacePanel).surface;
+    expect(surface.clipped).toBeGreaterThan(0);
+    expect(viewOf(tight, settle(tight, { x: "size", y: "width" })).rangeText).toContain(`At ${surface.clipped} places`);
+  });
+
+  it("plans a level axis from the levels of the record", () => {
+    const state = settle(record, { x: "strategy", y: "size" });
+    const panels = viewOf(record, state).panels.length;
+    expect(viewOf(record, state).steps).toBe(planSteps(record.points.length, panels, 1, 3));
+  });
+
   it("gives cells for a table model", () => {
     const table = tableRecord();
     const view = viewOf(table, settle(table, { x: "left", y: "right" }));
