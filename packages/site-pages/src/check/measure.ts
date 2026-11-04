@@ -3,6 +3,26 @@
  * the browser evaluates, so the code can use only the APIs of the page.
  */
 
+/** Text past the edge of a box that cuts it: an entry of `Measure.cut`. */
+export interface Cut {
+  /**
+   * The kind of the box:
+   * - `clip`: the box has `overflow-x: hidden` or `clip`, so a visitor cannot reach the text,
+   * - `table`: the box scrolls, and the text is in a table.
+   */
+  kind: "clip" | "table";
+  /** The box. */
+  box: string;
+  /** The table, or the element of the text. */
+  element: string;
+  /** The width of the content of the box, in CSS pixels. */
+  scrollWidth: number;
+  /** The visible width of the box, in CSS pixels. */
+  clientWidth: number;
+  /** The start of the first text past the edge. */
+  text: string;
+}
+
 /** The result of `MEASURE`. */
 export interface Measure {
   innerWidth: number;
@@ -15,6 +35,8 @@ export interface Measure {
   past: string[];
   /** The text areas that hide a part of their text, at most 8. */
   clipped: string[];
+  /** The boxes that cut text at their right edge, at most 8. `cutProblems` of `check.ts` tells which ones are problems. */
+  cut: Cut[];
 }
 
 /**
@@ -25,6 +47,21 @@ export interface Measure {
  * - an element in `.sr`, `.sr-only`, `.visually-hidden` or `.skip` (text for screen readers and skip links),
  * - an element in a `pre`, other than the `pre` itself.
  * Of a chain of elements past the edge, only the outermost one counts.
+ *
+ * `past` skips each element in a container that scrolls or clips, so `cut` examines those containers.
+ * A box is the nearest element around a text, below `body`, with `overflow-x` other than `visible`. Its content is wider
+ * than the box by more than 1 px. An element with `overflow-x: clip` is always a box, because it can report no overflow.
+ * The text counts when a line of it ends more than 1 px past the right edge of the box.
+ *
+ * A box that scrolls counts only for text in a table (`table`, `role="table"` or `role="grid"`).
+ * A code block, a hex view, a row of tabs and a carousel in such a box are meant to scroll.
+ * A box that clips counts for each text, because a visitor cannot reach that text. These texts do not count:
+ * - a text in a box with `text-overflow` other than `clip` (a person chose the ellipsis),
+ * - a text in an element with `data-overflow-ok`, or in that element itself (a person chose the overflow),
+ * - a text in `.sr`, `.sr-only`, `.visually-hidden`, `.skip`, `[aria-hidden="true"]`, `select`, `textarea` or `svg`,
+ * - a text in a fixed element, which the box does not clip,
+ * - a text that is not visible, or with an element around it of 1 px or less or with `opacity: 0`.
+ * Only the first text of a box counts. An element with no text does not count. Vertical overflow does not count.
  */
 export const MEASURE = `(() => {
   const root = document.documentElement;
@@ -53,6 +90,46 @@ export const MEASURE = `(() => {
   const clipped = [...document.querySelectorAll("textarea")]
     .filter((e) => { const s = getComputedStyle(e); return (s.overflowY === "hidden" || s.overflowY === "clip") && e.getBoundingClientRect().height > 0 && e.scrollHeight > e.clientHeight + 1; })
     .map((e) => name(e) + " " + e.scrollHeight + ">" + e.clientHeight);
+  const boxOf = (e) => {
+    for (let p = e; p && p !== document.body && p !== root; p = p.parentElement) {
+      const s = getComputedStyle(p);
+      if (s.overflowX === "clip" || (s.overflowX !== "visible" && p.scrollWidth > p.clientWidth + 1)) return p;
+      if (s.position === "fixed") return undefined;
+    }
+    return undefined;
+  };
+  const shown = (e) => {
+    if (e.closest(".sr,.sr-only,.visually-hidden,.skip,[aria-hidden=true],select,textarea,svg")) return false;
+    if (getComputedStyle(e).visibility !== "visible") return false;
+    for (let p = e; p && p !== root; p = p.parentElement) {
+      const s = getComputedStyle(p);
+      if (s.opacity === "0") return false;
+      if (s.display === "contents") continue;
+      const r = p.getBoundingClientRect();
+      if (r.width <= 1 || r.height <= 1) return false;
+    }
+    return true;
+  };
+  const cuts = new Map();
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  const range = document.createRange();
+  for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+    const e = t.parentElement;
+    if (!e || !t.data.trim()) continue;
+    const box = boxOf(e);
+    if (!box || cuts.has(box)) continue;
+    const s = getComputedStyle(box);
+    if (s.textOverflow !== "clip") continue;
+    const scrolls = s.overflowX === "auto" || s.overflowX === "scroll";
+    const table = e.closest("table,[role=table],[role=grid]");
+    if (scrolls && !(table && box.contains(table))) continue;
+    const left = box.getBoundingClientRect().left + box.clientLeft;
+    range.selectNodeContents(t);
+    const end = Math.max(...[...range.getClientRects()].filter((r) => r.width > 0).map((r) => r.right));
+    if (end <= left + box.clientWidth + 1) continue;
+    if (e.closest("[data-overflow-ok]") || !shown(e)) continue;
+    cuts.set(box, { kind: scrolls ? "table" : "clip", box: name(box), element: name(scrolls ? table : e), scrollWidth: Math.max(box.scrollWidth, Math.ceil(end - left)), clientWidth: box.clientWidth, text: t.data.trim().replace(/\\s+/g, " ").slice(0, 40) });
+  }
   return {
     innerWidth,
     scrollWidth: root.scrollWidth,
@@ -60,6 +137,7 @@ export const MEASURE = `(() => {
     text: (document.body ? document.body.innerText : "").trim().length,
     past: past.slice(0, 8),
     clipped: clipped.slice(0, 8),
+    cut: [...cuts.values()].slice(0, 8),
   };
 })()`;
 
