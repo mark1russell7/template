@@ -3,6 +3,7 @@
  * from this file. Thus a number on a progress page comes from a record and not from a person.
  *
  * The field `at` is the time of the data and not the time of the build. Thus the writer has no default for it.
+ * A measure can have its own `at` when its data is from another time than the rest of the file.
  */
 
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -45,16 +46,23 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 
 const isText = (value: unknown): value is string => typeof value === "string" && value.trim() !== "";
 
+/** This function gives the fault of a time of the data, or an empty list. The name tells which field it is. */
+function timeProblems(at: unknown, name: string, now: number): string[] {
+  if (typeof at !== "string" || !UTC_TIME.test(at) || Number.isNaN(Date.parse(at))) return [`${name} is not a time in UTC.`];
+  return Date.parse(at) > now + CLOCK_MARGIN ? [`The time of the data ${at} is after the time of the check.`] : [];
+}
+
 /** This function gives the faults of one measure. */
-function measureProblems(value: unknown, index: number, seen: Set<string>): string[] {
+function measureProblems(value: unknown, index: number, seen: Set<string>, now: number): string[] {
   if (!isRecord(value)) return [`Measure ${index} is not an object.`];
-  const { id, value: amount, unit } = value;
+  const { id, value: amount, unit, at } = value;
   const problems: string[] = [];
   if (typeof id !== "string" || !SLUG.test(id)) problems.push(`Measure ${index} has no id of lowercase words with single hyphens.`);
   else if (seen.has(id)) problems.push(`The id ${id} occurs two times.`);
   else seen.add(id);
   if (typeof amount !== "number" || !Number.isFinite(amount)) problems.push(`Measure ${index} has no finite number as its value.`);
   if (unit !== undefined && !isText(unit)) problems.push(`Measure ${index} has a unit that is not a text.`);
+  if (at !== undefined) problems.push(...timeProblems(at, `The field at of measure ${index}`, now));
   return problems;
 }
 
@@ -77,21 +85,20 @@ export function kpiProblems(value: unknown, now: number = Date.now()): string[] 
   if (value["format"] !== KPI_FORMAT) problems.push(`The format is not ${KPI_FORMAT}.`);
   const { project, at, commit, measures } = value;
   if (typeof project !== "string" || !SLUG.test(project)) problems.push("The project is not lowercase words with single hyphens.");
-  if (typeof at !== "string" || !UTC_TIME.test(at) || Number.isNaN(Date.parse(at))) problems.push("The field at is not a time in UTC.");
-  else if (Date.parse(at) > now + CLOCK_MARGIN) problems.push(`The time of the data ${at} is after the time of the check.`);
+  problems.push(...timeProblems(at, "The field at", now));
   if (typeof commit !== "string" || !COMMIT.test(commit)) problems.push("The commit is not a full commit.");
   if (!Array.isArray(measures) || measures.length === 0) problems.push("The file has no measures.");
   else {
     const seen = new Set<string>();
-    problems.push(...measures.flatMap((measure: unknown, index) => measureProblems(measure, index, seen)));
+    problems.push(...measures.flatMap((measure: unknown, index) => measureProblems(measure, index, seen, now)));
   }
   problems.push(...engineProblems(value["engines"]));
   return problems;
 }
 
 /** This function gives a copy of a measure with only its known fields. */
-function cleanMeasure({ id, value, unit }: KpiMeasure): KpiMeasure {
-  return unit === undefined ? { id, value } : { id, value, unit };
+function cleanMeasure({ id, value, unit, at }: KpiMeasure): KpiMeasure {
+  return { id, value, ...(unit === undefined ? {} : { unit }), ...(at === undefined ? {} : { at }) };
 }
 
 /** This function gives a copy of an engine with only its known fields. */

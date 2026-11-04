@@ -244,6 +244,24 @@ describe("site-pages build", () => {
     expect(html).toContain(`https://github.com/acme/widgets/commit/${kpi.commit}`);
   });
 
+  it("shows the date of a measure in a column of the Status page", async () => {
+    const kpi = {
+      format: "kpi/1",
+      project: "widgets",
+      at: "2020-01-01T00:00:00Z",
+      commit: "a".repeat(40),
+      measures: [{ id: "cases", value: 3, at: "2020-01-02T00:00:00Z" }, { id: "drift", value: 1 }],
+    };
+    mkdirSync(join(repo, "own-dates"));
+    writeFileSync(join(repo, "own-dates", "kpi.json"), JSON.stringify(kpi));
+    const code = await runCli(["build", "--out", "own-dates", "--repo", "acme/widgets"], { cwd: repo, env: { GITHUB_TOKEN: "t0ken" }, stdout: () => {}, stderr: () => {}, fetch: fakeFetch().fetch });
+    expect(code).toBe(0);
+    const html = readFileSync(join(repo, "own-dates", "status", "index.html"), "utf8");
+    expect(html).toContain("Data date");
+    expect(html).toContain('<td><time datetime="2020-01-02T00:00:00Z">');
+    expect(html).toContain('<td><time datetime="2020-01-01T00:00:00Z">');
+  });
+
   it("stops with code 1 at an incorrect kpi.json, and the Status page has no measures without the file", async () => {
     mkdirSync(join(repo, "bad-kpi"));
     writeFileSync(join(repo, "bad-kpi", "kpi.json"), '{ "format": "kpi/1" }');

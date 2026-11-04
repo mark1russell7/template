@@ -139,6 +139,8 @@ export interface KpiMeasure {
   id: string;
   value: number;
   unit?: string;
+  /** The ISO time of the data of this measure in UTC. Without it, the measure has the time of the file. */
+  at?: string;
 }
 
 /** One engine that made the data of `kpi.json`. */
