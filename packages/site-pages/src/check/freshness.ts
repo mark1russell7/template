@@ -231,12 +231,20 @@ function cronDays(line: string, from: number, days: number): number[] | undefine
   return starts;
 }
 
+/** This function gives the cron text of one line of a workflow in a list, or an empty list for another line. */
+function cronLine(line: string): string[] {
+  const text = line.trim().replace(/^- */, "");
+  if (!text.startsWith("cron:")) return [];
+  const value = text.slice("cron:".length).split("#")[0]?.trim() ?? "";
+  return [value.replaceAll('"', "").replaceAll("'", "")];
+}
+
 /**
  * This function gives the largest gap between the scheduled starts of a workflow, in days. The gap counts from the first start of a day.
  * It gives undefined for a workflow with no schedule, and for a schedule that it cannot read.
  */
 export function scheduleGapDays(workflow: string): number | undefined {
-  const lines = [...workflow.matchAll(/^\s*-?\s*cron:\s*["']?([^"'#\r\n]+?)["']?\s*(?:#.*)?$/gm)].map((match) => match[1] ?? "");
+  const lines = workflow.split("\n").flatMap(cronLine);
   if (lines.length === 0) return undefined;
   const from = Date.UTC(2027, 0, 1);
   const span = 731;

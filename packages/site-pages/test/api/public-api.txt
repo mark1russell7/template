@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 137 names
+## . (build/index.d.ts): 140 names
 
 BASE_CSS: build/index.d.ts#BASE_CSS
 type BoardIssue: build/chunks/freshness.d.ts#BoardIssue
@@ -20,6 +20,7 @@ type CheckState: build/chunks/freshness.d.ts#CheckState
 type CliIo: build/index.d.ts#CliIo
 DATA_STAMP_SCHEMA: build/chunks/freshness.d.ts#DATA_STAMP_SCHEMA
 DEFAULT_CHANGELOGS: build/index.d.ts#DEFAULT_CHANGELOGS
+type DataLimit: build/chunks/freshness.d.ts#DataLimit
 type DataRun: build/chunks/freshness.d.ts#DataRun
 type DataStamps: build/chunks/freshness.d.ts#DataStamps
 type DataStampsParse: build/chunks/freshness.d.ts#DataStampsParse
@@ -43,6 +44,7 @@ type KpiMeasure: build/chunks/freshness.d.ts#KpiMeasure
 type Link: build/chunks/freshness.d.ts#Link
 type LinkOptions: build/index.d.ts#LinkOptions
 MAX_DATA_AGE_DAYS: build/chunks/freshness.d.ts#MAX_DATA_AGE_DAYS
+MAX_LIMIT_DAYS_WITHOUT_RULING: build/chunks/freshness.d.ts#MAX_LIMIT_DAYS_WITHOUT_RULING
 MAX_MINORS_BEHIND: build/chunks/freshness.d.ts#MAX_MINORS_BEHIND
 type MarkdownTable: build/index.d.ts#MarkdownTable
 NPM_REGISTRY: build/index.d.ts#NPM_REGISTRY
@@ -133,6 +135,7 @@ renderStatusPage: build/index.d.ts#renderStatusPage
 roadmapItems: build/index.d.ts#roadmapItems
 runCli: build/index.d.ts#runCli
 safeUrl: build/index.d.ts#safeUrl
+scheduleGapDays: build/chunks/freshness.d.ts#scheduleGapDays
 sectionsOf: build/index.d.ts#sectionsOf
 shortDate: build/index.d.ts#shortDate
 slugOf: build/index.d.ts#slugOf
@@ -340,6 +343,14 @@ type CheckState = "success" | "failure" | "pending" | "none";
 ### build/chunks/freshness.d.ts#DATA_STAMP_SCHEMA
 declare const DATA_STAMP_SCHEMA = "data-stamp/1";
 
+### build/chunks/freshness.d.ts#DataLimit
+interface DataLimit {
+  readonly days: number;
+  readonly reason: string;
+  readonly workflow: string;
+  readonly ruling?: string;
+}
+
 ### build/chunks/freshness.d.ts#DataRun
 interface DataRun {
   readonly id: string;
@@ -375,6 +386,7 @@ interface FreshnessOptions {
   readonly times: readonly NpmVersionTime[];
   readonly maxAgeDays?: number;
   readonly maxMinorsBehind?: number;
+  readonly schedules?: Readonly<Record<string, number | undefined>>;
 }
 
 ### build/chunks/freshness.d.ts#GitHubOpenWork
@@ -455,6 +467,9 @@ interface Link {
 ### build/chunks/freshness.d.ts#MAX_DATA_AGE_DAYS
 declare const MAX_DATA_AGE_DAYS = 3;
 
+### build/chunks/freshness.d.ts#MAX_LIMIT_DAYS_WITHOUT_RULING
+declare const MAX_LIMIT_DAYS_WITHOUT_RULING = 14;
+
 ### build/chunks/freshness.d.ts#MAX_MINORS_BEHIND
 declare const MAX_MINORS_BEHIND = 1;
 
@@ -482,6 +497,8 @@ interface PageStamp {
   readonly page: string;
   readonly runs: readonly DataRun[];
   readonly inFlight?: DataRun;
+  readonly study?: true;
+  readonly limit?: DataLimit;
 }
 
 ### build/chunks/freshness.d.ts#Release
@@ -548,6 +565,9 @@ declare function parseDataStamps(raw: unknown): DataStampsParse;
 
 ### build/chunks/freshness.d.ts#readKpi
 declare function readKpi(text: string, now?: number): KpiFile;
+
+### build/chunks/freshness.d.ts#scheduleGapDays
+declare function scheduleGapDays(workflow: string): number | undefined;
 
 ### build/chunks/freshness.d.ts#writeKpi
 declare function writeKpi(out: string, input: KpiInput, now?: number): string;
