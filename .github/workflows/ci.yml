@@ -79,15 +79,22 @@ jobs:
           node-version: 26
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: node scripts/stamp/stamp.ts stamp-demo --description "A repository of the stamp test." --ref HEAD --out "$DEMO"
+      - run: node scripts/stamp/main.ts stamp-demo --description "A repository of the stamp test." --ref HEAD --out "$DEMO"
       - name: The new repository installs
         run: |
           cd "$DEMO"
           pnpm install --no-frozen-lockfile
           git add -A
           git -c user.name=stamp -c user.email=stamp@example.com commit -q -m "first commit"
+      # The default list of reusable-ci.yml, with each missing script skipped
       - name: The new repository passes its gates
-        run: cd "$DEMO" && pnpm exec conventions check && pnpm run typecheck && pnpm run test
+        run: |
+          cd "$DEMO"
+          # The rule runner-budget reads the name of the repository from this variable
+          export GITHUB_REPOSITORY=mark1russell7/stamp-demo
+          for script in format:check typecheck lint check:conventions test build check:boundaries check:api lint:ste; do
+            pnpm run --if-present "$script"
+          done
       - name: The Pages build works
         env:
           SITE_BASE: /stamp-demo

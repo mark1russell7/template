@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { minuteField, scheduleMinute } from "../../packages/conventions/src/rules/runner-budget.ts";
 import { parseRoadmap } from "../../packages/site-pages/src/index.ts";
 import { firstRoadmap, pinWorkflow, rootScripts, stamp } from "./stamp.ts";
 
@@ -58,6 +59,20 @@ describe("the stamp", () => {
     assert.equal(parseRoadmap(read(out, "docs/ROADMAP.md")).length, 1);
   });
 
+  it("leaves out check:api until a package is public, and the roadmap tells when to add it", async () => {
+    const { out } = await stamped();
+    const root = JSON.parse(read(out, "package.json")) as { scripts: Record<string, string> };
+    assert.equal(root.scripts["check:api"], undefined);
+    assert.match(read(out, "docs/ROADMAP.md"), /add the script `check:api`/);
+  });
+
+  it("sets each schedule to the minute of the new repository", async () => {
+    const { out } = await stamped();
+    const pages = read(out, ".github/workflows/pages.yml");
+    const minute = scheduleMinute("mark1russell7/demo-repo", ".github/workflows/pages.yml");
+    assert.match(pages, new RegExp(`cron: "${minuteField(minute, 1)} `));
+  });
+
   it("copies no folder that only the template needs", async () => {
     const { out } = await stamped();
     for (const path of ["scripts", "renovate", ".github/actions", ".github/workflows/site-audit.yml", ".github/workflows/actions-test.yml", "pnpm-lock.yaml"]) {
@@ -82,6 +97,7 @@ describe("rootScripts", () => {
       "test:homes": 'node --test "scripts/homes/*.test.ts"',
       "test:actions": 'node --test ".github/actions/*.test.ts"',
       "homes:exports": "node scripts/homes/exports.ts",
+      "check:api": "api-report check",
       typecheck: "pnpm -r run typecheck",
       package: "tsx packages/cli/src/index.ts package",
     });

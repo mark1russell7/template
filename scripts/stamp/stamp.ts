@@ -1,6 +1,6 @@
 /**
  * The stamp: it makes a new repository from a commit of the template. Start it with
- * `node scripts/stamp/stamp.ts <name> --description <line>`. `new-repo.ps1` calls it.
+ * `node scripts/stamp/main.ts <name> --description <line>`. `new-repo.ps1` calls it.
  *
  * The stamp copies only what `KEEP` names, so a new folder of the template stays out by default.
  * It stops when the result has a part that cannot work, and the test of `ci.yml` installs, checks
@@ -8,9 +8,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { parseArgs } from "node:util";
+import { dirname, join } from "node:path";
 import { writePackage } from "../../packages/cli/src/commands/package/add.ts";
 
 /** The files that a new repository gets from the template: a path, or a folder with `/` at the end. */
@@ -36,6 +34,12 @@ export const KEEP: readonly string[] = [
   "tsconfig.scripts.json",
 ];
 
+/**
+ * The root scripts that stay out of a new repository until its first public package. `api-report check`
+ * fails a run that finds no public package, and the first site is private.
+ */
+export const AFTER_PUBLIC_PACKAGE: readonly string[] = ["check:api"];
+
 /** The form of the name of a new repository. */
 const NAME = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -60,7 +64,7 @@ const missingPaths = (command: string): string[] => [...command.matchAll(/(?:^|[
  * that does not exist.
  */
 export function rootScripts(scripts: Readonly<Record<string, string>>): Record<string, string> {
-  const gone = new Set(Object.keys(scripts).filter((name) => missingPaths(scripts[name] ?? "").length > 0));
+  const gone = new Set(Object.keys(scripts).filter((name) => AFTER_PUBLIC_PACKAGE.includes(name) || missingPaths(scripts[name] ?? "").length > 0));
   const kept: Record<string, string> = {};
   for (const [name, command] of Object.entries(scripts)) {
     if (gone.has(name)) continue;
@@ -76,7 +80,7 @@ export function rootScripts(scripts: Readonly<Record<string, string>>): Record<s
 
 /** The first roadmap of a new repository. The rule `roadmap-parses` refuses a table with no row, and the Status page reads this row. */
 export function firstRoadmap(name: string): string {
-  return `# Roadmap\n\nThis file is the plan of ${name}. The Status page of the site reads it, and the tracker of the project mirrors it.\n\n| ID | Item | Status | Summary |\n| --- | --- | --- | --- |\n| R1 | The first package | open | Make the first package with \`pnpm package add\`, and replace the first site with a demo. |\n`;
+  return `# Roadmap\n\nThis file is the plan of ${name}. The Status page of the site reads it, and the tracker of the project mirrors it.\n\n| ID | Item | Status | Summary |\n| --- | --- | --- | --- |\n| R1 | The first package | open | Make the first package with \`pnpm package add\`, and replace the first site with a demo. When a package is public, add the script \`check:api\`. |\n`;
 }
 
 /** The input of `stamp`. */
@@ -161,34 +165,10 @@ export async function stamp({ name, description, npm, template, out, ref, latest
     if (readFileSync(join(out, path), "utf8").includes('"workspace:')) throw new Error(`${path} has a workspace range of a package that is not in the new repository.`);
   }
   execFileSync("git", ["init", "-q", "-b", "main", out]);
+  // The rule reads the files that git tracks, and its fix sets the schedule minutes of this repository
+  git(out, "add", "-A");
+  const conventions = join(template, "packages", "conventions", "src", "cli.ts");
+  execFileSync(process.execPath, [conventions, "fix", "--rule", "runner-budget"], { cwd: out, env: { ...process.env, GITHUB_REPOSITORY: `mark1russell7/${name}` }, stdio: "ignore" });
+  git(out, "add", "-A");
   return sha;
 }
-
-/** This function gives the newest version of an npm package, from the registry. */
-function npmLatest(name: string): string {
-  return execFileSync("npm", ["view", name, "version"], { encoding: "utf8", shell: process.platform === "win32" }).trim();
-}
-
-function main(): void {
-  const { values, positionals } = parseArgs({
-    allowPositionals: true,
-    options: { description: { type: "string" }, npm: { type: "string" }, out: { type: "string" }, ref: { type: "string", default: "origin/main" } },
-  });
-  const [name] = positionals;
-  if (!name || !values.description) throw new Error('Usage: node scripts/stamp/stamp.ts <name> --description "<one line>" [--npm <package>] [--out <folder>] [--ref <commit>]');
-  const template = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-  const out = resolve(values.out ?? join(template, "..", name));
-  // The default takes the newest main, whichever branch the clone has
-  if (values.ref === "origin/main") git(template, "fetch", "-q", "origin", "main");
-  void stamp({ name, description: values.description, npm: values.npm, template, out, ref: values.ref, latest: npmLatest }).then((sha) => {
-    console.log(`Created ${out} from the template commit ${sha}.`);
-    console.log("Next: pnpm install, then commit. Then gh repo create, and set the Pages source:");
-    console.log(`  gh api -X POST repos/mark1russell7/${name}/pages -f build_type=workflow`);
-    console.log("Turn on the dependency graph, or dependency-review fails on each pull request:");
-    console.log(`  gh api -X PUT repos/mark1russell7/${name}/vulnerability-alerts`);
-    console.log("Set the schedule minutes of the workflows (the rule runner-budget):");
-    console.log(`  GITHUB_REPOSITORY=mark1russell7/${name} pnpm exec conventions fix`);
-  });
-}
-
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main();

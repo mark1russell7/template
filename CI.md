@@ -415,4 +415,4 @@ The workflows of the template call the shared workflows and actions by a local p
 
 The job `publish` of `release.yml` uses the pinned form of `npm-publish`, also in the template. A local action needs a checkout, and that job does no checkout.
 
-The stamp (`scripts/stamp/stamp.ts`, started by `new-repo.ps1`) copies only the files that its list `KEEP` names. It does not copy the shared workflows, the actions or `actions-test.yml`. It changes each local path and each pin of the template to the pinned form, with the commit of the template that it copies. The job `stamp` of `ci.yml` makes a repository. With no hand edit, that repository must pass its install, its checks, its Pages build and the site check.
+The stamp (`scripts/stamp/main.ts`, started by `new-repo.ps1`) copies only the files that its list `KEEP` names. It does not copy the shared workflows, the actions or `actions-test.yml`. It changes each local path and each pin of the template to the pinned form, with the commit of the template that it copies. The job `stamp` of `ci.yml` makes a repository. With no hand edit, that repository must pass its install, its checks, its Pages build and the site check.

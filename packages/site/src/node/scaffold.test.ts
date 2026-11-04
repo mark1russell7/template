@@ -7,7 +7,7 @@ describe("the output of the CLI for each preset", () => {
   const preset = (name: string) => data.presets.find((p) => p.name === name);
 
   it("has each preset of the CLI, with its label", () => {
-    expect(data.presets.map((p) => p.name)).toEqual(["node", "node-cjs", "ts", "vite", "react", "service"]);
+    expect(data.presets.map((p) => p.name)).toEqual(["node", "node-cjs", "ts", "vite", "react", "service", "site"]);
     expect(preset("react")?.label).toMatch(/React/);
     expect(data.namePattern).toBe("^[a-z0-9][a-z0-9-]*$");
   });
@@ -31,6 +31,6 @@ describe("the output of the CLI for each preset", () => {
 describe("the labels of the presets", () => {
   it("come from the source of the CLI", () => {
     const source = readFileSync(new URL("../../../cli/src/commands/package/add.ts", import.meta.url), "utf8");
-    expect(Object.keys(presetLabels(source))).toEqual(["node", "node-cjs", "ts", "vite", "react", "service"]);
+    expect(Object.keys(presetLabels(source))).toEqual(["node", "node-cjs", "ts", "vite", "react", "service", "site"]);
   });
 });
