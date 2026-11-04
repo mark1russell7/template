@@ -1,8 +1,9 @@
 /// <reference lib="dom" />
 /**
  * The small helpers of a page in the browser: the element helper, the element lookup, the theme
- * button and the copy button. This module imports no Node.js module, so a site can bundle it.
- * Import it from `@mark1russell7/site-pages/chrome`, because the package root also has Node.js code.
+ * button, the copy button and the build stamp. This module imports no Node.js module, so a site can
+ * bundle it. Import it from `@mark1russell7/site-pages/chrome`, because the package root also has
+ * Node.js code.
  */
 
 /** A child of `h`: a node or a text. The values `null`, `undefined` and `false` give no child. */
@@ -86,7 +87,8 @@ export function nextTheme(storageKey: string): Theme {
  * "Theme: auto", "Theme: light" or "Theme: dark", and its `aria-label` tells the same theme.
  *
  * @remarks Before the first paint, a script in the `head` of the page reads `storageKey` from
- * `localStorage` and sets `data-theme`. Thus a dark page does not show white for a moment.
+ * `localStorage` and sets `data-theme`. Thus a dark page does not show white for a moment. The
+ * plugin `siteShell` of the entry `./vite` adds that script.
  */
 export function setupTheme(button: HTMLButtonElement, storageKey: string): void {
   const show = (theme: Theme): void => {
@@ -95,6 +97,28 @@ export function setupTheme(button: HTMLButtonElement, storageKey: string): void 
   };
   show(currentTheme());
   button.addEventListener("click", () => show(nextTheme(storageKey)));
+}
+
+/** The data of a build: `siteShell` writes it, and `showBuild` shows it. */
+export interface BuildInfo {
+  /** The first 7 characters of the commit, or `local` for a build outside CI. */
+  readonly sha: string;
+  /** The date of the build, as `YYYY-MM-DD`. */
+  readonly date: string;
+  /** The version of the package. A site without a version does not set it. */
+  readonly version?: string | undefined;
+}
+
+/**
+ * This function shows the version and the build of the site in an element. The text is "Version
+ * 1.2.3, build abc1234 of 2026-11-03", and the commit is a link to GitHub. A build with no version
+ * starts with "Build", and a local build has no link.
+ *
+ * @param repository - The repository as "owner/name".
+ */
+export function showBuild(element: HTMLElement, build: BuildInfo, repository: string): void {
+  const commit = build.sha === "local" ? "local" : h("a", { href: `https://github.com/${repository}/commit/${build.sha}` }, build.sha);
+  element.append(build.version === undefined ? "Build " : `Version ${build.version}, build `, commit, ` of ${build.date}`);
 }
 
 /**

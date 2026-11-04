@@ -118,9 +118,10 @@ timelineLayout: build/index.d.ts#timelineLayout
 utcDay: build/index.d.ts#utcDay
 versionOfTag: build/index.d.ts#versionOfTag
 
-## ./chrome (build/chrome.d.ts): 13 names
+## ./chrome (build/chrome.d.ts): 15 names
 
 AttributeValue: build/chrome.d.ts#AttributeValue
+BuildInfo: build/chrome.d.ts#BuildInfo
 Child: build/chrome.d.ts#Child
 CopyTextOptions: build/chrome.d.ts#CopyTextOptions
 THEMES: build/chrome.d.ts#THEMES
@@ -133,10 +134,30 @@ currentTheme: build/chrome.d.ts#currentTheme
 h: build/chrome.d.ts#h
 nextTheme: build/chrome.d.ts#nextTheme
 setupTheme: build/chrome.d.ts#setupTheme
+showBuild: build/chrome.d.ts#showBuild
+
+## ./vite (build/vite.d.ts): 12 names
+
+type BuildInfo: build/chrome.d.ts#BuildInfo
+SiteEnv: build/vite.d.ts#SiteEnv
+SiteShellConfig: build/vite.d.ts#SiteShellConfig
+SiteShellConfigInput: build/vite.d.ts#SiteShellConfigInput
+SiteShellOptions: build/vite.d.ts#SiteShellOptions
+SiteShellPlugin: build/vite.d.ts#SiteShellPlugin
+SiteShellTag: build/vite.d.ts#SiteShellTag
+SiteTarget: build/vite.d.ts#SiteTarget
+buildInfo: build/vite.d.ts#buildInfo
+siteBase: build/vite.d.ts#siteBase
+siteShell: build/vite.d.ts#siteShell
+themeScript: build/vite.d.ts#themeScript
 
 ## ./scroll-cue.css: no declaration file for ./styles/scroll-cue.css
 
 file ./scroll-cue.css: styles/scroll-cue.css
+
+## ./shell.css: no declaration file for ./styles/shell.css
+
+file ./shell.css: styles/shell.css
 
 ## bin: 1 commands
 
@@ -146,6 +167,13 @@ site-pages: ./build/cli.js
 
 ### build/chrome.d.ts#AttributeValue
 export type AttributeValue = string | number | boolean | null | undefined;
+
+### build/chrome.d.ts#BuildInfo
+export interface BuildInfo {
+  readonly sha: string;
+  readonly date: string;
+  readonly version?: string | undefined;
+}
 
 ### build/chrome.d.ts#Child
 export type Child = Node | string | null | undefined | false;
@@ -186,6 +214,9 @@ export declare function nextTheme(storageKey: string): Theme;
 
 ### build/chrome.d.ts#setupTheme
 export declare function setupTheme(button: HTMLButtonElement, storageKey: string): void;
+
+### build/chrome.d.ts#showBuild
+export declare function showBuild(element: HTMLElement, build: BuildInfo, repository: string): void;
 
 ### build/index.d.ts#BASE_CSS
 export declare const BASE_CSS: string;
@@ -792,3 +823,59 @@ export declare function utcDay(time: number): number;
 
 ### build/index.d.ts#versionOfTag
 export declare function versionOfTag(tag: string): TagVersion | null;
+
+### build/vite.d.ts#SiteEnv
+export type SiteEnv = Readonly<Record<string, string | undefined>>;
+
+### build/vite.d.ts#SiteShellConfig
+export interface SiteShellConfig {
+  readonly base: string;
+  readonly build: {
+    readonly target: SiteTarget;
+  };
+  readonly define: Readonly<Record<string, string>>;
+}
+
+### build/vite.d.ts#SiteShellConfigInput
+export interface SiteShellConfigInput {
+  readonly root?: string | undefined;
+  readonly base?: string | undefined;
+  readonly build?: {
+    readonly target?: SiteTarget | undefined;
+  } | null | undefined;
+}
+
+### build/vite.d.ts#SiteShellOptions
+export interface SiteShellOptions {
+  readonly themeKey: string;
+  readonly packageFile?: string | false | undefined;
+}
+
+### build/vite.d.ts#SiteShellPlugin
+export interface SiteShellPlugin {
+  readonly name: string;
+  config(config: SiteShellConfigInput): SiteShellConfig;
+  transformIndexHtml(): SiteShellTag[];
+}
+
+### build/vite.d.ts#SiteShellTag
+export interface SiteShellTag {
+  readonly tag: "script";
+  readonly children: string;
+  readonly injectTo: "head";
+}
+
+### build/vite.d.ts#SiteTarget
+export type SiteTarget = string | string[] | false;
+
+### build/vite.d.ts#buildInfo
+export declare function buildInfo(version?: string, env?: SiteEnv, now?: Date): BuildInfo;
+
+### build/vite.d.ts#siteBase
+export declare function siteBase(env?: SiteEnv): string;
+
+### build/vite.d.ts#siteShell
+export declare function siteShell(options: SiteShellOptions): SiteShellPlugin;
+
+### build/vite.d.ts#themeScript
+export declare function themeScript(storageKey: string): string;
