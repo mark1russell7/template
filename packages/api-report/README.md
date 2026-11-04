@@ -40,8 +40,8 @@ Then commit the reports with the change. Put the pathspec of `git diff` in quote
 
 | Command | What it does |
 |---|---|
-| `api-report check` | It compares each report with the built `.d.ts` files. It shows the diff of each changed report. The exit code is 1 when a report differs, is missing or has an error. |
-| `api-report update` | It writes each report that is not current. It removes the report of a package that became private. |
+| `api-report check` | It compares each report with the built `.d.ts` files. It shows the diff of each changed report. The exit code is 1 when a report differs, is missing or has an error, when a folder has a report that the command does not read, or when the command finds no public package. |
+| `api-report update` | It writes each report that is not current. It removes each report that the command does not read: the report of a private package, an excluded package or a removed package. The exit code is 1 when the command finds no public package. |
 
 In GitHub Actions, `check` also writes the diff to the summary of the run (`GITHUB_STEP_SUMMARY`).
 

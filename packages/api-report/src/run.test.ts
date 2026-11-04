@@ -134,9 +134,49 @@ describe("check and update", () => {
     writeFileSync(join(root, "packages/a/package.json"), JSON.stringify({ name: "a", private: true, types: "./index.d.ts" }));
     const check = cli(root, ["check"]);
     expect(check.code).toBe(1);
-    expect(check.stdout).toContain("A report of a private package:\n  packages/a/test/api/public-api.txt\n");
+    expect(check.stdout).toContain("A report of a package that the command does not read:\n  packages/a/test/api/public-api.txt\n");
     expect(cli(root, ["update"]).code).toBe(0);
     expect(existsSync(join(root, "packages/a/test/api/public-api.txt"))).toBe(false);
+  });
+
+  it("fails a run over all packages that finds no public package", () => {
+    const root = fixture({
+      "package.json": { name: "root", private: true },
+      "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n',
+      "packages/hidden/package.json": { name: "hidden", private: true },
+    });
+    for (const mode of ["check", "update"]) {
+      const result = cli(root, [mode]);
+      expect(result.code, mode).toBe(1);
+      expect(result.stdout).toContain("Errors:\n  .: no public package");
+    }
+  });
+
+  it("fails a run over no package folder at all", () => {
+    const root = fixture({ "package.json": { name: "root", private: true }, "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n' });
+    expect(cli(root, ["check"]).stdout).toContain("Errors:\n  .: no public package");
+  });
+
+  it("finds a report that the run does not read, and update removes it", () => {
+    const root = workspace();
+    expect(cli(root, ["update"]).code).toBe(0);
+    const reports = ["hidden", "ignored", "removed"].map((folder) => join(root, "packages", folder, "test/api/public-api.txt"));
+    for (const report of reports) {
+      mkdirSync(dirname(report), { recursive: true });
+      writeFileSync(report, "an old report\n");
+    }
+    const check = cli(root, ["check"]);
+    expect(check.code).toBe(1);
+    expect(check.stdout).toContain(
+      "A report of a package that the command does not read:\n  packages/hidden/test/api/public-api.txt\n  packages/ignored/test/api/public-api.txt\n  packages/removed/test/api/public-api.txt\n",
+    );
+    for (const report of reports) expect(readFileSync(report, "utf8"), "check writes nothing").toBe("an old report\n");
+    expect(cli(root, ["check", "packages/a"]).code, "a run of named folders examines only those folders").toBe(0);
+    const update = cli(root, ["update"]);
+    expect(update.code).toBe(0);
+    expect(update.stdout).toContain("Removed (the command does not read the package):");
+    for (const report of reports) expect(existsSync(report)).toBe(false);
+    expect(cli(root, ["check"]).code).toBe(0);
   });
 
   it("uses the globs, the report path and the private packages of the configuration", () => {

@@ -5,9 +5,9 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { unifiedDiff } from "./diff.ts";
-import { relativePath, type Manifest } from "./entries.ts";
+import { byCode, relativePath, type Manifest } from "./entries.ts";
 import { DEFAULT_TOOL, packageReport } from "./report.ts";
-import { packageFolders } from "./workspace.ts";
+import { globFolders, packageFolders, workspaceGlobs } from "./workspace.ts";
 
 /** The path of the report in a package folder, when the configuration gives no other path. */
 export const REPORT_FILE = "test/api/public-api.txt";
@@ -46,8 +46,9 @@ export interface PackageResult {
   readonly file: string;
   /**
    * `same`: the report is current. `changed` and `new`: the report differs or is missing (`check`),
-   * or the command wrote it (`update`). `stale`: a private package has a report. `private`: the
-   * package has no report. `error`: the command did not make the report.
+   * or the command wrote it (`update`). `stale`: a folder has a report, and the run does not read
+   * the package: it is private, excluded by a `!` glob, or removed. `private`: the package has no
+   * report. `error`: the command did not make the report.
    */
   readonly status: "same" | "changed" | "new" | "stale" | "private" | "error";
   /** The change from the committed report to the new report, in the unified format. */
@@ -106,7 +107,24 @@ function checkReportPath(report: string): string {
   return clean;
 }
 
-/** This function compares (`check`) or writes (`update`) the report of each package. It writes nothing in `check` mode. */
+/**
+ * This function gives the folders that the globs name, as absolute paths, in the order of the code
+ * units. It ignores the `!` globs and needs no `package.json` file, so the result also has the
+ * excluded folders and the folders of removed packages.
+ */
+function globbedFolders(root: string, globs: readonly string[] | undefined): string[] {
+  const found = new Set<string>();
+  for (const glob of (globs ?? workspaceGlobs(root) ?? []).filter((item) => !item.startsWith("!"))) {
+    for (const folder of globFolders(root, glob)) found.add(folder);
+  }
+  return [...found].sort(byCode).map((folder) => join(root, folder));
+}
+
+/**
+ * This function compares (`check`) or writes (`update`) the report of each package. It writes nothing
+ * in `check` mode. Without named folders, a run that finds no public package fails: it examined
+ * nothing, and that is not a pass. A report in a folder that the run does not read is `stale`.
+ */
 export function runReports(options: RunOptions): RunResult {
   const root = resolve(options.root);
   const report = checkReportPath(options.report ?? REPORT_FILE);
@@ -161,6 +179,18 @@ export function runReports(options: RunOptions): RunResult {
     const diff = unifiedDiff(current ?? "", text, { from: current === undefined ? "/dev/null" : `a/${shownFile}`, to: `b/${shownFile}` });
     results.push({ folder: shown, file: shownFile, status: current === undefined ? "new" : "changed", diff });
   }
+  if (!named) {
+    const read = new Set(folders);
+    for (const folder of globbedFolders(root, options.packages)) {
+      const file = join(folder, report);
+      if (read.has(folder) || !existsSync(file)) continue;
+      if (options.mode === "update") rmSync(file);
+      results.push({ folder: relativePath(root, folder), file: relativePath(root, file), status: "stale" });
+    }
+    if (results.every((result) => result.status === "private" || result.status === "stale")) {
+      results.push({ folder: ".", file: report, status: "error", error: "no public package. The command read the globs of the workspace, or a package.json file in the root." });
+    }
+  }
   const failed = results.some(
     (result) => result.status === "error" || (options.mode === "check" && (result.status === "changed" || result.status === "new" || result.status === "stale")),
   );
@@ -190,7 +220,7 @@ export function formatResult(result: RunResult, tool: string = DEFAULT_TOOL): st
   const update = result.mode === "update";
   list(update ? "Written" : "The report differs from the built .d.ts files", by("changed"), (item) => item.file);
   list(update ? "Written (new)" : "No report", by("new"), (item) => (update ? item.file : `${item.folder} (${item.file})`));
-  list(update ? "Removed (the package is private)" : "A report of a private package", by("stale"), (item) => item.file);
+  list(update ? "Removed (the command does not read the package)" : "A report of a package that the command does not read", by("stale"), (item) => item.file);
   list("Errors", by("error"), (item) => `${item.folder}: ${item.error ?? "unknown error"}`);
   let text = `${out.join("\n")}\n`;
   if (!update) {
@@ -209,7 +239,7 @@ export function summaryMarkdown(result: RunResult): string {
   if (changed.length === 0 && other.length === 0) return "";
   const out = ["### Public API reports", ""];
   for (const item of changed) out.push(`<details><summary><code>${item.file}</code> (${item.status})</summary>`, "", "```diff", shortDiff(item.diff ?? "").replace(/\n$/, ""), "```", "", "</details>", "");
-  for (const item of other) out.push(`- \`${item.file}\`: ${item.status === "stale" ? "a report of a private package" : (item.error ?? "error")}`);
+  for (const item of other) out.push(`- \`${item.file}\`: ${item.status === "stale" ? "a report of a package that the command does not read" : (item.error ?? "error")}`);
   return `${out.join("\n")}\n`;
 }
 
@@ -224,8 +254,9 @@ export interface CliIo {
 /** The help text of the bin. */
 export const USAGE: string = `Usage: api-report <check | update> [options] [<package folder>...]
 
-  check                  Compare each report with the built .d.ts files. Exit code 1 when a report differs or is missing.
-  update                 Write each report again.
+  check                  Compare each report with the built .d.ts files. Exit code 1 when a report differs, is missing or has no
+                         package that the command reads, or when the command finds no public package.
+  update                 Write each report again. Remove each report of a package that the command does not read.
 
   --root <folder>        The root of the repository. The default is the current folder.
   --packages <glob>      A glob of package folders. Use it again for more globs. The default is the globs of the workspace.
