@@ -32,7 +32,7 @@ export const requiredScripts: Rule = {
     { repo: "client", rule: "ste-prose", doc: "CLAUDE.md:5" },
     { repo: "coeval", rule: "ste-prose", doc: "CLAUDE.md:5" },
     { repo: "crawler", rule: "ste-prose", doc: "CLAUDE.md:5" },
-    { repo: "Graph", rule: "ste-prose", doc: "CLAUDE.md:5" },
+    { repo: "private", rule: "ste-prose", doc: "CLAUDE.md:5" },
     { repo: "headroom", rule: "ste-prose", doc: "CLAUDE.md:19" },
     { repo: "systems", rule: "lint-ste-in-ci", doc: "CLAUDE.md:24" },
     { repo: "Vex", rule: "ste-prose", doc: "CLAUDE.md:5" },

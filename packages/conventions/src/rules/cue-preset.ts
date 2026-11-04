@@ -109,9 +109,9 @@ export const cuePreset: Rule = {
   sources: [
     { repo: "client", rule: "cue-config", doc: "CLAUDE.md:64" },
     { repo: "client", rule: "no-manual-tsconfig", doc: "CLAUDE.md:64" },
-    { repo: "Graph", rule: "cue-preset-strict", doc: "docs/architecture/ecosystem-and-structure.md:58" },
-    { repo: "Graph", rule: "strict-preset", doc: "docs/architecture/ecosystem-and-structure.md:58" },
-    { repo: "Graph", rule: "new-package-via-cli", doc: "CLAUDE.md:14" },
+    { repo: "private", rule: "cue-preset-strict", doc: "docs/architecture/ecosystem-and-structure.md:58" },
+    { repo: "private", rule: "strict-preset", doc: "docs/architecture/ecosystem-and-structure.md:58" },
+    { repo: "private", rule: "new-package-via-cli", doc: "CLAUDE.md:14" },
     { repo: "coeval", rule: "package-scaffold", doc: "CLAUDE.md:16" },
     { repo: "crawler", rule: "package-scaffold", doc: "CLAUDE.md:16" },
     { repo: "headroom", rule: "package-scaffold", doc: "CLAUDE.md:30" },

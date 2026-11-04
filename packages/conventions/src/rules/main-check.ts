@@ -130,7 +130,7 @@ export const mainCheck: Rule = {
   reason:
     "Through a link, `process.argv[1]` has the path of the link, and the module has the real path. The compare is false, so the script does nothing and ends with exit code 0: a check that looks done but did not start.",
   fix: "Write `if (import.meta.main)` when `engines.node` allows only versions that have it (`^22.18`, `>=24.2`). Else compare `realpathSync(process.argv[1])` with `realpathSync(fileURLToPath(import.meta.url))`. `conventions fix` writes the one that fits.",
-  sources: [{ repo: "fleet", rule: "main-check", doc: "docs/STRATEGY.md (2026-11-02, the main check through a link)" }],
+  sources: [{ repo: "private", rule: "main-check", doc: "docs/STRATEGY.md (2026-11-02, the main check through a link)" }],
   options: {},
   check(context) {
     const files = context.gitFiles();

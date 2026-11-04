@@ -43,9 +43,9 @@ export const testsRequired: Rule = {
   id: "tests-required",
   title: "No test runner passes when it finds no test: no `passWithNoTests: true` in a config, and no `--passWithNoTests` in a script.",
   reason:
-    "With the option, a test step that finds 0 tests passes. A broken include pattern, a moved folder or a renamed file then turns the gate green with no test run. In the fleet audit of 2026-10-30, vex had the option in all 9 vitest configs and client in 2 packages that have tests.",
+    "With the option, a test step that finds 0 tests passes. A broken include pattern, a moved folder or a renamed file then turns the gate green with no test run. In an audit of 2026-10-30, vex had the option in all 9 vitest configs and client in 2 packages that have tests.",
   fix: "Remove the option. A package with no tests has no test script, so the shared CI skips it. A package whose tests a later change adds keeps no test script until then.",
-  sources: [{ repo: "fleet", rule: "fail-closed", doc: "docs/STRATEGY.md (2026-10-30, gates and probes fail closed)" }],
+  sources: [{ repo: "private", rule: "fail-closed", doc: "docs/STRATEGY.md (2026-10-30, gates and probes fail closed)" }],
   options: {},
   check(context) {
     const files = context.gitFiles();

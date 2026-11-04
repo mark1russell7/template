@@ -34,7 +34,7 @@ export interface Home {
 export const MAP_RULE =
   "Before you write a helper, find its home in this map. If the home does not have the function, add it to the home, in a pull request of the home repository. Do not make a local copy, a new package or a new repository for an area that has a home: that needs the strategist. A home that is not on npm is used with workspace:* or a github: specifier pinned to a commit. If no area fits, ask the strategist for a home before you write the code.";
 
-/** The public homes. Each package of the fleet that other code can use has one area. */
+/** The public homes. Each package that other code can use has one area. */
 export const HOMES: readonly Home[] = [
   {
     area: "statistics",

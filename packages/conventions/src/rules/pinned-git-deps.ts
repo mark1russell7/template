@@ -52,8 +52,8 @@ export const pinnedGitDeps: Rule = {
     { repo: "coeval", rule: "unpublished-dep-pinned", doc: "CLAUDE.md:41" },
     { repo: "headroom", rule: "non-npm-deps-pinned", doc: "CLAUDE.md:38" },
     { repo: "headroom", rule: "pinned-github-specifier", doc: "CLAUDE.md:38" },
-    { repo: "Graph", rule: "github-dep-full-sha", doc: "docs/decisions.md:1384" },
-    { repo: "Graph", rule: "github-dep-pinned", doc: "docs/decisions.md:1384" },
+    { repo: "private", rule: "github-dep-full-sha", doc: "docs/decisions.md:1384" },
+    { repo: "private", rule: "github-dep-pinned", doc: "docs/decisions.md:1384" },
     { repo: "client", rule: "general-npm-version", doc: "CLAUDE.md:54" },
   ],
   options: {
