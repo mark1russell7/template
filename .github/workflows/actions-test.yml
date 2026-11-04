@@ -16,7 +16,7 @@
 #                   Its log shows the flags of each release: --latest for the entry with "latest",
 #                   and --latest=false for the others.
 #
-# ci.yml tests reusable-ci.yml on each push and pull request. new-repo.ps1 does not copy this
+# ci.yml tests reusable-ci.yml on each push to main and each pull request. new-repo.ps1 does not copy this
 # workflow, the actions or the shared workflows: a repository uses them from GitHub.
 name: Actions test
 

@@ -3,7 +3,7 @@
  * headless Chromium at phone and desktop widths, in the light and the dark scheme.
  *
  * A view fails when the page is wider than the screen or an element goes past the right edge. It
- * also fails when a text area hides its text or the page shows no text. A console error, an
+ * also fails when a text area hides its text, a box cuts text (`cutProblems`) or the page shows no text. A console error, an
  * exception and a failed request of the site also fail it. A script that does not load and a failed check of the probe
  * fail it too. The command
  * writes a screenshot of each view.
@@ -13,9 +13,12 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { isAbsolute, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { findBrowser, launch, type Page } from "./browser.ts";
-import { MEASURE, probeExpression, type Measure, type ProbeCheck } from "./measure.ts";
+import { MEASURE, probeExpression, type Cut, type Measure, type ProbeCheck } from "./measure.ts";
 import { probeScript, TYPESCRIPT_PROBE } from "./probe.ts";
 import { serve } from "./serve.ts";
+
+/** A view narrower than this width in CSS pixels is a phone. */
+export const PHONE_WIDTH = 768;
 
 /** The options of `checkSite`. */
 export interface CheckOptions {
@@ -27,7 +30,7 @@ export interface CheckOptions {
   url?: string | undefined;
   /** The pages, from the site home, for example `/` and `/releases/`. */
   pages: readonly string[];
-  /** The widths in CSS pixels. A width under 768 is a phone. */
+  /** The widths in CSS pixels. A width under `PHONE_WIDTH` is a phone. */
   widths: readonly number[];
   /** The color schemes. */
   schemes: readonly ("light" | "dark")[];
@@ -64,6 +67,20 @@ export interface CheckResult {
   url: string;
   browser: string;
   views: ViewResult[];
+}
+
+/**
+ * This function gives the problems of the cuts of a view with the given width. A box that clips text is a problem at each width.
+ * A table in a box that scrolls is a problem only on a phone. A phone shows no scroll bar, but a desktop shows one.
+ * The summary and the log give the page of each problem.
+ */
+export function cutProblems(cuts: readonly Cut[], width: number): string[] {
+  const widths = (cut: Cut) => `${cut.element} in ${cut.box}: content of ${cut.scrollWidth} px in a box of ${cut.clientWidth} px, "${cut.text}"`;
+  return cuts.flatMap((cut) => {
+    if (cut.kind === "clip") return [`a box cuts text at ${width} px: ${widths(cut)}. Make the content fit, or add data-overflow-ok to the box.`];
+    if (width < PHONE_WIDTH) return [`a table goes out of view at ${width} px: ${widths(cut)}. Make the table fit, give the box the class scroll-cue, or add data-overflow-ok to the box.`];
+    return [];
+  });
 }
 
 /** This function gives the file name part of a page: `/` is `home`, `/releases/` is `releases`. */
@@ -189,7 +206,7 @@ async function checkView(page: Page, events: Events, input: ViewInput): Promise<
   const { target, path, width, scheme, withProbe, options } = input;
   const view: ViewResult = { page: path, width, scheme, ok: false, problems: [] };
   try {
-    await page.send("Emulation.setDeviceMetricsOverride", { width, height: 900, deviceScaleFactor: 1, mobile: width < 768 });
+    await page.send("Emulation.setDeviceMetricsOverride", { width, height: 900, deviceScaleFactor: 1, mobile: width < PHONE_WIDTH });
     await page.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: scheme }] });
     events.reset();
     const loaded = page.once("Page.loadEventFired", options.timeoutMs);
@@ -207,6 +224,7 @@ async function checkView(page: Page, events: Events, input: ViewInput): Promise<
     if (measure.scrollWidth > width) view.problems.push(`the page is wider than the screen: ${measure.scrollWidth} > ${width}`);
     for (const past of measure.past) view.problems.push(`past the right edge: ${past}`);
     for (const clipped of measure.clipped) view.problems.push(`a text area hides its text: ${clipped}`);
+    view.problems.push(...cutProblems(measure.cut, width));
     if (measure.text === 0) view.problems.push("the page shows no text");
     if (options.shots) {
       const file = join(options.shots, `${pageSlug(path)}-${width}-${scheme}.png`);
@@ -265,8 +283,10 @@ export const CHECK_HELP = `Usage: site-pages check (--out <dir> | --url <url>) [
 
 Opens the pages of the site in a headless Chromium at phone and desktop widths, in the light and
 the dark scheme, and fails when a page is wider than the screen, an element goes past the right
-edge, a text area hides its text, a page shows no text, or on a console error, an exception, a
-failed request of the site, a script that does not load or a failed check of the probe.
+edge, a text area hides its text, a box cuts text, a table goes out of view on a phone, a page
+shows no text, or on a console error, an exception, a failed request of the site, a script that
+does not load or a failed check of the probe. Add data-overflow-ok to a box that is meant to
+scroll or to clip.
 
 Options:
   --out <dir>          The built site folder. The check serves it at --base.

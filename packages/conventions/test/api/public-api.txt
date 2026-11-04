@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 131 names
+## . (build/index.d.ts): 132 names
 
 ACTIONS_COMMIT: build/index.d.ts#ACTIONS_COMMIT
 type AuditSource: build/index.d.ts#AuditSource
@@ -103,6 +103,7 @@ parseJsonc: build/index.d.ts#parseJsonc
 pathsOf: build/index.d.ts#pathsOf
 pinnedGitDeps: build/index.d.ts#pinnedGitDeps
 prPathFilters: build/index.d.ts#prPathFilters
+pushMainOnly: build/index.d.ts#pushMainOnly
 readConfig: build/index.d.ts#readConfig
 readJsonc: build/index.d.ts#readJsonc
 readOverlay: build/index.d.ts#readOverlay
@@ -565,6 +566,9 @@ export declare const pinnedGitDeps: Rule;
 
 ### build/index.d.ts#prPathFilters
 export declare function prPathFilters(text: string): PathFilter[];
+
+### build/index.d.ts#pushMainOnly
+export declare const pushMainOnly: Rule;
 
 ### build/index.d.ts#readConfig
 export declare function readConfig(root: string, rules?: readonly Rule[]): ConventionsConfig;

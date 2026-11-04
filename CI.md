@@ -79,6 +79,62 @@ The ruleset names only the summary checks. Thus it does not change when a job is
 - Set the ruleset once with `node scripts/workflows/ruleset-ci-ok.ts <owner/repo> --apply`. Without `--apply`, it only prints the changes. It reads the checks of the newest of the last 5 pull requests into the default branch where "CI OK" passed. It adds each check with a name `<Name> OK` that passed there and that no ruleset names. It skips a repository where "CI OK" did not pass on any of the 5. A check that starts only on a push to `main` is not added, because it does not start on a pull request.
 - To make the summary checks the only checks of the ruleset, add `--only-summary`. Then the script also removes each check that started in the same workflow run as that "CI OK", because "CI OK" covers it. It deletes a ruleset with no rule left. Then a repository can join or split the jobs of its CI, and its ruleset stays correct.
 
+### One run for each commit
+
+A commit on a branch with an open pull request starts `push` and `pull_request`. Thus a workflow with no limit on `push` starts two times for each commit. The rule `push-main-only` of `@mark1russell7/conventions` stops this, and `pnpm exec conventions fix` writes the change. A workflow that starts on the two events has this form:
+
+```yaml
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # A person starts a run on a branch with no pull request: gh workflow run ci.yml --ref <branch>
+  workflow_dispatch:
+```
+
+`branches` names the default branch. The rule reads it from the event file of the run, and then from `origin/HEAD`. If it finds neither, it uses `main`.
+
+| Trigger | What the rule does |
+|---|---|
+| `push` with no filter, or with only `paths` or `paths-ignore` | The fix adds `branches`. The path filter stays. |
+| `push` with `branches: ["**"]` or `branches: ["*"]` | The fix writes the default branch. |
+| `push` with `branches` and `tags` | The fix keeps `tags`, so a tag push stays. |
+| `push` with only `tags` or `tags-ignore` | No break, because GitHub starts this trigger on no branch. |
+| `push` with no filter in a workflow that reads `refs/tags` or `github.ref_type` | The fix adds `branches` and `tags: ["**"]`, so the tag run stays. The rule also reads the local workflows that the file calls. |
+| `push` and `release` with no `pull_request` | No break. Only the two events together start a commit two times. |
+| `pull_request.types` with no `synchronize` | No break. Such a trigger does not start on a new commit, so `push` gives the only run. |
+| `pull_request_target` | No break. It uses the code of the base, so only `push` tests the branch. |
+| `workflow_call` or `schedule` next to the triggers | They stay as they are. |
+| `on: [push, pull_request]` | The fix writes the block form. A comment stays on its line. |
+| A caller of a shared workflow | The same as each other workflow. The fix does not change the jobs. |
+
+The fix gives a break with no edit, and a person chooses the change, in these cases:
+
+- `push` has `branches-ignore`.
+- `branches` names another branch, for example `[main, develop]`.
+- The workflow reads another branch, for example `github.ref == 'refs/heads/develop'`.
+- `on` or `push` has the flow form of a map, for example `on: { push: {}, pull_request: {} }`.
+- The file is `release.yml`. The fix does not change this file.
+
+For a long-lived branch, add its name to the option `branches` of the rule, with a reason. To keep a workflow out of the rule, use `ignore`, with a reason.
+
+The limit has these results:
+
+- A branch with no pull request gets no automatic run. Start a run with `gh workflow run`.
+- GitHub does not start `pull_request` on a pull request with a merge conflict. Correct the conflict to get a run.
+- A pull request into a branch that `on.pull_request.branches` does not name gets no run. Start a run with `gh workflow run`.
+- A tag push no longer starts a CI that does not read the tag.
+- The checks of a pull request do not change. `CI OK` and `Security OK` come from the run for `pull_request`, and the ruleset stays as it is.
+
+A run from `workflow_dispatch` is the same as a run from a push to `main`, with these points:
+
+- The concurrency group of `ci.yml` is the group of the commit, and `cancel-in-progress` is `false`. A newer push does not cancel the run. A run of the same commit waits for the first run.
+- The job `changesets` skips, because its `if` asks for `pull_request`. The job `ci` stays green, as on a push to `main`.
+- The steps "Deepen to the merge base" and "Fetch the commit before the push" skip.
+- The action `changes` gives a match, as for each event other than a pull request.
+- The rules of `conventions` that read a range of commits skip, because a run of `workflow_dispatch` has no base.
+- `reusable-pages.yml` starts a deploy only after a CI run with the event `push`. Thus a run of `workflow_dispatch` does not deploy.
+
 ### A gate with paths
 
 A gate that is only about some files (a bench of the core, a corpus) starts on each pull request too. Two shared actions do the rest:
@@ -92,6 +148,7 @@ on:
   push:
     branches: [main]
     paths: ["packages/core/src/**"]
+  workflow_dispatch:
 
 jobs:
   changes:
@@ -259,6 +316,9 @@ jobs:
 - The check opens each page of `site-check-pages` (default: the home) at the widths 360, 400 and 1280, in light and dark.
 - A page fails when it is wider than the screen, or an element goes past the right edge.
 - A page also fails when it shows no text, or a text area hides its text.
+- A page also fails when a box with `overflow-x: hidden` or `clip` cuts text.
+- A page also fails when a table in a box that scrolls goes out of view at a phone width.
+- The attribute `data-overflow-ok` marks a box that is meant to scroll or to clip. The `README.md` of `site-pages` tells the rule and what does not count.
 - A console error, an exception or a failed request also fails the page.
 - `site-check-probe` is a JavaScript or TypeScript file that tests the interactive core of the home. Its checks run at each width. The check removes the types of a `.ts` file, so the site needs no build step for its probe. `site-pages check --help` tells its functions.
 - The check uses the Chromium of `playwright-core` at `site-check-playwright`, from the action `setup-playwright`. The artifact `site-check` has the screenshots and `report.json`.

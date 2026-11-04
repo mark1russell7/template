@@ -61,13 +61,50 @@ site-pages check --url https://owner.github.io/name/
 
 A view fails for each of these problems:
 
-- The page is wider than the screen, or an element goes past the right edge. A container that scrolls or clips is not a problem.
+- The page is wider than the screen, or an element goes past the right edge. An element in a box that scrolls or clips does not count here.
+- A box with `overflow-x: hidden` or `clip` cuts text at its right edge, at any width. A visitor cannot reach that text.
+- A table goes out of view at a phone width. The table is in a box that scrolls, and a text of the table ends past the edge of the box.
 - A text area hides a part of its text.
 - The page shows no text.
 - The page writes a console error, or a script throws an exception.
 - A request to the site fails, or gets a status of 400 or more.
 - A script or a style sheet does not load, from any origin. An example is a module script that imports `node:perf_hooks`.
 - A check of the probe fails, or the probe makes no check.
+
+The text of the problem has the element, the box, the two widths, the width of the view and the start of the text. For example:
+
+```text
+a table goes out of view at 360 px: table.api-table in div.table-scroll: content of 736 px in a box of 344 px, "Note". Make the table fit, give the box the class scroll-cue, or add data-overflow-ok to the box.
+```
+
+The rule for a box that scrolls examines only tables, for these reasons:
+
+- A code block, a hex view, a row of tabs and a carousel are meant to scroll, and a visitor sees that they scroll.
+- A table in a box that scrolls looks complete on a phone, with no scroll bar. The visitor does not see the last columns.
+- The class `scroll-cue` shows a shade at the edge of the box, so a table in such a box does not count. The shade shows only when the cells have no background color of their own.
+- A false alarm costs more than a miss, because each false alarm needs an exception in the site.
+
+A table is `table`, `role="table"` or `role="grid"`. A desktop view has a scroll bar, so a table in a box that scrolls is not a problem there. `report.json` still shows the table in `measure.cut`.
+
+These items do not count as cut text:
+
+- Text in a box with `text-overflow: ellipsis`.
+- Text for a screen reader: `.sr`, `.sr-only`, `.visually-hidden`, `.skip`, or an element of 1 px or less, with or without a clip.
+- Hidden text: `display: none`, `visibility: hidden`, `opacity: 0` or `aria-hidden="true"`.
+- A decorative element with no text, and text in an `svg`.
+- An overflow of 1 px or less. This tolerance is for rounding.
+
+Vertical overflow does not count, because an accordion and a list with a line clamp use it on purpose.
+
+The attribute `data-overflow-ok` marks a box that is meant to scroll or to clip. Put it on the box or on an element around the box:
+
+```html
+<div class="result-scroll" data-overflow-ok><table>...</table></div>
+```
+
+Use the attribute for a data table with many columns, a marquee or a slider. For an API table, the better fix is a layout that fits the phone.
+
+A passing check proves what it asserts, not the page. Read the screenshots at full size before a merge. When a read finds a fault that a script can find, add it to this check.
 
 The probe is a JavaScript file or a TypeScript file (`.ts`, `.mts` or `.cts`). Its code is the body of an async function. These functions are available:
 
