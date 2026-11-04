@@ -29,7 +29,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./chrome": "./src/chrome.ts",
+    "./vite": "./src/vite.ts",
     "./scroll-cue.css": "./styles/scroll-cue.css",
+    "./shell.css": "./styles/shell.css",
     "./package.json": "./package.json"
   },
   "bin": {
@@ -52,7 +54,12 @@
         "types": "./build/chrome.d.ts",
         "import": "./build/chrome.js"
       },
+      "./vite": {
+        "types": "./build/vite.d.ts",
+        "import": "./build/vite.js"
+      },
       "./scroll-cue.css": "./styles/scroll-cue.css",
+      "./shell.css": "./styles/shell.css",
       "./package.json": "./package.json"
     },
     "bin": {
@@ -73,6 +80,7 @@
     "@types/node": "^26.6.4",
     "tsdown": "^0.23.1",
     "typescript": "^7.0.2",
+    "vite": "^8.3.5",
     "vitest": "^5.0.3"
   }
 }

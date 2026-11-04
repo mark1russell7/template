@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyTheme, byId, copyText, copyToClipboard, currentTheme, h, nextTheme, setupTheme, THEMES } from "./chrome.ts";
+import { applyTheme, byId, copyText, copyToClipboard, currentTheme, h, nextTheme, setupTheme, showBuild, THEMES } from "./chrome.ts";
 
 // The package has no DOM for its tests. These fakes have only the members that the helpers use.
 
@@ -129,6 +129,31 @@ describe("byId", () => {
 
   it("throws for a missing ID", () => {
     expect(() => byId("none")).toThrow('The page has no element "none".');
+  });
+});
+
+describe("showBuild", () => {
+  const shown = (build: Parameters<typeof showBuild>[1]): unknown[] => {
+    const el = new FakeElement("p");
+    showBuild(el as unknown as HTMLElement, build, "acme/site");
+    return el.children;
+  };
+
+  it("shows the version, and links the commit to the repository", () => {
+    const [start, commit, end] = shown({ sha: "abc1234", date: "2026-11-03", version: "1.2.3" });
+    expect(start).toBe("Version 1.2.3, build ");
+    expect(fake(commit).tagName).toBe("a");
+    expect(fake(commit).getAttribute("href")).toBe("https://github.com/acme/site/commit/abc1234");
+    expect(fake(commit).children).toEqual(["abc1234"]);
+    expect(end).toBe(" of 2026-11-03");
+  });
+
+  it("starts with Build when the site has no version", () => {
+    expect(shown({ sha: "abc1234", date: "2026-11-03" })[0]).toBe("Build ");
+  });
+
+  it("gives a local build no link", () => {
+    expect(shown({ sha: "local", date: "2026-11-03", version: "1.2.3" })).toEqual(["Version 1.2.3, build ", "local", " of 2026-11-03"]);
   });
 });
 

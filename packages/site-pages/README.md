@@ -343,6 +343,7 @@ The entry `@mark1russell7/site-pages/chrome` has small helpers for the script of
 | `currentTheme()`, `nextTheme(storageKey)`, `applyTheme(theme, storageKey)` | Read the theme, set the next theme, or set one theme. A site with its own button, for example a React component, uses them. |
 | `copyText(button, text, options)` | Copies a text. The button shows "Copied" or "Copy failed" for 1600 ms. |
 | `copyToClipboard(text)` | Copies a text with the Clipboard API, else with `document.execCommand`. It gives `true` after a copy. |
+| `showBuild(element, build, repository)` | Adds "Version 1.2.3, build abc1234 of 2026-11-03" to an element. The commit is a link to GitHub. |
 
 ```ts
 import { byId, copyText, h, setupTheme } from "@mark1russell7/site-pages/chrome";
@@ -353,7 +354,7 @@ copy.addEventListener("click", () => void copyText(copy, "pnpm add my-package"))
 byId("install").append(copy);
 ```
 
-The theme `auto` removes `data-theme`, and the CSS of the site then obeys `prefers-color-scheme`. Put this script in the `head` of the page, with the same key. It sets the theme before the first paint, so a dark page does not show white for a moment:
+The theme `auto` removes `data-theme`, and the CSS of the site then obeys `prefers-color-scheme`. Put this script in the `head` of the page, with the same key. It sets the theme before the first paint, so a dark page does not show white for a moment. A site with the plugin `siteShell` does not need this script, because the plugin adds it:
 
 ```html
 <script>
@@ -363,6 +364,51 @@ The theme `auto` removes `data-theme`, and the CSS of the site then obeys `prefe
   } catch {}
 </script>
 ```
+
+## The shell of a site
+
+The shell is the part of a page that is not its content. The package has two parts of the shell, and each part is optional.
+
+The entry `@mark1russell7/site-pages/vite` is for `vite.config.ts`. The plugin `siteShell` sets `base` from `SITE_BASE`, sets `build.target` to `es2022`, defines `__BUILD__`, and adds the theme script to the `head` of each HTML page.
+
+```ts
+import { defineConfig } from "vite";
+import { siteShell } from "@mark1russell7/site-pages/vite";
+
+export default defineConfig({
+  root: "site",
+  plugins: [siteShell({ themeKey: "my-site-theme" })],
+});
+```
+
+```ts
+import { byId, setupTheme, showBuild, type BuildInfo } from "@mark1russell7/site-pages/chrome";
+
+declare const __BUILD__: BuildInfo;
+
+setupTheme(byId<HTMLButtonElement>("theme"), "my-site-theme");
+showBuild(byId("build"), __BUILD__, "owner/my-site");
+```
+
+| Export of `./vite` | Operation |
+| --- | --- |
+| `siteShell({ themeKey, packageFile })` | Makes the plugin. A `base` or a `build.target` in the config of the site has priority. |
+| `themeScript(storageKey)` | Gives the text of the theme script, for a page without the plugin. |
+| `siteBase(env)` | Gives `SITE_BASE` with one `/` at the end, or `/`. |
+| `buildInfo(version, env, now)` | Gives the data of `__BUILD__`: the short commit, the date and the version. |
+
+The version comes from `../package.json`, relative to the folder of the site. Set `packageFile` to another file, or to `false` for a site with no version.
+
+The file `@mark1russell7/site-pages/shell.css` has the tokens and the rules of the shell. The rules are for the document, the skip link, the header, the links, the theme button, the main column and the footer. Import it before the style sheet of the site, so the rules of the site come last:
+
+```ts
+import "@mark1russell7/site-pages/shell.css";
+import "./style.css";
+```
+
+The file sets no look for the content. Buttons, cards, code and tables stay in the site. The header, the navigation, the footer text and each widget also stay in the site, because each site has its own words there.
+
+A site with its own look does not import `shell.css`. It uses only the plugin and `showBuild`, or nothing from this section.
 
 ## A GitHub Pages workflow
 
