@@ -19,6 +19,7 @@ import {
   heatStep,
   HEAT_STEPS,
   holdControls,
+  levelForm,
   linePath,
   MAX_STEPS,
   numberTable,
@@ -423,8 +424,30 @@ function dimensionSelect(label: string, key: string, choices: readonly Dimension
   return h("label", { class: "rx-field" }, h("span", {}, label), select);
 }
 
-/** This function makes a group of level buttons. They are radio inputs, so the keyboard works with no script. */
-function levelGroup(label: string, key: string, name: string, options: readonly { readonly text: string; readonly checked: boolean; readonly disabled: boolean; readonly reason: string; readonly choose: () => void }[], note: string): HTMLElement {
+/** The fields of a level in a group. */
+interface LevelOption {
+  readonly text: string;
+  readonly checked: boolean;
+  readonly disabled: boolean;
+  readonly reason: string;
+  readonly choose: () => void;
+}
+
+/** This function makes a select of levels. A closed select shows the held value and takes one row. */
+function levelSelect(label: string, key: string, options: readonly LevelOption[], note: string): HTMLElement {
+  const items = options.map((option, i) => {
+    const text = option.disabled ? `${option.text}: ${option.reason}` : option.text;
+    return h("option", { value: i, disabled: option.disabled, selected: option.checked }, text);
+  });
+  const select = h("select", { "data-key": key }, ...items);
+  select.addEventListener("change", () => options[Number(select.value)]?.choose());
+  const field = h("label", { class: "rx-field" }, h("span", {}, label), select);
+  return h("div", { class: "rx-hold" }, field, note === "" ? null : h("p", { class: "rx-note" }, note));
+}
+
+/** This function makes a group of levels. Level buttons are radio inputs, so the keyboard works with no script. */
+function levelGroup(label: string, key: string, name: string, options: readonly LevelOption[], note: string): HTMLElement {
+  if (levelForm(options.length) === "select") return levelSelect(label, key, options, note);
   const chips = options.map((option, i) => {
     const input = h("input", { class: "rx-radio", type: "radio", name, checked: option.checked, disabled: option.disabled, "data-key": `${key}:${i}` });
     input.addEventListener("change", option.choose);

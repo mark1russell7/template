@@ -9,6 +9,12 @@ const pkg = JSON.parse(readFileSync(new URL("package.json", root), "utf8")) as {
 };
 const css = readFileSync(new URL("styles/explorer.css", root), "utf8");
 
+describe("the layout of the explorer", () => {
+  it("puts the chart first in one column", () => {
+    expect(css).toContain("@media (max-width: 59.99rem) {\n  .rx-chart { order: -1; }\n}");
+  });
+});
+
 /** This function gives the declarations of the first rule with exactly this selector. */
 function declarations(selector: string): string[] {
   const start = css.indexOf(`${selector} {`);
