@@ -7,70 +7,70 @@
 ## . (build/index.d.ts): 137 names
 
 BASE_CSS: build/index.d.ts#BASE_CSS
-type BoardIssue: build/chunks/kpi.d.ts#BoardIssue
-type BoardItem: build/chunks/kpi.d.ts#BoardItem
-type BoardPullRequest: build/chunks/kpi.d.ts#BoardPullRequest
+type BoardIssue: build/chunks/freshness.d.ts#BoardIssue
+type BoardItem: build/chunks/freshness.d.ts#BoardItem
+type BoardPullRequest: build/chunks/freshness.d.ts#BoardPullRequest
 type BoardSection: build/index.d.ts#BoardSection
 type BuildOptions: build/index.d.ts#BuildOptions
 type BuildResult: build/index.d.ts#BuildResult
 type ChangelogEntry: build/index.d.ts#ChangelogEntry
 type ChangelogSection: build/index.d.ts#ChangelogSection
 type ChangelogSource: build/index.d.ts#ChangelogSource
-type CheckState: build/chunks/kpi.d.ts#CheckState
+type CheckState: build/chunks/freshness.d.ts#CheckState
 type CliIo: build/index.d.ts#CliIo
-DATA_STAMP_SCHEMA: build/index.d.ts#DATA_STAMP_SCHEMA
+DATA_STAMP_SCHEMA: build/chunks/freshness.d.ts#DATA_STAMP_SCHEMA
 DEFAULT_CHANGELOGS: build/index.d.ts#DEFAULT_CHANGELOGS
-type DataRun: build/index.d.ts#DataRun
-type DataStamps: build/index.d.ts#DataStamps
-type DataStampsParse: build/index.d.ts#DataStampsParse
-type FreshnessCheck: build/index.d.ts#FreshnessCheck
-type FreshnessOptions: build/index.d.ts#FreshnessOptions
+type DataRun: build/chunks/freshness.d.ts#DataRun
+type DataStamps: build/chunks/freshness.d.ts#DataStamps
+type DataStampsParse: build/chunks/freshness.d.ts#DataStampsParse
+type FreshnessCheck: build/chunks/freshness.d.ts#FreshnessCheck
+type FreshnessOptions: build/chunks/freshness.d.ts#FreshnessOptions
 GITHUB_API: build/index.d.ts#GITHUB_API
 GITHUB_GRAPHQL: build/index.d.ts#GITHUB_GRAPHQL
-type GitHubOpenWork: build/chunks/kpi.d.ts#GitHubOpenWork
+type GitHubOpenWork: build/chunks/freshness.d.ts#GitHubOpenWork
 type GitHubOptions: build/index.d.ts#GitHubOptions
-type GitHubRelease: build/chunks/kpi.d.ts#GitHubRelease
-type GitHubReleases: build/chunks/kpi.d.ts#GitHubReleases
+type GitHubRelease: build/chunks/freshness.d.ts#GitHubRelease
+type GitHubReleases: build/chunks/freshness.d.ts#GitHubReleases
 HELP: build/index.d.ts#HELP
 type ItemGroup: build/index.d.ts#ItemGroup
-KPI_FILE: build/chunks/kpi.d.ts#KPI_FILE
-KPI_FORMAT: build/chunks/kpi.d.ts#KPI_FORMAT
-type KpiEngine: build/chunks/kpi.d.ts#KpiEngine
-KpiError: build/chunks/kpi.d.ts#KpiError
-type KpiFile: build/chunks/kpi.d.ts#KpiFile
-type KpiInput: build/chunks/kpi.d.ts#KpiInput
-type KpiMeasure: build/chunks/kpi.d.ts#KpiMeasure
-type Link: build/chunks/kpi.d.ts#Link
+KPI_FILE: build/chunks/freshness.d.ts#KPI_FILE
+KPI_FORMAT: build/chunks/freshness.d.ts#KPI_FORMAT
+type KpiEngine: build/chunks/freshness.d.ts#KpiEngine
+KpiError: build/chunks/freshness.d.ts#KpiError
+type KpiFile: build/chunks/freshness.d.ts#KpiFile
+type KpiInput: build/chunks/freshness.d.ts#KpiInput
+type KpiMeasure: build/chunks/freshness.d.ts#KpiMeasure
+type Link: build/chunks/freshness.d.ts#Link
 type LinkOptions: build/index.d.ts#LinkOptions
-MAX_DATA_AGE_DAYS: build/index.d.ts#MAX_DATA_AGE_DAYS
-MAX_MINORS_BEHIND: build/index.d.ts#MAX_MINORS_BEHIND
+MAX_DATA_AGE_DAYS: build/chunks/freshness.d.ts#MAX_DATA_AGE_DAYS
+MAX_MINORS_BEHIND: build/chunks/freshness.d.ts#MAX_MINORS_BEHIND
 type MarkdownTable: build/index.d.ts#MarkdownTable
 NPM_REGISTRY: build/index.d.ts#NPM_REGISTRY
 type NpmOptions: build/index.d.ts#NpmOptions
-type NpmPublishTimes: build/chunks/kpi.d.ts#NpmPublishTimes
-type NpmVersionTime: build/chunks/kpi.d.ts#NpmVersionTime
+type NpmPublishTimes: build/chunks/freshness.d.ts#NpmPublishTimes
+type NpmVersionTime: build/chunks/freshness.d.ts#NpmVersionTime
 OPEN_CLASSES: build/index.d.ts#OPEN_CLASSES
-type OpenWorkTotals: build/chunks/kpi.d.ts#OpenWorkTotals
+type OpenWorkTotals: build/chunks/freshness.d.ts#OpenWorkTotals
 type PageOptions: build/index.d.ts#PageOptions
 type PageParts: build/index.d.ts#PageParts
-type PageStamp: build/index.d.ts#PageStamp
+type PageStamp: build/chunks/freshness.d.ts#PageStamp
 type ParsedVersion: build/index.d.ts#ParsedVersion
 RELEASES_SCRIPT: build/index.d.ts#RELEASES_SCRIPT
 type ReadReleasesOptions: build/index.d.ts#ReadReleasesOptions
 type ReadStatusBoardOptions: build/index.d.ts#ReadStatusBoardOptions
-type Release: build/chunks/kpi.d.ts#Release
-type ReleaseChange: build/chunks/kpi.d.ts#ReleaseChange
+type Release: build/chunks/freshness.d.ts#Release
+type ReleaseChange: build/chunks/freshness.d.ts#ReleaseChange
 ReleaseDataError: build/index.d.ts#ReleaseDataError
-type ReleaseKind: build/chunks/kpi.d.ts#ReleaseKind
+type ReleaseKind: build/chunks/freshness.d.ts#ReleaseKind
 type ReleasePoint: build/index.d.ts#ReleasePoint
 type ReleaseSources: build/index.d.ts#ReleaseSources
 type ReleaseSummary: build/index.d.ts#ReleaseSummary
 RoadmapParseError: build/index.d.ts#RoadmapParseError
 STATUS_CLASSES: build/index.d.ts#STATUS_CLASSES
 STATUS_SCRIPT: build/index.d.ts#STATUS_SCRIPT
-type StatusBoardData: build/chunks/kpi.d.ts#StatusBoardData
+type StatusBoardData: build/chunks/freshness.d.ts#StatusBoardData
 type StatusBoardInput: build/index.d.ts#StatusBoardInput
-type StatusClass: build/chunks/kpi.d.ts#StatusClass
+type StatusClass: build/chunks/freshness.d.ts#StatusClass
 TYPESCRIPT_PROBE: build/index.d.ts#TYPESCRIPT_PROBE
 type TagDate: build/index.d.ts#TagDate
 type TagVersion: build/index.d.ts#TagVersion
@@ -81,7 +81,7 @@ type TimelineOptions: build/index.d.ts#TimelineOptions
 UsageError: build/index.d.ts#UsageError
 build: build/index.d.ts#build
 buildStatusBoard: build/index.d.ts#buildStatusBoard
-checkFreshness: build/index.d.ts#checkFreshness
+checkFreshness: build/chunks/freshness.d.ts#checkFreshness
 checkStateOf: build/index.d.ts#checkStateOf
 classCounts: build/index.d.ts#classCounts
 compareVersions: build/index.d.ts#compareVersions
@@ -98,16 +98,16 @@ headingDate: build/index.d.ts#headingDate
 inlineMarkdown: build/index.d.ts#inlineMarkdown
 isShallow: build/index.d.ts#isShallow
 kindOf: build/index.d.ts#kindOf
-kpiFile: build/chunks/kpi.d.ts#kpiFile
-kpiProblems: build/chunks/kpi.d.ts#kpiProblems
-kpiText: build/chunks/kpi.d.ts#kpiText
+kpiFile: build/chunks/freshness.d.ts#kpiFile
+kpiProblems: build/chunks/freshness.d.ts#kpiProblems
+kpiText: build/chunks/freshness.d.ts#kpiText
 laneCenter: build/index.d.ts#laneCenter
-latestAt: build/index.d.ts#latestAt
+latestAt: build/chunks/freshness.d.ts#latestAt
 linksOf: build/index.d.ts#linksOf
 longDate: build/index.d.ts#longDate
 markdownTables: build/index.d.ts#markdownTables
 mergeReleases: build/index.d.ts#mergeReleases
-minorsBehind: build/index.d.ts#minorsBehind
+minorsBehind: build/chunks/freshness.d.ts#minorsBehind
 npmPublishTimes: build/index.d.ts#npmPublishTimes
 oldestFirst: build/index.d.ts#oldestFirst
 openGroups: build/index.d.ts#openGroups
@@ -115,13 +115,13 @@ originRepository: build/index.d.ts#originRepository
 pageShell: build/index.d.ts#pageShell
 parseBuildArgs: build/index.d.ts#parseBuildArgs
 parseChangelog: build/index.d.ts#parseChangelog
-parseDataStamps: build/index.d.ts#parseDataStamps
+parseDataStamps: build/chunks/freshness.d.ts#parseDataStamps
 parseRoadmap: build/index.d.ts#parseRoadmap
 parseVersion: build/index.d.ts#parseVersion
 plainText: build/index.d.ts#plainText
 probeScript: build/index.d.ts#probeScript
 readChangelogs: build/index.d.ts#readChangelogs
-readKpi: build/chunks/kpi.d.ts#readKpi
+readKpi: build/chunks/freshness.d.ts#readKpi
 readReleases: build/index.d.ts#readReleases
 readStatusBoard: build/index.d.ts#readStatusBoard
 releaseBodyEntries: build/index.d.ts#releaseBodyEntries
@@ -142,7 +142,7 @@ statusLead: build/index.d.ts#statusLead
 timelineLayout: build/index.d.ts#timelineLayout
 utcDay: build/index.d.ts#utcDay
 versionOfTag: build/index.d.ts#versionOfTag
-writeKpi: build/chunks/kpi.d.ts#writeKpi
+writeKpi: build/chunks/freshness.d.ts#writeKpi
 
 ## ./chrome (build/chrome.d.ts): 15 names
 
@@ -203,6 +203,8 @@ viewOf: build/explorer/index.d.ts#viewOf
 ## ./vite (build/vite.d.ts): 21 names
 
 type BuildInfo: build/chrome.d.ts#BuildInfo
+STAMPS_FILE: build/vite.d.ts#STAMPS_FILE
+STAMP_MARK: build/vite.d.ts#STAMP_MARK
 SiteEnv: build/vite.d.ts#SiteEnv
 SiteKpiContext: build/vite.d.ts#SiteKpiContext
 SiteKpiInput: build/vite.d.ts#SiteKpiInput
@@ -215,8 +217,6 @@ SiteShellTag: build/vite.d.ts#SiteShellTag
 SiteStampsPage: build/vite.d.ts#SiteStampsPage
 SiteStampsPlugin: build/vite.d.ts#SiteStampsPlugin
 SiteTarget: build/vite.d.ts#SiteTarget
-STAMP_MARK: build/vite.d.ts#STAMP_MARK
-STAMPS_FILE: build/vite.d.ts#STAMPS_FILE
 buildInfo: build/vite.d.ts#buildInfo
 siteBase: build/vite.d.ts#siteBase
 siteKpi: build/vite.d.ts#siteKpi
@@ -295,7 +295,7 @@ export declare function setupTheme(button: HTMLButtonElement, storageKey: string
 ### build/chrome.d.ts#showBuild
 export declare function showBuild(element: HTMLElement, build: BuildInfo, repository: string): void;
 
-### build/chunks/kpi.d.ts#BoardIssue
+### build/chunks/freshness.d.ts#BoardIssue
 interface BoardIssue {
   number: number;
   title: string;
@@ -306,7 +306,7 @@ interface BoardIssue {
   labels: string[];
 }
 
-### build/chunks/kpi.d.ts#BoardItem
+### build/chunks/freshness.d.ts#BoardItem
 interface BoardItem {
   id: string;
   title: string;
@@ -320,7 +320,7 @@ interface BoardItem {
   links: Link[];
 }
 
-### build/chunks/kpi.d.ts#BoardPullRequest
+### build/chunks/freshness.d.ts#BoardPullRequest
 interface BoardPullRequest {
   number: number;
   title: string;
@@ -334,10 +334,50 @@ interface BoardPullRequest {
   checks: CheckState;
 }
 
-### build/chunks/kpi.d.ts#CheckState
+### build/chunks/freshness.d.ts#CheckState
 type CheckState = "success" | "failure" | "pending" | "none";
 
-### build/chunks/kpi.d.ts#GitHubOpenWork
+### build/chunks/freshness.d.ts#DATA_STAMP_SCHEMA
+declare const DATA_STAMP_SCHEMA = "data-stamp/1";
+
+### build/chunks/freshness.d.ts#DataRun
+interface DataRun {
+  readonly id: string;
+  readonly url: string;
+  readonly date: string;
+  readonly engines: Readonly<Record<string, string>>;
+}
+
+### build/chunks/freshness.d.ts#DataStamps
+interface DataStamps {
+  readonly schema: typeof DATA_STAMP_SCHEMA;
+  readonly pages: readonly PageStamp[];
+}
+
+### build/chunks/freshness.d.ts#DataStampsParse
+type DataStampsParse = {
+  readonly ok: true;
+  readonly stamps: DataStamps;
+} | {
+  readonly ok: false;
+  readonly faults: readonly string[];
+};
+
+### build/chunks/freshness.d.ts#FreshnessCheck
+interface FreshnessCheck {
+  readonly faults: readonly string[];
+  readonly notRun: readonly string[];
+}
+
+### build/chunks/freshness.d.ts#FreshnessOptions
+interface FreshnessOptions {
+  readonly now: string;
+  readonly times: readonly NpmVersionTime[];
+  readonly maxAgeDays?: number;
+  readonly maxMinorsBehind?: number;
+}
+
+### build/chunks/freshness.d.ts#GitHubOpenWork
 type GitHubOpenWork = {
   available: true;
   pullRequests: BoardPullRequest[];
@@ -348,7 +388,7 @@ type GitHubOpenWork = {
   reason: string;
 };
 
-### build/chunks/kpi.d.ts#GitHubRelease
+### build/chunks/freshness.d.ts#GitHubRelease
 interface GitHubRelease {
   tag: string;
   name: string;
@@ -358,7 +398,7 @@ interface GitHubRelease {
   prerelease: boolean;
 }
 
-### build/chunks/kpi.d.ts#GitHubReleases
+### build/chunks/freshness.d.ts#GitHubReleases
 type GitHubReleases = {
   available: true;
   releases: GitHubRelease[];
@@ -367,25 +407,25 @@ type GitHubReleases = {
   reason: string;
 };
 
-### build/chunks/kpi.d.ts#KPI_FILE
+### build/chunks/freshness.d.ts#KPI_FILE
 declare const KPI_FILE = "kpi.json";
 
-### build/chunks/kpi.d.ts#KPI_FORMAT
+### build/chunks/freshness.d.ts#KPI_FORMAT
 declare const KPI_FORMAT = "kpi/1";
 
-### build/chunks/kpi.d.ts#KpiEngine
+### build/chunks/freshness.d.ts#KpiEngine
 interface KpiEngine {
   name: string;
   version: string;
 }
 
-### build/chunks/kpi.d.ts#KpiError
+### build/chunks/freshness.d.ts#KpiError
 declare class KpiError extends Error {
   readonly problems: readonly string[];
   constructor(problems: readonly string[]);
 }
 
-### build/chunks/kpi.d.ts#KpiFile
+### build/chunks/freshness.d.ts#KpiFile
 interface KpiFile {
   format: "kpi/1";
   project: string;
@@ -395,10 +435,10 @@ interface KpiFile {
   engines?: KpiEngine[];
 }
 
-### build/chunks/kpi.d.ts#KpiInput
+### build/chunks/freshness.d.ts#KpiInput
 type KpiInput = Omit<KpiFile, "format">;
 
-### build/chunks/kpi.d.ts#KpiMeasure
+### build/chunks/freshness.d.ts#KpiMeasure
 interface KpiMeasure {
   id: string;
   value: number;
@@ -406,32 +446,45 @@ interface KpiMeasure {
   at?: string;
 }
 
-### build/chunks/kpi.d.ts#Link
+### build/chunks/freshness.d.ts#Link
 interface Link {
   label: string;
   url: string;
 }
 
-### build/chunks/kpi.d.ts#NpmPublishTimes
+### build/chunks/freshness.d.ts#MAX_DATA_AGE_DAYS
+declare const MAX_DATA_AGE_DAYS = 3;
+
+### build/chunks/freshness.d.ts#MAX_MINORS_BEHIND
+declare const MAX_MINORS_BEHIND = 1;
+
+### build/chunks/freshness.d.ts#NpmPublishTimes
 interface NpmPublishTimes {
   times: NpmVersionTime[];
   problems: string[];
 }
 
-### build/chunks/kpi.d.ts#NpmVersionTime
+### build/chunks/freshness.d.ts#NpmVersionTime
 interface NpmVersionTime {
   name: string;
   version: string;
   date: string;
 }
 
-### build/chunks/kpi.d.ts#OpenWorkTotals
+### build/chunks/freshness.d.ts#OpenWorkTotals
 interface OpenWorkTotals {
   pullRequests: number;
   issues: number;
 }
 
-### build/chunks/kpi.d.ts#Release
+### build/chunks/freshness.d.ts#PageStamp
+interface PageStamp {
+  readonly page: string;
+  readonly runs: readonly DataRun[];
+  readonly inFlight?: DataRun;
+}
+
+### build/chunks/freshness.d.ts#Release
 interface Release {
   version: string;
   date: string;
@@ -440,17 +493,17 @@ interface Release {
   links: Link[];
 }
 
-### build/chunks/kpi.d.ts#ReleaseChange
+### build/chunks/freshness.d.ts#ReleaseChange
 interface ReleaseChange {
   commit: string | null;
   text: string;
   packages: string[];
 }
 
-### build/chunks/kpi.d.ts#ReleaseKind
+### build/chunks/freshness.d.ts#ReleaseKind
 type ReleaseKind = "first" | "major" | "minor" | "patch";
 
-### build/chunks/kpi.d.ts#StatusBoardData
+### build/chunks/freshness.d.ts#StatusBoardData
 interface StatusBoardData {
   generatedAt: string;
   commit: string | null;
