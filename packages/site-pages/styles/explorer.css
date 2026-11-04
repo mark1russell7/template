@@ -5,17 +5,25 @@
  *   import "@mark1russell7/site-pages/explorer.css";
  *
  * The explorer reads the tokens of a site when they exist: --card or --surface, --fg or --ink, --muted,
- * --line or --rule, --sunk or --sunken, --accent or --focus and --mono. Without them, it uses its own colors.
+ * --line or --rule, --sunk, --sunken or --well, --accent or --focus and --mono. Without them, it uses its own
+ * colors, the --rx-base tokens. These tokens have a dark value, so a site can have some of its tokens and not others.
  * The two dark rules below keep the same values, as the rules of shell.css do.
  */
 .response-explorer {
-  --rx-surface: var(--card, var(--surface, #ffffff));
-  --rx-sunken: var(--sunk, var(--sunken, #f1eee8));
-  --rx-ink: var(--fg, var(--ink, #1b1a17));
-  --rx-muted: var(--muted, #5d5952);
-  --rx-rule: var(--line, var(--rule, #e0dbd1));
-  --rx-accent: var(--accent, var(--focus, #2f5bd3));
-  --rx-error: var(--err, #b42318);
+  --rx-base-surface: #ffffff;
+  --rx-base-sunken: #f1eee8;
+  --rx-base-ink: #1b1a17;
+  --rx-base-muted: #5d5952;
+  --rx-base-rule: #e0dbd1;
+  --rx-base-accent: #2f5bd3;
+  --rx-base-error: #b42318;
+  --rx-surface: var(--card, var(--surface, var(--rx-base-surface)));
+  --rx-sunken: var(--sunk, var(--sunken, var(--well, var(--rx-base-sunken))));
+  --rx-ink: var(--fg, var(--ink, var(--rx-base-ink)));
+  --rx-muted: var(--muted, var(--rx-base-muted));
+  --rx-rule: var(--line, var(--rule, var(--rx-base-rule)));
+  --rx-accent: var(--accent, var(--focus, var(--rx-base-accent)));
+  --rx-error: var(--err, var(--rx-base-error));
   --rx-mono: var(--mono, ui-monospace, Menlo, Consolas, monospace);
   --rx-veil: #8f8d86;
   --rx-seq-0: #cde2fb;
@@ -39,6 +47,13 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .response-explorer {
+    --rx-base-surface: #171a23;
+    --rx-base-sunken: #1f2330;
+    --rx-base-ink: #e8e9ef;
+    --rx-base-muted: #a0a4b6;
+    --rx-base-rule: #2e3345;
+    --rx-base-accent: #93abff;
+    --rx-base-error: #fda29b;
     --rx-veil: #55534e;
     --rx-seq-0: #0d366b;
     --rx-seq-1: #104281;
@@ -55,6 +70,13 @@
 }
 
 :root[data-theme="dark"] .response-explorer {
+  --rx-base-surface: #171a23;
+  --rx-base-sunken: #1f2330;
+  --rx-base-ink: #e8e9ef;
+  --rx-base-muted: #a0a4b6;
+  --rx-base-rule: #2e3345;
+  --rx-base-accent: #93abff;
+  --rx-base-error: #fda29b;
   --rx-veil: #55534e;
   --rx-seq-0: #0d366b;
   --rx-seq-1: #104281;
