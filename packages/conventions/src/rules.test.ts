@@ -9,6 +9,7 @@ import { blockHash, sharedDocsRule, type HomeFetch } from "./rules/shared-docs.t
 import { authorOf, convertGate, declaredName, hasTests, HOMES, mitText, pagesCalls, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, unreleasedChangeRule, type CheckOptions, type RegistryAnswer, type RuleResult } from "./index.ts";
 import { minuteField } from "./rules/runner-budget.ts";
 import { runsOnMain, startsOnPush } from "./rules/main-runs-finish.ts";
+import { localBase, runCli } from "./run.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-rules-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -880,6 +881,19 @@ describe("home-package", () => {
     git(root, "commit", "-q", "-am", "change");
     return root;
   }
+
+  it("runs in a plain local check, with the default branch of origin as the base", () => {
+    const root = changed("function medianOf(xs: number[]): number {\n  return xs[0] ?? 0;\n}\n");
+    git(root, "update-ref", "refs/remotes/origin/main", "base");
+    const code = (args: string[], env: Record<string, string> = {}): number =>
+      runCli(["check", "--rule", "home-package", ...args], { cwd: root, env, stdout: () => undefined, stderr: () => undefined });
+    expect(localBase(root, {})).toBe("origin/main");
+    expect(code([])).toBe(1);
+    expect(code(["--no-base"])).toBe(0);
+    expect(localBase(root, { CI: "true" })).toBeUndefined();
+    expect(code([], { CI: "true" })).toBe(0);
+    expect(localBase(fixture({ "package.json": { name: "two" } }), {})).toBeUndefined();
+  });
 
   it("knows the forms of a declaration", () => {
     expect(declaredName("export async function quantile(xs: number[], q: number) {")).toBe("quantile");
