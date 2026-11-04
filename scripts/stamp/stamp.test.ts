@@ -59,11 +59,10 @@ describe("the stamp", () => {
     assert.equal(parseRoadmap(read(out, "docs/ROADMAP.md")).length, 1);
   });
 
-  it("leaves out check:api until a package is public, and the roadmap tells when to add it", async () => {
+  it("keeps check:api, because the check passes a repository of private packages", async () => {
     const { out } = await stamped();
     const root = JSON.parse(read(out, "package.json")) as { scripts: Record<string, string> };
-    assert.equal(root.scripts["check:api"], undefined);
-    assert.match(read(out, "docs/ROADMAP.md"), /add the script `check:api`/);
+    assert.equal(root.scripts["check:api"], "api-report check");
   });
 
   it("sets each schedule to the minute of the new repository", async () => {
@@ -101,7 +100,7 @@ describe("rootScripts", () => {
       typecheck: "pnpm -r run typecheck",
       package: "tsx packages/cli/src/index.ts package",
     });
-    assert.deepEqual(scripts, { test: "pnpm -r run test", typecheck: "pnpm -r run typecheck", package: "template package", template: "template repo" });
+    assert.deepEqual(scripts, { test: "pnpm -r run test", "check:api": "api-report check", typecheck: "pnpm -r run typecheck", package: "template package", template: "template repo" });
   });
 });
 
