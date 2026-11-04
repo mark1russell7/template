@@ -150,9 +150,9 @@ export const HOMES: readonly Home[] = [
   {
     area: "data-structures",
     title: "Collections and graphs of dependencies",
-    covers: "lists, deques, maps, trees and heaps; DAGs, cycles, topological order",
-    packages: ["@procedures/collections", "@procedures/dag"],
-    repo: "mark1russell7/client",
+    covers: "lists, deques, maps, trees and heaps; DAGs, cycles, topological order. @procedures/collections and @procedures/dag are the same code as procedures: new code goes to @mark1russell7/collections",
+    packages: ["@mark1russell7/collections", "@procedures/collections", "@procedures/dag"],
+    repo: "mark1russell7/collections",
     state: "published",
     words: ["list", "queue", "deque", "heap", "tree map", "graph", "dag", "topological", "cycle"],
     signatures: ["topoSort", "topologicalSort", "toposort", "topoOrder", "detectCycles?", "findCycles?"],
