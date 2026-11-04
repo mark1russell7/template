@@ -294,7 +294,9 @@ export const USAGE: string = `Usage: conventions check [options]
 
   --root <folder>       The root of the repository. The default is the current folder.
   --rule <id>           Only this rule. Use it again for more rules.
-  --base <ref>          The base commit of the change, for the rule release-files. On a pull request, the rule finds it.
+  --base <ref>          The base commit of the change, for the rules that examine a change. On a pull request, the
+                        rules find it. Outside CI, the default is the default branch of origin.
+  --no-base             Do not use the default base.
   --json                Write the result as JSON.
   -h, --help            Show this text.
 
@@ -305,6 +307,20 @@ with a reason, and sets the options of a rule with a reason:
                               "cue-preset": { "ignore": ["packages/web/**"], "reason": "<reason>" },
                               "workspace-protocol": { "prefix": "workspace:*", "reason": "<reason>" } } }
 `;
+
+/**
+ * This function gives the default base of a check outside CI: the default branch of origin. So a local check examines the same
+ * added lines as the check of the pull request. On 2026-11-04, two pull requests went red at the first push because a plain local
+ * check skipped those rules. In CI, the event gives the change, so this function gives undefined.
+ */
+export function localBase(root: string, env: Readonly<Record<string, string | undefined>>): string | undefined {
+  if (env["CI"] !== undefined || env["GITHUB_ACTIONS"] !== undefined) return undefined;
+  const head = runGit(root, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"])?.trim();
+  for (const ref of [head, "origin/main", "origin/master"]) {
+    if (ref !== undefined && ref !== "" && runGit(root, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]) !== undefined) return ref;
+  }
+  return undefined;
+}
 
 /** An error of the arguments: exit code 2 and the help text. */
 class UsageError extends Error {}
@@ -318,6 +334,7 @@ export function runCli(args: readonly string[], io: CliIo): number {
   let json = false;
   let root = io.cwd;
   let base: string | undefined;
+  let noBase = false;
   const only: string[] = [];
   try {
     for (let index = 0; index < args.length; index++) {
@@ -334,6 +351,7 @@ export function runCli(args: readonly string[], io: CliIo): number {
       else if (arg === "--root") root = resolve(io.cwd, value());
       else if (arg === "--rule") only.push(value());
       else if (arg === "--base") base = value();
+      else if (arg === "--no-base") noBase = true;
       else if (arg === "--help" || arg === "-h") {
         io.stdout(USAGE);
         return 0;
@@ -359,7 +377,8 @@ export function runCli(args: readonly string[], io: CliIo): number {
   let result: CheckResult;
   let fixed: FixResult | undefined;
   try {
-    const options = { root, only, env: io.env, ...(base === undefined ? {} : { base }) };
+    const change = noBase ? undefined : (base ?? localBase(root, io.env));
+    const options = { root, only, env: io.env, ...(change === undefined ? {} : { base: change }) };
     if (fix) {
       fixed = runFix(options);
       result = fixed.result;

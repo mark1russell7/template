@@ -144,7 +144,8 @@ An unknown rule, an unknown option, or an exception or a changed option without 
 | `--list` | Show each rule: the reason, the fix, the options, the state and the audit rows. |
 | `--root <folder>` | The root of the repository. The default is the current folder. |
 | `--rule <id>` | Only this rule. Use it again for more rules. |
-| `--base <ref>` | The base commit of the change, for the rules `release-files`, `home-package` and `unreleased-change`. |
+| `--base <ref>` | The base commit of the change, for the rules `release-files`, `home-package` and `unreleased-change`. Outside CI, the default is the default branch of origin, so a local check examines the same added lines as the check of the pull request. |
+| `--no-base` | Do not use that default. |
 | `--json` | Write the result as JSON. |
 
 ## The map of homes
