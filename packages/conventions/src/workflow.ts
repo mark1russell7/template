@@ -58,6 +58,25 @@ export function childKeys(lines: readonly string[], index: number): number[] {
   return keys;
 }
 
+/** A change of the lines: at the index `at`, remove `remove` lines and put `insert` in their place. */
+export interface Splice {
+  readonly at: number;
+  readonly remove: number;
+  readonly insert: readonly string[];
+}
+
+/**
+ * This function applies changes to the lines of `text`, and keeps its line ends. The changes go from the end to the
+ * start, so each index stays correct. At one index, a splice that removes lines goes first, so it removes only the old
+ * lines. Then the inserts go in, the later one first, so they keep their order.
+ */
+export function applySplices(text: string, splices: readonly Splice[]): string {
+  const eol = text.includes("\r\n") ? "\r\n" : "\n";
+  const out = text.split(/\r?\n/);
+  for (const item of splices.map((value, order) => ({ ...value, order })).sort((a, b) => b.at - a.at || b.remove - a.remove || b.order - a.order)) out.splice(item.at, item.remove, ...item.insert);
+  return out.join(eol);
+}
+
 export interface WorkflowInput {
   readonly name: string;
   readonly type: string;

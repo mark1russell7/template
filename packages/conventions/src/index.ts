@@ -47,6 +47,7 @@ export {
   noLocalPaths,
   pagesSite,
   pinnedGitDeps,
+  pushMainOnly,
   releaseFiles,
   requiredScripts,
   roadmapParses,
