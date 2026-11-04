@@ -62,7 +62,11 @@ export const apiReportScript: Rule = {
   reason:
     "The shared CI starts each script of its list that `package.json` has, and it skips the others. On 2026-11-04, 8 of the 12 repositories without the script had a public package, so a change of their API had no check.",
   fix: 'Add the script `"check:api": "api-report check"` and a dev dependency on `@mark1russell7/api-report`. Then build and start `api-report update`. The release train writes the first report in its update.',
-  sources: [{ repo: "template", rule: "api-report", doc: "CLAUDE.md:27" }],
+  sources: [
+    { repo: "template", rule: "api-report", doc: "CLAUDE.md:27" },
+    { repo: "packing", rule: "api-report", doc: "CLAUDE.md:20" },
+    { repo: "layout-contract", rule: "api-report", doc: "CLAUDE.md:20" },
+  ],
   options: {
     script: { type: "string", default: "check:api", description: "The root script that checks the API reports." },
   },
