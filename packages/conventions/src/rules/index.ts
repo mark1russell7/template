@@ -15,6 +15,7 @@ import { apiReportScript } from "./api-report-script.ts";
 import { pagesSite } from "./pages-site.ts";
 import { pinnedGitDeps } from "./pinned-git-deps.ts";
 import { pushMainOnly } from "./push-main-only.ts";
+import { publishedMinor } from "./published-minor.ts";
 import { releaseFiles } from "./release-files.ts";
 import { requiredScripts } from "./required-scripts.ts";
 import { roadmapParses } from "./roadmap-parses.ts";
@@ -43,6 +44,7 @@ export const RULES: readonly Rule[] = [
   apiReportScript,
   releaseFiles,
   unreleasedChange,
+  publishedMinor,
   changelogVersion,
   typedScripts,
   typedFiles,
@@ -59,4 +61,5 @@ export const RULES: readonly Rule[] = [
   sharedDocs,
 ];
 
+export { publishedMinor };
 export { apiReportScript, changelogVersion, cuePreset, gateTrigger, homePackage, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, pagesSite, pinnedGitDeps, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, workspaceProtocol };

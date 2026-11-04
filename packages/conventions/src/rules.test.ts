@@ -6,6 +6,8 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { blockHash, sharedDocsRule, type HomeFetch } from "./rules/shared-docs.ts";
+import { lockedVersions, minorOf, publishedMinorRule, reachOf } from "./rules/published-minor.ts";
+import type { RegistryLookup } from "./rules/unreleased-change.ts";
 import { authorOf, convertGate, declaredName, hasTests, HOMES, mitText, pagesCalls, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, unreleasedChangeRule, type CheckOptions, type RegistryAnswer, type RuleResult } from "./index.ts";
 import { API_REPORT_RANGE } from "./rules/api-report-script.ts";
 import { minuteField } from "./rules/runner-budget.ts";
@@ -1498,5 +1500,99 @@ describe("main-runs-finish", () => {
     const root = fixture({ "package.json": { name: "one" }, ".github/workflows/pr.yml": flow(["on: pull_request"], "true") });
     commitAll(root);
     expect(rule(root, "main-runs-finish")).toMatchObject({ status: "skipped", note: "no workflow starts on push or on workflow_call" });
+  });
+});
+
+describe("published-minor", () => {
+  const DAY = 86_400_000;
+  const NOW = Date.parse("2026-11-04T00:00:00Z");
+  const daysAgo = (days: number): string => new Date(NOW - days * DAY).toISOString();
+  /** A fake registry. The key of `versions` is each published version, and the value is its age in days. */
+  const registry = (versions: Record<string, number>, latest: string): RegistryLookup => (names) =>
+    new Map(names.map((name): [string, RegistryAnswer] => [name, { versions: Object.keys(versions), times: Object.fromEntries(Object.entries(versions).map(([v, age]) => [v, daysAgo(age)])), latest }]));
+  /** A package `consumer` with the dependency `@x/a` at `range`. */
+  const repo = (range: string, config: Record<string, unknown> = {}, extra: Record<string, unknown> = {}): string =>
+    workspace(
+      { conventions: { rules: { "published-minor": { packages: ["@x/*"], reason: "this repository takes each minor", ...config } } } },
+      { "packages/consumer/package.json": { name: "consumer", private: true, dependencies: { "@x/a": range, other: "^1.0.0" } }, ...extra },
+    );
+  const check = (root: string, lookup: RegistryLookup): RuleResult => rule(root, "published-minor", { rules: [publishedMinorRule(lookup, () => NOW)] });
+  /** The lock text of the importer `packages/consumer`. */
+  const lock = (version: string): string =>
+    `lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n\n  packages/consumer:\n    dependencies:\n      '@x/a':\n        specifier: ^1.2.0\n        version: ${version}\n\npackages:\n\n  '@x/a@9.9.9':\n    resolution: {integrity: x}\n`;
+
+  it("reads the forms of a range", () => {
+    expect(reachOf("^0.3.9")).toEqual([0, 3]);
+    expect(reachOf("^0.0.3")).toEqual([0, 0]);
+    expect(reachOf("^1.2.3")).toEqual([1, Number.POSITIVE_INFINITY]);
+    expect(reachOf("~1.2.3")).toEqual([1, 2]);
+    expect(reachOf("1.2.3")).toEqual([1, 2]);
+    for (const form of ["workspace:*", "github:a/b#abc", "file:../a", "latest", "*", "^1", ">=1.0.0", "^1.0.0 || ^2.0.0"]) expect(reachOf(form), form).toBeUndefined();
+  });
+
+  it("reads a release version with its peer suffix, and no pre-release", () => {
+    expect(minorOf("0.8.0")).toEqual([0, 8]);
+    expect(minorOf("1.2.3(react@19.0.0)")).toEqual([1, 2]);
+    expect(minorOf("1.2.0-rc.1")).toBeUndefined();
+  });
+
+  it("reads the versions of each importer, and no other section", () => {
+    const locked = lockedVersions(lock("1.2.3").replace(/\n/g, "\r\n"));
+    expect(locked.get("packages/consumer")?.get("@x/a")).toBe("1.2.3");
+    expect(locked.get("")?.size).toBe(0);
+    expect(locked.has("@x/a@9.9.9")).toBe(false);
+  });
+
+  it("does not start with no pattern, or with no dependency that a pattern names", () => {
+    const root = workspace({}, { "packages/consumer/package.json": { name: "consumer", dependencies: { "@x/a": "^0.1.0" } } });
+    expect(check(root, registry({ "0.2.0": 9 }, "0.2.0"))).toMatchObject({ status: "skipped", note: expect.stringContaining("names no package") });
+    expect(check(repo("workspace:*"), registry({ "0.2.0": 9 }, "0.2.0"))).toMatchObject({ status: "skipped" });
+  });
+
+  it("breaks on a 0.x caret behind the next minor, at the line of the dependency", () => {
+    const result = check(repo("^0.3.9"), registry({ "0.3.9": 90, "0.4.0": 9 }, "0.4.0"));
+    expect(result.status).toBe("break");
+    expect(result.breaks).toEqual([expect.objectContaining({ file: "packages/consumer/package.json", line: expect.any(Number), message: expect.stringContaining("cannot reach 0.4.0") })]);
+  });
+
+  it("passes at the current minor, with a patch that the range reaches", () => {
+    expect(check(repo("^0.4.0"), registry({ "0.4.0": 90, "0.4.7": 1 }, "0.4.7")).status).toBe("pass");
+  });
+
+  it("breaks on a major ahead, on a tilde behind a minor and on an exact version behind a minor", () => {
+    expect(check(repo("^1.2.0"), registry({ "2.0.0": 9 }, "2.0.0")).status).toBe("break");
+    expect(check(repo("~1.2.0"), registry({ "1.3.0": 9 }, "1.3.0")).status).toBe("break");
+    expect(check(repo("1.2.0"), registry({ "1.3.0": 9 }, "1.3.0")).status).toBe("break");
+    expect(check(repo("1.3.0"), registry({ "1.3.1": 9 }, "1.3.1")).status).toBe("pass");
+  });
+
+  it("breaks on a lockfile behind a minor that the range reaches, and passes when it holds that minor", () => {
+    const behind = check(repo("^1.2.0", {}, { "pnpm-lock.yaml": lock("1.2.3") }), registry({ "1.2.3": 90, "1.5.0": 9 }, "1.5.0"));
+    expect(behind.status).toBe("break");
+    expect(behind.breaks?.[0]?.message).toContain("the lockfile holds 1.2.3");
+    expect(check(repo("^1.2.0", {}, { "pnpm-lock.yaml": lock("1.5.0(peer@1.0.0)") }), registry({ "1.5.0": 9 }, "1.5.0")).status).toBe("pass");
+  });
+
+  it("gives a consumer the grace days, from the first minor that it does not have", () => {
+    const grace = { graceDays: 7 };
+    expect(check(repo("^0.3.0", grace), registry({ "0.4.0": 6 }, "0.4.0")).status).toBe("pass");
+    expect(check(repo("^0.3.0", grace), registry({ "0.4.0": 8 }, "0.4.0")).status).toBe("break");
+    // A new patch does not start the days again
+    expect(check(repo("^0.3.0", grace), registry({ "0.3.5": 80, "0.4.0": 30, "0.4.1": 1 }, "0.4.1")).status).toBe("break");
+  });
+
+  it("does not ask the registry for a name that no pattern names", () => {
+    const asked: string[] = [];
+    const lookup: RegistryLookup = (names) => {
+      asked.push(...names);
+      return new Map(names.map((name): [string, RegistryAnswer] => [name, { versions: [] }]));
+    };
+    expect(check(repo("^1.0.0"), lookup).status).toBe("pass");
+    expect(asked).toEqual(["@x/a"]);
+  });
+
+  it("does not start when the registry does not answer, and tells why", () => {
+    const lookup: RegistryLookup = (names) => new Map(names.map((name): [string, RegistryAnswer] => [name, { error: "HTTP 503" }]));
+    expect(check(repo("^0.1.0"), lookup)).toMatchObject({ status: "skipped", note: expect.stringContaining("HTTP 503") });
   });
 });
