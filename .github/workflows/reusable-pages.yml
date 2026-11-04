@@ -259,7 +259,8 @@ jobs:
           css: ${{ inputs.css }}
           site-name: ${{ inputs.site-name }}
           data-only: ${{ inputs.data-only }}
-      - if: inputs.site-check
+      - name: Site check
+        if: inputs.site-check
         uses: ./.shared-actions/.github/actions/site-check
         with:
           out: ${{ inputs.out }}
