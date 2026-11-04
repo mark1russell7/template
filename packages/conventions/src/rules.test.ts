@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { blockHash, sharedDocsRule, type HomeFetch } from "./rules/shared-docs.ts";
 import { authorOf, convertGate, declaredName, hasTests, HOMES, mitText, pagesCalls, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, unreleasedChangeRule, type CheckOptions, type RegistryAnswer, type RuleResult } from "./index.ts";
+import { API_REPORT_RANGE } from "./rules/api-report-script.ts";
 import { minuteField } from "./rules/runner-budget.ts";
 import { runsOnMain, startsOnPush } from "./rules/main-runs-finish.ts";
 import { localBase, runCli } from "./run.ts";
@@ -939,6 +940,54 @@ describe("home-package", () => {
     for (const name of ["bootstrapRepo", "bootstrapApp", "wilsonInterval", "bootstrapMedian", "bootstrap"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(!name.endsWith("Repo") && !name.endsWith("App"));
     // A planned home has no package to import yet, so its signatures do not break
     for (const name of ["graphemes", "parseArgs"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(false);
+  });
+});
+
+describe("api-report-script", () => {
+  const SCRIPTS = { typecheck: "tsc" };
+  const publicPackage = { "packages/a/package.json": { name: "a" } };
+
+  it("passes with the script, and with no public package", () => {
+    expect(rule(workspace({ scripts: { "check:api": "api-report check" } }, publicPackage), "api-report-script").status).toBe("pass");
+    expect(rule(workspace({}, { "packages/b/package.json": { name: "b", private: true } }), "api-report-script").status).toBe("pass");
+    expect(rule(fixture({ "package.json": { name: "one", private: true } }), "api-report-script").status).toBe("pass");
+  });
+
+  it("asks a repository with one public package for the script", () => {
+    const result = rule(workspace({ scripts: SCRIPTS }, publicPackage), "api-report-script");
+    expect(result.status).toBe("break");
+    expect(result.breaks[0]?.message).toContain('no script "check:api"');
+    expect(result.breaks[0]?.message).toContain("public package: a.");
+    expect(rule(fixture({ "package.json": { name: "one" } }), "api-report-script").status).toBe("break");
+  });
+
+  it("adds the script and the dependency, with the form of the file", () => {
+    const root = fixture({
+      "package.json": '{\r\n  "name": "root",\r\n  "private": true,\r\n  "files": ["a", "b"],\r\n  "scripts": {\r\n    "test": "vitest"\r\n  },\r\n  "devDependencies": {\r\n    "@mark1russell7/conventions": "^0.29.0",\r\n    "typescript": "^6.0.0"\r\n  }\r\n}\r\n',
+      "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n',
+      ...publicPackage,
+    });
+    expect(runFix({ root, only: ["api-report-script"] }).changed).toEqual(["package.json"]);
+    const text = readFileSync(join(root, "package.json"), "utf8");
+    expect(text).toContain('"files": ["a", "b"],\r\n');
+    expect(text).toContain('    "test": "vitest",\r\n    "check:api": "api-report check"\r\n  },\r\n');
+    expect(text).toContain(`    "@mark1russell7/api-report": "${API_REPORT_RANGE}",\r\n    "@mark1russell7/conventions": "^0.29.0",\r\n`);
+    expect(text.replaceAll("\r\n", "")).not.toContain("\n");
+    expect(rule(root, "api-report-script").status).toBe("pass");
+  });
+
+  it("keeps a dependency that exists, and adds a block that does not exist", () => {
+    const root = workspace({ devDependencies: { "@mark1russell7/api-report": "workspace:*" } }, publicPackage);
+    runFix({ root, only: ["api-report-script"] });
+    const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { scripts: Record<string, string>; devDependencies: Record<string, string> };
+    expect(manifest.scripts["check:api"]).toBe("api-report check");
+    expect(manifest.devDependencies["@mark1russell7/api-report"]).toBe("workspace:*");
+  });
+
+  it("gives a break with no edit for a manifest that the fix cannot read", () => {
+    const root = fixture({ "package.json": '{ "name": "one", "scripts": { "test": "vitest" } }\n' });
+    expect(rule(root, "api-report-script").status).toBe("break");
+    expect(runFix({ root, only: ["api-report-script"] }).changed).toEqual([]);
   });
 });
 

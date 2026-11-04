@@ -60,7 +60,7 @@ SOFTWARE.
 `;
 }
 
-const isPublic = (pkg: PackageInfo): boolean => pkg.manifest["private"] !== true;
+export const isPublic = (pkg: PackageInfo): boolean => pkg.manifest["private"] !== true;
 
 /**
  * This function tells if the repository is public, from the event file of a GitHub Actions run. Outside a run, or with no
