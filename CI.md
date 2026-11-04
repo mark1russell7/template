@@ -238,7 +238,7 @@ Most repositories need no inputs. A repository with more release steps uses thes
 | `reusable-release-build.yml` | `require-main` | `true` | The check that the commit is on `main`. Only `actions-test.yml` sets `false`. |
 | `reusable-release-build.yml` | `node-version` | `26` | The Node.js version of the build. |
 | `reusable-release-build.yml` | `node-version-file` | (empty) | A file with the Node.js version, for example `.nvmrc`. It replaces `node-version`. |
-| `reusable-release-build.yml` | `build` | (empty) | The build command. Empty starts the `build` script. |
+| `reusable-release-build.yml` | `build` | (empty) | The build command. Empty starts the root `build` script, or else the `build` script of each published package and its dependencies. |
 | `reusable-release-build.yml` | `after-pack` | (empty) | A command after `pack.ts` and `tags.ts`, before the upload of the artifacts. |
 | `npm-publish` | `new-packages` | `error` | `warning`: a package that is not on npm gives a warning, and the step does not fail. |
 | `npm-publish` | `node-version` | `26` | The Node.js version of npm. |
