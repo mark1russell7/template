@@ -399,6 +399,36 @@ The theme `auto` removes `data-theme`, and the CSS of the site then obeys `prefe
 </script>
 ```
 
+## The measures of a site
+
+The file `kpi.json` at the root of a site holds the measures of the project, in the format `kpi/1`. A reader outside the site takes the numbers from this file.
+
+```ts
+import { defineConfig } from "vite";
+import { siteKpi } from "@mark1russell7/site-pages/vite";
+
+export default defineConfig({
+  plugins: [siteKpi({ project: "acme", at: data.at, measures: [{ id: "cases", value: data.cases.length, unit: "cases" }] })],
+});
+```
+
+```ts
+interface KpiFile {
+  format: "kpi/1";
+  project: string;
+  at: string; // the ISO time of the data in UTC, never the time of the build
+  commit: string; // the full commit of the build
+  measures: Array<{ id: string; value: number; unit?: string }>;
+  engines?: Array<{ name: string; version: string }>; // the Status page shows them
+}
+```
+
+- Give `at` from the record of the data. The writer has no default for this field, because a build time hides old data.
+- Without `commit`, the plugin takes `GITHUB_SHA`, else the head of the repository.
+- A fault in the data stops the build, and the old site stays. A fault is a wrong form, a value that is not finite, a repeated id or a time after the check.
+- A site with no Vite build calls `writeKpi(out, input)` from the root entry, before `site-pages build`.
+- `site-pages build` reads the file from the output folder. It adds the file to `data/status.json`, and the Status page shows the measures, the data date and the engines.
+
 ## The shell of a site
 
 The shell is the part of a page that is not its content. The package has two parts of the shell, and each part is optional.

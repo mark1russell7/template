@@ -133,6 +133,35 @@ export type GitHubOpenWork =
   | { available: true; pullRequests: BoardPullRequest[]; issues: BoardIssue[]; totals: OpenWorkTotals }
   | { available: false; reason: string };
 
+/** One measure of `kpi.json`. */
+export interface KpiMeasure {
+  /** The name of the measure, in lowercase words with single hyphens. */
+  id: string;
+  value: number;
+  unit?: string;
+}
+
+/** One engine that made the data of `kpi.json`. */
+export interface KpiEngine {
+  /** The name of the engine, for example its npm name. */
+  name: string;
+  version: string;
+}
+
+/** The content of `kpi.json`, format `kpi/1`. */
+export interface KpiFile {
+  format: "kpi/1";
+  /** The name of the project, in lowercase words with single hyphens. */
+  project: string;
+  /** The ISO time of the data in UTC, and not the time of the build. */
+  at: string;
+  /** The full commit of the build. */
+  commit: string;
+  measures: KpiMeasure[];
+  /** The engines that made the data. The Status page shows them. */
+  engines?: KpiEngine[];
+}
+
 /** The data of the status page, as `status.json` holds it. */
 export interface StatusBoardData {
   /** The ISO time of the build that read the data. */
@@ -146,4 +175,6 @@ export interface StatusBoardData {
   issues: BoardIssue[];
   /** The GitHub part. When GitHub was not available, the board shows the reason. */
   github: { available: boolean; reason?: string; totals?: OpenWorkTotals };
+  /** The content of `kpi.json`, when the site has that file. */
+  kpi?: KpiFile;
 }
