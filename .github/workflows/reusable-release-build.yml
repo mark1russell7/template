@@ -36,7 +36,7 @@ on:
         type: string
         default: ""
       build:
-        description: A bash command that builds the packages. Empty runs the build script of the root package.json, or else the build script of each package.
+        description: A bash command that builds the packages. Empty runs the build script of the root package.json, or else the build script of each published package and its dependencies.
         type: string
         default: ""
       after-pack:
@@ -88,7 +88,9 @@ jobs:
           node-version-file: ${{ inputs.node-version-file }}
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile
-      # The build input, or the build script of the root package.json, or else the build script of each package
+      # The build input, or the build script of the root package.json, or else the build script of each published
+      # package and its dependencies. A private package that a published package does not need stays out: a site can
+      # need a browser that this job does not have, and the release does not publish it.
       - name: Build
         shell: bash
         env:
@@ -99,7 +101,10 @@ jobs:
           elif node -e 'process.exit(require("./package.json").scripts?.build ? 0 : 1)'; then
             pnpm run build
           else
-            pnpm -r --if-present run build
+            pnpm -r ls --depth -1 --json > "$RUNNER_TEMP/workspace.json"
+            filters=$(node -e 'const all = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); console.log(all.filter((p) => !p.private && p.name).map((p) => `--filter=${p.name}...`).join(" "))' "$RUNNER_TEMP/workspace.json")
+            # shellcheck disable=SC2086
+            pnpm -r $filters --if-present run build
           fi
       # The release scripts of the same template commit as this file, not a copy in the repository
       - name: Get the release scripts
