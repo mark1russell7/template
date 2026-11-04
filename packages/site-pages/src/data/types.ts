@@ -153,7 +153,7 @@ export interface KpiFile {
   format: "kpi/1";
   /** The name of the project, in lowercase words with single hyphens. */
   project: string;
-  /** The ISO time of the data in UTC, never the time of the build. */
+  /** The ISO time of the data in UTC, and not the time of the build. */
   at: string;
   /** The full commit of the build. */
   commit: string;

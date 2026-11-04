@@ -1,8 +1,8 @@
 /**
  * The file `kpi.json` at the root of a site, format `kpi/1`. A reader outside the site takes the measures of the project
- * from this file, so a number on a progress page comes from a record and not from a person.
+ * from this file. Thus a number on a progress page comes from a record and not from a person.
  *
- * The field `at` is the time of the data, never the time of the build. Thus the writer has no default for it.
+ * The field `at` is the time of the data and not the time of the build. Thus the writer has no default for it.
  */
 
 import { mkdirSync, writeFileSync } from "node:fs";

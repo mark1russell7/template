@@ -226,7 +226,7 @@ describe("site-pages build", () => {
     const errors: string[] = [];
     const code = await runCli(["build", "--out", "with-kpi", "--repo", "acme/widgets"], {
       cwd: repo,
-      env: {},
+      env: { GITHUB_TOKEN: "t0ken" },
       stdout: () => {},
       stderr: (text) => errors.push(text),
       fetch: fakeFetch().fetch,
