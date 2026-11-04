@@ -58,7 +58,7 @@ export async function devDependencyVersions(root: string = repoRoot(), cli: Mani
 type CueConfig = "node" | "node-cjs" | "ts" | "vite" | "react";
 
 /** The name of a preset: the value of `--preset`. */
-export type PresetName = "node" | "node-cjs" | "ts" | "vite" | "react" | "service";
+export type PresetName = "node" | "node-cjs" | "ts" | "vite" | "react" | "service" | "site";
 
 /** A preset of a new package, as data. */
 export interface Preset {
@@ -74,10 +74,52 @@ export interface Preset {
   readonly scripts?: Readonly<Record<string, string>>;
   /**
    * This folder of `src/presets` has the files of the package, at their paths in the package. The
-   * CLI replaces `{{name}}`, `{{scope}}` and `{{package}}` in each file. Without a folder, the
-   * package gets an empty `src/index.ts`.
+   * CLI replaces `{{name}}`, `{{scope}}` and `{{package}}` in each file, and removes the end
+   * `.tmpl` of a file name. Thus the checks of the CLI do not examine that file. Without a folder,
+   * the package gets an empty `src/index.ts`.
    */
   readonly files?: string;
+  /**
+   * These files of `src/presets` go to the repository, by their path in the repository. The CLI
+   * replaces the same words, and `{{pin}}` with the template commit of the workflows of the
+   * repository. The CLI keeps a file that exists.
+   */
+  readonly repoFiles?: Readonly<Record<string, string>>;
+}
+
+/** The text of a new site (the preset `site`). */
+export interface SiteText {
+  /** This one line tells what the project does. */
+  readonly description?: string | undefined;
+  /** The npm name of the first package of the repository. It need not have a release yet. */
+  readonly npm?: string | undefined;
+}
+
+const escapeHtml = (text: string): string => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+
+/** This function gives the words of the files of the preset `site`. A command must work today, so a repository with no package name gets `git clone`. */
+function siteWords(scope: string, { description, npm }: SiteText): Record<string, string> {
+  return {
+    description: escapeHtml(description ?? `The project ${scope}.`),
+    installTitle: npm ? "Install" : "Get the code",
+    install: npm ? `pnpm add ${npm}` : `git clone https://github.com/mark1russell7/${scope}.git`,
+    note: npm ? "This package has no release on npm yet. " : "",
+    npm: npm ?? "",
+  };
+}
+
+/** The workflows of a repository pin the shared workflows of the template by this form. */
+const TEMPLATE_PIN = /mark1russell7\/template\/\.github\/[\w./-]+@([0-9a-f]{40})/;
+
+/** This function gives the template commit that the workflows of a repository pin, or undefined when they pin no commit. */
+async function templatePin(root: string): Promise<string | undefined> {
+  const dir = resolve(root, ".github", "workflows");
+  if (!existsSync(dir)) return undefined;
+  for (const file of (await readdir(dir)).sort()) {
+    const pin = TEMPLATE_PIN.exec(await readFile(resolve(dir, file), "utf8"))?.[1];
+    if (pin) return pin;
+  }
+  return undefined;
 }
 
 /** These are the presets of `pnpm package add`, by name. */
@@ -99,6 +141,15 @@ export const PRESETS: Readonly<Record<PresetName, Preset>> = {
     dependencies: ["@mark1russell7/service"],
     scripts: { start: "node src/main.ts" },
     files: "service",
+  },
+  // A first site: the name, one line, a command, and the links to the pages of site-pages. It passes the site check.
+  site: {
+    label: "site — a first site for GitHub Pages (Vite)",
+    tsconfig: "vite",
+    install: { dependencies: [], devDependencies: ["vite", "@mark1russell7/site-pages"] },
+    scripts: { dev: "vite", build: "vite build" },
+    files: "site",
+    repoFiles: { ".github/workflows/pages.yml": "site-repo/pages.yml" },
   },
 };
 
@@ -149,11 +200,15 @@ async function filesOf(dir: string, prefix = ""): Promise<string[]> {
   return files;
 }
 
-function parseArgs(args: string[]): { name: string | undefined; preset: PresetName | undefined } {
+function parseArgs(args: string[]): { name: string | undefined; preset: PresetName | undefined; site: SiteText } {
   let name: string | undefined;
   let preset: PresetName | undefined;
+  let description: string | undefined;
+  let npm: string | undefined;
   for (const a of args) {
-    if (a.startsWith("--preset=")) {
+    if (a.startsWith("--description=")) description = a.slice("--description=".length);
+    else if (a.startsWith("--npm=")) npm = a.slice("--npm=".length);
+    else if (a.startsWith("--preset=")) {
       const v = a.slice("--preset=".length);
       if (!isPresetName(v)) {
         throw new Error(`Unknown --preset "${v}". Allowed: ${PRESET_NAMES.join(", ")}`);
@@ -163,7 +218,7 @@ function parseArgs(args: string[]): { name: string | undefined; preset: PresetNa
       name = a;
     }
   }
-  return { name, preset };
+  return { name, preset, site: { description, npm } };
 }
 
 /** The result of `writePackage`: the folder of the new package and the `pnpm add` commands that its preset needs. */
@@ -171,6 +226,8 @@ export interface WrittenPackage {
   readonly dir: string;
   readonly name: string;
   readonly install: readonly string[];
+  /** These files of the preset are not in the repository: the file exists, or the workflows pin no template commit. */
+  readonly skipped: readonly string[];
 }
 
 /**
@@ -180,7 +237,13 @@ export interface WrittenPackage {
  *
  * @throws Error when the name is not valid, the scope is not found, or the package exists
  */
-export async function writePackage(root: string, name: string, presetName: PresetName, cli: Manifest = cliManifest()): Promise<WrittenPackage> {
+export async function writePackage(
+  root: string,
+  name: string,
+  presetName: PresetName,
+  cli: Manifest = cliManifest(),
+  site: SiteText = {},
+): Promise<WrittenPackage> {
   const scope = await getScope(root);
   if (!scope) {
     throw new Error("Could not derive package scope from root package.json (expected name to end with -monorepo).");
@@ -199,7 +262,7 @@ export async function writePackage(root: string, name: string, presetName: Prese
   const devDependencies = await devDependencyVersions(root, cli);
   await mkdir(resolve(dir, "src"), { recursive: true });
   try {
-    return await writeFiles({ dir, name, scope, packageName, preset, dependencies, devDependencies });
+    return await writeFiles({ root, dir, name, scope, packageName, preset, dependencies, devDependencies, site });
   } catch (error) {
     // The folder is new (the check above), so a failed write removes it
     await rm(dir, { recursive: true, force: true });
@@ -209,6 +272,7 @@ export async function writePackage(root: string, name: string, presetName: Prese
 
 /** The data of a new package that `writeFiles` writes, after `writePackage` resolved it. */
 interface NewPackage {
+  readonly root: string;
   readonly dir: string;
   readonly name: string;
   readonly scope: string;
@@ -216,10 +280,14 @@ interface NewPackage {
   readonly preset: Preset;
   readonly dependencies: Record<string, string> | undefined;
   readonly devDependencies: Record<string, string>;
+  readonly site: SiteText;
 }
 
+/** This function gives a text with each word of `words` in place of its `{{word}}`. */
+const fill = (text: string, words: Readonly<Record<string, string>>): string => text.replace(/\{\{(\w+)\}\}/g, (mark: string, word: string) => words[word] ?? mark);
+
 /** This function writes the files of a new package in its new folder (`writePackage`). */
-async function writeFiles({ dir, name, scope, packageName, preset, dependencies, devDependencies }: NewPackage): Promise<WrittenPackage> {
+async function writeFiles({ root, dir, name, scope, packageName, preset, dependencies, devDependencies, site }: NewPackage): Promise<WrittenPackage> {
   const pkgJson = {
     $schema: "https://json.schemastore.org/package",
     name: packageName,
@@ -246,14 +314,14 @@ async function writeFiles({ dir, name, scope, packageName, preset, dependencies,
   await writeFile(resolve(dir, "tsconfig.json"), JSON.stringify(tsconfig, null, 2) + "\n");
   await writeFile(resolve(dir, "tsconfig.test.json"), JSON.stringify(testTsconfig(preset.tsconfig), null, 2) + "\n");
 
+  const words: Readonly<Record<string, string>> = { ...siteWords(scope, site), name, scope, package: packageName };
   if (preset.files) {
     const source = presetDir(preset.files);
-    const words: Readonly<Record<string, string>> = { name, scope, package: packageName };
     for (const file of await filesOf(source)) {
       const text = await readFile(resolve(source, file), "utf8");
-      const target = resolve(dir, file);
+      const target = resolve(dir, file.replace(/\.tmpl$/, ""));
       await mkdir(dirname(target), { recursive: true });
-      await writeFile(target, text.replace(/\{\{(name|scope|package)\}\}/g, (_, word: string) => words[word] ?? ""));
+      await writeFile(target, fill(text, words));
     }
   } else {
     await writeFile(resolve(dir, "src", "index.ts"), `export {};\n`);
@@ -274,7 +342,19 @@ async function writeFiles({ dir, name, scope, packageName, preset, dependencies,
   const filter = `--filter=${packageName}`;
   if (preset.install && preset.install.dependencies.length > 0) install.push(`pnpm add ${filter} ${preset.install.dependencies.join(" ")}`);
   if (preset.install && preset.install.devDependencies.length > 0) install.push(`pnpm add -D ${filter} ${preset.install.devDependencies.join(" ")}`);
-  return { dir, name: packageName, install };
+
+  const skipped: string[] = [];
+  const pin = await templatePin(root);
+  for (const [path, source] of Object.entries(preset.repoFiles ?? {})) {
+    const target = resolve(root, path);
+    if (pin === undefined || existsSync(target)) {
+      skipped.push(path);
+      continue;
+    }
+    await mkdir(dirname(target), { recursive: true });
+    await writeFile(target, fill(await readFile(presetDir(source), "utf8"), { ...words, pin }));
+  }
+  return { dir, name: packageName, install, skipped };
 }
 
 export async function addPackage(args: string[]): Promise<void> {
@@ -313,8 +393,9 @@ export async function addPackage(args: string[]): Promise<void> {
     preset = presetAnswer;
   }
 
-  const written = await writePackage(root, name, preset);
+  const written = await writePackage(root, name, preset, cliManifest(), parsed.site);
   p.log.success(`Created packages/${name}/ with the preset ${preset} (cue ${PRESETS[preset].tsconfig}.json)`);
+  for (const path of written.skipped) p.log.warn(`The CLI did not write ${path}. Do it by hand: the file exists, or the workflows pin no template commit.`);
 
   if (written.install.length === 0) {
     p.log.info(`Run 'pnpm install' to wire up the new workspace package.`);

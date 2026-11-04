@@ -39,7 +39,7 @@ jobs:
       # The runners are shared by all repositories of the account (the rule runner-budget)
       max-parallel: 3
       matrix:
-        preset: [node, node-cjs, ts, vite, react, service]
+        preset: [node, node-cjs, ts, vite, react, service, site]
     env:
       PACKAGE: demo-${{ matrix.preset }}
       PRESET: ${{ matrix.preset }}
@@ -59,13 +59,66 @@ jobs:
       - run: pnpm --filter "@template/$PACKAGE" typecheck
       - run: pnpm --filter "@template/$PACKAGE" test
 
+  # A new repository passes its install, conventions check, typecheck, tests, Pages build and site check with no hand edit.
+  # Only the template has the stamp (scripts/stamp), so a repository from the stamp skips this job.
+  stamp:
+    if: github.repository == 'mark1russell7/template'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      DEMO: ${{ github.workspace }}/../stamp-demo
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/stamp/main.ts stamp-demo --description "A repository of the stamp test." --ref HEAD --out "$DEMO"
+      - name: The new repository installs
+        run: |
+          cd "$DEMO"
+          pnpm install --no-frozen-lockfile
+          git add -A
+          git -c user.name=stamp -c user.email=stamp@example.com commit -q -m "first commit"
+      # The default list of reusable-ci.yml, with each missing script skipped
+      - name: The new repository passes its gates
+        run: |
+          cd "$DEMO"
+          # The rule runner-budget reads the name of the repository from this variable
+          export GITHUB_REPOSITORY=mark1russell7/stamp-demo
+          for script in format:check typecheck lint check:conventions test build check:boundaries check:api lint:ste; do
+            pnpm run --if-present "$script"
+          done
+      - name: The Pages build works
+        env:
+          SITE_BASE: /stamp-demo
+        run: |
+          cd "$DEMO"
+          pnpm --filter @stamp-demo/site run build
+          pnpm --filter @stamp-demo/site exec site-pages build --out dist --repo mark1russell7/stamp-demo --roadmap ../../docs/ROADMAP.md --site-name stamp-demo
+      # The same browser and the same check as reusable-pages.yml
+      - name: Install the browser of the site check
+        run: npm install --prefix "$RUNNER_TEMP/site-check-playwright" --no-save --no-package-lock --no-audit --no-fund playwright-core@1.64.1
+      - uses: ./.github/actions/setup-playwright
+        with:
+          command: ${{ runner.temp }}/site-check-playwright/node_modules/.bin/playwright-core
+          browsers: chromium
+      - name: The site passes the site check
+        run: node packages/site-pages/src/check/main.ts --out "$DEMO/packages/site/dist" --repo mark1russell7/stamp-demo --pages /,/releases/,/status/ --shots "$RUNNER_TEMP/site-check"
+
   # The one check of the ruleset of main (CI.md, "The check of the ruleset"). It passes only when
   # each job of needs passed, or was skipped by its own if and ALLOW_SKIP names it. A new job of this
   # file goes in needs, so the ruleset never has to change, and gh pr merge --auto waits for the whole gate.
   ci-ok:
     name: CI OK
     if: always()
-    needs: [ci, presets]
+    needs: [ci, presets, stamp]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}
@@ -74,7 +127,7 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
           # The jobs that their own if may skip, separated by spaces. Each other job must pass.
-          ALLOW_SKIP: "presets"
+          ALLOW_SKIP: "presets stamp"
         run: |
           echo "$NEEDS" | jq -r 'to_entries[] | "\(.key) \(.value.result)"' > results
           cat results

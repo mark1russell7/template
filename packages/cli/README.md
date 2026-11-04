@@ -20,7 +20,7 @@ Give the root `package.json` of the repository these scripts:
 ## Add a package
 
 ```sh
-pnpm package add <name> --preset=<node|node-cjs|ts|vite|react|service>
+pnpm package add <name> --preset=<node|node-cjs|ts|vite|react|service|site>
 ```
 
 - The command makes `packages/<name>` with `package.json`, `tsconfig.json`, `tsconfig.test.json`, `src/index.ts` and `vitest.config.ts`.
@@ -31,6 +31,15 @@ pnpm package add <name> --preset=<node|node-cjs|ts|vite|react|service>
 - Without a name or a preset, the command asks for them.
 
 ### A server package
+
+The preset `site` makes a first site: the name, one line, a command, and the links to the Releases page and the Status page.
+
+```sh
+pnpm package add site --preset=site --description="One line about the project." --npm=@scope/name
+```
+
+- Without `--npm`, the page gives `git clone`, because a command on the page must work today.
+- The CLI also writes `.github/workflows/pages.yml`, with the template commit that the other workflows pin. It keeps a file that exists.
 
 The preset `service` makes an HTTP server on the one service runner, [`@mark1russell7/service`](https://www.npmjs.com/package/@mark1russell7/service). The server does not start with a bare `listen()`.
 
@@ -44,7 +53,7 @@ The preset `service` makes an HTTP server on the one service runner, [`@mark1rus
 - The dependency `@mark1russell7/service` gets the range of the repository, or the range of the CLI.
 - `PORT` (8080), `PROBE_PORT` (9090) and `SERVICE_PROFILE` (`local` or `pod`) set the ports and the profile.
 - The profile `pod` is for Kubernetes with a grace of 30 s. Make its grace equal to the grace of the pod.
-- The files of each preset are in `src/presets/<preset>/`. The CLI replaces `{{name}}`, `{{scope}}` and `{{package}}` in them.
+- The files of each preset are in `src/presets/<preset>/`. The CLI replaces `{{name}}`, `{{scope}}` and `{{package}}` in them, and it removes the end `.tmpl` of a file name.
 - The job `presets` of the CI makes a package of each preset. The package must pass its typecheck and its tests.
 
 ## Rename a new repository

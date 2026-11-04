@@ -22,7 +22,7 @@ const field = (selector: string): Element => {
   return el;
 };
 
-check("the page shows the six presets of the CLI", await until(() => $$("#presets [data-preset]").length >= 6), $$("#presets [data-preset]").map((b) => b.getAttribute("data-preset")).join(", "));
+check("the page shows the seven presets of the CLI", await until(() => $$("#presets [data-preset]").length >= 7), $$("#presets [data-preset]").map((b) => b.getAttribute("data-preset")).join(", "));
 
 click('[data-preset="react"]');
 type(field("#pkg-name"), "probe-web");
