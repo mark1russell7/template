@@ -79,7 +79,7 @@ export const trustPolicy: Rule = {
   reason:
     "A stolen npm token can publish a version with no provenance, and the next install takes it. With `no-downgrade`, pnpm refuses a version with less trust evidence than an earlier version. The release age of pnpm keeps out the versions of the last day; this check covers the next days. The release train updates our own scopes at once and checks their provenance itself.",
   fix: "Add `trustPolicy: no-downgrade`, `trustPolicyIgnoreAfter: 10080` and a `trustPolicyExclude` with the scopes of the option `exclude` to `pnpm-workspace.yaml`. `conventions fix` writes them.",
-  sources: [{ repo: "fleet", rule: "trust-policy", doc: "docs/STRATEGY.md (2026-11-01, release age and trust policy)" }],
+  sources: [{ repo: "private", rule: "trust-policy", doc: "docs/STRATEGY.md (2026-11-01, release age and trust policy)" }],
   options: {
     exclude: {
       type: "strings",

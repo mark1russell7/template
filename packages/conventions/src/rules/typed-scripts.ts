@@ -42,7 +42,7 @@ export const typedScripts: Rule = {
   reason:
     "A script has bugs like the code, and types and tests find them. Node 22.18 and later runs a `.ts` file directly, so a script in JavaScript or in a shell language has no cost to save and no check. A shell file stays only as a launcher of one line.",
   fix: "Rename the file to `.ts`, add the types, and check it with `tsc --noEmit` and a test. Move the logic of a shell script into a `.ts` file, and keep the shell file as one line that starts it, or remove it. A file that must stay (generated output, vendored code, a configuration that a tool reads only as JavaScript) goes in `ignore` with its reason.",
-  sources: [{ repo: "fleet", rule: "typed-everything", doc: "docs/STRATEGY.md:78" }],
+  sources: [{ repo: "private", rule: "typed-everything", doc: "docs/STRATEGY.md:78" }],
   options: {
     javascript: { type: "strings", default: [".js", ".mjs", ".cjs", ".jsx"], description: "The extensions of JavaScript source." },
     shell: { type: "strings", default: [".sh", ".bash", ".zsh", ".ps1"], description: "The extensions of shell scripts." },

@@ -33,8 +33,8 @@ export const sourceMain: Rule = {
     { repo: "crawler", rule: "pkg-source-main", doc: "CLAUDE.md:17" },
     { repo: "crawler", rule: "source-package-main", doc: "CLAUDE.md:17" },
     { repo: "crawler", rule: "publish-config-build", doc: "CLAUDE.md:41" },
-    { repo: "Graph", rule: "new-package-main-index", doc: "CLAUDE.md:15" },
-    { repo: "Graph", rule: "source-package-main", doc: "CLAUDE.md:15" },
+    { repo: "private", rule: "new-package-main-index", doc: "CLAUDE.md:15" },
+    { repo: "private", rule: "source-package-main", doc: "CLAUDE.md:15" },
     { repo: "headroom", rule: "source-package-main", doc: "CLAUDE.md:31" },
   ],
   options: {

@@ -78,7 +78,7 @@ export const roadmapParses: Rule = {
   reason:
     "Only the Pages job on main reads the roadmap. A pull request with a bad table row passes each check, and then the build of the site stops and the site stays stale. On 2026-10-30, one repository had 3 red Pages runs in a row because of one row with 2 cells under a header with 4. A site with no roadmap is the same fault with no error: its Status page shows no item of the plan, and each check is green. On 2026-10-30, 2 repositories had a site with no roadmap.",
   fix: 'Give the roadmap file to the Pages workflow (`roadmap: docs/ROADMAP.md`). Correct the row or the heading that the message names. Each table row has one cell for each column of its header, and the file has a table with an ID column and a Status column, or a heading "### `id`: Title".',
-  sources: [{ repo: "fleet", rule: "fail-closed", doc: "docs/STRATEGY.md (2026-10-30, gates and probes fail closed)" }],
+  sources: [{ repo: "private", rule: "fail-closed", doc: "docs/STRATEGY.md (2026-10-30, gates and probes fail closed)" }],
   options: {
     roadmaps: { type: "strings", default: [], description: "More roadmap files to check: a roadmap that no workflow names with a `roadmap:` key." },
   },

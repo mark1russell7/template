@@ -32,7 +32,7 @@ export const changelogVersion: Rule = {
   sources: [
     { repo: "packing", rule: "changelog", doc: "packages/packing/CHANGELOG.md (#249 added 0.5.0, package.json stayed 0.4.1; #253 set 0.5.0)" },
     { repo: "release-train", rule: "cascade", doc: "the train plans a PATCH for a change of a dependency range" },
-    { repo: "fleet", rule: "semver", doc: "the global CLAUDE.md, npm packages use Semantic Versioning" },
+    { repo: "private", rule: "semver", doc: "the global CLAUDE.md, npm packages use Semantic Versioning" },
   ],
   options: {
     file: { type: "string", default: "CHANGELOG.md", description: "The name of the changelog in the folder of each package." },

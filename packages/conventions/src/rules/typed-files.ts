@@ -392,11 +392,11 @@ export const typedFiles: Rule = {
   title:
     "Each TypeScript file that git keeps is in a tsconfig that a `typecheck` script examines: the tests, the e2e specs, the scripts, the benches and the configs too.",
   reason:
-    "A file that no tsconfig of a typecheck holds has no type check. Its type errors hide until it runs, and a broken test or script can pass a gate. A test runner such as vitest strips the types, so it does not examine them. In the fleet audit of 2026-10-30, every repository had such files (in one, 90 of 612 files, its e2e specs among them), and the new checks found real defects.",
+    "A file that no tsconfig of a typecheck holds has no type check. Its type errors hide until it runs, and a broken test or script can pass a gate. A test runner such as vitest strips the types, so it does not examine them. In an audit of 2026-10-30, every repository had such files (in one, 90 of 612 files, its e2e specs among them), and the new checks found real defects.",
   fix: 'Add the file to the `include` of a tsconfig that the `typecheck` script names (for example `tsconfig.test.json`, with `*.config.ts`, `scripts/**`, `bench/**` and `e2e/**`). A config file at the root of a package needs `rootDir: "."` there. For the files at the root of the repository, add a `tsconfig.repo.json` and name it in the root `typecheck`. A file that cannot be in a typecheck (it imports a module that only a tool makes) goes in `ignore` with its reason.',
   sources: [
     {
-      repo: "fleet",
+      repo: "private",
       rule: "fail-closed",
       doc: "docs/STRATEGY.md (2026-10-30, gates and probes fail closed)",
     },

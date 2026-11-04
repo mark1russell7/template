@@ -226,7 +226,7 @@ export const gateTrigger: Rule = {
   reason:
     'The ruleset requires the summary check "<Name> OK" of each gate. A workflow with a path filter does not start on a pull request that changes no file of the filter, so its check is not there, and the ruleset cannot require it. Then a pull request can merge before such a gate ends. On 2026-11-02, 19 such workflows in 11 repositories fed no required check.',
   fix: 'Remove the paths from on.pull_request. Add a job "changes" with the action mark1russell7/template/.github/actions/changes and the same paths, and "if: needs.changes.outputs.match == \'true\'" on each gate job. Add a job "<Name> OK" with "if: always()", "needs" with each job, and the action gate-summary (CI.md, "A gate with paths"). Then start ruleset-ci-ok.ts again. A workflow that is not a gate can go in the option allow.',
-  sources: [{ repo: "fleet", rule: "gate-trigger", doc: "docs/STRATEGY.md (2026-11-02, a gate with paths feeds a required summary)" }],
+  sources: [{ repo: "private", rule: "gate-trigger", doc: "docs/STRATEGY.md (2026-11-02, a gate with paths feeds a required summary)" }],
   options: {
     allow: { type: "strings", default: [], description: "The file names of the workflows that can filter pull requests by path, because they are not a gate (for example a preview)." },
   },

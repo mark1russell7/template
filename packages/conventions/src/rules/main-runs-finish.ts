@@ -50,7 +50,7 @@ export const mainRunsFinish: Rule = {
     "On 2026-11-03 the next merge cancelled the CI run of a commit on main, so the main check of that commit had no result. A shared concurrency group also cancelled a bench run on main, and its claim had no measurement. The CI workflow of the template had `cancel-in-progress: true`, and each repository copied it. A called workflow gets the event of its caller, so a `true` in a workflow that starts on `workflow_call` cancels the run of main too (packing, time-gate.yml, 2026-11-03).",
   fix: `Set \`cancel-in-progress: ${PULL_REQUEST_ONLY}\`, and end the concurrency group with \`${OWN_GROUP}\`. In one group, GitHub cancels a run that waits when a newer run comes, whatever \`cancel-in-progress\` says.`,
   sources: [
-    { repo: "fleet", rule: "main-runs-finish", doc: "docs/STRATEGY.md (2026-11-03, a run of main ends)" },
+    { repo: "private", rule: "main-runs-finish", doc: "docs/STRATEGY.md (2026-11-03, a run of main ends)" },
     { repo: "client", rule: "release", doc: "the release of 0.47.0 (2026-11-03): four waiting CI runs of main were cancelled, so the version commit had no result" },
     { repo: "algebra", rule: "main-check", doc: "the A2 and A5 results (2026-11-03): a cancelled main run, and a cancelled bench run" },
   ],
