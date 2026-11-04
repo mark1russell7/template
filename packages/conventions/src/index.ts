@@ -98,4 +98,5 @@ export {
   type RuleResult,
 } from "./run.ts";
 export { findHomes, HOMES, MAP_RULE, mapMarkdown, mapText, mergeHomes, readOverlay, type Home, type HomeState } from "./map.ts";
+export { changelogSection, MAX_NOTES, npmUrl, releaseNotes, tagName } from "./release-text.ts";
 export { globFolders, globToRegExp, packageFolders, workspaceGlobs } from "./workspace.ts";

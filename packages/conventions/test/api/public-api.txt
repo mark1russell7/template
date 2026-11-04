@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 132 names
+## . (build/index.d.ts): 137 names
 
 ACTIONS_COMMIT: build/index.d.ts#ACTIONS_COMMIT
 type AuditSource: build/index.d.ts#AuditSource
@@ -28,6 +28,7 @@ type HomeState: build/index.d.ts#HomeState
 IGNORE_AFTER: build/index.d.ts#IGNORE_AFTER
 LICENSE_TEXTS: build/index.d.ts#LICENSE_TEXTS
 MAP_RULE: build/index.d.ts#MAP_RULE
+MAX_NOTES: build/index.d.ts#MAX_NOTES
 type Manifest: build/index.d.ts#Manifest
 NPM_REGISTRY: build/index.d.ts#NPM_REGISTRY
 type OptionSpec: build/index.d.ts#OptionSpec
@@ -58,6 +59,7 @@ type WorkflowStep: build/index.d.ts#WorkflowStep
 annotations: build/index.d.ts#annotations
 authorOf: build/index.d.ts#authorOf
 blockHash: build/index.d.ts#blockHash
+changelogSection: build/index.d.ts#changelogSection
 cleanPath: build/index.d.ts#cleanPath
 codePackages: build/index.d.ts#codePackages
 configsOfScript: build/index.d.ts#configsOfScript
@@ -95,6 +97,7 @@ mitText: build/index.d.ts#mitText
 noBuildOutput: build/index.d.ts#noBuildOutput
 noLocalPaths: build/index.d.ts#noLocalPaths
 npmLookup: build/index.d.ts#npmLookup
+npmUrl: build/index.d.ts#npmUrl
 packageFolders: build/index.d.ts#packageFolders
 pagesCalls: build/index.d.ts#pagesCalls
 pagesSite: build/index.d.ts#pagesSite
@@ -109,6 +112,7 @@ readJsonc: build/index.d.ts#readJsonc
 readOverlay: build/index.d.ts#readOverlay
 readWorkflow: build/index.d.ts#readWorkflow
 releaseFiles: build/index.d.ts#releaseFiles
+releaseNotes: build/index.d.ts#releaseNotes
 replaceLine: build/index.d.ts#replaceLine
 repoOf: build/index.d.ts#repoOf
 repositoryIsPublic: build/index.d.ts#repositoryIsPublic
@@ -129,6 +133,7 @@ sourceMain: build/index.d.ts#sourceMain
 specifiersOf: build/index.d.ts#specifiersOf
 summaryMarkdown: build/index.d.ts#summaryMarkdown
 summaryName: build/index.d.ts#summaryName
+tagName: build/index.d.ts#tagName
 testsRequired: build/index.d.ts#testsRequired
 trustPolicy: build/index.d.ts#trustPolicy
 tsconfigTest: build/index.d.ts#tsconfigTest
@@ -262,6 +267,9 @@ export declare const LICENSE_TEXTS: Readonly<Record<string, RegExp>>;
 
 ### build/index.d.ts#MAP_RULE
 export declare const MAP_RULE = "Before you write a helper, find its home in this map. If the home does not have the function, add it to the home, in a pull request of the home repository. Do not make a local copy, a new package or a new repository for an area that has a home: that needs the strategist. A home that is not on npm is used with workspace:* or a github: specifier pinned to a commit. If no area fits, ask the strategist for a home before you write the code.";
+
+### build/index.d.ts#MAX_NOTES
+export declare const MAX_NOTES: number;
 
 ### build/index.d.ts#Manifest
 type Manifest = Readonly<Record<string, unknown>>;
@@ -428,6 +436,9 @@ export declare function authorOf(author: unknown): string | undefined;
 ### build/index.d.ts#blockHash
 export declare const blockHash: (body: readonly string[]) => string;
 
+### build/index.d.ts#changelogSection
+export declare function changelogSection(markdown: string, version: string, name: string): string | undefined;
+
 ### build/index.d.ts#cleanPath
 export declare const cleanPath: (path: string) => string;
 
@@ -543,6 +554,9 @@ export declare const noLocalPaths: Rule;
 ### build/index.d.ts#npmLookup
 export declare const npmLookup: RegistryLookup;
 
+### build/index.d.ts#npmUrl
+export declare function npmUrl(name: string, version: string): string;
+
 ### build/index.d.ts#packageFolders
 export declare function packageFolders(root: string, globs?: readonly string[] | undefined): string[];
 
@@ -584,6 +598,9 @@ export declare function readWorkflow(file: string, text: string): Workflow;
 
 ### build/index.d.ts#releaseFiles
 export declare const releaseFiles: Rule;
+
+### build/index.d.ts#releaseNotes
+export declare function releaseNotes(name: string, version: string, changelog: string | undefined): string;
 
 ### build/index.d.ts#replaceLine
 export declare function replaceLine(text: string, line: number, lines: readonly string[]): string;
@@ -644,6 +661,9 @@ export declare function summaryMarkdown(result: CheckResult): string;
 
 ### build/index.d.ts#summaryName
 export declare function summaryName(workflowName: string): string;
+
+### build/index.d.ts#tagName
+export declare function tagName(name: string, version: string, packageCount: number): string;
 
 ### build/index.d.ts#testsRequired
 export declare const testsRequired: Rule;

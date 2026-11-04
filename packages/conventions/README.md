@@ -178,4 +178,5 @@ The package also exports the functions of the tool:
 - `formatResult(result)`, `summaryMarkdown(result)`, `annotations(result)` and `listRules(config)` give the output.
 - `parseConfig(value, rules)` and `readConfig(root)` read the field `conventions`.
 - `HOMES` is the map of homes. `findHomes(query)` finds the homes of words, and `mapMarkdown(homes)` and `mapText(homes)` write them. `readOverlay(file)` and `mergeHomes(base, extra)` add more homes.
+- `tagName(name, version, packageCount)` gives the git tag of a version. `releaseNotes(name, version, changelog)` gives the text of its GitHub release, with `changelogSection`, `npmUrl` and `MAX_NOTES`. The script `scripts/release/tags.ts` keeps the same rule, and a test compares the two.
 - `RULES` and each rule, with the helpers `isGitSpecifier`, `isPinned`, `isSourcePath` and `parseJsonc`.
