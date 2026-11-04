@@ -212,6 +212,55 @@ describe("site-pages build", () => {
     expect(errors.join("")).toContain("the status page has no GitHub data: the build had no GitHub token.");
   });
 
+  it("shows kpi.json of the output folder in the status data and on the Status page", async () => {
+    const kpi = {
+      format: "kpi/1",
+      project: "widgets",
+      at: "2026-10-01T08:00:00Z",
+      commit: "b".repeat(40),
+      measures: [{ id: "cases", value: 12, unit: "cases" }, { id: "gaps", value: 0 }],
+      engines: [{ name: "@acme/engine", version: "1.2.3" }],
+    };
+    mkdirSync(join(repo, "with-kpi"));
+    writeFileSync(join(repo, "with-kpi", "kpi.json"), JSON.stringify(kpi));
+    const errors: string[] = [];
+    const code = await runCli(["build", "--out", "with-kpi", "--repo", "acme/widgets"], {
+      cwd: repo,
+      env: { GITHUB_TOKEN: "t0ken" },
+      stdout: () => {},
+      stderr: (text) => errors.push(text),
+      fetch: fakeFetch().fetch,
+    });
+    expect(errors.join("")).toBe("");
+    expect(code).toBe(0);
+    const status = JSON.parse(readFileSync(join(repo, "with-kpi", "data", "status.json"), "utf8")) as StatusBoardData;
+    expect(status.kpi).toEqual(kpi);
+    const html = readFileSync(join(repo, "with-kpi", "status", "index.html"), "utf8");
+    expect(html).toContain('<h2 id="measures">Measures</h2>');
+    expect(html).toContain("Oct 1, 2026, 08:00 UTC");
+    expect(html).toContain("<code>@acme/engine</code> 1.2.3");
+    expect(html).toContain("<td>12 cases</td>");
+    expect(html).toContain("<td>0</td>");
+    expect(html).toContain(`https://github.com/acme/widgets/commit/${kpi.commit}`);
+  });
+
+  it("stops with code 1 at an incorrect kpi.json, and the Status page has no measures without the file", async () => {
+    mkdirSync(join(repo, "bad-kpi"));
+    writeFileSync(join(repo, "bad-kpi", "kpi.json"), '{ "format": "kpi/1" }');
+    const errors: string[] = [];
+    const code = await runCli(["build", "--out", "bad-kpi", "--repo", "acme/widgets"], {
+      cwd: repo,
+      env: {},
+      stdout: () => {},
+      stderr: (text) => errors.push(text),
+      fetch: fakeFetch().fetch,
+    });
+    expect(code).toBe(1);
+    expect(errors.join("")).toContain("kpi.json is not correct");
+    expect(existsSync(join(repo, "bad-kpi", "status"))).toBe(false);
+    expect(readFileSync(join(repo, "site", "dist", "status", "index.html"), "utf8")).not.toContain('id="measures"');
+  });
+
   it("stops with code 1 at an incorrect roadmap", async () => {
     writeFileSync(join(repo, "docs", "BROKEN.md"), "| ID | Status |\n|---|---|\n| X | open | extra |\n");
     const errors: string[] = [];

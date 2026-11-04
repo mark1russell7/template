@@ -202,6 +202,24 @@ function openWork(data: StatusBoardData): string {
   );
 }
 
+/** This function renders the measures of `kpi.json`: their values, the date of the data and the engines that made it. */
+function measures(data: StatusBoardData): string {
+  const { kpi } = data;
+  if (kpi === undefined) return "";
+  const rows = kpi.measures
+    .map((measure) => `<tr><th scope="row">${escapeHtml(measure.id)}</th><td>${measure.value}${measure.unit === undefined ? "" : ` ${escapeHtml(measure.unit)}`}</td></tr>`)
+    .join("");
+  const engines = kpi.engines ?? [];
+  const commit = link(`https://github.com/${data.source.github}/commit/${kpi.commit}`, `<code>${kpi.commit.slice(0, 7)}</code>`);
+  return (
+    `<section class="sp-section" aria-labelledby="measures"><h2 id="measures">Measures</h2>` +
+    `<p>The data of these numbers is from <time datetime="${escapeHtml(kpi.at)}" data-sp-data-date>${escapeHtml(longDate(kpi.at))}</time>. The build of ${commit} published them.</p>` +
+    (engines.length > 0 ? `<p>The engines of the data: ${listText(engines.map((engine) => `<code>${escapeHtml(engine.name)}</code> ${escapeHtml(engine.version)}`))}.</p>` : "") +
+    `<div class="sp-table-box" tabindex="0" role="region" aria-label="Measures"><table class="sp-table"><thead><tr><th scope="col">Measure</th><th scope="col">Value</th></tr></thead><tbody>${rows}</tbody></table></div>` +
+    "</section>"
+  );
+}
+
 function when(date: string): string {
   const text = escapeHtml(longDate(date));
   return `<time datetime="${escapeHtml(date)}" title="${text}" data-sp-rel>${text}</time>`;
@@ -369,6 +387,7 @@ export function renderStatusPage(data: StatusBoardData, options: PageOptions): s
   const main =
     `<h1>Status</h1><p class="sp-lead">${escapeHtml(lead)}</p>` +
     '<p class="sp-small sp-muted">The build reads the roadmap file and GitHub again after each commit and on a schedule.</p>' +
+    measures(data) +
     (data.source.roadmap ? openWork(data) : "") +
     pullRequests(data) +
     issues(data);

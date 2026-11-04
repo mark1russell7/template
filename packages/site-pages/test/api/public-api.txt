@@ -4,57 +4,64 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 111 names
+## . (build/index.d.ts): 123 names
 
 BASE_CSS: build/index.d.ts#BASE_CSS
-type BoardIssue: build/index.d.ts#BoardIssue
-type BoardItem: build/index.d.ts#BoardItem
-type BoardPullRequest: build/index.d.ts#BoardPullRequest
+type BoardIssue: build/chunks/kpi.d.ts#BoardIssue
+type BoardItem: build/chunks/kpi.d.ts#BoardItem
+type BoardPullRequest: build/chunks/kpi.d.ts#BoardPullRequest
 type BoardSection: build/index.d.ts#BoardSection
 type BuildOptions: build/index.d.ts#BuildOptions
 type BuildResult: build/index.d.ts#BuildResult
 type ChangelogEntry: build/index.d.ts#ChangelogEntry
 type ChangelogSection: build/index.d.ts#ChangelogSection
 type ChangelogSource: build/index.d.ts#ChangelogSource
-type CheckState: build/index.d.ts#CheckState
+type CheckState: build/chunks/kpi.d.ts#CheckState
 type CliIo: build/index.d.ts#CliIo
 DEFAULT_CHANGELOGS: build/index.d.ts#DEFAULT_CHANGELOGS
 GITHUB_API: build/index.d.ts#GITHUB_API
 GITHUB_GRAPHQL: build/index.d.ts#GITHUB_GRAPHQL
-type GitHubOpenWork: build/index.d.ts#GitHubOpenWork
+type GitHubOpenWork: build/chunks/kpi.d.ts#GitHubOpenWork
 type GitHubOptions: build/index.d.ts#GitHubOptions
-type GitHubRelease: build/index.d.ts#GitHubRelease
-type GitHubReleases: build/index.d.ts#GitHubReleases
+type GitHubRelease: build/chunks/kpi.d.ts#GitHubRelease
+type GitHubReleases: build/chunks/kpi.d.ts#GitHubReleases
 HELP: build/index.d.ts#HELP
 type ItemGroup: build/index.d.ts#ItemGroup
-type Link: build/index.d.ts#Link
+KPI_FILE: build/chunks/kpi.d.ts#KPI_FILE
+KPI_FORMAT: build/chunks/kpi.d.ts#KPI_FORMAT
+type KpiEngine: build/chunks/kpi.d.ts#KpiEngine
+KpiError: build/chunks/kpi.d.ts#KpiError
+type KpiFile: build/chunks/kpi.d.ts#KpiFile
+type KpiInput: build/chunks/kpi.d.ts#KpiInput
+type KpiMeasure: build/chunks/kpi.d.ts#KpiMeasure
+type Link: build/chunks/kpi.d.ts#Link
 type LinkOptions: build/index.d.ts#LinkOptions
 type MarkdownTable: build/index.d.ts#MarkdownTable
 NPM_REGISTRY: build/index.d.ts#NPM_REGISTRY
 type NpmOptions: build/index.d.ts#NpmOptions
-type NpmPublishTimes: build/index.d.ts#NpmPublishTimes
-type NpmVersionTime: build/index.d.ts#NpmVersionTime
+type NpmPublishTimes: build/chunks/kpi.d.ts#NpmPublishTimes
+type NpmVersionTime: build/chunks/kpi.d.ts#NpmVersionTime
 OPEN_CLASSES: build/index.d.ts#OPEN_CLASSES
-type OpenWorkTotals: build/index.d.ts#OpenWorkTotals
+type OpenWorkTotals: build/chunks/kpi.d.ts#OpenWorkTotals
 type PageOptions: build/index.d.ts#PageOptions
 type PageParts: build/index.d.ts#PageParts
 type ParsedVersion: build/index.d.ts#ParsedVersion
 RELEASES_SCRIPT: build/index.d.ts#RELEASES_SCRIPT
 type ReadReleasesOptions: build/index.d.ts#ReadReleasesOptions
 type ReadStatusBoardOptions: build/index.d.ts#ReadStatusBoardOptions
-type Release: build/index.d.ts#Release
-type ReleaseChange: build/index.d.ts#ReleaseChange
+type Release: build/chunks/kpi.d.ts#Release
+type ReleaseChange: build/chunks/kpi.d.ts#ReleaseChange
 ReleaseDataError: build/index.d.ts#ReleaseDataError
-type ReleaseKind: build/index.d.ts#ReleaseKind
+type ReleaseKind: build/chunks/kpi.d.ts#ReleaseKind
 type ReleasePoint: build/index.d.ts#ReleasePoint
 type ReleaseSources: build/index.d.ts#ReleaseSources
 type ReleaseSummary: build/index.d.ts#ReleaseSummary
 RoadmapParseError: build/index.d.ts#RoadmapParseError
 STATUS_CLASSES: build/index.d.ts#STATUS_CLASSES
 STATUS_SCRIPT: build/index.d.ts#STATUS_SCRIPT
-type StatusBoardData: build/index.d.ts#StatusBoardData
+type StatusBoardData: build/chunks/kpi.d.ts#StatusBoardData
 type StatusBoardInput: build/index.d.ts#StatusBoardInput
-type StatusClass: build/index.d.ts#StatusClass
+type StatusClass: build/chunks/kpi.d.ts#StatusClass
 TYPESCRIPT_PROBE: build/index.d.ts#TYPESCRIPT_PROBE
 type TagDate: build/index.d.ts#TagDate
 type TagVersion: build/index.d.ts#TagVersion
@@ -81,6 +88,9 @@ headingDate: build/index.d.ts#headingDate
 inlineMarkdown: build/index.d.ts#inlineMarkdown
 isShallow: build/index.d.ts#isShallow
 kindOf: build/index.d.ts#kindOf
+kpiFile: build/chunks/kpi.d.ts#kpiFile
+kpiProblems: build/chunks/kpi.d.ts#kpiProblems
+kpiText: build/chunks/kpi.d.ts#kpiText
 laneCenter: build/index.d.ts#laneCenter
 linksOf: build/index.d.ts#linksOf
 longDate: build/index.d.ts#longDate
@@ -98,6 +108,7 @@ parseVersion: build/index.d.ts#parseVersion
 plainText: build/index.d.ts#plainText
 probeScript: build/index.d.ts#probeScript
 readChangelogs: build/index.d.ts#readChangelogs
+readKpi: build/chunks/kpi.d.ts#readKpi
 readReleases: build/index.d.ts#readReleases
 readStatusBoard: build/index.d.ts#readStatusBoard
 releaseBodyEntries: build/index.d.ts#releaseBodyEntries
@@ -117,6 +128,7 @@ statusLead: build/index.d.ts#statusLead
 timelineLayout: build/index.d.ts#timelineLayout
 utcDay: build/index.d.ts#utcDay
 versionOfTag: build/index.d.ts#versionOfTag
+writeKpi: build/chunks/kpi.d.ts#writeKpi
 
 ## ./chrome (build/chrome.d.ts): 15 names
 
@@ -174,10 +186,13 @@ setMeasure: build/explorer/index.d.ts#setMeasure
 settle: build/explorer/index.d.ts#settle
 viewOf: build/explorer/index.d.ts#viewOf
 
-## ./vite (build/vite.d.ts): 12 names
+## ./vite (build/vite.d.ts): 16 names
 
 type BuildInfo: build/chrome.d.ts#BuildInfo
 SiteEnv: build/vite.d.ts#SiteEnv
+SiteKpiContext: build/vite.d.ts#SiteKpiContext
+SiteKpiInput: build/vite.d.ts#SiteKpiInput
+SiteKpiPlugin: build/vite.d.ts#SiteKpiPlugin
 SiteShellConfig: build/vite.d.ts#SiteShellConfig
 SiteShellConfigInput: build/vite.d.ts#SiteShellConfigInput
 SiteShellOptions: build/vite.d.ts#SiteShellOptions
@@ -186,6 +201,7 @@ SiteShellTag: build/vite.d.ts#SiteShellTag
 SiteTarget: build/vite.d.ts#SiteTarget
 buildInfo: build/vite.d.ts#buildInfo
 siteBase: build/vite.d.ts#siteBase
+siteKpi: build/vite.d.ts#siteKpi
 siteShell: build/vite.d.ts#siteShell
 themeScript: build/vite.d.ts#themeScript
 
@@ -259,6 +275,197 @@ export declare function setupTheme(button: HTMLButtonElement, storageKey: string
 
 ### build/chrome.d.ts#showBuild
 export declare function showBuild(element: HTMLElement, build: BuildInfo, repository: string): void;
+
+### build/chunks/kpi.d.ts#BoardIssue
+interface BoardIssue {
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  createdAt: string;
+  updatedAt: string;
+  labels: string[];
+}
+
+### build/chunks/kpi.d.ts#BoardItem
+interface BoardItem {
+  id: string;
+  title: string;
+  status: string;
+  statusClass: StatusClass;
+  owner?: string;
+  area?: string;
+  needs?: string;
+  section: string;
+  line: number;
+  links: Link[];
+}
+
+### build/chunks/kpi.d.ts#BoardPullRequest
+interface BoardPullRequest {
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  branch: string;
+  draft: boolean;
+  createdAt: string;
+  updatedAt: string;
+  labels: string[];
+  checks: CheckState;
+}
+
+### build/chunks/kpi.d.ts#CheckState
+type CheckState = "success" | "failure" | "pending" | "none";
+
+### build/chunks/kpi.d.ts#GitHubOpenWork
+type GitHubOpenWork = {
+  available: true;
+  pullRequests: BoardPullRequest[];
+  issues: BoardIssue[];
+  totals: OpenWorkTotals;
+} | {
+  available: false;
+  reason: string;
+};
+
+### build/chunks/kpi.d.ts#GitHubRelease
+interface GitHubRelease {
+  tag: string;
+  name: string;
+  body: string;
+  publishedAt: string;
+  url: string;
+  prerelease: boolean;
+}
+
+### build/chunks/kpi.d.ts#GitHubReleases
+type GitHubReleases = {
+  available: true;
+  releases: GitHubRelease[];
+} | {
+  available: false;
+  reason: string;
+};
+
+### build/chunks/kpi.d.ts#KPI_FILE
+declare const KPI_FILE = "kpi.json";
+
+### build/chunks/kpi.d.ts#KPI_FORMAT
+declare const KPI_FORMAT = "kpi/1";
+
+### build/chunks/kpi.d.ts#KpiEngine
+interface KpiEngine {
+  name: string;
+  version: string;
+}
+
+### build/chunks/kpi.d.ts#KpiError
+declare class KpiError extends Error {
+  readonly problems: readonly string[];
+  constructor(problems: readonly string[]);
+}
+
+### build/chunks/kpi.d.ts#KpiFile
+interface KpiFile {
+  format: "kpi/1";
+  project: string;
+  at: string;
+  commit: string;
+  measures: KpiMeasure[];
+  engines?: KpiEngine[];
+}
+
+### build/chunks/kpi.d.ts#KpiInput
+type KpiInput = Omit<KpiFile, "format">;
+
+### build/chunks/kpi.d.ts#KpiMeasure
+interface KpiMeasure {
+  id: string;
+  value: number;
+  unit?: string;
+}
+
+### build/chunks/kpi.d.ts#Link
+interface Link {
+  label: string;
+  url: string;
+}
+
+### build/chunks/kpi.d.ts#NpmPublishTimes
+interface NpmPublishTimes {
+  times: NpmVersionTime[];
+  problems: string[];
+}
+
+### build/chunks/kpi.d.ts#NpmVersionTime
+interface NpmVersionTime {
+  name: string;
+  version: string;
+  date: string;
+}
+
+### build/chunks/kpi.d.ts#OpenWorkTotals
+interface OpenWorkTotals {
+  pullRequests: number;
+  issues: number;
+}
+
+### build/chunks/kpi.d.ts#Release
+interface Release {
+  version: string;
+  date: string;
+  kind: ReleaseKind;
+  changes: ReleaseChange[];
+  links: Link[];
+}
+
+### build/chunks/kpi.d.ts#ReleaseChange
+interface ReleaseChange {
+  commit: string | null;
+  text: string;
+  packages: string[];
+}
+
+### build/chunks/kpi.d.ts#ReleaseKind
+type ReleaseKind = "first" | "major" | "minor" | "patch";
+
+### build/chunks/kpi.d.ts#StatusBoardData
+interface StatusBoardData {
+  generatedAt: string;
+  commit: string | null;
+  source: {
+    roadmap: string | null;
+    github: string;
+  };
+  items: BoardItem[];
+  pullRequests: BoardPullRequest[];
+  issues: BoardIssue[];
+  github: {
+    available: boolean;
+    reason?: string;
+    totals?: OpenWorkTotals;
+  };
+  kpi?: KpiFile;
+}
+
+### build/chunks/kpi.d.ts#StatusClass
+type StatusClass = "waiting" | "blocked" | "progress" | "open" | "later" | "done";
+
+### build/chunks/kpi.d.ts#kpiFile
+declare function kpiFile(input: KpiInput, now?: number): KpiFile;
+
+### build/chunks/kpi.d.ts#kpiProblems
+declare function kpiProblems(value: unknown, now?: number): string[];
+
+### build/chunks/kpi.d.ts#kpiText
+declare function kpiText(file: KpiFile): string;
+
+### build/chunks/kpi.d.ts#readKpi
+declare function readKpi(text: string, now?: number): KpiFile;
+
+### build/chunks/kpi.d.ts#writeKpi
+declare function writeKpi(out: string, input: KpiInput, now?: number): string;
 
 ### build/explorer/index.d.ts#AxisSlot
 type AxisSlot = "x" | "y";
@@ -442,45 +649,6 @@ export declare function viewOf(record: ResponseRecord, state: ExplorerState, opt
 ### build/index.d.ts#BASE_CSS
 export declare const BASE_CSS: string;
 
-### build/index.d.ts#BoardIssue
-interface BoardIssue {
-  number: number;
-  title: string;
-  url: string;
-  author: string;
-  createdAt: string;
-  updatedAt: string;
-  labels: string[];
-}
-
-### build/index.d.ts#BoardItem
-interface BoardItem {
-  id: string;
-  title: string;
-  status: string;
-  statusClass: StatusClass;
-  owner?: string;
-  area?: string;
-  needs?: string;
-  section: string;
-  line: number;
-  links: Link[];
-}
-
-### build/index.d.ts#BoardPullRequest
-interface BoardPullRequest {
-  number: number;
-  title: string;
-  url: string;
-  author: string;
-  branch: string;
-  draft: boolean;
-  createdAt: string;
-  updatedAt: string;
-  labels: string[];
-  checks: CheckState;
-}
-
 ### build/index.d.ts#BoardSection
 interface BoardSection {
   slug: string;
@@ -536,9 +704,6 @@ interface ChangelogSource {
   markdown: string;
 }
 
-### build/index.d.ts#CheckState
-type CheckState = "success" | "failure" | "pending" | "none";
-
 ### build/index.d.ts#CliIo
 interface CliIo {
   cwd: string;
@@ -558,17 +723,6 @@ export declare const GITHUB_API = "https://api.github.com";
 ### build/index.d.ts#GITHUB_GRAPHQL
 export declare const GITHUB_GRAPHQL = "https://api.github.com/graphql";
 
-### build/index.d.ts#GitHubOpenWork
-type GitHubOpenWork = {
-  available: true;
-  pullRequests: BoardPullRequest[];
-  issues: BoardIssue[];
-  totals: OpenWorkTotals;
-} | {
-  available: false;
-  reason: string;
-};
-
 ### build/index.d.ts#GitHubOptions
 interface GitHubOptions {
   owner: string;
@@ -578,25 +732,6 @@ interface GitHubOptions {
   timeoutMs?: number;
 }
 
-### build/index.d.ts#GitHubRelease
-interface GitHubRelease {
-  tag: string;
-  name: string;
-  body: string;
-  publishedAt: string;
-  url: string;
-  prerelease: boolean;
-}
-
-### build/index.d.ts#GitHubReleases
-type GitHubReleases = {
-  available: true;
-  releases: GitHubRelease[];
-} | {
-  available: false;
-  reason: string;
-};
-
 ### build/index.d.ts#HELP
 export declare const HELP = "Usage: site-pages build --out <dir> [options]\n\nWrites <out>/data/releases.json, <out>/data/status.json, <out>/releases/index.html\nand <out>/status/index.html. Start it in the repository, after the build of the site.\n\nOptions:\n  --out <dir>           The built output folder of the site (necessary)\n  --repo <owner/name>   The GitHub repository (default: $GITHUB_REPOSITORY, else the remote \"origin\")\n  --base </name/>       The path of the site home (default: \"/<name>/\", or \"/\" for <owner>.github.io)\n  --roadmap <file>      The roadmap file (default: none, the status page has only the GitHub part)\n  --packages <names>    npm names or a @scope, separated by commas, for the npm dates\n  --changesets <glob>   The changelog files (default: packages/*/CHANGELOG.md, else CHANGELOG.md)\n  --group <name>        The npm name of the package whose changelog gives the versions\n  --token <token>       A GitHub token with read access (default: $GITHUB_TOKEN)\n  --css <file>          A CSS file for the pages, after the default CSS\n  --site-name <name>    The name of the site in the header (default: the repository name)\n  --data-only           Write only the JSON data, not the pages\n  -h, --help            Show this help\n\nUsage: site-pages check (--out <dir> | --url <url>) [options]\n\nOpens the pages of the site in a headless Chromium at phone and desktop widths. Start\n\"site-pages check --help\" for its options.\n";
 
@@ -604,12 +739,6 @@ export declare const HELP = "Usage: site-pages build --out <dir> [options]\n\nWr
 interface ItemGroup {
   statusClass: StatusClass;
   items: BoardItem[];
-}
-
-### build/index.d.ts#Link
-interface Link {
-  label: string;
-  url: string;
 }
 
 ### build/index.d.ts#LinkOptions
@@ -641,27 +770,8 @@ interface NpmOptions {
   timeoutMs?: number;
 }
 
-### build/index.d.ts#NpmPublishTimes
-interface NpmPublishTimes {
-  times: NpmVersionTime[];
-  problems: string[];
-}
-
-### build/index.d.ts#NpmVersionTime
-interface NpmVersionTime {
-  name: string;
-  version: string;
-  date: string;
-}
-
 ### build/index.d.ts#OPEN_CLASSES
 export declare const OPEN_CLASSES: readonly StatusClass[];
-
-### build/index.d.ts#OpenWorkTotals
-interface OpenWorkTotals {
-  pullRequests: number;
-  issues: number;
-}
 
 ### build/index.d.ts#PageOptions
 interface PageOptions {
@@ -719,27 +829,8 @@ interface ReadStatusBoardOptions {
   generatedAt?: string | undefined;
 }
 
-### build/index.d.ts#Release
-interface Release {
-  version: string;
-  date: string;
-  kind: ReleaseKind;
-  changes: ReleaseChange[];
-  links: Link[];
-}
-
-### build/index.d.ts#ReleaseChange
-interface ReleaseChange {
-  commit: string | null;
-  text: string;
-  packages: string[];
-}
-
 ### build/index.d.ts#ReleaseDataError
 export declare class ReleaseDataError extends Error {}
-
-### build/index.d.ts#ReleaseKind
-type ReleaseKind = "first" | "major" | "minor" | "patch";
 
 ### build/index.d.ts#ReleasePoint
 interface ReleasePoint {
@@ -781,24 +872,6 @@ export declare const STATUS_CLASSES: readonly StatusClass[];
 ### build/index.d.ts#STATUS_SCRIPT
 export declare const STATUS_SCRIPT: string;
 
-### build/index.d.ts#StatusBoardData
-interface StatusBoardData {
-  generatedAt: string;
-  commit: string | null;
-  source: {
-    roadmap: string | null;
-    github: string;
-  };
-  items: BoardItem[];
-  pullRequests: BoardPullRequest[];
-  issues: BoardIssue[];
-  github: {
-    available: boolean;
-    reason?: string;
-    totals?: OpenWorkTotals;
-  };
-}
-
 ### build/index.d.ts#StatusBoardInput
 interface StatusBoardInput {
   items: BoardItem[];
@@ -808,9 +881,6 @@ interface StatusBoardInput {
   commit?: string | null;
   generatedAt?: string;
 }
-
-### build/index.d.ts#StatusClass
-type StatusClass = "waiting" | "blocked" | "progress" | "open" | "later" | "done";
 
 ### build/index.d.ts#TYPESCRIPT_PROBE
 export declare const TYPESCRIPT_PROBE: RegExp;
@@ -1048,6 +1118,27 @@ export declare function versionOfTag(tag: string): TagVersion | null;
 ### build/vite.d.ts#SiteEnv
 export type SiteEnv = Readonly<Record<string, string | undefined>>;
 
+### build/vite.d.ts#SiteKpiContext
+export interface SiteKpiContext {
+  emitFile(file: {
+    type: "asset";
+    fileName: string;
+    source: string;
+  }): string;
+}
+
+### build/vite.d.ts#SiteKpiInput
+export type SiteKpiInput = Omit<KpiInput, "commit"> & {
+  readonly commit?: string | undefined;
+};
+
+### build/vite.d.ts#SiteKpiPlugin
+export interface SiteKpiPlugin {
+  readonly name: string;
+  readonly apply: "build";
+  generateBundle(this: SiteKpiContext): void;
+}
+
 ### build/vite.d.ts#SiteShellConfig
 export interface SiteShellConfig {
   readonly base: string;
@@ -1094,6 +1185,9 @@ export declare function buildInfo(version?: string, env?: SiteEnv, now?: Date): 
 
 ### build/vite.d.ts#siteBase
 export declare function siteBase(env?: SiteEnv): string;
+
+### build/vite.d.ts#siteKpi
+export declare function siteKpi(input: SiteKpiInput | (() => SiteKpiInput), env?: SiteEnv): SiteKpiPlugin;
 
 ### build/vite.d.ts#siteShell
 export declare function siteShell(options: SiteShellOptions): SiteShellPlugin;
