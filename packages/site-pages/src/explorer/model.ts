@@ -12,8 +12,10 @@ import {
   heldOutError,
   parseResponseRecord,
   quantile,
+  responseCells,
   sliceResponse,
   surfaceResponse,
+  whenHolds,
   type ParsedResponseRecord,
   type ResponseBand,
   type ResponseCurvePoint,
@@ -164,6 +166,8 @@ export interface ExplorerView {
   readonly modelText: string;
   /** The size of the grid of a surface in plain words. A curve has an empty string. */
   readonly gridText: string;
+  /** The places that the range of the measure moved, in plain words. With no such place, this is an empty string. */
+  readonly rangeText: string;
   /** The text of a request that the record refused. A good view has an empty string. */
   readonly problem: string;
   /** The number of values on a continuous axis of this view. */
@@ -496,9 +500,7 @@ function pointMatches(record: ResponseRecord, point: ResponsePoint, measure: str
   return record.dimensions.every((d) => {
     const value = point.values[d.id] ?? null;
     if (varied.includes(d.id)) return value !== null;
-    const parent = d.when === undefined ? null : (point.values[d.when.dimension] ?? null);
-    const present = d.when === undefined || (parent !== null && d.when.levels.includes(parent));
-    const wanted = present ? (hold[d.id] as ResponseValue) : null;
+    const wanted = whenHolds(d, point.values) ? (hold[d.id] as ResponseValue) : null;
     if (typeof value !== "number" || typeof wanted !== "number" || d.kind !== "continuous") return value === wanted;
     return Math.abs(shareOf(d, value) - shareOf(d, wanted)) <= tolerance;
   });
@@ -544,12 +546,19 @@ function gridSentence(x: readonly ResponseValue[], y: readonly ResponseValue[], 
   return elapsedMs > budgetMs ? `${size} This surface took ${Math.round(elapsedMs)} ms, so the next grid is smaller.` : size;
 }
 
+/** This function gives the text of the places that a range moved. A view with no such place gives an empty string. */
+function rangeSentence(measure: ResponseMeasure, panels: readonly ExplorerPanel[]): string {
+  const moved = panels.reduce((count, panel) => count + (panel.kind === "curve" ? panel.slice.clipped : panel.kind === "surface" ? panel.surface.clipped : 0), 0);
+  if (moved === 0 || measure.range === undefined) return "";
+  return `At ${moved} ${moved === 1 ? "place" : "places"}, the view stops at the range of the measure, ${measure.range[0]} to ${measure.range[1]}.`;
+}
+
 /** This function gives the steps of a view from its axes and the plan of `planSteps`. */
 function stepsOfView(record: ResponseRecord, state: ExplorerState, panels: number, cap: number): number {
-  const axes = variedOf(state).map((id) => dimensionOf(record, id));
-  const fixed = axes.filter((d) => d.kind !== "continuous");
-  const levels = fixed.reduce((count, d) => count * (d as { levels: readonly ResponseValue[] }).levels.length, 1);
-  return planSteps(record.points.length, panels, axes.length - fixed.length, levels, cap);
+  const continuous = variedOf(state).filter((id) => dimensionOf(record, id).kind === "continuous").length;
+  // A count at 2 steps, less the 2 of each continuous axis, leaves the levels of the other axes.
+  const levels = responseCells(record, state.y === null ? state.x : [state.x, state.y], 2) / 2 ** continuous;
+  return planSteps(record.points.length, panels, continuous, levels, cap);
 }
 
 /**
@@ -566,7 +575,7 @@ export function viewOf(record: ResponseRecord, state: ExplorerState, options: Vi
   const levels = facet === undefined ? [null] : panelLevels(record, state, facet.id);
   const steps = stepsOfView(record, state, levels.length, stepsCap);
   const tolerance = toleranceOf(record);
-  const base = { measure, x, y, log: model?.scale === "log", steps, elapsedMs: 0, nextCap: stepsCap, gridText: "", problem: "" };
+  const base = { measure, x, y, log: model?.scale === "log", steps, elapsedMs: 0, nextCap: stepsCap, gridText: "", rangeText: "", problem: "" };
 
   if (model === undefined) {
     const modelText = "This measure has no valid model in the record, so the view shows only the measured points.";
@@ -588,7 +597,7 @@ export function viewOf(record: ResponseRecord, state: ExplorerState, options: Vi
     const late = surface !== undefined && !surface.cells ? nextStepsCap(steps, elapsedMs, budgetMs) : Number.POSITIVE_INFINITY;
     const gridText = surface === undefined ? "" : gridSentence(surface.surface.x, surface.surface.y, surface.cells, elapsedMs, budgetMs);
     const error = heldOutError(record, measure.id);
-    return { ...base, panels, error, errorText: errorSentence(measure, model, error), modelText, gridText, elapsedMs, nextCap: Math.min(stepsCap, late) };
+    return { ...base, panels, error, errorText: errorSentence(measure, model, error), modelText, gridText, rangeText: rangeSentence(measure, panels), elapsedMs, nextCap: Math.min(stepsCap, late) };
   } catch (error) {
     return { ...base, panels: [], error: null, errorText: "", modelText, problem: error instanceof Error ? error.message : String(error) };
   }

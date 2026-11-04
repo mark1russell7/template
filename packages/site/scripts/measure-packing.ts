@@ -84,7 +84,7 @@ const record = fitResponse(
       { id: "iterations", label: "Restarts", unit: "", kind: "continuous", range: [2, 16], log: true, when: { dimension: "strategy", levels: ["restarts"] } },
     ],
     measures: [
-      { id: "fill", label: "Fill", unit: "", direction: "higher" },
+      { id: "fill", label: "Fill", unit: "", direction: "higher", range: [0, 1] },
       { id: "aspect", label: "Aspect", unit: "", direction: "none" },
     ],
     points,
