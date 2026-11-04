@@ -1,0 +1,64 @@
+name: site-check
+description: >-
+  Checks a built site in a headless Chromium at phone and desktop widths, in light and dark. A failed check fails the
+  step, so a deploy after it does not start. The artifact site-check has the screenshots and the report.
+inputs:
+  out:
+    description: The folder of the built site.
+    required: true
+  base:
+    description: The base path of the site. Empty uses the name of the repository.
+    default: ""
+  site-check-pages:
+    description: The pages to check, from the site home, separated by commas. Empty checks the home only.
+    default: ""
+  site-check-widths:
+    description: The widths of the check in CSS pixels, separated by commas. Empty gives 360,400,1280.
+    default: ""
+  site-check-probe:
+    description: A JavaScript or TypeScript file of the repository that tests the interactive core of the first page.
+    default: ""
+  site-check-playwright:
+    description: The version of playwright-core whose Chromium the check uses.
+    default: "1.64.1"
+runs:
+  using: composite
+  steps:
+    # The check uses the Chromium of a pinned Playwright, not the Chrome of the runner image, so each run
+    # checks with the same browser. playwright-core goes into its own folder, as the tool of site-pages does.
+    - name: Playwright for the site check
+      shell: bash
+      env:
+        VERSION: ${{ inputs.site-check-playwright }}
+      run: npm install --prefix "$RUNNER_TEMP/site-check-playwright" --no-save --no-package-lock --no-audit --no-fund "playwright-core@$VERSION"
+    # A composite action resolves a local path from the workspace, not from its own folder. So this step names a commit.
+    - uses: mark1russell7/template/.github/actions/setup-playwright@f039d649b66d2d7cb6746ab5927f77b7001ca40d # main
+      with:
+        command: ${{ runner.temp }}/site-check-playwright/node_modules/.bin/playwright-core
+        browsers: chromium
+    # The check starts from the source of the commit of this action (packages/site-pages/src/check imports only
+    # Node.js and packages/site-pages/src/data), so it needs no npm release of site-pages.
+    - name: Site check
+      shell: bash
+      env:
+        OUT: ${{ inputs.out }}
+        BASE: ${{ inputs.base }}
+        PAGES: ${{ inputs.site-check-pages }}
+        WIDTHS: ${{ inputs.site-check-widths }}
+        PROBE: ${{ inputs.site-check-probe }}
+      run: |
+        args=(--out "$OUT" --repo "$GITHUB_REPOSITORY" --shots "$RUNNER_TEMP/site-check")
+        [ -z "$BASE" ] || args+=(--base "$BASE")
+        [ -z "$PAGES" ] || args+=(--pages "$PAGES")
+        [ -z "$WIDTHS" ] || args+=(--widths "$WIDTHS")
+        [ -z "$PROBE" ] || args+=(--probe "$PROBE")
+        node "$GITHUB_ACTION_PATH/../../../packages/site-pages/src/check/main.ts" "${args[@]}"
+    # The screenshots, report.json and summary.md, also of a failed check, for a review of the site.
+    - name: Screenshots of the site check
+      if: always()
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: site-check
+        path: ${{ runner.temp }}/site-check
+        if-no-files-found: warn
+        retention-days: 14
