@@ -126,6 +126,37 @@ The check runs the probe on the first page, in the first scheme, at each width. 
 
 The check finds a browser in this order: `--browser`, `$SITE_CHECK_BROWSER`, the newest Chromium of Playwright, and then Chrome or Edge. The folder `src/check` imports only Node.js. Thus Node.js 22.18 or later can start `src/check/main.ts` with no install. The workflow `reusable-pages.yml` of the template uses it this way.
 
+## The freshness of a measured page
+
+A measured page shows numbers from a run. The numbers become old when the run becomes old or when an engine has a new release. A site keeps one file of data stamps. Each stamp names the page, its runs, the date of each run and the engine versions of each run. The gate reads this file:
+
+```sh
+site-pages freshness --stamps data/stamps.json
+```
+
+```json
+{
+  "schema": "data-stamp/1",
+  "pages": [
+    {
+      "page": "index.html",
+      "runs": [{ "id": "101", "url": "https://github.com/owner/repo/actions/runs/101", "date": "2026-11-02T10:00:00Z", "engines": { "@scope/engine": "0.7.0" } }],
+      "inFlight": { "id": "102", "url": "https://github.com/owner/repo/actions/runs/102", "date": "2026-11-04T10:00:00Z", "engines": { "@scope/engine": "0.8.0" } }
+    }
+  ]
+}
+```
+
+The gate has three rules. A fault of one rule gives the exit code 1.
+
+1. Each page names a run, and each run has an id, a link, a date and its engine versions.
+2. The data of a page is at most 3 days old (`MAX_DATA_AGE_DAYS`), or a run on newer engines is in flight. The stamp of that run is at most 3 days old, so an old stamp does not hold the gate open.
+3. The engines of the newest run are at most 1 minor version behind npm at the start of the run (`MAX_MINORS_BEHIND`). A release during a long run does not fail the gate.
+
+When npm does not answer, the gate prints the rule 3 under `Not run` and does not fail. A workflow turns the gate on with the input `data-stamps` of `reusable-pages.yml`. The gate then runs from the template commit, so it needs no install.
+
+`renderDataStamp(stamp)` gives the line that the page shows with its data: the run, its date, its engine versions and the run in flight.
+
 ## The releases
 
 The command merges four sources by version:
