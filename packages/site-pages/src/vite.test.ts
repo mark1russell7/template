@@ -4,10 +4,11 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { build as viteBuild, resolveConfig, type InlineConfig, type Plugin, type Rolldown } from "vite";
 import { applyTheme } from "./chrome.ts";
-import { buildInfo, siteBase, siteShell, themeScript } from "./vite.ts";
+import { buildInfo, siteBase, siteKpi, siteShell, themeScript } from "./vite.ts";
 
 // The compiler examines this line: Vite accepts the plugin without a cast.
 const asVitePlugin = (options: Parameters<typeof siteShell>[0]): Plugin => siteShell(options);
+const asViteKpi = (...args: Parameters<typeof siteKpi>): Plugin => siteKpi(...args);
 
 /** This function starts the theme script with a fake page, and gives the attribute that it sets. */
 function runScript(script: string, storage: { getItem(key: string): string | null }): string | undefined {
@@ -161,5 +162,20 @@ describe("siteShell in a real Vite", () => {
 
   it("stops the build when the package file does not exist", async () => {
     await expect(resolveConfig(config({}, "../none.json"), "build")).rejects.toThrow(/none\.json/);
+  });
+
+  const KPI = { project: "acme", at: "2026-10-01T08:00:00Z", measures: [{ id: "cases", value: 12 }] };
+  const COMMIT = "c".repeat(40);
+
+  it("adds kpi.json at the root of the built site, with the commit of the environment", async () => {
+    const plugins = [asViteKpi(() => KPI, { GITHUB_SHA: COMMIT })];
+    const result = (await viteBuild(config({ plugins, build: { write: false } }))) as Rolldown.RolldownOutput;
+    const file = result.output.find((item) => item.fileName === "kpi.json") as Rolldown.OutputAsset;
+    expect(JSON.parse(String(file.source))).toEqual({ format: "kpi/1", ...KPI, commit: COMMIT });
+  });
+
+  it("stops the build when the data is not correct", async () => {
+    const plugins = [asViteKpi({ ...KPI, measures: [] }, { GITHUB_SHA: COMMIT })];
+    await expect(viteBuild(config({ plugins, build: { write: false } }))).rejects.toThrow("The file has no measures.");
   });
 });

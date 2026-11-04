@@ -3,10 +3,11 @@
  * standalone pages into the built output folder of a site.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { headCommit, originRepository } from "./data/git.ts";
+import { KPI_FILE, KpiError, readKpi } from "./data/kpi.ts";
 import { readReleases, ReleaseDataError } from "./data/releases.ts";
 import { readStatusBoard, RoadmapParseError } from "./data/status.ts";
 import type { Release, StatusBoardData } from "./data/types.ts";
@@ -67,9 +68,10 @@ function write(file: string, content: string, files: string[]): void {
 
 /**
  * This function reads the sources and writes `data/releases.json`, `data/status.json`,
- * `releases/index.html` and `status/index.html` into the output folder.
+ * `releases/index.html` and `status/index.html` into the output folder. When the output folder has a
+ * `kpi.json`, the status data and the status page show it.
  *
- * @throws ReleaseDataError or RoadmapParseError when a source on disk is not correct
+ * @throws ReleaseDataError, RoadmapParseError or KpiError when a source on disk is not correct
  */
 export async function build(options: BuildOptions): Promise<BuildResult> {
   const { repoDir, repository, warn = () => {} } = options;
@@ -91,7 +93,10 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
     warn,
     ...fetcher,
   });
-  const status = await readStatusBoard({ repoDir, roadmap: options.roadmap ?? null, owner, repo, token: options.token, commit, generatedAt: now, ...fetcher });
+  const kpiPath = join(out, KPI_FILE);
+  const kpi = existsSync(kpiPath) ? readKpi(readFileSync(kpiPath, "utf8"), Date.parse(now)) : undefined;
+  const board = await readStatusBoard({ repoDir, roadmap: options.roadmap ?? null, owner, repo, token: options.token, commit, generatedAt: now, ...fetcher });
+  const status: StatusBoardData = kpi === undefined ? board : { ...board, kpi };
   if (!status.github.available) warn(`the status page has no GitHub data: ${status.github.reason ?? "no reason"}.`);
 
   const files: string[] = [];
@@ -248,7 +253,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     );
     return 0;
   } catch (error) {
-    if (error instanceof ReleaseDataError || error instanceof RoadmapParseError || (error as NodeJS.ErrnoException)?.code === "ENOENT") {
+    if (error instanceof ReleaseDataError || error instanceof RoadmapParseError || error instanceof KpiError || (error as NodeJS.ErrnoException)?.code === "ENOENT") {
       io.stderr(`site-pages: ${(error as Error).message}\n`);
       return 1;
     }

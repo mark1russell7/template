@@ -9,6 +9,8 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { BuildInfo } from "./chrome.ts";
+import { headCommit } from "./data/git.ts";
+import { KPI_FILE, kpiFile, kpiText, type KpiInput } from "./data/kpi.ts";
 
 export type { BuildInfo } from "./chrome.ts";
 
@@ -55,6 +57,39 @@ export interface SiteShellPlugin {
   readonly name: string;
   config(config: SiteShellConfigInput): SiteShellConfig;
   transformIndexHtml(): SiteShellTag[];
+}
+
+/** The input of `siteKpi`. Without a commit, the plugin takes `GITHUB_SHA`, else the head of the repository. */
+export type SiteKpiInput = Omit<KpiInput, "commit"> & { readonly commit?: string | undefined };
+
+/** The part of the context of a Rollup hook that `siteKpi` uses. */
+export interface SiteKpiContext {
+  emitFile(file: { type: "asset"; fileName: string; source: string }): string;
+}
+
+/** The Vite plugin that `siteKpi` gives. */
+export interface SiteKpiPlugin {
+  readonly name: string;
+  readonly apply: "build";
+  generateBundle(this: SiteKpiContext): void;
+}
+
+/**
+ * This function gives the Vite plugin that adds `kpi.json` to the root of a built site. A fault in the data stops the build.
+ *
+ * @param input - The data, or a function that reads it at the time of the build.
+ * @param env - The environment variables. A test gives its own.
+ */
+export function siteKpi(input: SiteKpiInput | (() => SiteKpiInput), env: SiteEnv = process.env): SiteKpiPlugin {
+  return {
+    name: "site-pages-kpi",
+    apply: "build",
+    generateBundle() {
+      const data = typeof input === "function" ? input() : input;
+      const commit = data.commit ?? env["GITHUB_SHA"] ?? headCommit(process.cwd()) ?? "";
+      this.emitFile({ type: "asset", fileName: KPI_FILE, source: kpiText(kpiFile({ ...data, commit })) });
+    },
+  };
 }
 
 /**
