@@ -380,6 +380,7 @@ interface DataRun {
   readonly url: string;
   readonly date: string;
   readonly engines: Readonly<Record<string, string>>;
+  readonly method?: string;
 }
 
 ### build/chunks/freshness.d.ts#DataStamps

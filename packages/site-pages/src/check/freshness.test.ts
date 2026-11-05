@@ -50,6 +50,8 @@ describe("parseDataStamps", () => {
     expect(faults({ schema: DATA_STAMP_SCHEMA, pages: [{}] })).toEqual(["A stamp has no page."]);
     expect(faults(stamps([run({ id: "" })]))[0]).toContain("has no id");
     expect(faults(stamps([run({ url: "http://example.com" })]))[0]).toContain("no https link");
+    expect(faults(stamps([run({ method: " " })]))[0]).toContain("method of the run is not text");
+    expect(faults(stamps([run({ method: "lab run" })]))).toEqual([]);
     expect(faults(stamps(["run" as unknown as DataRun]))[0]).toContain("is not an object");
     expect(faults(stamps([run()], run({ engines: {} })))[0]).toContain("in flight");
   });
@@ -159,6 +161,13 @@ describe("a fixed study", () => {
     const limit: DataLimit = { days: 7, reason: "Weekly.", workflow: "w.yml" };
     expect(parseDataStamps(page({ study: true, limit }))).toMatchObject({ ok: false, faults: ["index.html: a fixed study has no limit."] });
     expect(parseDataStamps(page({ study: true, inFlight: run() }))).toMatchObject({ ok: false, faults: ["index.html: a fixed study has no run in flight."] });
+  });
+
+  it("can name a two-part image tag, and another page cannot", () => {
+    const tagged = [run({ engines: { redis: "7.4" } })];
+    expect(parseDataStamps(page({ study: true, runs: tagged }))).toMatchObject({ ok: true });
+    expect(parseDataStamps(page({ runs: tagged }))).toMatchObject({ ok: false });
+    expect(parseDataStamps(page({ study: true, runs: [run({ engines: { redis: "latest" } })] }))).toMatchObject({ ok: false });
   });
 });
 
