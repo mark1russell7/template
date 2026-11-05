@@ -571,6 +571,8 @@ function stepsOfView(record: ResponseRecord, state: ExplorerState, panels: numbe
 /**
  * This function gives the data of a view. It does not throw. A request that the record refuses gives the text in
  * `problem`, and no panels. A measure with no model gives only the measured points, and a table model gives cells.
+ * A smooth model that is no better than a plain mean also gives only the measured points. A drawn fit claims knowledge that such a model does not have.
+ * A table model keeps its cells at any error, because each cell is the mean of measured points.
  */
 export function viewOf(record: ResponseRecord, state: ExplorerState, options: ViewOptions = {}): ExplorerView {
   const { budgetMs = SURFACE_BUDGET_MS, stepsCap = MAX_STEPS, now = (): number => 0 } = options;
@@ -590,6 +592,11 @@ export function viewOf(record: ResponseRecord, state: ExplorerState, options: Vi
   }
   const modelText = model.kind === "table" ? "The model is the mean of each measured cell, so the view shows cells and no smooth surface." : "The model is a smooth fit over all the dimensions.";
   try {
+    const heldOut = heldOutError(record, measure.id);
+    if (model.kind !== "table" && heldOut.skill !== null && heldOut.skill <= 0) {
+      const noBetter = "The model is no better than a plain mean on points that it did not see, so the view shows only the measured points.";
+      return { ...base, panels: pointPanels(record, state, levels, facet, tolerance), error: heldOut, errorText: errorSentence(measure, model, heldOut), modelText: noBetter };
+    }
     const start = now();
     const panels = levels.map((level): ExplorerPanel => {
       const hold = requestHold(state, facet, level);
@@ -603,8 +610,7 @@ export function viewOf(record: ResponseRecord, state: ExplorerState, options: Vi
     const surface = first?.kind === "surface" ? first : undefined;
     const late = surface !== undefined && !surface.cells ? nextStepsCap(steps, elapsedMs, budgetMs) : Number.POSITIVE_INFINITY;
     const gridText = surface === undefined ? "" : gridSentence(surface.surface.x, surface.surface.y, surface.cells, elapsedMs, budgetMs);
-    const error = heldOutError(record, measure.id);
-    return { ...base, panels, error, errorText: errorSentence(measure, model, error), modelText, gridText, rangeText: rangeSentence(measure, panels), elapsedMs, nextCap: Math.min(stepsCap, late) };
+    return { ...base, panels, error: heldOut, errorText: errorSentence(measure, model, heldOut), modelText, gridText, rangeText: rangeSentence(measure, panels), elapsedMs, nextCap: Math.min(stepsCap, late) };
   } catch (error) {
     return { ...base, panels: [], error: null, errorText: "", modelText, problem: error instanceof Error ? error.message : String(error) };
   }
