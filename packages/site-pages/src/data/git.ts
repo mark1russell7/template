@@ -47,6 +47,15 @@ export function headingDate(repoDir: string, version: string, file: string): str
   return dates[dates.length - 1] ?? null;
 }
 
+/**
+ * This function gives the ISO time of the last commit that changed the `version` line of a `package.json`, or null. The
+ * path of the file starts at `repoDir`. A shallow clone can give a later commit, so use the full history. A change of
+ * only the comma of that line also counts as a change of the line.
+ */
+export function versionCommitTime(repoDir: string, file: string): string | null {
+  return git(repoDir, "log", "-1", "--format=%cI", '-G^\\s*"version":', "HEAD", "--", file)?.trim() || null;
+}
+
 /** This function gives the full SHA of `HEAD`, or null. */
 export function headCommit(repoDir: string): string | null {
   const sha = git(repoDir, "rev-parse", "HEAD")?.trim();

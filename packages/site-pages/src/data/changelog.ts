@@ -164,3 +164,8 @@ export function headingAnchor(heading: string): string {
     .replace(/[^\p{L}\p{N}\s_-]/gu, "")
     .replace(/\s/g, "-");
 }
+
+/** This function gives the versions of the headings of a changelog, in the order of the file. Another heading is not a version. */
+export function changelogVersions(markdown: string): string[] {
+  return parseChangelog(markdown).map((section) => section.version);
+}

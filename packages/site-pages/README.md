@@ -191,7 +191,7 @@ The command merges four sources by version:
 1. **The changelogs of Changesets.** Each `## 1.2.3` section of a `CHANGELOG.md` gives a version and its changes. Each change has its commit, the first sentence of its text, and the packages that list it.
 2. **The GitHub releases.** Each release gives a version (from its tag), a date and a link. When no changelog has the version, the list items of the release text are the changes.
 3. **The git tags.** The tags `1.2.3`, `v1.2.3` and `name@1.2.3` give the date of a version.
-4. **npm.** The publication time of each version of `--packages` is the last source of a date.
+4. **npm.** The publication time of each version of `--packages` is the last source of a date. Each stable version of the group, or of the only package, is also a release. So a publication with no changelog heading stays on the list. With `--group`, a version of another package that the group does not have is a release with the name of its package, for example `viewer@0.4.1`.
 
 The date of a version comes from the git tag, else from the GitHub release, else from npm. Else it comes from the commit that added the version heading to the changelog. A version without a date gets the date of the next version, and the command writes a warning.
 
@@ -342,6 +342,9 @@ The functions of the command are also in the package:
 | --- | --- |
 | `readReleases(options)` | The releases of a repository on disk, with GitHub and npm |
 | `mergeReleases(sources)` | The releases from sources that the caller reads |
+| `releaseReading(listed, sources, now)` | The versions that the changelog, the package or npm name and a list does not show, and the version in flight. Use it for a list that a site keeps itself |
+| `versionCommitTime(repoDir, file)` | The time of the commit that set the version of a `package.json`, for the version in flight |
+| `changelogVersions(markdown)` | The versions of the headings of a changelog |
 | `readStatusBoard(options)` | The status data of a repository on disk, with GitHub |
 | `githubReleases`, `githubOpenWork`, `npmPublishTimes` | The data of one source. After an error, each function gives `{ available: false, reason }`. It does not throw. |
 | `renderReleasesPage(releases, options)`, `renderStatusPage(data, options)` | The HTML of a page |
@@ -431,6 +434,8 @@ The theme `auto` removes `data-theme`, and the CSS of the site then obeys `prefe
 ## The measures of a site
 
 The file `kpi.json` at the root of a site holds the measures of the project, in the format `kpi/1`. A reader outside the site takes the numbers from this file.
+
+A count that the build reads from the source is true at the commit of the build. Use `commitTime()` from `@mark1russell7/site-pages/vite` for its `at`.
 
 ```ts
 import { defineConfig } from "vite";

@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { BuildInfo } from "./chrome.ts";
 import { parseDataStamps, type DataStamps } from "./check/freshness.ts";
-import { headCommit } from "./data/git.ts";
+import { git, headCommit } from "./data/git.ts";
 import { KPI_FILE, kpiFile, kpiText, type KpiInput } from "./data/kpi.ts";
 import { renderDataStamp } from "./render/data-stamp.ts";
 
@@ -177,6 +177,21 @@ export function themeScript(storageKey: string): string {
 export function siteBase(env: SiteEnv = process.env): string {
   const base = env["SITE_BASE"];
   return base ? `${base.replace(/\/$/, "")}/` : "/";
+}
+
+/**
+ * This function gives the ISO time in UTC of the commit of a build. A count that a build reads from the source is
+ * true at that commit, so this time is the time of its data. It is not the time of the build.
+ *
+ * @param env - The environment variables. The function takes `GITHUB_SHA`, else `HEAD`.
+ * @param repoDir - The folder of the repository.
+ * @throws When git cannot read the commit. A file with no time of its data is a fault.
+ */
+export function commitTime(env: SiteEnv = process.env, repoDir: string = process.cwd()): string {
+  const ref = env["GITHUB_SHA"] ?? "HEAD";
+  const time = git(repoDir, "show", "-s", "--format=%cI", ref)?.trim();
+  if (!time) throw new Error(`git cannot read the commit ${ref}, so the data has no time.`);
+  return new Date(time).toISOString();
 }
 
 /** This function gives the data of a build. Outside CI, `GITHUB_SHA` is not set, and `sha` is `local`. */
