@@ -33,6 +33,8 @@ beforeAll(() => {
   write("index.html", page(`<h1>Home</h1><button id="go">Go</button><output id="out"></output><script src="app.js"></script>`));
   write("app.js", `document.getElementById("go").addEventListener("click", () => { document.getElementById("out").textContent = "done"; });`);
   write("wide/index.html", page(`<h1>Wide</h1><div id="wide" style="width: 900px">A wide block</div>`));
+  write("fixed-empty/index.html", page(`<h1>Panel</h1><aside id="panel" style="position: fixed; top: 0; left: 200px; width: 100%; height: 100vh"><div id="inner" style="width: 100%"><p style="width: 100px">Short</p></div></aside>`));
+  write("fixed-text/index.html", page(`<h1>Panel</h1><aside id="over" style="position: fixed; top: 0; left: 200px; width: 100%; white-space: nowrap">This text is long, and the screen cuts it at the right edge of the view</aside>`));
   write("scroller/index.html", page(`<h1>Scroller</h1><div data-overflow-ok style="overflow-x: auto"><table><tr><td style="min-width: 900px">A wide table in a scroller</td></tr></table></div><pre style="overflow-x:auto">a long line of code that is wider than a phone screen, in a pre that scrolls</pre>`));
   write("broken/index.html", page(`<h1>Broken</h1><img src="missing.png" alt=""><script>console.error("bad thing")</script>`));
   write("throws/index.html", page(`<h1>Throws</h1><script>throw new Error("boom")</script>`));
@@ -227,6 +229,13 @@ describe.skipIf(browser === undefined)("checkSite in a browser", () => {
     expect(problems["/clip/"]).toContain("a text area hides its text: textarea#ed");
     expect(problems["/module/"]).toContain("console.error: failed to load script: page.js");
     expect(problems["/nothing/"]).toMatch(/HTTP 404: .*\/nothing\//);
+  }, 120_000);
+
+  it("counts a fixed box only for the text past the edge", async () => {
+    const result = await checkSite(options(["/fixed-empty/", "/fixed-text/"], { widths: [360], schemes: ["light"] }));
+    const problems = Object.fromEntries(result.views.map((view) => [view.page, view.problems.join("\n")]));
+    expect(problems["/fixed-empty/"]).toBe("");
+    expect(problems["/fixed-text/"]).toContain("past the right edge: aside#over");
   }, 120_000);
 
   it("does not count a refused request to a path of another site that the page names", async () => {
