@@ -38,12 +38,11 @@ describe("the data stamp of the home page", () => {
 describe("the section of the explorer", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const main = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
-  const words = (text: string): string => text.replace(/<[^>]+>/g, "");
 
   it("says first what the chart is, with the version of the stamp", () => {
     const what = /<p class="lead small" id="response-what">(.*?)<\/p>/.exec(html)?.[1] ?? "";
     const version = STAMPS.pages[0]?.runs[0]?.engines["@mark1russell7/packing"];
-    expect(words(what).startsWith(`This is the explorer that @mark1russell7/site-pages gives any site. The sample data is a fixed study of packing ${version}.`)).toBe(true);
+    expect(what.startsWith(`This is the explorer that <code>@mark1russell7/site-pages</code> gives any site. The sample data is a fixed study of packing ${version}.`)).toBe(true);
   });
 
   it("links to the live explorer of packing", () => {
