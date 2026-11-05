@@ -363,7 +363,7 @@ The functions of the command are also in the package:
 | `versionCommitTime(repoDir, file)` | The time of the commit that set the version of a `package.json`, for the version in flight |
 | `changelogVersions(markdown)` | The versions of the headings of a changelog |
 | `readStatusBoard(options)` | The status data of a repository on disk, with GitHub |
-| `githubReleases`, `githubOpenWork`, `githubGreenRun`, `githubReleaseLag`, `npmPublishTimes` | The data of one source. After an error, each function gives `{ available: false, reason }`. It does not throw. |
+| `githubReleases`, `githubOpenWork`, `githubGreenRun`, `githubReleaseLag`, `githubRunProgress`, `npmPublishTimes` | The data of one source. After an error, each function gives `{ available: false, reason }`. It does not throw. |
 | `renderReleasesPage(releases, options)`, `renderStatusPage(data, options)` | The HTML of a page |
 | `timelineLayout(releases, { width })` | The positions of the marks of the timeline |
 
@@ -497,6 +497,7 @@ Two functions read a measure from GitHub at the build. Each result has the `at` 
 | --- | --- |
 | `githubGreenRun({ owner, repo, token, workflow })` | The scheduled runs of a workflow that passed in a row, from the newest run |
 | `githubReleaseLag({ owner, repo, token, tagPrefix, branch })` | The age in days of the oldest commit of the branch after the newest release of the tag prefix. Drafts and pre-releases do not count. |
+| `githubRunProgress({ owner, repo, token, runId })` | The state of one run and the time of the newest end of its jobs. The rule `hold` of the freshness gate reads it. |
 
 ## The shell of a site
 

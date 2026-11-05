@@ -383,9 +383,9 @@ export function runProgressOf(run: { readonly status: string; readonly conclusio
 export async function githubRunProgress(options: GitHubOptions & { runId: string; endpoint?: string; maxPages?: number }): Promise<GitHubRunProgress> {
   const stop = precheck(options);
   if (stop) return stop;
-  const { owner, repo, token, runId, endpoint = GITHUB_API, maxPages = 10, timeoutMs = 15_000 } = options;
+  const { owner, repo, token = "", runId, endpoint = GITHUB_API, maxPages = 10, timeoutMs = 15_000 } = options;
   const fetcher = options.fetch ?? globalThis.fetch;
-  const headers = { accept: "application/vnd.github+json", authorization: `Bearer ${token}`, "user-agent": USER_AGENT, "x-github-api-version": "2022-11-28" };
+  const headers = restHeaders(token);
   const base = `${endpoint}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs/${encodeURIComponent(runId)}`;
   try {
     const response = await fetcher(base, { headers, signal: AbortSignal.timeout(timeoutMs) });
