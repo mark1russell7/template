@@ -65,6 +65,14 @@ Renovate merges the pull request itself (`platformAutomerge` is `false`). Thus i
 
 A repository with no automerge extends `base` in place of `default`.
 
+## Rebases
+
+Renovate rebases a branch only when the branch has a conflict (`rebaseWhen` is `conflicted`). With the default of Renovate, an automerge branch gets a rebase each time `main` moves. Each rebase starts CI again, so a long CI can stop the merge for days.
+
+Two updates can merge with no test of the two together. The CI of `main` tests them after the merge.
+
+If up-to-date branches are necessary in a repository, that repository changes this setting to `behind-base-branch`. If it does not, Renovate cannot merge a branch that is behind `main`.
+
 ## The rules of a repository
 
 Add the rules of a repository after `extends` in its `renovate.json`. For example:
