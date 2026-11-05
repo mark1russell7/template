@@ -14,7 +14,7 @@ function engineText(name: string, version: string): string {
 /** This function gives the html of one run: a link to the run, the day of its start and each engine. */
 function runHtml(run: DataRun): string {
   const engines = Object.entries(run.engines).map(([name, version]) => escapeHtml(engineText(name, version)));
-  return `run ${link(run.url, escapeHtml(run.id))} of ${escapeHtml(run.date.slice(0, 10))}, on ${listText(engines)}`;
+  return `${escapeHtml(run.method ?? "run")} ${link(run.url, escapeHtml(run.id))} of ${escapeHtml(run.date.slice(0, 10))}, on ${listText(engines)}`;
 }
 
 /** This function gives the html of the sentence of a fixed study, with each version of its runs once. */

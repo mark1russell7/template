@@ -14,6 +14,13 @@ describe("renderDataStamp", () => {
     expect(html).not.toContain("in flight");
   });
 
+  it("shows the words of a method in place of the word run", () => {
+    const html = renderDataStamp({ page: "index.html", runs: [{ ...run, method: "lab run" }] });
+    expect(html).toContain('The data comes from lab run <a href="https://example.com/42"');
+    expect(html).not.toContain("from run");
+    expect(renderDataStamp({ page: "index.html", runs: [run] })).toContain("from run");
+  });
+
   it("names a run in flight", () => {
     const html = renderDataStamp({ page: "index.html", runs: [run], inFlight: { ...run, id: "43", url: "https://example.com/43" } });
     expect(html).toContain("A newer run is in flight");

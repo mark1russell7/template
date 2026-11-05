@@ -50,6 +50,8 @@ describe("parseDataStamps", () => {
     expect(faults({ schema: DATA_STAMP_SCHEMA, pages: [{}] })).toEqual(["A stamp has no page."]);
     expect(faults(stamps([run({ id: "" })]))[0]).toContain("has no id");
     expect(faults(stamps([run({ url: "http://example.com" })]))[0]).toContain("no https link");
+    expect(faults(stamps([run({ method: " " })]))[0]).toContain("method of the run is not text");
+    expect(faults(stamps([run({ method: "lab run" })]))).toEqual([]);
     expect(faults(stamps(["run" as unknown as DataRun]))[0]).toContain("is not an object");
     expect(faults(stamps([run()], run({ engines: {} })))[0]).toContain("in flight");
   });

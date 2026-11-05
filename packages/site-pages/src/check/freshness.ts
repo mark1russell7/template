@@ -37,6 +37,8 @@ export interface DataRun {
   readonly date: string;
   /** The version of each engine of the run, by its npm name. */
   readonly engines: Readonly<Record<string, string>>;
+  /** The words for data that no CI run made, for example `lab run` or `hand count`. The page shows them in place of `run`. */
+  readonly method?: string;
 }
 
 /** The age limit of one page, in place of `MAX_DATA_AGE_DAYS`. */
@@ -106,6 +108,7 @@ function runFaults(raw: unknown, at: string): string[] {
   const label = `${at}, run ${String(run["id"])}`;
   if (typeof run["url"] !== "string" || !run["url"].startsWith("https://")) faults.push(`${label}: the run has no https link.`);
   if (typeof run["date"] !== "string" || !Number.isFinite(Date.parse(run["date"]))) faults.push(`${label}: the run has no date.`);
+  if (run["method"] !== undefined && (typeof run["method"] !== "string" || run["method"].trim() === "")) faults.push(`${label}: the method of the run is not text.`);
   const engines = record(run["engines"]);
   if (engines === null || Object.keys(engines).length === 0) return [...faults, `${label}: the run names no engine versions.`];
   for (const [name, version] of Object.entries(engines)) {
