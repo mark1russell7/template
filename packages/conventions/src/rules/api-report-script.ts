@@ -8,7 +8,7 @@ import { isPublic } from "./license-file.ts";
 const API_REPORT = "@mark1russell7/api-report";
 
 /** The range that the fix adds. The train moves it after that. */
-export const API_REPORT_RANGE = "^0.3.1";
+export const API_REPORT_RANGE = "^0.4.0";
 
 /** The command of the script. */
 const COMMAND = "api-report check";
