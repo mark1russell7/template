@@ -194,6 +194,32 @@ export function commitTime(env: SiteEnv = process.env, repoDir: string = process
   return new Date(time).toISOString();
 }
 
+/** A node of an HTML tree, with only the fields that `rehypeScrollCue` reads. */
+export interface RehypeNode {
+  readonly type: string;
+  readonly tagName?: string;
+  properties?: Record<string, unknown>;
+  readonly children?: readonly RehypeNode[];
+}
+
+/**
+ * This function gives the transformer of a rehype plugin. The transformer gives the class `scroll-cue` to each table of a Markdown page.
+ * The table also gets a place in the tab order and a label, so a keyboard can scroll it. A site that uses this plugin imports `scroll-cue.css`.
+ * Markdown has no way to set the class of a table, so a page of a docs theme needs this plugin.
+ */
+export function rehypeScrollCue(): (tree: RehypeNode) => void {
+  const visit = (node: RehypeNode): void => {
+    if (node.type === "element" && node.tagName === "table") {
+      const properties = node.properties ?? {};
+      const names = properties["className"];
+      const list = Array.isArray(names) ? names : typeof names === "string" ? [names] : [];
+      node.properties = { ...properties, className: [...list, "scroll-cue"], tabIndex: 0, ariaLabel: "Table. It scrolls sideways on a narrow screen." };
+    }
+    for (const child of node.children ?? []) visit(child);
+  };
+  return visit;
+}
+
 /** This function gives the data of a build. Outside CI, `GITHUB_SHA` is not set, and `sha` is `local`. */
 export function buildInfo(version?: string, env: SiteEnv = process.env, now: Date = new Date()): BuildInfo {
   return { sha: (env["GITHUB_SHA"] ?? "local").slice(0, 7), date: now.toISOString().slice(0, 10), version };

@@ -51,6 +51,10 @@ on:
 # Each job sets its own permissions
 permissions: {}
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   review:
     # Of the label events, only the review label starts a review

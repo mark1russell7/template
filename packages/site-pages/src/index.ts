@@ -6,7 +6,7 @@
 
 export type * from "./data/types.ts";
 export { compareVersions, kindOf, parseVersion, versionOfTag, type ParsedVersion, type TagVersion } from "./data/versions.ts";
-export { changelogVersions, firstSentence, headingAnchor, parseChangelog, releaseBodyEntries, type ChangelogEntry, type ChangelogSection } from "./data/changelog.ts";
+export { changelogFaults, changelogVersions, firstSentence, headingAnchor, parseChangelog, releaseBodyEntries, sectionMarksBreak, type ChangelogEntry, type ChangelogFault, type ChangelogFaultKind, type ChangelogFaultOptions, type ChangelogSection } from "./data/changelog.ts";
 export { checkStateOf, githubOpenWork, githubReleases, GITHUB_API, GITHUB_GRAPHQL, type GitHubOptions } from "./data/github.ts";
 export { npmPublishTimes, NPM_REGISTRY, type NpmOptions } from "./data/npm.ts";
 export { gitTagDates, headCommit, headingDate, isShallow, originRepository, versionCommitTime, type TagDate } from "./data/git.ts";
@@ -66,6 +66,7 @@ export {
   checkFreshness,
   cronLines,
   DATA_STAMP_SCHEMA,
+  failingCases,
   latestAt,
   MAX_DATA_AGE_DAYS,
   MAX_LIMIT_DAYS_WITHOUT_RULING,
@@ -77,6 +78,7 @@ export {
   type DataRun,
   type DataStamps,
   type DataStampsParse,
+  type FailingCase,
   type FreshnessCheck,
   type FreshnessOptions,
   type PageStamp,
