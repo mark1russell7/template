@@ -7,6 +7,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { unifiedDiff } from "./diff.ts";
 import { byCode, relativePath, type Manifest } from "./entries.ts";
 import { pageFaults, type ApiPage } from "./page.ts";
+import { referencePage } from "./reference.ts";
 import { DEFAULT_TOOL, packageReport } from "./report.ts";
 import { globFolders, packageFolders, workspaceGlobs } from "./workspace.ts";
 
@@ -25,7 +26,7 @@ export interface ApiReportConfig {
   readonly publishConfig?: boolean;
   /** The command that the header of each report names. The default is `api-report`. */
   readonly tool?: string;
-  /** The hand-written pages of an API. The command `check` holds their names against the report of each package. */
+  /** The pages of an API. The command `check` holds their names against the report of each package. */
   readonly pages?: readonly ApiPage[];
 }
 
@@ -59,6 +60,8 @@ export interface PackageResult {
   readonly error?: string;
   /** The faults of the hand-written pages of this package against its report. */
   readonly pageFaults?: readonly string[];
+  /** The pages of each export that the command `update` wrote. */
+  readonly writtenPages?: readonly string[];
 }
 
 /** The result of `runReports`. */
@@ -113,22 +116,52 @@ function readPages(value: unknown): readonly ApiPage[] {
   return value.map((item: unknown, index): ApiPage => {
     const at = `apiReport.pages[${index}]`;
     if (typeof item !== "object" || item === null || Array.isArray(item)) throw new Error(`${at} must be an object.`);
-    const { package: folder, pages, except } = item as Record<string, unknown>;
+    const { package: folder, pages, except, reference } = item as Record<string, unknown>;
     if (typeof folder !== "string" || folder === "") throw new Error(`${at}.package must be a string.`);
-    if (!Array.isArray(pages) || pages.length === 0 || !pages.every((page) => typeof page === "string")) throw new Error(`${at}.pages must be an array of paths.`);
-    if (except === undefined) return { package: folder, pages };
+    if (reference !== undefined && (typeof reference !== "string" || !isRootPath(reference))) throw new Error(`${at}.reference must be a path in the repository.`);
+    const emptyOk = reference !== undefined;
+    if (!Array.isArray(pages) || (pages.length === 0 && !emptyOk) || !pages.every((page) => typeof page === "string")) throw new Error(`${at}.pages must be an array of paths.`);
+    const named = { package: folder, pages: pages as string[], ...(reference === undefined ? {} : { reference: reference as string }) };
+    if (except === undefined) return named;
     if (typeof except !== "object" || except === null || Array.isArray(except) || !Object.values(except).every((reason) => typeof reason === "string")) {
       throw new Error(`${at}.except must be an object of names and reasons.`);
     }
-    return { package: folder, pages, except: except as Record<string, string> };
+    return { ...named, except: except as Record<string, string> };
   });
 }
 
-/** This function gives the faults of the pages of one package. A file that does not exist is a fault. */
+/** This function is true for a relative path with no `..`. */
+function isRootPath(path: string): boolean {
+  const clean = path.replaceAll("\\", "/");
+  return clean !== "" && !isAbsolute(path) && !clean.split("/").includes("..");
+}
+
+/** This function gives the text of a file with `\n` line ends, or undefined when the file does not exist. */
+function textOf(file: string): string | undefined {
+  return existsSync(file) ? readFileSync(file, "utf8").replace(/\r\n/g, "\n") : undefined;
+}
+
+/** This function gives the faults of the pages of one package. A file that does not exist is a fault, and so is a page of each export that differs from the report. */
 function faultsOfPages(root: string, entry: ApiPage, report: string, packageName: string): string[] {
   const missing = entry.pages.filter((page) => !existsSync(resolve(root, page)));
   if (missing.length > 0) return missing.map((page) => `${page}: the page does not exist.`);
-  return pageFaults(report, packageName, entry.pages.map((page) => readFileSync(resolve(root, page), "utf8")), entry.except);
+  const faults: string[] = [];
+  if (entry.reference !== undefined && textOf(resolve(root, entry.reference)) !== referencePage(report, packageName)) {
+    faults.push(`${entry.reference}: the page differs from the report. Start the command update, and commit the page.`);
+  }
+  const pages = entry.pages.map((page) => readFileSync(resolve(root, page), "utf8"));
+  return [...faults, ...pageFaults(report, packageName, pages, entry.except, entry.reference !== undefined)];
+}
+
+/** This function writes the page of each export of one package, and gives its path when the text changes. */
+function writeReference(root: string, entry: ApiPage, report: string, packageName: string): string[] {
+  if (entry.reference === undefined) return [];
+  const file = resolve(root, entry.reference);
+  const text = referencePage(report, packageName);
+  if (textOf(file) === text) return [];
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, text);
+  return [entry.reference];
 }
 
 /** This function makes sure that the path of a report stays in its package folder. */
@@ -202,10 +235,13 @@ export function runReports(options: RunOptions): RunResult {
       results.push({ folder: shown, file: shownFile, status: "error", error: error instanceof Error ? error.message : String(error) });
       continue;
     }
-    const faults = (options.pages ?? [])
-      .filter((entry) => resolve(root, entry.package) === folder)
-      .flatMap((entry) => faultsOfPages(root, entry, text, manifest.name ?? ""));
-    const onPages = options.mode === "check" && faults.length > 0 ? { pageFaults: faults } : {};
+    const ownPages = (options.pages ?? []).filter((entry) => resolve(root, entry.package) === folder);
+    const written = options.mode === "update" ? ownPages.flatMap((entry) => writeReference(root, entry, text, manifest.name ?? "")) : [];
+    const faults = ownPages.flatMap((entry) => faultsOfPages(root, entry, text, manifest.name ?? ""));
+    const onPages = {
+      ...(options.mode === "check" && faults.length > 0 ? { pageFaults: faults } : {}),
+      ...(written.length > 0 ? { writtenPages: written } : {}),
+    };
     if (current === text) {
       results.push({ folder: shown, file: shownFile, status: "same", ...onPages });
       continue;
@@ -222,7 +258,7 @@ export function runReports(options: RunOptions): RunResult {
     for (const entry of options.pages ?? []) {
       const pageFolder = resolve(root, entry.package);
       if (read.has(pageFolder) && !skipped.has(pageFolder)) continue;
-      results.push({ folder: entry.package, file: entry.pages[0] ?? "", status: "error", error: "the field pages names a package that the command does not read" });
+      results.push({ folder: entry.package, file: entry.pages[0] ?? entry.reference ?? "", status: "error", error: "the field pages names a package that the command does not read" });
     }
     for (const folder of globbedFolders(root, options.packages)) {
       const file = join(folder, report);
@@ -264,6 +300,7 @@ export function formatResult(result: RunResult, tool: string = DEFAULT_TOOL): st
   list(update ? "Written" : "The report differs from the built .d.ts files", by("changed"), (item) => item.file);
   list(update ? "Written (new)" : "No report", by("new"), (item) => (update ? item.file : `${item.folder} (${item.file})`));
   list(update ? "Removed (the command does not read the package)" : "A report of a package that the command does not read", by("stale"), (item) => item.file);
+  list("Written (the page of each export)", result.packages.filter((item) => (item.writtenPages?.length ?? 0) > 0), (item) => (item.writtenPages ?? []).join(", "));
   list("Errors", by("error"), (item) => `${item.folder}: ${item.error ?? "unknown error"}`);
   for (const item of result.packages) {
     if ((item.pageFaults?.length ?? 0) > 0) out.push(`The page of the API of ${item.folder} differs from its report:`, ...(item.pageFaults ?? []).map((fault) => `  ${fault}`));
@@ -304,7 +341,8 @@ export const USAGE: string = `Usage: api-report <check | update> [options] [<pac
 
   check                  Compare each report with the built .d.ts files. Exit code 1 when a report differs, is missing or has no
                          package that the command reads, or when the command finds no package.
-  update                 Write each report again. Remove each report of a package that the command does not read.
+  update                 Write each report again, and each page of the field reference. Remove each report of a package that the
+                         command does not read.
 
   --root <folder>        The root of the repository. The default is the current folder.
   --packages <glob>      A glob of package folders. Use it again for more globs. The default is the globs of the workspace.

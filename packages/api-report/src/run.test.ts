@@ -248,6 +248,51 @@ describe("check and update", () => {
     expect(() => readConfig(workspace({ apiReport: { pages: [{ package: "packages/a", pages: ["a"], except: { a: 1 } }] } }))).toThrow("of names and reasons");
   });
 
+  it("writes a page of each export with update, and fails on it when it differs from the report", () => {
+    const pages = [{ package: "packages/a", pages: [], reference: "site/each-export.md" }];
+    const root = workspace({ apiReport: { pages } });
+    const first = cli(root, ["update"]);
+    expect(first.code).toBe(0);
+    expect(first.stdout).toContain("Written (the page of each export):\n  site/each-export.md");
+    const page = readFileSync(join(root, "site/each-export.md"), "utf8");
+    expect(page).toContain('## `a`');
+    expect(page).toContain("const a: 1;");
+    expect(cli(root, ["check"]).code).toBe(0);
+    expect(cli(root, ["update"]).stdout).not.toContain("each-export.md");
+
+    writeFileSync(join(root, "site/each-export.md"), page.replace(/\n/g, "\r\n"));
+    expect(cli(root, ["check"]).code).toBe(0);
+
+    writeFileSync(join(root, "site/each-export.md"), `${page}A hand edit.\n`);
+    const edited = cli(root, ["check"]);
+    expect(edited.code).toBe(1);
+    expect(edited.stdout).toContain("site/each-export.md: the page differs from the report.");
+
+    cli(root, ["update"]);
+    writeFileSync(join(root, "packages/a/index.d.ts"), "export declare const a: 1;\nexport declare const b: 2;\n");
+    runReports({ mode: "update", root, pages: [] });
+    const stale = cli(root, ["check"]);
+    expect(stale.code).toBe(1);
+    expect(stale.stdout).toContain("site/each-export.md: the page differs from the report.");
+
+    rmSync(join(root, "site/each-export.md"));
+    expect(cli(root, ["check"]).stdout).toContain("site/each-export.md: the page differs from the report.");
+  });
+
+  it("still holds the imports of a hand-written page next to a page of each export, and refuses a wrong path", () => {
+    const pages = [{ package: "packages/a", pages: ["api.md"], reference: "each.md" }];
+    const root = workspace({ apiReport: { pages } });
+    writeFileSync(join(root, "api.md"), "Prose with no code.\n");
+    cli(root, ["update"]);
+    expect(cli(root, ["check"]).code).toBe(0);
+    writeFileSync(join(root, "api.md"), '```ts\nimport { gone } from "a";\n```\n');
+    const failed = cli(root, ["check"]);
+    expect(failed.code).toBe(1);
+    expect(failed.stdout).toContain("gone: the page imports this name from a, and that entry does not export it.");
+    expect(() => readConfig(workspace({ apiReport: { pages: [{ package: "packages/a", pages: [], reference: "../out.md" }] } }))).toThrow("must be a path in the repository");
+    expect(() => readConfig(workspace({ apiReport: { pages: [{ package: "packages/a", pages: [], reference: 1 }] } }))).toThrow("must be a path in the repository");
+  });
+
   it("gives exit code 2 and the help for wrong arguments", () => {
     expect(cli(temp, []).code).toBe(2);
     expect(cli(temp, ["check", "--bad"]).stderr).toContain("An unknown option: --bad");

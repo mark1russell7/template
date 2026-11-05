@@ -9,8 +9,10 @@ import { byCode } from "./entries.ts";
 export interface ApiPage {
   /** The folder of the package, relative to the root. */
   readonly package: string;
-  /** The Markdown or MDX files of the page, relative to the root. Together they tell the API. */
+  /** The Markdown or MDX files of the page, relative to the root. Together they tell the API. The list can be empty when `reference` is present. */
   readonly pages: readonly string[];
+  /** The file of a page of each export, relative to the root. The command `update` writes it from the report, and the command `check` compares it. */
+  readonly reference?: string;
   /** The names that the check does not examine, each with its reason. */
   readonly except?: Readonly<Record<string, string>>;
 }
@@ -72,8 +74,9 @@ function hasWord(code: string, name: string): boolean {
  * An export must show in a code block or a code span of a page. An import from the package in a code block
  * must name an export of that entry. A signature, an `interface` or a `type` in a code block must be an
  * export of an entry. An exception needs a reason, and an exception that removes no fault is also a fault.
+ * When `complete` is true, a different page shows each export, so the first rule does not apply.
  */
-export function pageFaults(report: string, packageName: string, pages: readonly string[], except: Readonly<Record<string, string>> = {}): string[] {
+export function pageFaults(report: string, packageName: string, pages: readonly string[], except: Readonly<Record<string, string>> = {}, complete = false): string[] {
   const entries = reportEntries(report);
   const all = new Set([...entries.values()].flatMap((names) => [...names]));
   const code = pages.map(codeOf);
@@ -86,8 +89,10 @@ export function pageFaults(report: string, packageName: string, pages: readonly 
     else if (!faults.has(name)) faults.set(name, `${name}: ${words}`);
   };
 
-  for (const name of all) {
-    if (!hasWord(text, name)) fault(name, "the package exports this name, and no code on the page shows it.");
+  if (!complete) {
+    for (const name of all) {
+      if (!hasWord(text, name)) fault(name, "the package exports this name, and no code on the page shows it.");
+    }
   }
   for (const block of blocks) {
     for (const match of block.matchAll(/import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["']([^"']+)["']/g)) {

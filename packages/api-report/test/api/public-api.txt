@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 48 names
+## . (build/index.d.ts): 49 names
 
 type ApiPage: build/index.d.ts#ApiPage
 type ApiReportConfig: build/index.d.ts#ApiReportConfig
@@ -46,6 +46,7 @@ parseDeclarations: build/index.d.ts#parseDeclarations
 patternMatch: build/index.d.ts#patternMatch
 publishedManifest: build/index.d.ts#publishedManifest
 readConfig: build/index.d.ts#readConfig
+referencePage: build/index.d.ts#referencePage
 reportEntries: build/index.d.ts#reportEntries
 runCli: build/index.d.ts#runCli
 runReports: build/index.d.ts#runReports
@@ -65,6 +66,7 @@ api-report: ./build/cli.js
 interface ApiPage {
   readonly package: string;
   readonly pages: readonly string[];
+  readonly reference?: string;
   readonly except?: Readonly<Record<string, string>>;
 }
 
@@ -184,6 +186,7 @@ interface PackageResult {
   readonly diff?: string;
   readonly error?: string;
   readonly pageFaults?: readonly string[];
+  readonly writtenPages?: readonly string[];
 }
 
 ### build/index.d.ts#REPORT_FILE
@@ -261,7 +264,7 @@ export declare function packageFolders(root: string, globs?: readonly string[] |
 export declare function packageReport(dir: string, options?: PackageReportOptions): string;
 
 ### build/index.d.ts#pageFaults
-export declare function pageFaults(report: string, packageName: string, pages: readonly string[], except?: Readonly<Record<string, string>>): string[];
+export declare function pageFaults(report: string, packageName: string, pages: readonly string[], except?: Readonly<Record<string, string>>, complete?: boolean): string[];
 
 ### build/index.d.ts#parseDeclarations
 export declare function parseDeclarations(source: string, file?: string): DeclarationInfo;
@@ -274,6 +277,9 @@ export declare function publishedManifest(manifest: Manifest): Manifest;
 
 ### build/index.d.ts#readConfig
 export declare function readConfig(root: string): ApiReportConfig;
+
+### build/index.d.ts#referencePage
+export declare function referencePage(report: string, packageName: string): string;
 
 ### build/index.d.ts#reportEntries
 export declare function reportEntries(report: string): ReadonlyMap<string, ReadonlySet<string>>;
