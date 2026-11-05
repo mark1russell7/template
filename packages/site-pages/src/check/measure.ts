@@ -44,6 +44,7 @@ export interface Measure {
  * more than half a pixel past the width of the document. These elements do not count:
  * - an element in a container that scrolls or clips (`overflow-x` other than `visible`, below `body`),
  * - an element of zero size, a hidden element, or a fixed element that is fully past the edge (a closed drawer),
+ * - an element in a fixed element, or that fixed element itself, with no text and no image past the edge. The screen cuts only an empty part of the box,
  * - an element in `.sr`, `.sr-only`, `.visually-hidden` or `.skip` (text for screen readers and skip links),
  * - an element in a `pre`, other than the `pre` itself.
  * Of a chain of elements past the edge, only the outermost one counts.
@@ -74,6 +75,23 @@ export const MEASURE = `(() => {
     }
     return false;
   };
+  const inFixed = (e) => {
+    for (let p = e; p && p !== document.body && p !== root; p = p.parentElement) {
+      if (getComputedStyle(p).position === "fixed") return true;
+    }
+    return false;
+  };
+  const contentPast = (e) => {
+    for (const m of e.querySelectorAll("img,svg,canvas,video")) if (m.getBoundingClientRect().right > w + 0.5) return true;
+    const walker = document.createTreeWalker(e, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    while (walker.nextNode()) {
+      if (walker.currentNode.textContent.trim() === "") continue;
+      range.selectNodeContents(walker.currentNode);
+      for (const b of range.getClientRects()) if (b.width > 0 && b.right > w + 0.5) return true;
+    }
+    return false;
+  };
   const counts = (e) => {
     const r = e.getBoundingClientRect();
     if (r.width === 0 || r.height === 0 || r.right <= w + 0.5) return false;
@@ -82,6 +100,7 @@ export const MEASURE = `(() => {
     const s = getComputedStyle(e);
     if (s.visibility === "hidden" || s.display === "none") return false;
     if (s.position === "fixed" && r.left >= w) return false;
+    if (inFixed(e) && !contentPast(e)) return false;
     return !inScroller(e);
   };
   const over = new Set([...document.querySelectorAll("body *")].filter(counts));
