@@ -207,7 +207,7 @@ For a monorepo with one version for all its packages, give `--group` and the nam
 - A break of the version rule with no mark.
 - A mark on a release with no break.
 
-The option `from` leaves out older sections. The option `fixedGroup` passes a section with no change, because its raise comes from another package of the group.
+The option `from` leaves out older sections. The option `fixedGroup` passes a section with no change or with only PATCH changes, because its raise comes from another package of the group.
 
 `sectionMarksBreak(section)` tells if the text of a section marks a break. The marks are the heading `### Breaking` and the words "has breaking changes". A page that counts breaks uses this function.
 

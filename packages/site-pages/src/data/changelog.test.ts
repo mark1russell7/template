@@ -73,6 +73,21 @@ describe("changelogFaults", () => {
     ]);
   });
 
+  it("passes a raise of a fixed group, and it still finds a MINOR change of the same group", () => {
+    const text = `## 0.5.0\n\n### Minor Changes\n\n- abc1234: A new option.\n\n## 0.4.0\n\n### Patch Changes\n\n- abc1234: A fix.\n\n## 0.3.0\n\nNo changes in this release.\n\n## 0.2.0\n\n### Minor Changes\n\n- abc1234: A new option.\n\n### Patch Changes\n\n- abc1234: A fix.\n\n${FIRST}`;
+    expect(changelogFaults(text, { fixedGroup: true }).map((f) => [f.version, f.kind])).toEqual([
+      ["0.5.0", "break-unmarked"],
+      ["0.2.0", "break-unmarked"],
+    ]);
+    expect(changelogFaults(text).map((f) => f.version)).toEqual(["0.5.0", "0.4.0", "0.3.0", "0.2.0"]);
+  });
+
+  it("keeps the other faults of a section in a fixed group", () => {
+    expect(changelogFaults(`## 0.2.0\n\nA free text with no heading.\n\n${FIRST}`, { fixedGroup: true }).map((f) => f.kind)).toEqual(["break-unmarked"]);
+    expect(changelogFaults(`## 0.2.0\n\n### Patch Changes\n\n- PATCH.\n\n${FIRST}`, { fixedGroup: true }).map((f) => f.kind)).toEqual(["version-kind-only"]);
+    expect(changelogFaults(`## 0.1.1\n\n### Patch Changes\n\n- A fix.\n\n### Breaking\n\n- A new name.\n\n${FIRST}`, { fixedGroup: true }).map((f) => f.kind)).toEqual(["mark-without-break"]);
+  });
+
   it("counts only the two marks of a break", () => {
     expect(sectionMarksBreak("A new name.\n\n### Breaking\n\n- A new name.")).toBe(true);
     expect(sectionMarksBreak("### Breaking changes\n\n- A new name.")).toBe(true);

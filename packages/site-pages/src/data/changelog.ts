@@ -139,7 +139,8 @@ export interface ChangelogFaultOptions {
   from?: string;
   /**
    * This option states that all the packages of a fixed group raise one version together. Then the
-   * raise of a section with no change comes from another package, and the section has no fault.
+   * raise of a section with no change or with only PATCH changes comes from another package.
+   * Such a section has no break fault, and a section with no change has no statement fault.
    */
   fixedGroup?: boolean;
 }
@@ -216,6 +217,12 @@ function firstStatement(section: { heading: string; body: string[] }): string {
   return parsed?.entries[0]?.text ?? "";
 }
 
+/** This function tells if a section of a fixed group has no change of its own above the level of PATCH. */
+function raisedByGroup(text: string): boolean {
+  if (/^### (?:Minor|Major) Changes\b/m.test(text)) return false;
+  return text.trim() === "" || /^### Patch Changes\b/m.test(text) || /^No changes in this release\.$/m.test(text);
+}
+
 /** This function tells if a section has a line that names a new version of a dependency. */
 function hasDependencyLine(section: { body: string[] }): boolean {
   return section.body.some((line) => {
@@ -252,9 +259,13 @@ export function changelogFaults(markdown: string, options: ChangelogFaultOptions
     if (statement === "" && (!hasDependencyLine(section) || (ruled && ruleGivesBreak(core)))) fault("no-statement");
     else if (statement !== "" && namesOnlyKind(statement)) fault("version-kind-only");
     if (!ruled) continue;
-    const marked = sectionMarksBreak(section.body.join("\n"));
-    if (ruleGivesBreak(core) && !marked) fault("break-unmarked");
-    else if (!ruleGivesBreak(core) && marked) fault("mark-without-break");
+    const text = section.body.join("\n");
+    const marked = sectionMarksBreak(text);
+    if (!ruleGivesBreak(core)) {
+      if (marked) fault("mark-without-break");
+    } else if (!marked && !(options.fixedGroup === true && raisedByGroup(text))) {
+      fault("break-unmarked");
+    }
   }
   return faults;
 }
