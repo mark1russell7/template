@@ -83,8 +83,8 @@ export interface FreshnessOptions {
   readonly maxAgeDays?: number;
   /** The limit of the minor versions. The default is `MAX_MINORS_BEHIND`. */
   readonly maxMinorsBehind?: number;
-  /** The largest gap between the scheduled starts of each workflow of a limit, in days. A workflow with no schedule has no value. */
-  readonly schedules?: Readonly<Record<string, number | undefined>>;
+  /** The schedule of each workflow of a limit. A number is the largest gap between its starts in days. A text tells why the gate cannot read it. */
+  readonly schedules?: Readonly<Record<string, number | string>>;
 }
 
 /** The result of `checkFreshness`. */
@@ -241,20 +241,20 @@ function cronLine(line: string): string[] {
 
 /**
  * This function gives the largest gap between the scheduled starts of a workflow, in days. The gap counts from the first start of a day.
- * It gives undefined for a workflow with no schedule, and for a schedule that it cannot read.
+ * It gives a text in place of the gap for a workflow with no schedule, and for a line that it cannot read. The text names the line, and the gate fails on it.
  */
-export function scheduleGapDays(workflow: string): number | undefined {
+export function scheduleGapDays(workflow: string): number | string {
   const lines = workflow.split("\n").flatMap(cronLine);
-  if (lines.length === 0) return undefined;
+  if (lines.length === 0) return "the workflow has no line `cron:`";
   const from = Date.UTC(2027, 0, 1);
   const span = 731;
   const starts: number[] = [];
   for (const line of lines) {
     const days = cronDays(line, from, span);
-    if (days === undefined) return undefined;
+    if (days === undefined) return `the gate cannot read the line \`cron: ${line}\``;
     starts.push(...days);
   }
-  if (starts.length < 2) return undefined;
+  if (starts.length < 2) return `the lines \`cron: ${lines.join("`, `cron: ")}\` give fewer than two starts in two years`;
   starts.sort((a, b) => a - b);
   let largest = 0;
   for (let index = 1; index < starts.length; index += 1) largest = Math.max(largest, ((starts[index] ?? 0) - (starts[index - 1] ?? 0)) / DAY_MS);
@@ -291,7 +291,7 @@ export function checkFreshness(stamps: DataStamps, options: FreshnessOptions): F
     const maxAgeDays = stamp.limit?.days ?? defaultAge;
     if (stamp.limit !== undefined) {
       const gap = schedules[stamp.limit.workflow];
-      if (gap === undefined) faults.push(`${stamp.page}: the limit of ${maxAgeDays} days has no schedule that the gate can read in ${stamp.limit.workflow}.`);
+      if (gap === undefined || typeof gap === "string") faults.push(`${stamp.page}: the limit of ${maxAgeDays} days has no schedule that the gate can read in ${stamp.limit.workflow}: ${gap ?? "the check has no read of this workflow"}.`);
       else if (gap > maxAgeDays) faults.push(`${stamp.page}: the schedule of ${stamp.limit.workflow} has a gap of ${gap.toFixed(1)} days, over the limit of ${maxAgeDays}.`);
     }
     const flight = stamp.inFlight;
@@ -329,12 +329,12 @@ Examine the data stamps of the measured pages of a site.
 The exit code is 0 when the stamps pass, 1 for a fault, and 2 for an incorrect command line.
 `;
 
-/** This function gives the largest gap of the schedule in a workflow file. It gives undefined for a file that it cannot read. */
-function readSchedule(path: string): number | undefined {
+/** This function gives the largest gap of the schedule in a workflow file. It gives a text for a file that it cannot read. */
+function readSchedule(path: string): number | string {
   try {
     return scheduleGapDays(readFileSync(path, "utf8"));
-  } catch {
-    return undefined;
+  } catch (error) {
+    return `the file cannot be read: ${error instanceof Error ? error.message : String(error)}`;
   }
 }
 
@@ -372,7 +372,7 @@ export async function runFreshnessCli(argv: readonly string[], io: CheckIo, fetc
     .filter((p) => p.study !== true)
     .flatMap((p) => [...p.runs, ...(p.inFlight === undefined ? [] : [p.inFlight])])
     .flatMap((r) => Object.keys(r.engines));
-  const schedules: Record<string, number | undefined> = {};
+  const schedules: Record<string, number | string> = {};
   for (const page of parsed.stamps.pages) {
     if (page.limit !== undefined) schedules[page.limit.workflow] = readSchedule(join(io.cwd, page.limit.workflow));
   }

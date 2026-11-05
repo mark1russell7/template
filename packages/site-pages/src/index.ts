@@ -67,7 +67,6 @@ export {
   MAX_MINORS_BEHIND,
   minorsBehind,
   parseDataStamps,
-  scheduleGapDays,
   type DataLimit,
   type DataRun,
   type DataStamps,

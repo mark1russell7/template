@@ -178,6 +178,7 @@ describe("the limit of a page", () => {
 
   it("fails on a limit with no schedule", () => {
     expect(checkFreshness(page([aged(1)]), { now: NOW, times, schedules: {} }).faults[0]).toContain("has no schedule that the gate can read");
+    expect(checkFreshness(page([aged(1)]), { now: NOW, times, schedules: { [WORKFLOW]: "the workflow has no line `cron:`" } }).faults[0]).toContain("the workflow has no line `cron:`");
   });
 
   it("fails on a schedule slower than the limit", () => {
@@ -223,14 +224,22 @@ describe("scheduleGapDays", () => {
   });
 
   it("starts on a day that matches one of the two day fields", () => {
-    expect(scheduleGapDays(workflow("0 0 1 * 1"))).toBeLessThanOrEqual(7);
+    expect(scheduleGapDays(workflow("0 0 1 * 1"))).toBe(7);
   });
 
-  it("gives no value with no schedule, for a comment, and for a form that it cannot read", () => {
-    expect(scheduleGapDays("on:\n  push:\n")).toBeUndefined();
-    expect(scheduleGapDays('on:\n  # - cron: "0 0 * * *"\n  push:\n')).toBeUndefined();
-    expect(scheduleGapDays(workflow("0 0 * * MON"))).toBeUndefined();
-    expect(scheduleGapDays(workflow("0 0 * *"))).toBeUndefined();
+  it("gives a text with no schedule and for a comment", () => {
+    expect(scheduleGapDays("on:\n  push:\n")).toBe("the workflow has no line `cron:`");
+    expect(scheduleGapDays('on:\n  # - cron: "0 0 * * *"\n  push:\n')).toBe("the workflow has no line `cron:`");
+  });
+
+  it("names the line of a form that it cannot read", () => {
+    expect(scheduleGapDays(workflow("0 0 * * MON"))).toBe("the gate cannot read the line `cron: 0 0 * * MON`");
+    expect(scheduleGapDays(workflow("0 0 * *"))).toBe("the gate cannot read the line `cron: 0 0 * *`");
+    expect(scheduleGapDays(workflow("0 0 * * 1", "0 0 * * MON"))).toBe("the gate cannot read the line `cron: 0 0 * * MON`");
+  });
+
+  it("names the line of a schedule with one start in two years", () => {
+    expect(scheduleGapDays(workflow("0 0 29 2 *"))).toBe("the lines `cron: 0 0 29 2 *` give fewer than two starts in two years");
   });
 });
 
@@ -255,7 +264,15 @@ describe("runFreshnessCli", () => {
     expect(good.code).toBe(0);
     const lost = await start(["--stamps", file("lost.json", { schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", runs: [run()], limit: { ...limit, workflow: "gone.yml" } }] }), "--now", NOW]);
     expect(lost.code).toBe(1);
-    expect(lost.err).toContain("no schedule that the gate can read in gone.yml");
+    expect(lost.err).toContain("no schedule that the gate can read in gone.yml: the file cannot be read");
+  });
+
+  it("fails a page with a limit on a line that it cannot read, and names the line", async () => {
+    file("named.yml", 'on:\n  schedule:\n    - cron: "23 6 * * MON"\n');
+    const limit: DataLimit = { days: 7, reason: "The scan is weekly.", workflow: "named.yml" };
+    const { code, err } = await start(["--stamps", file("named.json", { schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", runs: [run()], limit }] }), "--now", NOW]);
+    expect(code).toBe(1);
+    expect(err).toContain("in named.yml: the gate cannot read the line `cron: 23 6 * * MON`.");
   });
 
   it("exits with 0 on correct stamps, and reads npm", async () => {

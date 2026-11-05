@@ -135,7 +135,6 @@ renderStatusPage: build/index.d.ts#renderStatusPage
 roadmapItems: build/index.d.ts#roadmapItems
 runCli: build/index.d.ts#runCli
 safeUrl: build/index.d.ts#safeUrl
-scheduleGapDays: build/chunks/freshness.d.ts#scheduleGapDays
 sectionsOf: build/index.d.ts#sectionsOf
 shortDate: build/index.d.ts#shortDate
 slugOf: build/index.d.ts#slugOf
@@ -386,7 +385,7 @@ interface FreshnessOptions {
   readonly times: readonly NpmVersionTime[];
   readonly maxAgeDays?: number;
   readonly maxMinorsBehind?: number;
-  readonly schedules?: Readonly<Record<string, number | undefined>>;
+  readonly schedules?: Readonly<Record<string, number | string>>;
 }
 
 ### build/chunks/freshness.d.ts#GitHubOpenWork
@@ -565,9 +564,6 @@ declare function parseDataStamps(raw: unknown): DataStampsParse;
 
 ### build/chunks/freshness.d.ts#readKpi
 declare function readKpi(text: string, now?: number): KpiFile;
-
-### build/chunks/freshness.d.ts#scheduleGapDays
-declare function scheduleGapDays(workflow: string): number | undefined;
 
 ### build/chunks/freshness.d.ts#writeKpi
 declare function writeKpi(out: string, input: KpiInput, now?: number): string;
@@ -1321,6 +1317,9 @@ export declare function siteKpi(input: SiteKpiInput | (() => SiteKpiInput), env?
 
 ### build/vite.d.ts#siteShell
 export declare function siteShell(options: SiteShellOptions): SiteShellPlugin;
+
+### build/vite.d.ts#siteStamps
+export declare function siteStamps(input: DataStamps | (() => DataStamps)): SiteStampsPlugin;
 
 ### build/vite.d.ts#themeScript
 export declare function themeScript(storageKey: string): string;
