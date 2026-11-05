@@ -2,7 +2,7 @@ name: gate-summary
 description: >-
   The step of the summary job "<Name> OK" of a gate workflow. The ruleset requires that check, so it must pass only
   when the gate passed: each job succeeded, or the job "changes" found no file of the gate and the gate jobs were
-  skipped. A failure, a cancel or a skip for another reason fails it. The job has "if: ${{ !cancelled() }}" and "needs" with
+  skipped. A failure, a cancel or a skip for another reason fails it. The job has "if: !cancelled()" and "needs" with
   each job of the workflow.
 inputs:
   needs:
