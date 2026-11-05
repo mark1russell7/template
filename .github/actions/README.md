@@ -12,6 +12,7 @@ These composite actions are shared by the repositories of mark1russell7. A repos
 | `gate-summary` | The step of a summary job `<Name> OK`. It passes when each job passed, or when `changes` found no file of the gate and the gate jobs were skipped. |
 | `site-check` | Checks a built site in a browser at each width and scheme, and uploads the screenshots. `reusable-pages.yml` uses it. A site with its own Pages workflow uses it before the upload of the Pages artifact. |
 | `data-stamps` | Checks the data stamps of the measured pages of a built site. `reusable-pages.yml` uses it. A site with its own Pages workflow uses it before the upload of the Pages artifact. |
+| `security-scan` | Runs the dependency review, osv-scanner and CodeQL in one job. The last step fails when a scan fails, and names that scan. It replaces the three jobs of `reusable-security.yml` (`CI.md`, "Security"). |
 | `changeset-check` | Fails a pull request when a published package changes with no changeset, or when a changeset makes a `0.x` package into `1.0.0`. The job `changesets` of `reusable-ci.yml` uses it (`CI.md`). |
 
 A browser job uses `setup-playwright` after the install of its dependencies:
@@ -75,4 +76,4 @@ A workflow with its own build job can also use the two actions directly, as step
 
 ## Test
 
-The workflow `actions-test.yml` tests the three actions and the shared workflows on this repository. It keeps the pages as an artifact. The test of `npm-publish` uses `dry-run: "true"` and publishes nothing.
+The workflow `actions-test.yml` tests the three actions and the shared workflows on this repository. It keeps the pages as an artifact. The test of `npm-publish` uses `dry-run: "true"` and publishes nothing. `security.yml` starts `security-scan` on each pull request of this repository, and `scripts/workflows/security-scan.test.ts` tests its last step.

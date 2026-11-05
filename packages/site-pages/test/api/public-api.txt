@@ -39,6 +39,7 @@ type GitHubGreenRun: build/index.d.ts#GitHubGreenRun
 type GitHubOpenWork: build/chunks/freshness.d.ts#GitHubOpenWork
 type GitHubOptions: build/index.d.ts#GitHubOptions
 type GitHubRelease: build/chunks/freshness.d.ts#GitHubRelease
+type GitHubReleaseLag: build/index.d.ts#GitHubReleaseLag
 type GitHubReleases: build/chunks/freshness.d.ts#GitHubReleases
 HELP: build/index.d.ts#HELP
 type ItemGroup: build/index.d.ts#ItemGroup
@@ -114,6 +115,7 @@ firstSentence: build/index.d.ts#firstSentence
 gitTagDates: build/index.d.ts#gitTagDates
 githubGreenRun: build/index.d.ts#githubGreenRun
 githubOpenWork: build/index.d.ts#githubOpenWork
+githubReleaseLag: build/index.d.ts#githubReleaseLag
 githubReleases: build/index.d.ts#githubReleases
 globFiles: build/index.d.ts#globFiles
 greenRunOf: build/index.d.ts#greenRunOf
@@ -151,6 +153,7 @@ readKpi: build/chunks/freshness.d.ts#readKpi
 readReleases: build/index.d.ts#readReleases
 readStatusBoard: build/index.d.ts#readStatusBoard
 releaseBodyEntries: build/index.d.ts#releaseBodyEntries
+releaseLagOf: build/index.d.ts#releaseLagOf
 releaseReading: build/index.d.ts#releaseReading
 releaseSummary: build/index.d.ts#releaseSummary
 releasesLead: build/index.d.ts#releasesLead
@@ -941,6 +944,17 @@ interface GitHubOptions {
   timeoutMs?: number;
 }
 
+### build/index.d.ts#GitHubReleaseLag
+type GitHubReleaseLag = {
+  available: true;
+  value: number;
+  at: string;
+  release: string;
+} | {
+  available: false;
+  reason: string;
+};
+
 ### build/index.d.ts#HELP
 export declare const HELP = "Usage: site-pages build --out <dir> [options]\n\nWrites <out>/data/releases.json, <out>/data/status.json, <out>/releases/index.html\nand <out>/status/index.html. Start it in the repository, after the build of the site.\n\nOptions:\n  --out <dir>           The built output folder of the site (necessary)\n  --repo <owner/name>   The GitHub repository (default: $GITHUB_REPOSITORY, else the remote \"origin\")\n  --base </name/>       The path of the site home (default: \"/<name>/\", or \"/\" for <owner>.github.io)\n  --roadmap <file>      The roadmap file (default: none, the status page has only the GitHub part)\n  --packages <names>    npm names or a @scope, separated by commas, for the npm dates\n  --changesets <glob>   The changelog files (default: packages/*/CHANGELOG.md, else CHANGELOG.md)\n  --group <name>        The npm name of the package whose changelog gives the versions\n  --token <token>       A GitHub token with read access (default: $GITHUB_TOKEN)\n  --css <file>          A CSS file for the pages, after the default CSS\n  --site-name <name>    The name of the site in the header (default: the repository name)\n  --data-only           Write only the JSON data, not the pages\n  -h, --help            Show this help\n\nUsage: site-pages check (--out <dir> | --url <url>) [options]\n\nOpens the pages of the site in a headless Chromium at phone and desktop widths. Start\n\"site-pages check --help\" for its options.\n\nUsage: site-pages freshness --stamps <file> [options]\n\nExamine the data stamps of the measured pages of a site. See\n\"site-pages freshness --help\" for its options.\n";
 
@@ -1236,6 +1250,15 @@ export declare function githubOpenWork(options: GitHubOptions & {
   first?: number;
 }): Promise<GitHubOpenWork>;
 
+### build/index.d.ts#githubReleaseLag
+export declare function githubReleaseLag(options: GitHubOptions & {
+  tagPrefix: string;
+  branch?: string;
+  endpoint?: string;
+  maxPages?: number;
+  now?: string;
+}): Promise<GitHubReleaseLag>;
+
 ### build/index.d.ts#githubReleases
 export declare function githubReleases(options: GitHubOptions & {
   endpoint?: string;
@@ -1334,6 +1357,9 @@ export declare function readStatusBoard(options: ReadStatusBoardOptions): Promis
 
 ### build/index.d.ts#releaseBodyEntries
 export declare function releaseBodyEntries(body: string): ChangelogEntry[];
+
+### build/index.d.ts#releaseLagOf
+export declare function releaseLagOf(oldest: string | undefined, now: string): number;
 
 ### build/index.d.ts#releaseReading
 export declare function releaseReading(listed: readonly string[], sources: ReleaseListSources, now?: number): ReleaseReading;

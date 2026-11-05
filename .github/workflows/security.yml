@@ -1,6 +1,6 @@
-# The security scans of this repository (reusable-security.yml, CI.md): dependency review,
-# osv-scanner and CodeQL. A pull request fails only for a new finding at or above high.
-# Other repositories call mark1russell7/template/.github/workflows/reusable-security.yml@<commit> # main
+# The security scans of this repository (the action security-scan, CI.md): dependency review, osv-scanner and
+# CodeQL, in one job. A pull request fails only for a new finding at or above high.
+# Other repositories use mark1russell7/template/.github/actions/security-scan@<commit> # main
 name: Security
 
 on:
@@ -24,38 +24,26 @@ defaults:
     shell: bash
 
 jobs:
-  security:
-    uses: ./.github/workflows/reusable-security.yml
+  # The one check of this file that the ruleset of main names, next to CI OK (CI.md, "The check of the
+  # ruleset"). The scans run in this job, so a run asks for one runner. The last step of the action fails when
+  # a scan fails, and names that scan. The scans stay out of ci.yml, because release.yml calls ci.yml with
+  # contents: read only.
+  security-ok:
+    name: Security OK
+    runs-on: ubuntu-latest
+    # The time limit of the three scans together
+    timeout-minutes: 30
+    # security-events: write uploads the results (not on a pull request). actions: read lets CodeQL and the
+    # upload read the run in a private repository.
     permissions:
       contents: read
       security-events: write
       actions: read
-
-  # The one check of this file that the ruleset of main names, next to CI OK (CI.md, "The check of the
-  # ruleset"). The scans stay out of ci.yml, because release.yml calls ci.yml with contents: read only.
-  security-ok:
-    name: Security OK
-    if: ${{ !cancelled() }}
-    needs: [security]
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    permissions: {}
     steps:
-      - name: Each scan passed
-        env:
-          NEEDS: ${{ toJSON(needs) }}
-          # The jobs that their own if may skip, separated by spaces. Each other job must pass.
-          ALLOW_SKIP: ""
-        run: |
-          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key) \(.value.result)"' > results
-          cat results
-          if [ ! -s results ]; then echo "::error::no job in needs"; exit 1; fi
-          bad=0
-          while read -r job result; do
-            case "$result" in
-              success) ;;
-              skipped) case " $ALLOW_SKIP " in *" $job "*) ;; *) echo "::error::$job was skipped, and ALLOW_SKIP does not name it"; bad=1 ;; esac ;;
-              *) echo "::error::$job: $result"; bad=1 ;;
-            esac
-          done < results
-          exit $bad
+      # The template runs the action of this commit, so it checks out the folder of the actions first. A
+      # repository that pins the action to a commit needs no such step: the action checks out the repository.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      - uses: ./.github/actions/security-scan
