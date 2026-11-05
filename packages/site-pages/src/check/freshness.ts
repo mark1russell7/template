@@ -346,7 +346,6 @@ export interface FailingCase {
   readonly fault?: string;
 }
 
-const DAY_MS = 86_400_000;
 
 /**
  * This function gives one failing case for each page, from the stamps of the site itself. A measured page must fail one
