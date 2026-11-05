@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package",
   "name": "@mark1russell7/site-pages",
-  "version": "0.2.26",
+  "version": "0.2.27",
   "description": "A release timeline page and a live status page for the site of a GitHub repository: JSON data and standalone HTML, made at deploy time.",
   "keywords": [
     "github-pages",
@@ -88,6 +88,7 @@
   "devDependencies": {
     "@mark1russell7/cue": "^2.0.0",
     "@types/node": "^26.6.4",
+    "axe-core": "^4.14.0",
     "tsdown": "^0.23.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.5",
