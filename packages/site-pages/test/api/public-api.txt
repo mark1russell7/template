@@ -210,7 +210,7 @@ setMeasure: build/explorer/index.d.ts#setMeasure
 settle: build/explorer/index.d.ts#settle
 viewOf: build/explorer/index.d.ts#viewOf
 
-## ./vite (build/vite.d.ts): 21 names
+## ./vite (build/vite.d.ts): 22 names
 
 type BuildInfo: build/chrome.d.ts#BuildInfo
 STAMPS_FILE: build/vite.d.ts#STAMPS_FILE
@@ -228,6 +228,7 @@ SiteStampsPage: build/vite.d.ts#SiteStampsPage
 SiteStampsPlugin: build/vite.d.ts#SiteStampsPlugin
 SiteTarget: build/vite.d.ts#SiteTarget
 buildInfo: build/vite.d.ts#buildInfo
+commitTime: build/vite.d.ts#commitTime
 siteBase: build/vite.d.ts#siteBase
 siteKpi: build/vite.d.ts#siteKpi
 siteShell: build/vite.d.ts#siteShell
@@ -1355,6 +1356,9 @@ export type SiteTarget = string | string[] | false;
 
 ### build/vite.d.ts#buildInfo
 export declare function buildInfo(version?: string, env?: SiteEnv, now?: Date): BuildInfo;
+
+### build/vite.d.ts#commitTime
+export declare function commitTime(env?: SiteEnv, repoDir?: string): string;
 
 ### build/vite.d.ts#siteBase
 export declare function siteBase(env?: SiteEnv): string;

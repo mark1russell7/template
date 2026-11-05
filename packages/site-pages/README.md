@@ -166,7 +166,7 @@ Two fields of a stamp change the age rule:
 - `"study": true` marks a fixed study. The data has no age limit, and the rule 3 does not apply. The run names the method or the run, the date and the engine version. The stamp line tells in plain words that the page is a fixed study of that version. A page with a claim about the current engine is not a fixed study.
 - `"limit"` sets a longer age limit: `{ "days": 7, "reason": "The scan is weekly.", "workflow": ".github/workflows/scan.yml" }`. The stamp line shows the limit and the reason. The schedule of that workflow must meet the limit, or the gate fails. A limit with no schedule fails. A limit over 14 days (`MAX_LIMIT_DAYS_WITHOUT_RULING`) also needs a `ruling`, a public https link for that site.
 
-When npm does not answer, the gate prints the rule 3 under `Not run` and does not fail. A workflow turns the gate on with the input `data-stamps` of `reusable-pages.yml`. The gate then runs from the template commit, so it needs no install.
+When npm does not answer, the gate prints the rule 3 under `Not run` and does not fail. A workflow turns the gate on with the input `data-stamps` of `reusable-pages.yml`. A site with its own Pages workflow uses the action `data-stamps` of the template. The gate then runs from the template commit, so it needs no install.
 
 `renderDataStamp(stamp)` gives the line that the page shows with its data: the run, its date, its engine versions and the run in flight.
 
@@ -434,6 +434,8 @@ The theme `auto` removes `data-theme`, and the CSS of the site then obeys `prefe
 ## The measures of a site
 
 The file `kpi.json` at the root of a site holds the measures of the project, in the format `kpi/1`. A reader outside the site takes the numbers from this file.
+
+A count that the build reads from the source is true at the commit of the build. Use `commitTime()` from `@mark1russell7/site-pages/vite` for its `at`.
 
 ```ts
 import { defineConfig } from "vite";
