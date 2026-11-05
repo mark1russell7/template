@@ -152,7 +152,11 @@ export const pagesAfterRelease: Rule = {
   reason:
     "A release starts no Pages run, so a Releases page is behind npm until the next push. On 2026-11-04 four sites showed an older version than npm for this reason. A release can also fail after it publishes, and then only a daily build shows the version.",
   fix: 'Add `workflow_run` with `workflows: [Release]`, `types: [completed]` and `branches: [<default branch>]` under `on`, and a daily `schedule` (CI.md, "Pages"). A workflow that deploys with its own steps also needs a condition that stops a run after a failed release.',
-  sources: [{ repo: "template", rule: "pages-after-release", doc: ".github/workflows/pages.yml (workflow_run of Release, and a schedule)" }],
+  sources: [
+    { repo: "template", rule: "pages-after-release", doc: ".github/workflows/pages.yml (workflow_run of Release, and a schedule)" },
+    { repo: "packing", rule: "pages-after-release", doc: ".github/workflows/pages.yml (workflow_run of Release, and a schedule)" },
+    { repo: "ireko", rule: "pages-after-release", doc: ".github/workflows/pages.yml (workflow_run of CI and Release, and a schedule)" },
+  ],
   options: {
     workflows: { type: "strings", default: PAGES_WORKFLOWS, description: "The workflows that deploy a site, without the ref after `@`." },
   },
