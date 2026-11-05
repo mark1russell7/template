@@ -31,6 +31,6 @@ describe("the data stamp of the home page", () => {
   });
 
   it("tells in plain words which version the page measured", () => {
-    expect(renderDataStamp(page)).toContain("This page is a fixed study of packing 0.6.1. It tells nothing about a newer release.");
+    expect(renderDataStamp(page)).toContain("The measured numbers of this page are a fixed study of packing 0.6.1. They tell nothing about a newer release.");
   });
 });

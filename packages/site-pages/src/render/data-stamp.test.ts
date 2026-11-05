@@ -20,9 +20,11 @@ describe("renderDataStamp", () => {
     expect(html).toContain('href="https://example.com/43"');
   });
 
-  it("says in plain words that a page is a fixed study of its versions", () => {
+  it("says in plain words that the measured numbers of a page are a fixed study of its versions", () => {
     const html = renderDataStamp({ page: "index.html", runs: [run, { ...run, id: "43" }], study: true });
-    expect(html).toContain("This page is a fixed study of packing 0.7.0");
+    expect(html).toContain("The measured numbers of this page are a fixed study of packing 0.7.0");
+    expect(html).toContain("They tell nothing about a newer release.");
+    expect(html).not.toContain("This page is a fixed study");
     expect(html.match(/packing 0\.7\.0/g)).toHaveLength(3);
     expect(html).toContain("It tells nothing about a newer release.");
   });

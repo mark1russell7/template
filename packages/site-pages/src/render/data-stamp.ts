@@ -1,6 +1,6 @@
 /**
  * The line that a measured page shows for its data: the run, its date and its engine versions, and a run in flight.
- * The line also tells when the page is a fixed study, and it shows the reason for a longer age limit.
+ * The line also tells when the measured numbers of the page are a fixed study, and it shows the reason for a longer age limit.
  */
 
 import type { DataRun, PageStamp } from "../check/freshness.ts";
@@ -20,7 +20,7 @@ function runHtml(run: DataRun): string {
 /** This function gives the html of the sentence of a fixed study, with each version of its runs once. */
 function studyHtml(stamp: PageStamp): string {
   const engines = [...new Set(stamp.runs.flatMap((run) => Object.entries(run.engines).map(([name, version]) => engineText(name, version))))].map(escapeHtml);
-  return `<span>This page is a fixed study of ${listText(engines)}. It tells nothing about a newer release.</span> `;
+  return `<span>The measured numbers of this page are a fixed study of ${listText(engines)}. They tell nothing about a newer release.</span> `;
 }
 
 /** This function gives the html line of the stamp of a page. A page shows this line with its data. */
