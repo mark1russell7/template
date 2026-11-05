@@ -81,7 +81,7 @@ The rule for a box that scrolls examines only tables, for these reasons:
 
 - A code block, a hex view, a row of tabs and a carousel are meant to scroll, and a visitor sees that they scroll.
 - A table in a box that scrolls looks complete on a phone, with no scroll bar. The visitor does not see the last columns.
-- The class `scroll-cue` shows a fade at the edge of the box, so a table in such a box does not count.
+- The class `scroll-cue` shows a fade at the edge of the box, so a table in such a box does not count. The check reads the computed style of the box. A box with the class, with no animation and no background image, counts.
 - A false alarm costs more than a miss, because each false alarm needs an exception in the site.
 
 A table is `table`, `role="table"` or `role="grid"`. A desktop view has a scroll bar, so a table in a box that scrolls is not a problem there. `report.json` still shows the table in `measure.cut`.
