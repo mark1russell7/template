@@ -76,6 +76,18 @@ describe("the page of each export", () => {
     expect(page).toContain('description: "Each entry point of lib, with its exports and their declarations."\n');
   });
 
+  it("adds the fields of frontmatter after the description, and a field title replaces the default", () => {
+    const head = referencePage(REPORT, "lib", { order: 42, status: "final", title: "API: each export", draft: false }).split("\n---\n")[0] ?? "";
+    expect(head.split("\n").slice(2)).toEqual([
+      'title: "API: each export"',
+      'description: "Each entry point of lib, with its exports and their declarations."',
+      "order: 42",
+      'status: "final"',
+      "draft: false",
+    ]);
+    expect(referencePage(REPORT, "lib", {})).toBe(page);
+  });
+
   it("gives each entry a section with an import of its names", () => {
     expect(page).toContain('## `lib`\n\n```ts\nimport {\n  type Options, layout, renamed, aliased, many, useBundled, ns, other,\n} from "lib";\n```');
     expect(page).toContain('## `lib/svg`\n\n```ts\nimport {\n  layout, toSvg,\n} from "lib/svg";\n```');

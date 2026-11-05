@@ -3,6 +3,7 @@
  * page, and a hand-written page explains the main calls. The report has the names and the declarations, so
  * this page has the same text as the report in each build.
  */
+import type { FrontmatterValue } from "./page.ts";
 
 /** One line of an entry of a report. */
 interface ReportItem {
@@ -117,14 +118,21 @@ function withExportNames(code: string, items: readonly ReportItem[]): string {
  * names. A declaration shows one time, in the first entry that reaches it. A comment tells the name of an
  * export when the source gave the declaration a different name. A name from a bundler does not show. A
  * comment also tells the package of an external name.
+ *
+ * The fields of `frontmatter` go into the front matter, after the title and the description. A field `title` or
+ * `description` replaces the default.
  */
-export function referencePage(report: string, packageName: string): string {
+export function referencePage(report: string, packageName: string, frontmatter: Readonly<Record<string, FrontmatterValue>> = {}): string {
   const { entries, declarations } = readReport(report);
+  const fields: Record<string, FrontmatterValue> = {
+    title: `Each export of ${packageName}`,
+    description: `Each entry point of ${packageName}, with its exports and their declarations.`,
+    ...frontmatter,
+  };
   const out = [
     "---",
     "# The command `api-report update` writes this file from the report of the package. Do not edit it.",
-    `title: ${JSON.stringify(`Each export of ${packageName}`)}`,
-    `description: ${JSON.stringify(`Each entry point of ${packageName}, with its exports and their declarations.`)}`,
+    ...Object.entries(fields).map(([key, value]) => `${key}: ${JSON.stringify(value)}`),
     "---",
     "",
     "The report of the API of the package makes this page, so the page and the package have the same names. Each section is one entry point. A declaration shows one time, in the first section that has it.",
