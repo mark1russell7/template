@@ -4,10 +4,10 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { firstSentence, headingAnchor, parseChangelog, releaseBodyEntries } from "./changelog.ts";
+import { changelogVersions, firstSentence, headingAnchor, parseChangelog, releaseBodyEntries } from "./changelog.ts";
 import { githubReleases } from "./github.ts";
 import { npmPublishTimes } from "./npm.ts";
-import { mergeReleases, ReleaseDataError, type ChangelogSource } from "./releases.ts";
+import { mergeReleases, ReleaseDataError, releaseGaps, type ChangelogSource } from "./releases.ts";
 import type { GitHubRelease } from "./types.ts";
 import { compareVersions, kindOf, versionOfTag } from "./versions.ts";
 
@@ -326,10 +326,74 @@ describe("the releases from npm only (0.1.3)", () => {
     expect(releases.map((release) => release.version)).toEqual(["@b/core@1.0.0", "@a/core@1.0.0"]);
   });
 
-  it("does not use npm when a changelog gives the versions", () => {
+  it("does not take the versions of several npm packages when a changelog gives the versions and no group is set", () => {
     const changelog = { name: "@acme/service", file: "CHANGELOG.md", markdown: "# @acme/service\n\n## 1.0.0\n\n- The first.\n" };
     const releases = mergeReleases({ changelogs: [changelog], npm: TIMES });
     expect(releases.map((release) => release.version)).toEqual(["1.0.0"]);
+  });
+
+  describe("a version on npm with no changelog heading", () => {
+    const changelog = { name: "@acme/dsl", file: "packages/dsl/CHANGELOG.md", markdown: "# @acme/dsl\n\n## 0.2.2\n\n- abc1234: The last heading.\n\n## 0.2.1\n\n- def5678: An older heading.\n" };
+    const npm = [
+      { name: "@acme/dsl", version: "0.0.0-bootstrap.0", date: "2026-10-01T00:00:00Z" },
+      { name: "@acme/dsl", version: "0.2.1", date: "2026-10-02T00:00:00Z" },
+      { name: "@acme/dsl", version: "0.2.2", date: "2026-10-03T00:00:00Z" },
+      { name: "@acme/dsl", version: "0.3.0", date: "2026-10-25T00:00:00Z" },
+      { name: "@acme/viewer", version: "0.4.1", date: "2026-11-04T00:00:00Z" },
+    ];
+
+    it("is a release of the group, with its date, its link and a plain change", () => {
+      const releases = mergeReleases({ changelogs: [changelog], npm, group: "@acme/dsl" });
+      expect(releases.map((release) => release.version)).toEqual(["0.3.0", "0.2.2", "0.2.1"]);
+      expect(releases[0]!.date).toBe("2026-10-25T00:00:00Z");
+      expect(releases[0]!.changes).toEqual([{ commit: null, text: "Version 0.3.0 of `@acme/dsl` on npm.", packages: ["@acme/dsl"] }]);
+      expect(releases[0]!.links).toEqual([{ label: "npm", url: "https://www.npmjs.com/package/@acme/dsl/v/0.3.0" }]);
+      expect(releases[1]!.changes.map((change) => change.text)).toEqual(["The last heading."]);
+    });
+
+    it("is a release of a repository with one package and no group", () => {
+      const only = npm.filter((time) => time.name === "@acme/dsl");
+      expect(mergeReleases({ changelogs: [changelog], npm: only }).map((release) => release.version)).toEqual(["0.3.0", "0.2.2", "0.2.1"]);
+    });
+
+    it("leaves a merged list with no gap against its sources", () => {
+      const listed = mergeReleases({ changelogs: [changelog], npm, group: "@acme/dsl" }).map((release) => release.version);
+      const sources = { changelog: changelogVersions(changelog.markdown), npm: npm.filter((time) => time.name === "@acme/dsl").map((time) => time.version) };
+      expect(releaseGaps(listed, sources)).toEqual([]);
+    });
+  });
+});
+
+describe("changelogVersions", () => {
+  it("gives the versions of the headings, and leaves out a heading of another package and a lower heading", () => {
+    const markdown = "# Changelog\n\n## 0.8.0\n\ntext\n\n## 0.8.0-rc.1\n\n## 0.7.0\r\n\n## old-package 0.1.1\n\n### 0.6.0\n";
+    expect(changelogVersions(markdown)).toEqual(["0.8.0", "0.8.0-rc.1", "0.7.0"]);
+  });
+});
+
+describe("releaseGaps", () => {
+  it("gives no gap when the list shows each version", () => {
+    expect(releaseGaps(["0.8.0", "0.7.0"], { changelog: ["0.8.0", "0.7.0"], current: "0.8.0", npm: ["0.8.0", "0.7.0"] })).toEqual([]);
+  });
+
+  it("names an old list, with each source of the version", () => {
+    expect(releaseGaps(["0.7.0"], { changelog: ["0.8.0", "0.7.0"], current: "0.8.0", npm: ["0.8.0", "0.7.0"] })).toEqual([{ version: "0.8.0", sources: ["changelog", "current", "npm"] }]);
+  });
+
+  it("names a missing middle version under a correct latest version", () => {
+    expect(releaseGaps(["0.8.0", "0.6.0"], { changelog: ["0.8.0", "0.7.0", "0.6.0"] })).toEqual([{ version: "0.7.0", sources: ["changelog"] }]);
+  });
+
+  it("gives the newest gap first", () => {
+    expect(releaseGaps([], { npm: ["0.2.0", "0.10.0", "0.9.0"] }).map((gap) => gap.version)).toEqual(["0.10.0", "0.9.0", "0.2.0"]);
+  });
+
+  it("ignores a prerelease on npm and a listed version that no source names", () => {
+    expect(releaseGaps(["0.8.0", "0.1.0"], { npm: ["0.8.0", "0.0.0-bootstrap.0"] })).toEqual([]);
+  });
+
+  it("gives no gap when no source is given", () => {
+    expect(releaseGaps(["0.8.0"], {})).toEqual([]);
   });
 });
 

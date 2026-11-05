@@ -135,10 +135,18 @@ function npmReleases(times: readonly NpmVersionTime[], group: string | undefined
   return releases.sort((a, b) => Date.parse(b.date) - Date.parse(a.date) || a.version.localeCompare(b.version));
 }
 
+/** The npm package whose versions a release list shows: the group, or else the only package of the npm times. */
+function npmLine(times: readonly NpmVersionTime[], group: string | undefined): string | undefined {
+  if (group) return group;
+  const names = new Set(times.map((time) => time.name));
+  return names.size === 1 ? [...names][0] : undefined;
+}
+
 /**
  * This function merges the release sources into one entry for each version, the newest first.
  *
  * - The versions: the changelog of `group`, or else each changelog version and each GitHub release.
+ * - The versions also include each stable npm version of the group, or of the only npm package. A publication with no changelog heading is still a release.
  * - The date: the git tag, else the GitHub release, else npm, else the commit of the changelog heading.
  * - The changes: the changelog entries, else the list items of the GitHub release text.
  * - Without a changelog version and without a GitHub release, each npm version of each package is a release.
@@ -175,9 +183,13 @@ export function mergeReleases(sources: ReleaseSources): Release[] {
     for (const { sections } of parsed) for (const section of sections) versions.add(section.version);
     for (const [version, list] of githubByVersion) if (list.some((entry) => inGroup(entry.package))) versions.add(version);
   }
-  const ordered = [...versions].sort((a, b) => compareVersions(b, a));
   // No changelog and no GitHub release names a version: the versions on npm are the releases
-  if (ordered.length === 0) return npmReleases(sources.npm ?? [], group);
+  if (versions.size === 0) return npmReleases(sources.npm ?? [], group);
+  const line = npmLine(sources.npm ?? [], group);
+  for (const time of sources.npm ?? []) {
+    if (time.name === line && parseVersion(time.version)?.prerelease.length === 0) versions.add(time.version);
+  }
+  const ordered = [...versions].sort((a, b) => compareVersions(b, a));
 
   // The changes and the changelog section of each version
   const changelogChanges = new Map<string, ChangeMap>();
@@ -245,6 +257,9 @@ export function mergeReleases(sources: ReleaseSources): Release[] {
       for (const { release, package: packageName } of github) {
         for (const entry of releaseBodyEntries(release.body)) addChange(changes, entry, packageName ?? (group || null));
       }
+      if (changes.size === 0 && line !== undefined && npmByVersion.get(version)?.some((time) => time.name === line)) {
+        addChange(changes, { commit: null, text: `Version ${version} of \`${line}\` on npm.` }, line);
+      }
     }
 
     const links: Link[] = [];
@@ -270,6 +285,44 @@ export function mergeReleases(sources: ReleaseSources): Release[] {
       links,
     };
   });
+}
+
+/** The sources that a release list must cover. Each source is optional. */
+export interface ReleaseListSources {
+  /** The versions of the changelog, from `changelogVersions`. */
+  changelog?: readonly string[] | undefined;
+  /** The version of the package at the build. */
+  current?: string | undefined;
+  /** The versions on npm. The check ignores a prerelease, because a prerelease is not a release. */
+  npm?: readonly string[] | undefined;
+}
+
+/** A version that a release list does not show, and the sources that name it. */
+export interface ReleaseGap {
+  version: string;
+  sources: Array<"changelog" | "current" | "npm">;
+}
+
+/**
+ * This function gives the versions that the sources name and a release list does not show, the newest first. An old list
+ * and a list with a missing middle version both give a gap. The check covers one line of versions, so give the plain
+ * versions of one package. It does not read a page: a page that does not show its list has no gap here.
+ */
+export function releaseGaps(listed: readonly string[], sources: ReleaseListSources): ReleaseGap[] {
+  const shown = new Set(listed);
+  const gaps = new Map<string, ReleaseGap>();
+  const add = (version: string, source: ReleaseGap["sources"][number]): void => {
+    if (shown.has(version)) return;
+    const gap = gaps.get(version) ?? { version, sources: [] };
+    gap.sources.push(source);
+    gaps.set(version, gap);
+  };
+  for (const version of sources.changelog ?? []) add(version, "changelog");
+  if (sources.current !== undefined) add(sources.current, "current");
+  for (const version of sources.npm ?? []) {
+    if (parseVersion(version)?.prerelease.length === 0) add(version, "npm");
+  }
+  return [...gaps.values()].sort((a, b) => compareVersions(b.version, a.version));
 }
 
 // ---------------------------------------------------------------------------
