@@ -215,6 +215,7 @@ h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.07em; colo
 .step .label { min-width: 0; }
 .step small { display: block; font-family: var(--mono); font-size: 0.74rem; color: var(--muted); text-decoration: none; }
 .fine { font-size: 0.82rem; margin: 0.9rem 0 0; }
+.data-stamp { color: var(--muted); font-size: 0.82rem; margin: 0.5rem 0 0; }
 
 /* The secondary sections */
 .cards { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); margin-top: 1rem; }

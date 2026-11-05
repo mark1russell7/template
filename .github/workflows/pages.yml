@@ -57,3 +57,5 @@ jobs:
       site-check: true
       site-check-pages: /,/releases/,/status/
       site-check-probe: packages/site/src/check-probe.ts
+      # The home page shows one fixed study. The freshness gate reads its stamp (packages/site/src/data-stamps.ts).
+      data-stamps: packages/site/dist/data-stamps.json
