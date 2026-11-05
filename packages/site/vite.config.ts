@@ -1,4 +1,6 @@
+import { siteStamps } from "@mark1russell7/site-pages/vite";
 import { defineConfig, type Plugin } from "vite";
+import { STAMPS } from "./src/data-stamps.ts";
 import { siteData } from "./src/node/data.ts";
 
 // The Pages workflow sets SITE_BASE to "/template". A local build uses the root.
@@ -22,6 +24,6 @@ function data(): Plugin {
 
 export default defineConfig({
   base,
-  plugins: [data()],
+  plugins: [data(), siteStamps(STAMPS)],
   build: { target: "es2022" },
 });
