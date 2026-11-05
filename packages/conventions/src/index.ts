@@ -50,6 +50,7 @@ export {
   pagesSite,
   pinnedGitDeps,
   pipeFails,
+  gateAfterCancel,
   pushMainOnly,
   releaseFiles,
   requiredScripts,

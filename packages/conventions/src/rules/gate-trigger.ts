@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { byCode } from "../workspace.ts";
 import type { Break, Rule } from "../rule.ts";
 import { WORKFLOW, applySplices, blockEnd, childIndent, childKeys, indentOf, keyValue, valueOf, workflowLines, type Splice } from "../workflow.ts";
+import { NOT_CANCELLED } from "./gate-after-cancel.ts";
 import { OWN_GROUP, PULL_REQUEST_ONLY } from "./main-runs-finish.ts";
 
 const TRIGGERS = ["pull_request", "pull_request_target"] as const;
@@ -201,7 +202,7 @@ export function convertGate(text: string, file: string, commit: string = ACTIONS
     "",
     `${jobIndent}${summaryId}:`,
     `${job}name: ${name}`,
-    `${job}if: always()`,
+    `${job}if: ${NOT_CANCELLED}`,
     `${job}needs: [${["changes", ...ids].join(", ")}]`,
     `${job}runs-on: ubuntu-latest`,
     `${job}timeout-minutes: 2`,

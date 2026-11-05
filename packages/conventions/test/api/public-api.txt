@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 146 names
+## . (build/index.d.ts): 147 names
 
 ACTIONS_COMMIT: build/index.d.ts#ACTIONS_COMMIT
 type AuditSource: build/index.d.ts#AuditSource
@@ -72,6 +72,7 @@ declaredName: build/index.d.ts#declaredName
 defaultOptions: build/index.d.ts#defaultOptions
 findHomes: build/index.d.ts#findHomes
 formatResult: build/index.d.ts#formatResult
+gateAfterCancel: build/index.d.ts#gateAfterCancel
 gateTrigger: build/index.d.ts#gateTrigger
 githubFetch: build/index.d.ts#githubFetch
 globFolders: build/index.d.ts#globFolders
@@ -488,6 +489,9 @@ export declare function findHomes(query: string, homes?: readonly Home[]): reado
 
 ### build/index.d.ts#formatResult
 export declare function formatResult(result: CheckResult): string;
+
+### build/index.d.ts#gateAfterCancel
+export declare const gateAfterCancel: Rule;
 
 ### build/index.d.ts#gateTrigger
 export declare const gateTrigger: Rule;

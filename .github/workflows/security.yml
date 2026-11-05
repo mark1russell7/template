@@ -35,7 +35,7 @@ jobs:
   # ruleset"). The scans stay out of ci.yml, because release.yml calls ci.yml with contents: read only.
   security-ok:
     name: Security OK
-    if: always()
+    if: ${{ !cancelled() }}
     needs: [security]
     runs-on: ubuntu-latest
     timeout-minutes: 2

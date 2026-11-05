@@ -797,7 +797,7 @@ describe("gate-trigger", () => {
       "",
       "  speed-gate-ok:",
       "    name: Speed gate OK",
-      "    if: always()",
+      "    if: ${{ !cancelled() }}",
       "    needs: [changes, plan, bench, report, other]",
       "    runs-on: ubuntu-latest",
       "    timeout-minutes: 2",

@@ -232,7 +232,7 @@ jobs:
 
   actions-ok:
     name: Actions OK
-    if: always()
+    if: ${{ !cancelled() }}
     needs: [changes, green-main, pages, pages-check, release-build, release-publish, release-tag]
     runs-on: ubuntu-latest
     timeout-minutes: 2
