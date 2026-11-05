@@ -5,6 +5,7 @@
   "timezone": "America/New_York",
   "schedule": ["before 6am on monday"],
   "prConcurrentLimit": 5,
+  "rebaseWhen": "conflicted",
   "rangeStrategy": "update-lockfile",
   "minimumReleaseAge": "3 days",
   "labels": ["dependencies"],
