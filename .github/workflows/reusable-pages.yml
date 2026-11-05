@@ -239,12 +239,10 @@ jobs:
             packages/site-pages/src/check
             packages/site-pages/src/data
           persist-credentials: false
-      - name: Data stamps of the measured pages
-        if: inputs.data-stamps != ''
-        shell: bash
-        env:
-          STAMPS: ${{ inputs.data-stamps }}
-        run: node .shared-actions/packages/site-pages/src/check/freshness-main.ts --stamps "$STAMPS"
+      - if: inputs.data-stamps != ''
+        uses: ./.shared-actions/.github/actions/data-stamps
+        with:
+          stamps: ${{ inputs.data-stamps }}
       # The Releases page and the Status page (releases/, status/ and their data/*.json), at deploy time
       - if: inputs.site-pages
         uses: ./.shared-actions/.github/actions/site-pages

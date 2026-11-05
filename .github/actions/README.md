@@ -11,6 +11,7 @@ These composite actions are shared by the repositories of mark1russell7. A repos
 | `changes` | Tells if a pull request changes a file of a gate, with the patterns of `on.pull_request.paths`. A gate workflow starts on each pull request, and its jobs run only on a match (`CI.md`, "A gate with paths"). |
 | `gate-summary` | The step of a summary job `<Name> OK`. It passes when each job passed, or when `changes` found no file of the gate and the gate jobs were skipped. |
 | `site-check` | Checks a built site in a browser at each width and scheme, and uploads the screenshots. `reusable-pages.yml` uses it. A site with its own Pages workflow uses it before the upload of the Pages artifact. |
+| `data-stamps` | Checks the data stamps of the measured pages of a built site. `reusable-pages.yml` uses it. A site with its own Pages workflow uses it before the upload of the Pages artifact. |
 | `changeset-check` | Fails a pull request when a published package changes with no changeset, or when a changeset makes a `0.x` package into `1.0.0`. The job `changesets` of `reusable-ci.yml` uses it (`CI.md`). |
 
 A browser job uses `setup-playwright` after the install of its dependencies:

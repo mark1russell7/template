@@ -1,0 +1,18 @@
+name: data-stamps
+description: >-
+  Checks the data stamps of the measured pages of a built site (schema data-stamp/1). A page with old data or with
+  old engines fails the step, so a deploy after it does not start.
+inputs:
+  stamps:
+    description: The file of data stamps, from the root of the repository.
+    required: true
+runs:
+  using: composite
+  steps:
+    # The gate runs from the source of the same template commit. It imports only Node.js and
+    # packages/site-pages/src/data, so it needs no install and no npm release of site-pages.
+    - name: Data stamps of the measured pages
+      shell: bash
+      env:
+        STAMPS: ${{ inputs.stamps }}
+      run: node "$GITHUB_ACTION_PATH/../../../packages/site-pages/src/check/freshness-main.ts" --stamps "$STAMPS"
