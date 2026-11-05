@@ -80,8 +80,9 @@ export interface Measure {
  * Only the first text of a box counts. An element with no text does not count. Vertical overflow does not count.
  *
  * `labels` follows the rule `label-content-name-mismatch` of axe-core 4.14. A test compares the two on the same page.
- * A control counts when its role takes the name from its content, it has a label, and the words of its visible text
- * are not together and in order in the label. A check role with a label counts as "cannot decide", so it does not fail.
+ * A control counts when its role takes the name from its content and it has a label. It fails when the words of its
+ * visible text are not together and in order in the label. A check role with a label counts as "cannot decide", so it
+ * does not fail.
  * This copy does not read an icon font. An icon name in the text can give a false problem.
  */
 export const MEASURE = `(() => {
