@@ -7,7 +7,7 @@ These presets hold the shared Renovate settings of the repositories of mark1russ
 | `github>mark1russell7/template//renovate/default` | `base` and `automerge`. Most repositories use it. |
 | `github>mark1russell7/template//renovate/base` | The schedule, the groups and the release-age waits, with no automerge. |
 | `github>mark1russell7/template//renovate/automerge` | Only the automerge rules. |
-| `github>mark1russell7/template//renovate/expo` | No major or minor update of a package that an Expo SDK decides. An Expo repository extends it after `default`. |
+| `github>mark1russell7/template//renovate/expo` | No major or minor update of a package that an Expo SDK decides, except a security fix. A new SDK shows on the Dependency Dashboard. An Expo repository extends it after `default` and names the owner who moves the SDK. |
 
 ## What the settings do
 
