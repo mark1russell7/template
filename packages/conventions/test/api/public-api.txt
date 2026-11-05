@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 138 names
+## . (build/index.d.ts): 144 names
 
 ACTIONS_COMMIT: build/index.d.ts#ACTIONS_COMMIT
 type AuditSource: build/index.d.ts#AuditSource
@@ -30,6 +30,7 @@ LICENSE_TEXTS: build/index.d.ts#LICENSE_TEXTS
 MAP_RULE: build/index.d.ts#MAP_RULE
 MAX_NOTES: build/index.d.ts#MAX_NOTES
 type Manifest: build/index.d.ts#Manifest
+type Minor: build/index.d.ts#Minor
 NPM_REGISTRY: build/index.d.ts#NPM_REGISTRY
 type OptionSpec: build/index.d.ts#OptionSpec
 type OptionValue: build/index.d.ts#OptionValue
@@ -88,12 +89,14 @@ licenseFile: build/index.d.ts#licenseFile
 licenseFileOf: build/index.d.ts#licenseFileOf
 lineOf: build/index.d.ts#lineOf
 listRules: build/index.d.ts#listRules
+lockedVersions: build/index.d.ts#lockedVersions
 mainCheck: build/index.d.ts#mainCheck
 mapMarkdown: build/index.d.ts#mapMarkdown
 mapText: build/index.d.ts#mapText
 matchesAny: build/index.d.ts#matchesAny
 mergeHomes: build/index.d.ts#mergeHomes
 messageOf: build/index.d.ts#messageOf
+minorOf: build/index.d.ts#minorOf
 mitText: build/index.d.ts#mitText
 noBuildOutput: build/index.d.ts#noBuildOutput
 noLocalPaths: build/index.d.ts#noLocalPaths
@@ -107,7 +110,10 @@ parseJsonc: build/index.d.ts#parseJsonc
 pathsOf: build/index.d.ts#pathsOf
 pinnedGitDeps: build/index.d.ts#pinnedGitDeps
 prPathFilters: build/index.d.ts#prPathFilters
+publishedMinor: build/index.d.ts#publishedMinor
+publishedMinorRule: build/index.d.ts#publishedMinorRule
 pushMainOnly: build/index.d.ts#pushMainOnly
+reachOf: build/index.d.ts#reachOf
 readConfig: build/index.d.ts#readConfig
 readJsonc: build/index.d.ts#readJsonc
 readOverlay: build/index.d.ts#readOverlay
@@ -275,6 +281,9 @@ export declare const MAX_NOTES: number;
 ### build/index.d.ts#Manifest
 type Manifest = Readonly<Record<string, unknown>>;
 
+### build/index.d.ts#Minor
+type Minor = readonly [major: number, minor: number];
+
 ### build/index.d.ts#NPM_REGISTRY
 export declare const NPM_REGISTRY = "https://registry.npmjs.org";
 
@@ -326,6 +335,7 @@ export declare const RULES: readonly Rule[];
 type RegistryAnswer = {
   readonly versions: readonly string[];
   readonly times?: Readonly<Record<string, string>>;
+  readonly latest?: string;
 } | {
   readonly error: string;
 };
@@ -528,6 +538,9 @@ export declare function lineOf(text: string, needle: string, from?: number): num
 ### build/index.d.ts#listRules
 export declare function listRules(config: ConventionsConfig | undefined, rules?: readonly Rule[]): string;
 
+### build/index.d.ts#lockedVersions
+export declare function lockedVersions(text: string): ReadonlyMap<string, ReadonlyMap<string, string>>;
+
 ### build/index.d.ts#mainCheck
 export declare const mainCheck: Rule;
 
@@ -545,6 +558,9 @@ export declare function mergeHomes(base: readonly Home[], extra: readonly Home[]
 
 ### build/index.d.ts#messageOf
 export declare function messageOf(file: string, name: string, home: Home): string;
+
+### build/index.d.ts#minorOf
+export declare function minorOf(version: string): Minor | undefined;
 
 ### build/index.d.ts#mitText
 export declare function mitText(year: number, holder: string): string;
@@ -585,8 +601,17 @@ export declare const pinnedGitDeps: Rule;
 ### build/index.d.ts#prPathFilters
 export declare function prPathFilters(text: string): PathFilter[];
 
+### build/index.d.ts#publishedMinor
+export declare const publishedMinor: Rule;
+
+### build/index.d.ts#publishedMinorRule
+export declare function publishedMinorRule(lookup?: RegistryLookup, now?: () => number): Rule;
+
 ### build/index.d.ts#pushMainOnly
 export declare const pushMainOnly: Rule;
+
+### build/index.d.ts#reachOf
+export declare function reachOf(specifier: string): Minor | undefined;
 
 ### build/index.d.ts#readConfig
 export declare function readConfig(root: string, rules?: readonly Rule[]): ConventionsConfig;

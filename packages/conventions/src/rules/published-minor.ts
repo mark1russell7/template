@@ -13,13 +13,15 @@ export type Minor = readonly [major: number, minor: number];
 
 /** This function gives the major and the minor of a release version, or undefined for a pre-release and for other text. */
 export function minorOf(version: string): Minor | undefined {
-  const match = /^(\d+)\.(\d+)\.\d+(?:\+.*)?(?:\(.*\))?$/.exec(version.trim());
+  // A cut at the first `(` and `+`, so that the pattern examines only the digits: this text comes from a file
+  const release = version.trim().split("(", 1)[0]?.split("+", 1)[0] ?? "";
+  const match = /^(\d+)\.(\d+)\.\d+$/.exec(release);
   return match === null ? undefined : [Number(match[1]), Number(match[2])];
 }
 
 /**
- * This function gives the highest minor that a range can reach, or undefined for a form that the rule does not read: a
- * `workspace:` or `github:` specifier, a tag, a partial version or a compound range. Below `1.0.0`, a caret stays in
+ * This function gives the highest minor that a range can reach. It gives undefined for a form that the rule does not read.
+ * These forms are a `workspace:` or `github:` specifier, a tag, a partial version and a compound range. Below `1.0.0`, a caret stays in
  * its minor. From `1.0.0`, a caret reaches each minor of its major.
  */
 export function reachOf(specifier: string): Minor | undefined {
@@ -31,6 +33,15 @@ export function reachOf(specifier: string): Minor | undefined {
 
 /** This function tells if the minor `have` is before the minor `other`. */
 const behind = (have: Minor, other: Minor): boolean => have[0] < other[0] || (have[0] === other[0] && have[1] < other[1]);
+
+/** This function gives the indent, the key and the value of one line of YAML. It cuts the line by position, with no pattern. */
+function yamlEntry(line: string): { readonly indent: number; readonly key: string; readonly value: string } | undefined {
+  const text = line.trimEnd();
+  const body = text.trimStart();
+  const colon = body.indexOf(": ");
+  const key = colon >= 0 ? body.slice(0, colon) : body.endsWith(":") ? body.slice(0, -1) : "";
+  return key === "" ? undefined : { indent: text.length - body.length, key, value: colon >= 0 ? body.slice(colon + 2) : "" };
+}
 
 /**
  * This function gives the locked version of each dependency of each importer of the text of a `pnpm-lock.yaml` file. The
@@ -44,17 +55,17 @@ export function lockedVersions(text: string): ReadonlyMap<string, ReadonlyMap<st
   for (const line of text.split(/\r?\n/)) {
     if (/^\S/.test(line)) inside = line.trimEnd() === "importers:";
     if (!inside) continue;
-    const entry = /^( +)(.+?):(?: (.*))?$/.exec(line.trimEnd());
-    if (entry === null) continue;
-    const indent = entry[1]?.length;
-    const key = (entry[2] ?? "").replace(/^['"]|['"]$/g, "");
+    const entry = yamlEntry(line);
+    if (entry === undefined) continue;
+    const { indent, value } = entry;
+    const key = entry.key.replace(/^['"]|['"]$/g, "");
     if (indent === 2) {
       importer = new Map();
       importers.set(key === "." ? "" : key, importer);
     } else if (indent === 6) {
       name = key;
     } else if (indent === 8 && key === "version" && name !== undefined) {
-      importer?.set(name, entry[3] ?? "");
+      importer?.set(name, value);
     }
   }
   return importers;
