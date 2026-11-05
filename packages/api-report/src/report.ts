@@ -46,7 +46,7 @@ const HASH_IN_TEXT = /-[A-Za-z0-9_-]{8}(?=\.(?:d\.)?[cm]?[jt]s\b)/g;
 /**
  * This function gives the stem and the extension of the name of a chunk, or null. A tail of small
  * letters and hyphens is a word (`route-resolver.d.ts`), so the name stays. The hash of a chunk has only
- * such characters in about 1 of 1,000 builds: then the report shows that hash until the next build.
+ * such characters in approximately 1 of 1,000 builds: then the report shows that hash until the next build.
  */
 function chunkOf(name: string): { readonly stem: string; readonly extension: string } | null {
   const match = CHUNK_NAME.exec(name);
