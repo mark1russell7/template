@@ -9,9 +9,9 @@ import { cleanPath, codePackages, hasFile, lineOf, matchesAny, type Break, type 
 
 /**
  * The answer of the registry for one package, or an error. The answer has each version that npm has or had (none for a
- * new package) and the time of each publish (ISO 8601).
+ * new package), the time of each publish (ISO 8601) and the version of the tag `latest`.
  */
-export type RegistryAnswer = { readonly versions: readonly string[]; readonly times?: Readonly<Record<string, string>> } | { readonly error: string };
+export type RegistryAnswer = { readonly versions: readonly string[]; readonly times?: Readonly<Record<string, string>>; readonly latest?: string } | { readonly error: string };
 
 /** This function gives the answer of the registry at the URL `registry` for each package name of `names`. */
 export type RegistryLookup = (names: readonly string[], registry: string) => ReadonlyMap<string, RegistryAnswer>;
@@ -52,7 +52,7 @@ Promise.all(names.map(async (name) => {
     if (!response.ok) return [name, { error: "HTTP " + response.status }];
     const data = await response.json();
     const times = Object.fromEntries(Object.entries(data.time ?? {}).filter(([key]) => key !== "created" && key !== "modified"));
-    return [name, { versions: [...new Set([...Object.keys(data.versions ?? {}), ...Object.keys(times)])], times }];
+    return [name, { versions: [...new Set([...Object.keys(data.versions ?? {}), ...Object.keys(times)])], times, latest: data["dist-tags"]?.latest }];
   } catch (error) {
     return [name, { error: String(error && error.message ? error.message : error) }];
   }
