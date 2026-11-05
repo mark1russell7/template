@@ -43,6 +43,10 @@ permissions:
   contents: read
   pull-requests: write
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   review:
     # Of the label events, only the review label starts a review. The other events start a review only

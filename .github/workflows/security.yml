@@ -19,6 +19,10 @@ concurrency:
   group: security-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   security:
     uses: ./.github/workflows/reusable-security.yml
