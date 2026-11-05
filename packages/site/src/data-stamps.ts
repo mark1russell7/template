@@ -7,8 +7,8 @@ import { DATA_STAMP_SCHEMA, type DataStamps } from "@mark1russell7/site-pages";
 export const RECORD_SHA256 = "b130cd98ecbd8868ccbde114a27b676e046e6b4bca897b81ea0aafd55f3b76ad";
 
 /**
- * These stamps name the record of the response explorer. The script measured one fixed set of placements of one version
- * of the packing package, so the data has no age limit, and the page says so.
+ * These stamps name the record of the response explorer. The script measured one fixed set of placements of one version.
+ * The data thus has no age limit, and the page says so.
  */
 export const STAMPS: DataStamps = {
   schema: DATA_STAMP_SCHEMA,
