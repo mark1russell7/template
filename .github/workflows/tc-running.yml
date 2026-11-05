@@ -5,8 +5,16 @@ permissions: {}
 jobs:
   work:
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
     steps:
-      - run: sleep 420
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh run cancel "$RUN" -R "$REPO"
+          sleep 240
   ok:
     name: TC running OK
     if: ${{ !cancelled() }}
