@@ -47,13 +47,16 @@ KpiError: build/chunks/freshness.d.ts#KpiError
 type KpiFile: build/chunks/freshness.d.ts#KpiFile
 type KpiInput: build/chunks/freshness.d.ts#KpiInput
 type KpiMeasure: build/chunks/freshness.d.ts#KpiMeasure
+LAST_LIMIT_START: build/chunks/freshness.d.ts#LAST_LIMIT_START
 type Link: build/chunks/freshness.d.ts#Link
 type LinkOptions: build/index.d.ts#LinkOptions
 MAX_DATA_AGE_DAYS: build/chunks/freshness.d.ts#MAX_DATA_AGE_DAYS
 MAX_LIMIT_DAYS_WITHOUT_RULING: build/chunks/freshness.d.ts#MAX_LIMIT_DAYS_WITHOUT_RULING
 MAX_MINORS_BEHIND: build/chunks/freshness.d.ts#MAX_MINORS_BEHIND
+MAX_STUDY_LIMIT_DAYS: build/chunks/freshness.d.ts#MAX_STUDY_LIMIT_DAYS
 type MarkdownTable: build/index.d.ts#MarkdownTable
 NPM_REGISTRY: build/index.d.ts#NPM_REGISTRY
+type NoAgeLimit: build/chunks/freshness.d.ts#NoAgeLimit
 type NpmOptions: build/index.d.ts#NpmOptions
 type NpmPublishTimes: build/chunks/freshness.d.ts#NpmPublishTimes
 type NpmVersionTime: build/chunks/freshness.d.ts#NpmVersionTime
@@ -376,6 +379,7 @@ interface DataLimit {
   readonly reason: string;
   readonly workflow: string;
   readonly ruling?: string;
+  readonly startsAt?: string;
 }
 
 ### build/chunks/freshness.d.ts#DataRun
@@ -385,6 +389,7 @@ interface DataRun {
   readonly date: string;
   readonly engines: Readonly<Record<string, string>>;
   readonly method?: string;
+  readonly commit?: string;
 }
 
 ### build/chunks/freshness.d.ts#DataStamps
@@ -494,6 +499,9 @@ interface KpiMeasure {
   notCounted?: string;
 }
 
+### build/chunks/freshness.d.ts#LAST_LIMIT_START
+declare const LAST_LIMIT_START = "2026-12-07T00:00:00Z";
+
 ### build/chunks/freshness.d.ts#Link
 interface Link {
   label: string;
@@ -508,6 +516,15 @@ declare const MAX_LIMIT_DAYS_WITHOUT_RULING = 14;
 
 ### build/chunks/freshness.d.ts#MAX_MINORS_BEHIND
 declare const MAX_MINORS_BEHIND = 1;
+
+### build/chunks/freshness.d.ts#MAX_STUDY_LIMIT_DAYS
+declare const MAX_STUDY_LIMIT_DAYS = 30;
+
+### build/chunks/freshness.d.ts#NoAgeLimit
+interface NoAgeLimit {
+  readonly reproduce: string;
+  readonly today: string;
+}
 
 ### build/chunks/freshness.d.ts#NpmPublishTimes
 interface NpmPublishTimes {
@@ -535,6 +552,7 @@ interface PageStamp {
   readonly inFlight?: DataRun;
   readonly study?: true;
   readonly limit?: DataLimit;
+  readonly noLimit?: NoAgeLimit;
 }
 
 ### build/chunks/freshness.d.ts#Release
@@ -1294,7 +1312,7 @@ export declare function releaseSummary(releases: readonly ReleasePoint[]): Relea
 export declare function releasesLead(releases: readonly Release[]): string;
 
 ### build/index.d.ts#renderDataStamp
-export declare function renderDataStamp(stamp: PageStamp): string;
+export declare function renderDataStamp(stamp: PageStamp, now?: string): string;
 
 ### build/index.d.ts#renderReleasesPage
 export declare function renderReleasesPage(releases: readonly Release[], options: PageOptions): string;
