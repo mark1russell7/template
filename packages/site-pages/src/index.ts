@@ -60,6 +60,7 @@ export { classCounts, openGroups, renderStatusPage, sectionsOf, slugOf, statusLe
 export { probeScript, TYPESCRIPT_PROBE } from "./check/probe.ts";
 export {
   checkFreshness,
+  cronLines,
   DATA_STAMP_SCHEMA,
   latestAt,
   MAX_DATA_AGE_DAYS,
@@ -67,6 +68,7 @@ export {
   MAX_MINORS_BEHIND,
   minorsBehind,
   parseDataStamps,
+  type CronLine,
   type DataLimit,
   type DataRun,
   type DataStamps,

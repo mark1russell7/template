@@ -231,12 +231,31 @@ function cronDays(line: string, from: number, days: number): number[] | undefine
   return starts;
 }
 
-/** This function gives the cron text of one line of a workflow in a list, or an empty list for another line. */
-function cronLine(line: string): string[] {
-  const text = line.trim().replace(/^- */, "");
-  if (!text.startsWith("cron:")) return [];
-  const value = text.slice("cron:".length).split("#")[0]?.trim() ?? "";
-  return [value.replaceAll('"', "").replaceAll("'", "")];
+/** One schedule of a workflow. */
+export interface CronLine {
+  /** The number of the line in the file, from 1. */
+  readonly line: number;
+  /** The cron text, with no quotes and no comment. */
+  readonly cron: string;
+}
+
+/**
+ * This function gives each line `cron:` of a workflow. It is the one reader of these lines: the freshness gate and the rule `runner-budget` of conventions use it.
+ * It skips a comment line. It reads a quoted key, a list item, a quoted value and a comment at the end of the line.
+ */
+export function cronLines(workflow: string): CronLine[] {
+  return workflow.split(/\r?\n/).flatMap((raw, index) => {
+    const text = raw.trim().replace(/^- */, "");
+    const key = ["cron:", '"cron":', "'cron':"].find((form) => text.startsWith(form));
+    if (key === undefined) return [];
+    // YAML starts a comment at a "#" after a space or a tab.
+    const rest = text.slice(key.length);
+    const comment = rest.search(/\s#/);
+    const value = (comment >= 0 ? rest.slice(0, comment) : rest).trim();
+    const quote = value.charAt(0);
+    const quoted = value.length >= 2 && (quote === '"' || quote === "'") && value.endsWith(quote);
+    return [{ line: index + 1, cron: quoted ? value.slice(1, -1).trim() : value }];
+  });
 }
 
 /**
@@ -244,7 +263,7 @@ function cronLine(line: string): string[] {
  * It gives a text in place of the gap for a workflow with no schedule, and for a line that it cannot read. The text names the line, and the gate fails on it.
  */
 export function scheduleGapDays(workflow: string): number | string {
-  const lines = workflow.split("\n").flatMap(cronLine);
+  const lines = cronLines(workflow).map((item) => item.cron);
   if (lines.length === 0) return "the workflow has no line `cron:`";
   const from = Date.UTC(2027, 0, 1);
   const span = 731;
