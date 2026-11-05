@@ -152,9 +152,13 @@ export const pipeFails: Rule = {
   id: "pipe-fails",
   title: "A failure on the left of a pipe fails its step: each step with a pipe has `pipefail`.",
   reason:
-    "With no `shell` key, GitHub has no `pipefail`, so `tests | tee out.txt` passes when the tests fail. On 2026-11-05 a read of 25 jobs of a required gate found 4 failed tests in jobs that concluded success.",
+    "With no `shell` key, GitHub has no `pipefail`, so `tests | tee out.txt` passes when the tests fail. On 2026-11-05 a read of 99 jobs of a merge gate found 8 failed tests in jobs that concluded success.",
   fix: "Add `defaults: { run: { shell: bash } }` to the workflow, or `shell: bash` to the step, or `set -o pipefail` to the script. Then read the next run: a step that turns red had a failure that the pipe hid.",
-  sources: [{ repo: "coeval", rule: "pipe-fails", doc: "K228 (2026-11-05): a required gate with no pipefail did not fail on 4 of 25 jobs" }],
+  sources: [
+    { repo: "coeval", rule: "measure", doc: "K228 (2026-11-05): a merge gate with no pipefail concluded success on 8 of 99 jobs with a failed test" },
+    { repo: "packing", rule: "predicates", doc: "run 41547266012 (2026-11-03): the join failed behind a pipe, and its job concluded success" },
+    { repo: "systems", rule: "kind", doc: "kind.yml (2026-11-05): a failed command behind a pipe left a diagnostic of the borders with no line" },
+  ],
   options: {},
   check(context) {
     const files = context.gitFiles();
