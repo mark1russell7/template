@@ -1,0 +1,10 @@
+name: TC called
+on:
+  workflow_call:
+permissions: {}
+jobs:
+  inner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - run: sleep 150

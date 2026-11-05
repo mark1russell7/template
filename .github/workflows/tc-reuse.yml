@@ -1,0 +1,20 @@
+name: TC reuse
+on:
+  pull_request:
+permissions: {}
+jobs:
+  work:
+    uses: ./.github/workflows/tc-called.yml
+  ok:
+    name: TC reuse OK
+    if: ${{ !cancelled() }}
+    needs: [work]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key) \(.value.result)"' | tee results
+          [ -s results ] || exit 1
+          ! grep -qv ' success$' results

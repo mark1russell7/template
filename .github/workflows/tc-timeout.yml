@@ -1,0 +1,23 @@
+name: TC timeout
+on:
+  pull_request:
+permissions: {}
+jobs:
+  work:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - run: sleep 150
+  ok:
+    name: TC timeout OK
+    if: ${{ !cancelled() }}
+    needs: [work]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key) \(.value.result)"' | tee results
+          [ -s results ] || exit 1
+          ! grep -qv ' success$' results
