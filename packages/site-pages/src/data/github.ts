@@ -217,3 +217,64 @@ export async function githubReleases(options: GitHubOptions & { endpoint?: strin
     return failure(error, timeoutMs);
   }
 }
+
+/** The result of `githubGreenRun`. The field `at` is the end of the newest scheduled run that ended. */
+export type GitHubGreenRun = { available: true; value: number; at: string } | { available: false; reason: string };
+
+/** One workflow run, with only the fields that `greenRunOf` reads. */
+export interface WorkflowRunEnd {
+  readonly status: string;
+  readonly conclusion: string | null;
+  readonly updated_at: string;
+}
+
+/**
+ * This function counts the runs that passed in a row, from the newest run. A run that has not ended does not count and does not break the row.
+ * Each other conclusion breaks the row, a cancelled run too. It gives null when no run ended.
+ *
+ * @param runs - The runs, the newest first.
+ */
+export function greenRunOf(runs: readonly WorkflowRunEnd[]): { value: number; at: string } | null {
+  const ended = runs.filter((run) => run.status === "completed");
+  const newest = ended[0];
+  if (newest === undefined) return null;
+  const broken = ended.findIndex((run) => run.conclusion !== "success");
+  return { value: broken === -1 ? ended.length : broken, at: newest.updated_at };
+}
+
+/**
+ * This function reads the scheduled runs of a workflow with the REST API, and counts the runs that passed in a row.
+ * It gives `{ available: false, reason }` without a token, after an error, or when no scheduled run ended.
+ * A caller then leaves the measure out, because 0 says that a run failed.
+ *
+ * @remarks The function reads at most `limit` runs (default 30), so the count stops at that limit.
+ */
+export async function githubGreenRun(options: GitHubOptions & { workflow: string; endpoint?: string; limit?: number }): Promise<GitHubGreenRun> {
+  const stop = precheck(options);
+  if (stop) return stop;
+  const { owner, repo, token, workflow, endpoint = GITHUB_API, limit = 30, timeoutMs = 15_000 } = options;
+  const fetcher = options.fetch ?? globalThis.fetch;
+  const url = `${endpoint}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/workflows/${encodeURIComponent(workflow)}/runs?event=schedule&per_page=${limit}`;
+  try {
+    const response = await fetcher(url, {
+      headers: {
+        accept: "application/vnd.github+json",
+        authorization: `Bearer ${token}`,
+        "user-agent": USER_AGENT,
+        "x-github-api-version": "2022-11-28",
+      },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (response.status === 404) return { available: false, reason: `GitHub has no workflow ${workflow} in ${owner}/${repo}` };
+    if (!response.ok) return { available: false, reason: `GitHub answered with HTTP ${response.status}` };
+    const runs = list(object(await response.json())["workflow_runs"]).map((value) => {
+      const run = object(value);
+      return { status: text(run["status"]), conclusion: typeof run["conclusion"] === "string" ? run["conclusion"] : null, updated_at: text(run["updated_at"]) };
+    });
+    const green = greenRunOf(runs);
+    if (green === null) return { available: false, reason: `the workflow ${workflow} has no scheduled run that ended` };
+    return { available: true, ...green };
+  } catch (error) {
+    return failure(error, timeoutMs);
+  }
+}

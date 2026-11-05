@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 154 names
+## . (build/index.d.ts): 158 names
 
 BASE_CSS: build/index.d.ts#BASE_CSS
 type BoardIssue: build/chunks/freshness.d.ts#BoardIssue
@@ -33,6 +33,7 @@ type FreshnessCheck: build/chunks/freshness.d.ts#FreshnessCheck
 type FreshnessOptions: build/chunks/freshness.d.ts#FreshnessOptions
 GITHUB_API: build/index.d.ts#GITHUB_API
 GITHUB_GRAPHQL: build/index.d.ts#GITHUB_GRAPHQL
+type GitHubGreenRun: build/index.d.ts#GitHubGreenRun
 type GitHubOpenWork: build/chunks/freshness.d.ts#GitHubOpenWork
 type GitHubOptions: build/index.d.ts#GitHubOptions
 type GitHubRelease: build/chunks/freshness.d.ts#GitHubRelease
@@ -89,6 +90,7 @@ type TimelineLayout: build/index.d.ts#TimelineLayout
 type TimelineMark: build/index.d.ts#TimelineMark
 type TimelineOptions: build/index.d.ts#TimelineOptions
 UsageError: build/index.d.ts#UsageError
+type WorkflowRunEnd: build/index.d.ts#WorkflowRunEnd
 build: build/index.d.ts#build
 buildStatusBoard: build/index.d.ts#buildStatusBoard
 changelogFaults: build/index.d.ts#changelogFaults
@@ -103,9 +105,11 @@ escapeHtml: build/index.d.ts#escapeHtml
 failingCases: build/chunks/freshness.d.ts#failingCases
 firstSentence: build/index.d.ts#firstSentence
 gitTagDates: build/index.d.ts#gitTagDates
+githubGreenRun: build/index.d.ts#githubGreenRun
 githubOpenWork: build/index.d.ts#githubOpenWork
 githubReleases: build/index.d.ts#githubReleases
 globFiles: build/index.d.ts#globFiles
+greenRunOf: build/index.d.ts#greenRunOf
 headCommit: build/index.d.ts#headCommit
 headingAnchor: build/index.d.ts#headingAnchor
 headingDate: build/index.d.ts#headingDate
@@ -879,6 +883,16 @@ export declare const GITHUB_API = "https://api.github.com";
 ### build/index.d.ts#GITHUB_GRAPHQL
 export declare const GITHUB_GRAPHQL = "https://api.github.com/graphql";
 
+### build/index.d.ts#GitHubGreenRun
+type GitHubGreenRun = {
+  available: true;
+  value: number;
+  at: string;
+} | {
+  available: false;
+  reason: string;
+};
+
 ### build/index.d.ts#GitHubOptions
 interface GitHubOptions {
   owner: string;
@@ -1119,6 +1133,13 @@ interface TimelineOptions {
 ### build/index.d.ts#UsageError
 export declare class UsageError extends Error {}
 
+### build/index.d.ts#WorkflowRunEnd
+interface WorkflowRunEnd {
+  readonly status: string;
+  readonly conclusion: string | null;
+  readonly updated_at: string;
+}
+
 ### build/index.d.ts#build
 export declare function build(options: BuildOptions): Promise<BuildResult>;
 
@@ -1154,6 +1175,13 @@ export declare function firstSentence(text: string): string;
 ### build/index.d.ts#gitTagDates
 export declare function gitTagDates(repoDir: string): TagDate[];
 
+### build/index.d.ts#githubGreenRun
+export declare function githubGreenRun(options: GitHubOptions & {
+  workflow: string;
+  endpoint?: string;
+  limit?: number;
+}): Promise<GitHubGreenRun>;
+
 ### build/index.d.ts#githubOpenWork
 export declare function githubOpenWork(options: GitHubOptions & {
   endpoint?: string;
@@ -1168,6 +1196,12 @@ export declare function githubReleases(options: GitHubOptions & {
 
 ### build/index.d.ts#globFiles
 export declare function globFiles(root: string, pattern: string): string[];
+
+### build/index.d.ts#greenRunOf
+export declare function greenRunOf(runs: readonly WorkflowRunEnd[]): {
+  value: number;
+  at: string;
+} | null;
 
 ### build/index.d.ts#headCommit
 export declare function headCommit(repoDir: string): string | null;
