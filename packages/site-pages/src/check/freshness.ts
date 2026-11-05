@@ -346,7 +346,6 @@ export interface FailingCase {
   readonly fault?: string;
 }
 
-
 /**
  * This function gives one failing case for each page, from the stamps of the site itself. A measured page must fail one
  * day after its limit, from `options.now`. A fixed study has no age limit, so it must fail before the date of its run.
