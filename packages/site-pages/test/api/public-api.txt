@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 147 names
+## . (build/index.d.ts): 149 names
 
 BASE_CSS: build/index.d.ts#BASE_CSS
 type BoardIssue: build/chunks/freshness.d.ts#BoardIssue
@@ -25,6 +25,7 @@ type DataLimit: build/chunks/freshness.d.ts#DataLimit
 type DataRun: build/chunks/freshness.d.ts#DataRun
 type DataStamps: build/chunks/freshness.d.ts#DataStamps
 type DataStampsParse: build/chunks/freshness.d.ts#DataStampsParse
+type FailingCase: build/chunks/freshness.d.ts#FailingCase
 type FreshnessCheck: build/chunks/freshness.d.ts#FreshnessCheck
 type FreshnessOptions: build/chunks/freshness.d.ts#FreshnessOptions
 GITHUB_API: build/index.d.ts#GITHUB_API
@@ -95,6 +96,7 @@ compareVersions: build/index.d.ts#compareVersions
 cronLines: build/chunks/freshness.d.ts#cronLines
 dayRange: build/index.d.ts#dayRange
 escapeHtml: build/index.d.ts#escapeHtml
+failingCases: build/chunks/freshness.d.ts#failingCases
 firstSentence: build/index.d.ts#firstSentence
 gitTagDates: build/index.d.ts#gitTagDates
 githubOpenWork: build/index.d.ts#githubOpenWork
@@ -388,6 +390,13 @@ type DataStampsParse = {
   readonly faults: readonly string[];
 };
 
+### build/chunks/freshness.d.ts#FailingCase
+interface FailingCase {
+  readonly page: string;
+  readonly at: string;
+  readonly fault?: string;
+}
+
 ### build/chunks/freshness.d.ts#FreshnessCheck
 interface FreshnessCheck {
   readonly faults: readonly string[];
@@ -561,6 +570,9 @@ declare function checkFreshness(stamps: DataStamps, options: FreshnessOptions): 
 
 ### build/chunks/freshness.d.ts#cronLines
 declare function cronLines(workflow: string): CronLine[];
+
+### build/chunks/freshness.d.ts#failingCases
+declare function failingCases(stamps: DataStamps, options: FreshnessOptions): readonly FailingCase[];
 
 ### build/chunks/freshness.d.ts#kpiFile
 declare function kpiFile(input: KpiInput, now?: number): KpiFile;

@@ -161,6 +161,8 @@ The gate has three rules. A fault of one rule gives the exit code 1.
 2. The data of a page is at most 3 days old (`MAX_DATA_AGE_DAYS`), or a run on newer engines is in flight. The stamp of that run is at most 3 days old, so an old stamp does not hold the gate open.
 3. The engines of the newest run are at most 1 minor version behind npm at the start of the run (`MAX_MINORS_BEHIND`). A release during a long run does not fail the gate.
 
+Stamps that pass also show one failing case for each page, in the log of each build. A measured page must fail one day after its limit. A fixed study must fail before the date of its run. A page with no failing case gives the exit code 1, so each site that uses the gate shows that the gate holds it.
+
 Two fields of a stamp change the age rule:
 
 - `"study": true` marks a fixed study. The data has no age limit, and the rule 3 does not apply. The run names the method or the run, the date and the engine version. The stamp line tells in plain words that the page is a fixed study of that version. A page with a claim about the current engine is not a fixed study.

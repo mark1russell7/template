@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { NpmVersionTime } from "../data/types.ts";
-import { checkFreshness, cronLines, DATA_STAMP_SCHEMA, latestAt, minorsBehind, parseDataStamps, runFreshnessCli, scheduleGapDays, type DataLimit, type DataRun, type DataStamps, type PageStamp } from "./freshness.ts";
+import { checkFreshness, cronLines, DATA_STAMP_SCHEMA, failingCases, latestAt, minorsBehind, parseDataStamps, runFreshnessCli, scheduleGapDays, type DataLimit, type FreshnessOptions, type DataRun, type DataStamps, type PageStamp } from "./freshness.ts";
 
 const ENGINE = "@scope/engine";
 const NOW = "2026-11-10T12:00:00Z";
@@ -272,6 +272,36 @@ describe("scheduleGapDays", () => {
   });
 });
 
+describe("failingCases", () => {
+  const cases = (s: DataStamps, more: Partial<FreshnessOptions> = {}) => failingCases(s, { now: NOW, times, ...more });
+
+  it("fails a measured page one day after the limit from the time of the check", () => {
+    const [one] = cases(stamps([run()]));
+    expect(one?.at).toBe("2026-11-14T12:00:00.000Z");
+    expect(one?.fault).toContain("over the limit of 3");
+  });
+
+  it("uses the limit of the page, and also fails a run in flight", () => {
+    const limit: DataLimit = { days: 7, reason: "The scan is weekly.", workflow: "scan.yml" };
+    const [one] = cases({ schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", runs: [run()], limit }] }, { schedules: { "scan.yml": 7 } });
+    expect(one?.at).toBe("2026-11-18T12:00:00.000Z");
+    expect(one?.fault).toContain("over the limit of 7");
+    const [flying] = cases(stamps([run()], run({ id: "8", date: "2026-11-10T00:00:00Z" })));
+    expect(flying?.fault).toContain("in flight for more than 3");
+  });
+
+  it("fails a fixed study before the date of its run", () => {
+    const [one] = cases({ schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", runs: [run()], study: true }] });
+    expect(one?.at).toBe("2026-11-08T00:00:00.000Z");
+    expect(one?.fault).toContain("has a date after the check");
+  });
+
+  it("gives one case for each page", () => {
+    const pages = [{ page: "a.html", runs: [run()] }, { page: "b.html", runs: [run()] }];
+    expect(cases({ schema: DATA_STAMP_SCHEMA, pages }).map((one) => one.page)).toEqual(["a.html", "b.html"]);
+  });
+});
+
 describe("runFreshnessCli", () => {
   const dir = mkdtempSync(join(tmpdir(), "stamps-"));
   const file = (name: string, content: unknown): string => {
@@ -307,6 +337,7 @@ describe("runFreshnessCli", () => {
   it("exits with 0 on correct stamps, and reads npm", async () => {
     const { code, out } = await start(["--stamps", file("good.json", stamps([run()])), "--now", NOW]);
     expect(out).toContain("The data stamps of 1 pages pass.");
+    expect(out).toContain("Failing case at 2026-11-14T12:00:00.000Z: index.html: the run 7");
     expect(out).not.toContain("Not run");
     expect(code).toBe(0);
   });
