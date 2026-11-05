@@ -162,6 +162,13 @@ describe("a fixed study", () => {
     expect(parseDataStamps(page({ study: true, limit }))).toMatchObject({ ok: false, faults: ["index.html: a fixed study has no limit."] });
     expect(parseDataStamps(page({ study: true, inFlight: run() }))).toMatchObject({ ok: false, faults: ["index.html: a fixed study has no run in flight."] });
   });
+
+  it("can name a two-part image tag, and another page cannot", () => {
+    const tagged = [run({ engines: { redis: "7.4" } })];
+    expect(parseDataStamps(page({ study: true, runs: tagged }))).toMatchObject({ ok: true });
+    expect(parseDataStamps(page({ runs: tagged }))).toMatchObject({ ok: false });
+    expect(parseDataStamps(page({ study: true, runs: [run({ engines: { redis: "latest" } })] }))).toMatchObject({ ok: false });
+  });
 });
 
 describe("the limit of a page", () => {

@@ -99,8 +99,11 @@ export interface FreshnessCheck {
 
 const record = (value: unknown): Record<string, unknown> | null => (value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null);
 
+/** The form of a two-part image tag, for example `7.4`. A fixed study can name it, because no check compares the versions of a study. */
+const IMAGE_TAG = /^\d+\.\d+$/;
+
 /** This function gives the faults of one run of a stamp. */
-function runFaults(raw: unknown, at: string): string[] {
+function runFaults(raw: unknown, at: string, study = false): string[] {
   const run = record(raw);
   if (run === null) return [`${at}: a run is not an object.`];
   const faults: string[] = [];
@@ -112,7 +115,8 @@ function runFaults(raw: unknown, at: string): string[] {
   const engines = record(run["engines"]);
   if (engines === null || Object.keys(engines).length === 0) return [...faults, `${label}: the run names no engine versions.`];
   for (const [name, version] of Object.entries(engines)) {
-    if (typeof version !== "string" || parseVersion(version) === null) faults.push(`${label}: the version of ${name} is not a version.`);
+    const known = typeof version === "string" && (parseVersion(version) !== null || (study && IMAGE_TAG.test(version)));
+    if (!known) faults.push(`${label}: the version of ${name} is not a version.`);
   }
   return faults;
 }
@@ -165,7 +169,7 @@ export function parseDataStamps(raw: unknown): DataStampsParse {
     const at = page["page"];
     const runs = page["runs"];
     if (!Array.isArray(runs) || runs.length === 0) faults.push(`${at}: the page names no run.`);
-    else for (const run of runs) faults.push(...runFaults(run, at));
+    else for (const run of runs) faults.push(...runFaults(run, at, page["study"] === true));
     if (page["inFlight"] !== undefined) faults.push(...runFaults(page["inFlight"], `${at}, in flight`));
     faults.push(...ageRuleFaults(page, at));
   }
