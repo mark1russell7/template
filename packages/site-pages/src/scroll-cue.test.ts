@@ -54,13 +54,13 @@ describe.skipIf(executable === undefined)("the scroll cue in a browser", () => {
   let browser: Browser;
 
   /** This function shows the page, scrolls the box, and returns the color of the top row at each edge and in the middle. */
-  const edges = async (html: string, scroll: "start" | "end", y = 20): Promise<{ left: number[]; middle: number[]; right: number[] }> => {
+  const edges = async (html: string, scroll: "start" | "end", y = 20, focus = false): Promise<{ left: number[]; middle: number[]; right: number[] }> => {
     const { page: tab } = browser;
     const loaded = tab.once("Page.loadEventFired", 30_000);
     await tab.send("Page.navigate", { url: `data:text/html;base64,${Buffer.from(html).toString("base64")}` });
     await loaded;
     await tab.evaluate(
-      `(() => { const box = document.getElementById("box"); box.scrollLeft = ${scroll === "end" ? "box.scrollWidth" : "0"}; ` +
+      `(() => { const box = document.getElementById("box"); box.scrollLeft = ${scroll === "end" ? "box.scrollWidth" : "0"}; ${focus ? "box.focus();" : ""} ` +
         `return new Promise((go) => requestAnimationFrame(() => requestAnimationFrame(go))); })()`,
     );
     const height = await tab.evaluate<number>(`document.documentElement.scrollHeight`);
@@ -110,6 +110,38 @@ describe.skipIf(executable === undefined)("the scroll cue in a browser", () => {
     expect(left).not.toEqual(CELL);
     expect(right).toEqual(CELL);
   }, 60_000);
+
+  describe("the ring of the keyboard focus", () => {
+    const RING = [0, 0, 255];
+    const TOP_MARGIN = 10;
+    const focusable = (html: string): string =>
+      html
+        .replace(`id="box"`, `id="box" tabindex="0"`)
+        .replace("</style>", `#box{margin-top:${TOP_MARGIN}px}#box:focus-visible{outline:2px solid rgb(${RING.join(",")})}</style>`);
+    const rule = /\.scroll-cue:focus-visible\s*\{[^}]*\}/;
+
+    beforeAll(async () => {
+      await browser.page.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+    });
+
+    it("shows inside the box, where the mask keeps it", async () => {
+      const { middle } = await edges(focusable(page(100, 900)), "start", TOP_MARGIN, true);
+      expect(middle).toEqual(RING);
+    }, 60_000);
+
+    it("goes out of view with no rule of its own: the mask hides the ring outside the box", async () => {
+      const bare = css.replace(rule, "");
+      expect(bare).not.toBe(css);
+      const html = focusable(page(100, 900).replace(css, bare));
+      expect((await edges(html, "start", TOP_MARGIN - 1, true)).middle).not.toEqual(RING);
+      expect((await edges(html, "start", TOP_MARGIN, true)).middle).not.toEqual(RING);
+    }, 60_000);
+
+    it("shows outside a box with no mask, so that the other test reads the mask and not a page with no ring", async () => {
+      const html = focusable(page(100, 900).replace(css, css.replace(rule, "").replace(/(-webkit-)?mask-image:[^;]*;/g, "")));
+      expect((await edges(html, "start", TOP_MARGIN - 1, true)).middle).toEqual(RING);
+    }, 60_000);
+  });
 
   it("shows no cue on a box with no overflow", async () => {
     const { left, right } = await edges(page(5, WIDTH), "start");
