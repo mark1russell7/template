@@ -203,6 +203,51 @@ describe("check and update", () => {
     expect(summaryMarkdown(result)).toContain("A statement that the report does not know");
   });
 
+  it("holds a page of the API against the report: a clean page passes, and a page that lost a name fails", () => {
+    const root = workspace({ apiReport: { pages: [{ package: "packages/a", pages: ["api.md"] }] } });
+    writeFileSync(join(root, "api.md"), "The constant `a`.\n");
+    expect(cli(root, ["update"]).code).toBe(0);
+    expect(cli(root, ["check"]).code).toBe(0);
+
+    writeFileSync(join(root, "api.md"), "The constant a, with no code.\n");
+    const failed = cli(root, ["check"]);
+    expect(failed.code).toBe(1);
+    expect(failed.stdout).toContain("The page of the API of packages/a differs from its report:");
+    expect(failed.stdout).toContain("a: the package exports this name, and no code on the page shows it.");
+    expect(summaryMarkdown(runReports({ mode: "check", root, pages: [{ package: "packages/a", pages: ["api.md"] }] }))).toContain("no code on the page shows it");
+  });
+
+  it("does not stop the command update for a page, because the report is the input of the check", () => {
+    const root = workspace({ apiReport: { pages: [{ package: "packages/a", pages: ["api.md"] }] } });
+    writeFileSync(join(root, "api.md"), "No code.\n");
+    expect(cli(root, ["update"]).code).toBe(0);
+    expect(cli(root, ["check"]).code).toBe(1);
+  });
+
+  it("fails on a page that does not exist, and on a page of a package that the command does not read", () => {
+    const missing = workspace({ apiReport: { pages: [{ package: "packages/a", pages: ["gone.md"] }] } });
+    cli(missing, ["update"]);
+    const result = cli(missing, ["check"]);
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain("gone.md: the page does not exist.");
+
+    const unread = workspace({ apiReport: { pages: [{ package: "packages/hidden", pages: ["api.md"] }] } });
+    cli(unread, ["update"]);
+    const other = cli(unread, ["check"]);
+    expect(other.code).toBe(1);
+    expect(other.stdout).toContain("the field pages names a package that the command does not read");
+  });
+
+  it("reads the exceptions of a page from the configuration, and refuses a wrong field", () => {
+    const root = workspace({ apiReport: { pages: [{ package: "packages/a", pages: ["api.md"], except: { a: "Another page tells this name." } }] } });
+    writeFileSync(join(root, "api.md"), "No code.\n");
+    cli(root, ["update"]);
+    expect(cli(root, ["check"]).code).toBe(0);
+    expect(() => readConfig(workspace({ apiReport: { pages: "api.md" } }))).toThrow("apiReport.pages must be an array.");
+    expect(() => readConfig(workspace({ apiReport: { pages: [{ package: "packages/a", pages: [] }] } }))).toThrow("must be an array of paths");
+    expect(() => readConfig(workspace({ apiReport: { pages: [{ package: "packages/a", pages: ["a"], except: { a: 1 } }] } }))).toThrow("of names and reasons");
+  });
+
   it("gives exit code 2 and the help for wrong arguments", () => {
     expect(cli(temp, []).code).toBe(2);
     expect(cli(temp, ["check", "--bad"]).stderr).toContain("An unknown option: --bad");
