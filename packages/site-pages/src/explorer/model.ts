@@ -47,6 +47,8 @@ export const SURFACE_BUDGET_MS = 50;
 export const MAX_PANELS = 8;
 /** The largest number of stops of a held continuous dimension. */
 export const MAX_STOPS = 33;
+/** The most levels that a row of buttons shows. A longer group is a select, so it does not push the chart down the page. */
+export const MAX_CHIPS = 8;
 /** The distance from a measurement, from 0 to 1, at which a band has its weakest color. */
 export const FADE_END = 0.5;
 /** The number of steps of the color scale of a surface. The CSS classes `rx-h0` to `rx-h8` give the colors. */
@@ -428,6 +430,11 @@ export function holdControls(record: ResponseRecord, state: ExplorerState): read
     const note = d.when === undefined ? "" : `Applies ${whenText(record, d)}`;
     return { id: d.id, label: d.label, kind: d.kind === "continuous" ? "stops" : "levels", applies, note, options, value: state.hold[d.id] as ResponseValue };
   });
+}
+
+/** This function gives the form of a group of levels. */
+export function levelForm(count: number): "chips" | "select" {
+  return count > MAX_CHIPS ? "select" : "chips";
 }
 
 /** This function gives the state with a new measure. */

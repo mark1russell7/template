@@ -104,6 +104,14 @@ The attribute `data-overflow-ok` marks a box that is meant to scroll or to clip.
 
 Use the attribute for a data table with many columns, a marquee or a slider. For an API table, the better fix is a layout that fits the phone.
 
+The check serves one site, so a request to another site of the same origin gets a 404. A page that links to other sites names their paths in a meta tag. The content is a regular expression for the full path:
+
+```html
+<meta name="site-check-other-paths" content="^/[^/]+/$">
+```
+
+A status of 400 or more on a path that matches is not a problem. Other faults on that path still count: a failed request, a console error and an exception.
+
 A passing check proves what it asserts, not the page. Read the screenshots at full size before a merge. When a read finds a fault that a script can find, add it to this check.
 
 The probe is a JavaScript file or a TypeScript file (`.ts`, `.mts` or `.cts`). Its code is the body of an async function. These functions are available:

@@ -15,7 +15,9 @@ import {
   heatRange,
   heatStep,
   holdControls,
+  levelForm,
   linePath,
+  MAX_CHIPS,
   MAX_PANELS,
   MAX_STEPS,
   MAX_STOPS,
@@ -102,6 +104,15 @@ function tableRecord(): ResponseRecord {
     points,
   });
 }
+
+describe("the form of a group of levels", () => {
+  it("uses buttons up to the limit and a select past it", () => {
+    expect(levelForm(1)).toBe("chips");
+    expect(levelForm(MAX_CHIPS)).toBe("chips");
+    expect(levelForm(MAX_CHIPS + 1)).toBe("select");
+    expect(levelForm(31)).toBe("select");
+  });
+});
 
 describe("openRecord", () => {
   it("gives the record of good data, from text and from data", () => {

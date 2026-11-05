@@ -95,6 +95,11 @@
   .response-explorer { grid-template-columns: minmax(16rem, 20rem) minmax(0, 1fr); align-items: start; }
 }
 
+/* In one column, the chart comes before the controls, so a phone shows it first. */
+@media (max-width: 59.99rem) {
+  .rx-chart { order: -1; }
+}
+
 /* The controls */
 .rx-controls { display: grid; gap: 0.75rem; min-width: 0; }
 .rx-axes { display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); }
