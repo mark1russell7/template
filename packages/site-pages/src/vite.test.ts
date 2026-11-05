@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { build as viteBuild, resolveConfig, type InlineConfig, type Plugin, type Rolldown } from "vite";
 import { applyTheme } from "./chrome.ts";
 import type { DataStamps } from "./check/freshness.ts";
-import { buildInfo, commitTime, siteBase, siteKpi, siteShell, siteStamps, STAMP_MARK, STAMPS_FILE, themeScript } from "./vite.ts";
+import { buildInfo, commitTime, rehypeScrollCue, type RehypeNode, siteBase, siteKpi, siteShell, siteStamps, STAMP_MARK, STAMPS_FILE, themeScript } from "./vite.ts";
 
 // The compiler examines this line: Vite accepts the plugin without a cast.
 const asVitePlugin = (options: Parameters<typeof siteShell>[0]): Plugin => siteShell(options);
@@ -230,6 +230,26 @@ describe("siteStamps", () => {
   it("stops the build for a stamp of a page that the build does not hold", async () => {
     const both: DataStamps = { schema: "data-stamp/1", pages: [{ page: "index.html", runs: [run] }, { page: "gone.html", runs: [run] }] };
     await expect(build(STAMP_MARK, both)).rejects.toThrow("the build does not hold: gone.html");
+  });
+});
+
+describe("rehypeScrollCue", () => {
+  const table = (properties?: Record<string, unknown>): RehypeNode => ({ type: "element", tagName: "table", ...(properties === undefined ? {} : { properties }), children: [] });
+
+  it("gives the cue, a tab stop and a label to each table, at each depth", () => {
+    const deep = table();
+    const tree: RehypeNode = { type: "root", children: [{ type: "element", tagName: "div", properties: {}, children: [deep] }] };
+    rehypeScrollCue()(tree);
+    expect(deep.properties).toEqual({ className: ["scroll-cue"], tabIndex: 0, ariaLabel: "Table. It scrolls sideways on a narrow screen." });
+    expect(tree.children?.[0]?.properties).toEqual({});
+  });
+
+  it("keeps the classes of the table", () => {
+    const list = table({ className: ["a", "b"] });
+    const one = table({ className: "c" });
+    rehypeScrollCue()({ type: "root", children: [list, one] });
+    expect(list.properties?.["className"]).toEqual(["a", "b", "scroll-cue"]);
+    expect(one.properties?.["className"]).toEqual(["c", "scroll-cue"]);
   });
 });
 
