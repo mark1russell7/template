@@ -43,6 +43,10 @@ if (executable === undefined && process.env["CI"]) throw new Error("CI has no Ch
 const CELL = [204, 51, 51];
 const WIDTH = 300;
 
+/** This function gives a style with the merged line of a minifier: the browser refuses a timeline in the shorthand. */
+const mergedLine = (style: string): string =>
+  style.replace(/animation-name:[^;]*;\s*animation-timing-function:[^;]*;\s*animation-fill-mode:[^;]*;\s*animation-timeline:[^;]*;/, "animation:linear both scroll-cue-fades scroll(self inline);");
+
 /** A page with one box of a table. Each cell has its own background color, as the verdict grid of a site has. */
 const page = (rows: number, tableWidth: number): string =>
   `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff}${css}` +
@@ -93,7 +97,7 @@ describe.skipIf(executable === undefined)("the scroll cue in a browser", () => {
   }, 60_000);
 
   it("shows no cue with the merged line of a minifier: the browser refuses a timeline in the shorthand", async () => {
-    const merged = css.replace(/animation-name:[^;]*;\s*animation-timing-function:[^;]*;\s*animation-fill-mode:[^;]*;\s*animation-timeline:[^;]*;/, "animation:linear both scroll-cue-fades scroll(self inline);");
+    const merged = mergedLine(css);
     expect(merged).not.toBe(css);
     const { right } = await edges(page(100, 900).replace(css, merged), "start");
     expect(right).toEqual(CELL);
@@ -135,6 +139,19 @@ describe.skipIf(executable === undefined)("the scroll cue in a browser", () => {
       const html = focusable(page(100, 900).replace(css, bare));
       expect((await edges(html, "start", TOP_MARGIN - 1, true)).middle).not.toEqual(RING);
       expect((await edges(html, "start", TOP_MARGIN, true)).middle).not.toEqual(RING);
+    }, 60_000);
+
+    it("goes out of view on a dead cue too, because the mask does not need a live animation", async () => {
+      const dead = mergedLine(css.replace(rule, ""));
+      expect(dead).not.toBe(css.replace(rule, ""));
+      const html = focusable(page(100, 900).replace(css, dead));
+      expect((await edges(html, "start", TOP_MARGIN - 1, true)).middle).not.toEqual(RING);
+      expect((await edges(html, "start", TOP_MARGIN, true)).middle).not.toEqual(RING);
+    }, 60_000);
+
+    it("shows inside the box on a dead cue, with the rule", async () => {
+      const { middle } = await edges(focusable(page(100, 900).replace(css, mergedLine(css))), "start", TOP_MARGIN, true);
+      expect(middle).toEqual(RING);
     }, 60_000);
 
     it("shows outside a box with no mask, so that the other test reads the mask and not a page with no ring", async () => {
