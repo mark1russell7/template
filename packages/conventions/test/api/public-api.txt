@@ -110,6 +110,7 @@ parseConfig: build/index.d.ts#parseConfig
 parseJsonc: build/index.d.ts#parseJsonc
 pathsOf: build/index.d.ts#pathsOf
 pinnedGitDeps: build/index.d.ts#pinnedGitDeps
+pipeFails: build/index.d.ts#pipeFails
 prPathFilters: build/index.d.ts#prPathFilters
 publishedMinor: build/index.d.ts#publishedMinor
 publishedMinorRule: build/index.d.ts#publishedMinorRule
@@ -601,6 +602,9 @@ export declare function pathsOf(value: unknown): string[];
 
 ### build/index.d.ts#pinnedGitDeps
 export declare const pinnedGitDeps: Rule;
+
+### build/index.d.ts#pipeFails
+export declare const pipeFails: Rule;
 
 ### build/index.d.ts#prPathFilters
 export declare function prPathFilters(text: string): PathFilter[];

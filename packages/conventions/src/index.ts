@@ -49,6 +49,7 @@ export {
   pagesAfterRelease,
   pagesSite,
   pinnedGitDeps,
+  pipeFails,
   pushMainOnly,
   releaseFiles,
   requiredScripts,

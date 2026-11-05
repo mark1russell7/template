@@ -15,6 +15,7 @@ import { apiReportScript } from "./api-report-script.ts";
 import { pagesAfterRelease } from "./pages-after-release.ts";
 import { pagesSite } from "./pages-site.ts";
 import { pinnedGitDeps } from "./pinned-git-deps.ts";
+import { pipeFails } from "./pipe-fails.ts";
 import { pushMainOnly } from "./push-main-only.ts";
 import { publishedMinor } from "./published-minor.ts";
 import { releaseFiles } from "./release-files.ts";
@@ -55,6 +56,7 @@ export const RULES: readonly Rule[] = [
   runnerBudget,
   mainRunsFinish,
   pushMainOnly,
+  pipeFails,
   gateTrigger,
   homePackage,
   licenseFile,
@@ -64,4 +66,4 @@ export const RULES: readonly Rule[] = [
 ];
 
 export { publishedMinor };
-export { apiReportScript, changelogVersion, cuePreset, gateTrigger, homePackage, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, pagesAfterRelease, pagesSite, pinnedGitDeps, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, workspaceProtocol };
+export { apiReportScript, changelogVersion, cuePreset, gateTrigger, homePackage, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, workspaceProtocol };
