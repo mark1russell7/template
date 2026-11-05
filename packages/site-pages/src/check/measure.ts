@@ -25,6 +25,16 @@ export interface Cut {
   deadCue?: boolean;
 }
 
+/** A control with an accessible name that leaves out its visible text: an entry of `Measure.labels`. */
+export interface Label {
+  /** The element: its tag, its id and its classes. */
+  element: string;
+  /** The accessible name, from `aria-label` or `aria-labelledby`. */
+  label: string;
+  /** The visible text. Text nodes join with no space between elements. */
+  text: string;
+}
+
 /** The result of `MEASURE`. */
 export interface Measure {
   innerWidth: number;
@@ -39,6 +49,8 @@ export interface Measure {
   clipped: string[];
   /** The boxes that cut text at their right edge, at most 8. `cutProblems` of `check.ts` tells which ones are problems. */
   cut: Cut[];
+  /** The controls with an accessible name that leaves out their visible text, at most 8. */
+  labels: Label[];
 }
 
 /**
@@ -67,6 +79,11 @@ export interface Measure {
  * - a text in a fixed element, which the box does not clip,
  * - a text that is not visible, or with an element around it of 1 px or less or with `opacity: 0`.
  * Only the first text of a box counts. An element with no text does not count. Vertical overflow does not count.
+ *
+ * `labels` follows the rule `label-content-name-mismatch` of axe-core 4.14. A test compares the two on the same page.
+ * A control counts when its role takes the name from its content, it has a label, and the words of its visible text
+ * are not together and in order in the label. A check role with a label counts as "cannot decide", so it does not fail.
+ * This copy does not read an icon font. An icon name in the text can give a false problem.
  */
 export const MEASURE = `(() => {
   const root = document.documentElement;
@@ -133,6 +150,64 @@ export const MEASURE = `(() => {
     }
     return true;
   };
+  const NAMED_BY_CONTENT = new Set(["button", "checkbox", "gridcell", "link", "menuitem", "menuitemcheckbox", "menuitemradio", "option", "radio", "switch", "tab", "treeitem"]);
+  const VALUE_ROLES = new Set(["switch", "checkbox", "radio", "menuitemcheckbox", "menuitemradio"]);
+  const roleOf = (e) => {
+    const own = (e.getAttribute("role") ?? "").trim().split(/\\s+/)[0].toLowerCase();
+    if (own !== "") return own;
+    if (e.localName === "button") return "button";
+    return (e.localName === "a" || e.localName === "area") && e.hasAttribute("href") ? "link" : "";
+  };
+  const onScreen = (e) => {
+    if (getComputedStyle(e).visibility !== "visible") return false;
+    for (let p = e; p && p !== root; p = p.parentElement) {
+      const s = getComputedStyle(p);
+      if (s.display === "contents") continue;
+      if (s.display === "none") return false;
+      const r = p.getBoundingClientRect();
+      if (r.width <= 1 || r.height <= 1) return false;
+    }
+    return true;
+  };
+  const visibleText = (e) => [...e.childNodes].map((c) => {
+    if (c.nodeType === 3) return onScreen(e) ? c.nodeValue : "";
+    if (c.nodeType !== 1) return "";
+    return c.localName === "br" ? " " : visibleText(c);
+  }).join("");
+  const labelOf = (e) => {
+    const ids = (e.getAttribute("aria-labelledby") ?? "").trim().split(/\\s+/).filter((id) => id !== "");
+    const named = ids.map((id) => document.getElementById(id)?.textContent ?? "").join(" ").trim();
+    return named !== "" ? named : (e.getAttribute("aria-label") ?? "").trim();
+  };
+  const SYMBOLS = /[\\u1D00-\\u1DFF\\u20A0-\\u20FF\\u2100-\\u27BF\\uE000-\\uF8FF\\p{Extended_Pictographic}\\p{P}]/gu;
+  const readable = (text) => {
+    const s = text.trim().toLowerCase();
+    if (s === "" || s === "aa" || s === "abc" || (s.length === 1 && !/\\d/.test(s))) return false;
+    return s.replace(SYMBOLS, " ").trim() !== "";
+  };
+  const words = (text) => {
+    let s = text.toLowerCase().normalize("NFKD");
+    for (let last; last !== s;) { last = s; s = s.replace(/\\([^()]*\\)/g, ""); }
+    s = s.replace(/[^\\p{L}\\p{N}]/gu, " ").replace(/\\s+/g, " ").trim();
+    return [...new Intl.Segmenter(undefined, { granularity: "word" }).segment(s)].map((part) => part.segment.trim()).filter((part) => part !== "");
+  };
+  const together = (all, some) => {
+    for (let i = 0; i + some.length <= all.length; i += 1) if (some.every((word, j) => word === all[i + j])) return true;
+    return false;
+  };
+  const labels = [];
+  for (const e of document.querySelectorAll("[aria-label],[aria-labelledby]")) {
+    const role = roleOf(e);
+    if (!NAMED_BY_CONTENT.has(role) || VALUE_ROLES.has(role) || e.closest("[aria-hidden=true]") || !onScreen(e)) continue;
+    const label = labelOf(e);
+    const text = visibleText(e).replace(/\\s+/g, " ").trim();
+    if (label === "" || text === "" || !readable(label) || !readable(text)) continue;
+    const textWords = words(text);
+    if (textWords.length === 0) continue;
+    const labelWords = words(label);
+    if (labelWords.length !== 0 && together(labelWords, textWords)) continue;
+    labels.push({ element: name(e), label: label.slice(0, 80), text: text.slice(0, 80) });
+  }
   const cueShows = (box) => { const s = getComputedStyle(box); return s.animationName !== "none" || s.backgroundImage !== "none"; };
   const cuts = new Map();
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -163,6 +238,7 @@ export const MEASURE = `(() => {
     past: past.slice(0, 8),
     clipped: clipped.slice(0, 8),
     cut: [...cuts.values()].slice(0, 8),
+    labels: labels.slice(0, 8),
   };
 })()`;
 

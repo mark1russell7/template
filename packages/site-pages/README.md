@@ -77,6 +77,12 @@ The text of the problem has the element, the box, the two widths, the width of t
 a table goes out of view at 360 px: table.api-table in div.table-scroll: content of 736 px in a box of 344 px, "Note". Make the table fit, give the box the class scroll-cue, or add data-overflow-ok to the box.
 ```
 
+A control fails when its label leaves out its visible text. A visitor who speaks the visible words to voice control then gets no match. The rule follows `label-content-name-mismatch` of axe-core 4.14:
+
+```text
+a label leaves out the visible text: a#row has the label "a 12 items" and shows "a12". Start the label with the visible text, and put a space between elements.
+```
+
 The rule for a box that scrolls examines only tables, for these reasons:
 
 - A code block, a hex view, a row of tabs and a carousel are meant to scroll, and a visitor sees that they scroll.

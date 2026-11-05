@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createRequire } from "node:module";
 import { Script } from "node:vm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { findBrowser } from "./browser.ts";
@@ -20,6 +21,27 @@ const CARD_CSS = `<style>.table-card{padding:0;overflow:hidden}.table-scroll{ove
 const STACKED_CSS = `<style>.table-scroll{overflow-x:auto}table{min-width:0}@media (max-width:640px){.stacked,.stacked tbody,.stacked tr,.stacked td{display:block;min-width:0}}.stacked{min-width:46rem}</style>`;
 /** A script that gives the box #box the width of its text #text, plus the given number of pixels. */
 const fit = (pixels: number) => `<div id="box" style="overflow: hidden; width: max-content; ${NOWRAP}"><span id="text">A short text</span></div><script>document.getElementById("box").style.width = document.getElementById("text").getBoundingClientRect().width + (${pixels}) + "px";</script>`;
+
+/** The controls that fail the rule of the labels, with the id of each. */
+const BAD_LABELS = `
+  <button id="bad-words" aria-label="Add the row">row 12</button>
+  <a id="bad-join" href="#x" aria-label="a 12 items"><code>a</code><span>12</span></a>
+  <button id="bad-order" aria-label="the second first thing">first second</button>
+  <button id="bad-hidden" aria-label="Back"><span aria-hidden="true">Forward</span></button>`;
+/** The controls that pass the rule of the labels. The second one is the clean copy of `bad-join`. */
+const GOOD_LABELS = `
+  <button id="good-start" aria-label="row 12: add the row">row 12</button>
+  <a id="good-join" href="#x" aria-label="a 12 items"><code>a</code> <span>12</span></a>
+  <button id="good-brackets" aria-label="Run it">Run (again)</button>
+  <button id="good-case" aria-label="SAVE the file">Save</button>
+  <button id="good-symbol" aria-label="Close">x</button>
+  <button id="good-no-text" aria-label="Close"></button>
+  <div id="good-no-control" aria-label="Zed">Other text</div>
+  <span id="good-value" role="switch" tabindex="0" aria-checked="false" aria-label="Sound">other text</span>
+  <button id="good-display" aria-label="Zed"><span style="display: none">Other</span>Zed</button>
+  <a id="good-clip" href="#x" aria-label="Guide"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">other words</span>Guide</a>
+  <span id="label-source">Run the job</span><button id="good-by-id" aria-labelledby="label-source">Run</button>
+  <button id="good-label-wins" aria-label="Open the box" aria-labelledby="label-source">Run</button>`;
 
 const page = (body: string, head = "") =>
   `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark">${head}</head><body>${body}</body></html>`;
@@ -44,6 +66,9 @@ beforeAll(() => {
   write("other-sites/index.html", page(`<h1>Other sites</h1>${FETCH_OTHER}`, OTHER_SITE));
   write("other-sites-own/index.html", page(`<h1>Other sites</h1><img src="missing.png" alt=""><script>fetch("../other-one/", { method: "HEAD" })</script>`, OTHER_SITE));
   write("other-sites-none/index.html", page(`<h1>Other sites</h1><script>fetch("../other-one/", { method: "HEAD" })</script>`));
+  write("axe.js", readFileSync(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8"));
+  write("labels-bad/index.html", page(`<h1>Labels</h1>${BAD_LABELS}${GOOD_LABELS}`, `<script src="../axe.js"></script>`));
+  write("labels-good/index.html", page(`<h1>Labels</h1>${GOOD_LABELS}`, `<script src="../axe.js"></script>`));
   // A table with the class of the cue, and with the merged line of a minifier that the browser refuses: no cue shows.
   write("dead-cue/index.html", page(`<h1>Dead cue</h1><div class="scroll-cue" style="overflow-x: auto"><table style="min-width: 46rem"><tr><td>${LONG}</td></tr></table></div>`, `<style>@keyframes fades{to{opacity:1}}@supports (animation-timeline:scroll()){.scroll-cue{background-image:none;animation:linear both fades scroll(self inline)}}</style>`));
   // A clean copy of the same page: the two lines stay apart, and the cue shows.
@@ -205,6 +230,21 @@ describe.skipIf(browser === undefined)("checkSite in a browser", () => {
     timeoutMs: 30_000,
     ...extra,
   });
+
+  it("fails a label that leaves out the visible text, passes a clean copy, and agrees with axe on both", async () => {
+    const probe = `
+      const found = (await axe.run({ runOnly: ["label-content-name-mismatch"] })).violations.flatMap((rule) => rule.nodes.map((node) => node.target[0]));
+      const named = [...document.querySelectorAll("button, a, [role]")].filter((e) => e.id.startsWith("bad-")).map((e) => "#" + e.id);
+      check("axe names the same controls", JSON.stringify(found.sort()) === JSON.stringify(named.sort()), JSON.stringify(found));
+    `;
+    const result = await checkSite(options(["/labels-bad/"], { widths: [1280], schemes: ["light"], probe }));
+    const view = result.views[0];
+    expect(view?.probe?.filter((check) => !check.ok)).toEqual([]);
+    expect(view?.measure?.labels.map((label) => label.element).sort()).toEqual(["a#bad-join", "button#bad-hidden", "button#bad-order", "button#bad-words"]);
+    expect(view?.problems.join("\n")).toContain(`a label leaves out the visible text: a#bad-join has the label "a 12 items" and shows "a12".`);
+    const clean = await checkSite(options(["/labels-good/"], { widths: [1280], schemes: ["light"], probe: `check("axe names no control", (await axe.run({ runOnly: ["label-content-name-mismatch"] })).violations.length === 0)` }));
+    expect(clean.views[0]?.problems).toEqual([]);
+  }, 60_000);
 
   it("fails a table with the class of the cue when the served CSS gives no cue, and passes a clean copy", async () => {
     const result = await checkSite(options(["/dead-cue/", "/live-cue/"], { widths: [360], schemes: ["light"] }));

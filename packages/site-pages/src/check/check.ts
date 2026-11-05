@@ -238,6 +238,7 @@ async function checkView(page: Page, events: Events, input: ViewInput): Promise<
     for (const past of measure.past) view.problems.push(`past the right edge: ${past}`);
     for (const clipped of measure.clipped) view.problems.push(`a text area hides its text: ${clipped}`);
     view.problems.push(...cutProblems(measure.cut, width));
+    for (const label of measure.labels) view.problems.push(`a label leaves out the visible text: ${label.element} has the label "${label.label}" and shows "${label.text}". Start the label with the visible text, and put a space between elements.`);
     if (measure.text === 0) view.problems.push("the page shows no text");
     if (options.shots) {
       const file = join(options.shots, `${pageSlug(path)}-${width}-${scheme}.png`);
