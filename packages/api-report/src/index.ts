@@ -27,6 +27,7 @@ export {
   type Manifest,
 } from "./entries.ts";
 export { pageFaults, reportEntries, type ApiPage } from "./page.ts";
+export { referencePage } from "./reference.ts";
 export { apiReport, DEFAULT_TOOL, HEADER_LINES, packageReport, type PackageReportOptions, type ReportOptions } from "./report.ts";
 export {
   formatResult,
