@@ -158,17 +158,18 @@ site-pages freshness --stamps data/stamps.json
 The gate has three rules. A fault of one rule gives the exit code 1.
 
 1. Each page names a run, and each run has an id, a link, a date and its engine versions.
-2. The data of a page is at most 3 days old (`MAX_DATA_AGE_DAYS`), or a run on newer engines is in flight. The stamp of that run is at most 3 days old, so an old stamp does not hold the gate open.
+2. The data of a page is at most 3 days old (`MAX_DATA_AGE_DAYS`), or a run on newer engines is in flight. The stamp of that run is at most 3 days old, so an old stamp does not hold the gate open. Only a `hold` keeps a slow run past it, while the jobs of that run end.
 3. The engines of the newest run are at most 1 minor version behind npm at the start of the run (`MAX_MINORS_BEHIND`). A release during a long run does not fail the gate.
 
 Stamps that pass also show one failing case for each page, in the log of each build. A measured page must fail one day after its limit, and after the start of its limit. A study with no limit must fail before the date of its run. A page with no failing case gives the exit code 1, so each site that uses the gate shows that the gate holds it.
 
-Two fields of a stamp change the age rule:
+These fields of a stamp change the age rule:
 
 - `"study": true` marks a study of the versions of its runs. The rule 3 does not apply. A study has a `limit`, or it has the field `noLimit`. Each other study fails the gate.
 - `"noLimit"` is for a study that no scheduled run can refresh: `{ "reproduce": "The code of the study is gone.", "today": "The page tells of one day." }`. The first text tells why no run of the current code can reproduce the numbers. It names the subject of the study, pinned to an exact version. The second text tells why the page claims nothing about today. The stamp line shows both, and tells that the page is a fixed study of that version.
 - `"limit"` sets a longer age limit: `{ "days": 7, "reason": "The scan is weekly.", "workflow": ".github/workflows/scan.yml" }`. The stamp line shows the limit and the reason. The schedule of that workflow must meet the limit, or the gate fails. A limit with no schedule fails. A limit over 14 days (`MAX_LIMIT_DAYS_WITHOUT_RULING`) also needs a `ruling`, a public https link for that site. A study has the same line, and its limit is at most 30 days (`MAX_STUDY_LIMIT_DAYS`), also with a ruling. Each run of the study names the full `commit` of the code that ran. A monthly line has a gap of 31 days, so it fails a limit of 30.
 - `"startsAt"` in a limit is the time at which the age rule and the commit rule start. The schedule rule applies at once. A site removes the field at the first green read of its workflow. The gate refuses a time after 2026-12-07 (`LAST_LIMIT_START`), so each limit turns on by that date.
+- `"hold"` keeps a slow run in flight past the age limit: `{ "until": "2026-11-08T19:36:10Z", "stallHours": 6, "reason": "The shared queue of CI is full." }`. The run counts as in flight while one of its jobs ended in the last `stallHours`. The hold ends at `until`, when the run fails or is cancelled, and when the gate cannot read the run. The gate reads the jobs from GitHub with the token of the build, so the link of the run in flight is a GitHub Actions run. The end is at most 96 hours after the start of the run (`MAX_HOLD_HOURS`). The stall hours are at most 24 (`MAX_STALL_HOURS`), so the failing case one day after the limit always fails. The stamp line tells since when the refresh runs, with its link and the end of the hold.
 
 When npm does not answer, the gate prints the rule 3 under `Not run` and does not fail. A workflow turns the gate on with the input `data-stamps` of `reusable-pages.yml`. A site with its own Pages workflow uses the action `data-stamps` of the template. The gate then runs from the template commit, so it needs no install.
 
