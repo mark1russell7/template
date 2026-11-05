@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 145 names
+## . (build/index.d.ts): 147 names
 
 BASE_CSS: build/index.d.ts#BASE_CSS
 type BoardIssue: build/chunks/freshness.d.ts#BoardIssue
@@ -68,6 +68,7 @@ type ReleaseGap: build/index.d.ts#ReleaseGap
 type ReleaseKind: build/chunks/freshness.d.ts#ReleaseKind
 type ReleaseListSources: build/index.d.ts#ReleaseListSources
 type ReleasePoint: build/index.d.ts#ReleasePoint
+type ReleaseReading: build/index.d.ts#ReleaseReading
 type ReleaseSources: build/index.d.ts#ReleaseSources
 type ReleaseSummary: build/index.d.ts#ReleaseSummary
 RoadmapParseError: build/index.d.ts#RoadmapParseError
@@ -132,7 +133,7 @@ readKpi: build/chunks/freshness.d.ts#readKpi
 readReleases: build/index.d.ts#readReleases
 readStatusBoard: build/index.d.ts#readStatusBoard
 releaseBodyEntries: build/index.d.ts#releaseBodyEntries
-releaseGaps: build/index.d.ts#releaseGaps
+releaseReading: build/index.d.ts#releaseReading
 releaseSummary: build/index.d.ts#releaseSummary
 releasesLead: build/index.d.ts#releasesLead
 renderDataStamp: build/index.d.ts#renderDataStamp
@@ -959,6 +960,8 @@ interface ReleaseListSources {
   changelog?: readonly string[] | undefined;
   current?: string | undefined;
   npm?: readonly string[] | undefined;
+  tags?: readonly string[] | undefined;
+  versionAt?: string | undefined;
 }
 
 ### build/index.d.ts#ReleasePoint
@@ -966,6 +969,12 @@ interface ReleasePoint {
   version: string;
   date: string;
   kind: ReleaseKind;
+}
+
+### build/index.d.ts#ReleaseReading
+interface ReleaseReading {
+  gaps: ReleaseGap[];
+  inFlight?: string;
 }
 
 ### build/index.d.ts#ReleaseSources
@@ -1199,8 +1208,8 @@ export declare function readStatusBoard(options: ReadStatusBoardOptions): Promis
 ### build/index.d.ts#releaseBodyEntries
 export declare function releaseBodyEntries(body: string): ChangelogEntry[];
 
-### build/index.d.ts#releaseGaps
-export declare function releaseGaps(listed: readonly string[], sources: ReleaseListSources): ReleaseGap[];
+### build/index.d.ts#releaseReading
+export declare function releaseReading(listed: readonly string[], sources: ReleaseListSources, now?: number): ReleaseReading;
 
 ### build/index.d.ts#releaseSummary
 export declare function releaseSummary(releases: readonly ReleasePoint[]): ReleaseSummary;
@@ -1249,6 +1258,9 @@ export declare function timelineLayout<T extends ReleasePoint>(releases: readonl
 
 ### build/index.d.ts#utcDay
 export declare function utcDay(time: number): number;
+
+### build/index.d.ts#versionCommitTime
+export declare function versionCommitTime(repoDir: string, file: string): string | null;
 
 ### build/index.d.ts#versionOfTag
 export declare function versionOfTag(tag: string): TagVersion | null;

@@ -9,7 +9,7 @@ export { compareVersions, kindOf, parseVersion, versionOfTag, type ParsedVersion
 export { changelogVersions, firstSentence, headingAnchor, parseChangelog, releaseBodyEntries, type ChangelogEntry, type ChangelogSection } from "./data/changelog.ts";
 export { checkStateOf, githubOpenWork, githubReleases, GITHUB_API, GITHUB_GRAPHQL, type GitHubOptions } from "./data/github.ts";
 export { npmPublishTimes, NPM_REGISTRY, type NpmOptions } from "./data/npm.ts";
-export { gitTagDates, headCommit, headingDate, isShallow, originRepository, type TagDate } from "./data/git.ts";
+export { gitTagDates, headCommit, headingDate, isShallow, originRepository, versionCommitTime, type TagDate } from "./data/git.ts";
 export { globFiles } from "./data/glob.ts";
 export {
   DEFAULT_CHANGELOGS,
@@ -17,11 +17,12 @@ export {
   readChangelogs,
   readReleases,
   ReleaseDataError,
-  releaseGaps,
+  releaseReading,
   type ChangelogSource,
   type ReadReleasesOptions,
   type ReleaseGap,
   type ReleaseListSources,
+  type ReleaseReading,
   type ReleaseSources,
 } from "./data/releases.ts";
 export {

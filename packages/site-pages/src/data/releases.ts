@@ -99,8 +99,10 @@ function stepKind(version: string, previous: string | undefined): ReleaseKind {
  *   version of a package is the kind `first`.
  * - A version with a prerelease part is not a release. npm also keeps the placeholder
  *   `0.0.0-bootstrap.0` of a new package.
+ * - With `label`, each version has the name of its package, also when the times name one package.
+ * - With `keep`, the function gives only the versions that `keep` accepts. The kind still comes from each version of the package.
  */
-function npmReleases(times: readonly NpmVersionTime[], group: string | undefined): Release[] {
+function npmReleases(times: readonly NpmVersionTime[], group: string | undefined, options: { label?: boolean; keep?: (version: string) => boolean } = {}): Release[] {
   const stable = times.filter((time) => (!group || time.name === group) && parseVersion(time.version)?.prerelease.length === 0);
   const byPackage = new Map<string, NpmVersionTime[]>();
   for (const time of stable) {
@@ -115,7 +117,7 @@ function npmReleases(times: readonly NpmVersionTime[], group: string | undefined
     shortNames.set(name, short);
     shortCount.set(short, (shortCount.get(short) ?? 0) + 1);
   }
-  const several = byPackage.size > 1;
+  const several = options.label ?? byPackage.size > 1;
   const releases: Release[] = [];
   for (const [name, list] of byPackage) {
     list.sort((a, b) => compareVersions(a.version, b.version));
@@ -123,6 +125,7 @@ function npmReleases(times: readonly NpmVersionTime[], group: string | undefined
     // Two scopes with one short name keep the full names
     const label = (shortCount.get(short) ?? 0) > 1 ? name : short;
     list.forEach((time, index) => {
+      if (options.keep && !options.keep(time.version)) return;
       releases.push({
         version: several ? `${label}@${time.version}` : time.version,
         date: time.date,
@@ -143,6 +146,18 @@ function npmLine(times: readonly NpmVersionTime[], group: string | undefined): s
 }
 
 /**
+ * This function adds the lines of their own to the list of a group. A package of the group can have a version that the
+ * group does not have. The list names that version with its package, because a reader looks for the package by its name.
+ */
+function withOwnLines(list: Release[], times: readonly NpmVersionTime[], group: string | undefined): Release[] {
+  if (!group) return list;
+  const versions = new Set(list.map((release) => release.version));
+  const others = times.filter((time) => time.name !== group);
+  const own = npmReleases(others, undefined, { label: true, keep: (version) => !versions.has(version) });
+  return own.length === 0 ? list : [...list, ...own].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
+}
+
+/**
  * This function merges the release sources into one entry for each version, the newest first.
  *
  * - The versions: the changelog of `group`, or else each changelog version and each GitHub release.
@@ -150,6 +165,7 @@ function npmLine(times: readonly NpmVersionTime[], group: string | undefined): s
  * - The date: the git tag, else the GitHub release, else npm, else the commit of the changelog heading.
  * - The changes: the changelog entries, else the list items of the GitHub release text.
  * - Without a changelog version and without a GitHub release, each npm version of each package is a release.
+ * - With `group`, a version of another package that the group does not have is a release with the name of its package.
  *
  * @throws ReleaseDataError when `group` has no changelog and other changelogs exist
  */
@@ -184,7 +200,7 @@ export function mergeReleases(sources: ReleaseSources): Release[] {
     for (const [version, list] of githubByVersion) if (list.some((entry) => inGroup(entry.package))) versions.add(version);
   }
   // No changelog and no GitHub release names a version: the versions on npm are the releases
-  if (versions.size === 0) return npmReleases(sources.npm ?? [], group);
+  if (versions.size === 0) return withOwnLines(npmReleases(sources.npm ?? [], group), sources.npm ?? [], group);
   const line = npmLine(sources.npm ?? [], group);
   for (const time of sources.npm ?? []) {
     if (time.name === line && parseVersion(time.version)?.prerelease.length === 0) versions.add(time.version);
@@ -248,7 +264,7 @@ export function mergeReleases(sources: ReleaseSources): Release[] {
   }
 
   const oldest = ordered[ordered.length - 1];
-  return ordered.map((version): Release => {
+  const merged = ordered.map((version): Release => {
     const github = githubByVersion.get(version) ?? [];
     let changes: ChangeMap | undefined = changelogChanges.get(version);
     if (!changes) {
@@ -285,6 +301,7 @@ export function mergeReleases(sources: ReleaseSources): Release[] {
       links,
     };
   });
+  return withOwnLines(merged, sources.npm ?? [], group);
 }
 
 /** The sources that a release list must cover. Each source is optional. */
@@ -295,6 +312,10 @@ export interface ReleaseListSources {
   current?: string | undefined;
   /** The versions on npm. The check ignores a prerelease, because a prerelease is not a release. */
   npm?: readonly string[] | undefined;
+  /** The versions that have a tag. A release makes its tag at its end. */
+  tags?: readonly string[] | undefined;
+  /** The ISO time of the commit that set `current`, from `versionCommitTime`. */
+  versionAt?: string | undefined;
 }
 
 /** A version that a release list does not show, and the sources that name it. */
@@ -303,16 +324,34 @@ export interface ReleaseGap {
   sources: Array<"changelog" | "current" | "npm">;
 }
 
+/** The result of the check of a release list. */
+export interface ReleaseReading {
+  /** The versions that the list does not show, the newest first. */
+  gaps: ReleaseGap[];
+  /** The current version when it has no tag and its commit is less than 1 day old. */
+  inFlight?: string;
+}
+
+/** The time that a release can take. After this time, a version with no tag is a failed release. */
+const IN_FLIGHT_MS = 24 * 60 * 60 * 1000;
+
 /**
- * This function gives the versions that the sources name and a release list does not show, the newest first. An old list
- * and a list with a missing middle version both give a gap. The check covers one line of versions, so give the plain
- * versions of one package. It does not read a page: a page that does not show its list has no gap here.
+ * This function reads a release list against its sources. An old list and a list with a missing middle version both give
+ * a gap. A version in flight gives no gap, because its release has not ended. After 1 day it gives a gap, so a failed
+ * release shows. The check covers one line of versions, so give the plain versions of one package. It does not read a
+ * page: a page that does not show its list has no gap here.
+ *
+ * @param listed - The versions of the list.
+ * @param sources - The sources that name the versions.
+ * @param now - The time of the check, in milliseconds.
  */
-export function releaseGaps(listed: readonly string[], sources: ReleaseListSources): ReleaseGap[] {
+export function releaseReading(listed: readonly string[], sources: ReleaseListSources, now: number = Date.now()): ReleaseReading {
+  const { current, tags, versionAt } = sources;
+  const inFlight = current !== undefined && tags !== undefined && versionAt !== undefined && !tags.includes(current) && now - Date.parse(versionAt) < IN_FLIGHT_MS ? current : undefined;
   const shown = new Set(listed);
   const gaps = new Map<string, ReleaseGap>();
   const add = (version: string, source: ReleaseGap["sources"][number]): void => {
-    if (shown.has(version)) return;
+    if (shown.has(version) || version === inFlight) return;
     const gap = gaps.get(version) ?? { version, sources: [] };
     gap.sources.push(source);
     gaps.set(version, gap);
@@ -322,7 +361,8 @@ export function releaseGaps(listed: readonly string[], sources: ReleaseListSourc
   for (const version of sources.npm ?? []) {
     if (parseVersion(version)?.prerelease.length === 0) add(version, "npm");
   }
-  return [...gaps.values()].sort((a, b) => compareVersions(b.version, a.version));
+  const ordered = [...gaps.values()].sort((a, b) => compareVersions(b.version, a.version));
+  return inFlight === undefined ? { gaps: ordered } : { gaps: ordered, inFlight };
 }
 
 // ---------------------------------------------------------------------------
