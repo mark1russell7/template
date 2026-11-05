@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { NpmVersionTime } from "../data/types.ts";
-import { checkFreshness, DATA_STAMP_SCHEMA, latestAt, minorsBehind, parseDataStamps, runFreshnessCli, scheduleGapDays, type DataLimit, type DataRun, type DataStamps, type PageStamp } from "./freshness.ts";
+import { checkFreshness, cronLines, DATA_STAMP_SCHEMA, latestAt, minorsBehind, parseDataStamps, runFreshnessCli, scheduleGapDays, type DataLimit, type DataRun, type DataStamps, type PageStamp } from "./freshness.ts";
 
 const ENGINE = "@scope/engine";
 const NOW = "2026-11-10T12:00:00Z";
@@ -195,6 +195,35 @@ describe("the limit of a page", () => {
     expect(parseDataStamps(page([aged(1)], { reason: " " }))).toMatchObject({ ok: false, faults: ["index.html: the limit has no reason."] });
     expect(parseDataStamps(page([aged(1)], { days: 0 }))).toMatchObject({ ok: false, faults: ["index.html: the limit has no count of days."] });
     expect(parseDataStamps(page([aged(1)], { workflow: "" }))).toMatchObject({ ok: false, faults: ["index.html: the limit names no workflow."] });
+  });
+});
+
+describe("cronLines", () => {
+  it("gives the number of each line and its text, in each form that a workflow can write", () => {
+    const workflow = [
+      "on:",
+      "  schedule:",
+      '    - cron: "1 2 * * *"',
+      "    - cron: '3 4 * * *' # weekly",
+      "    - cron: 5 6 * * *",
+      '    - "cron": "7 8 * * *"',
+      "    # - cron: 9 9 * * *",
+    ].join("\r\n");
+    expect(cronLines(workflow)).toEqual([
+      { line: 3, cron: "1 2 * * *" },
+      { line: 4, cron: "3 4 * * *" },
+      { line: 5, cron: "5 6 * * *" },
+      { line: 6, cron: "7 8 * * *" },
+    ]);
+  });
+
+  it("gives an empty text for a line with no value, so the gate names the line", () => {
+    expect(cronLines("    - cron:")).toEqual([{ line: 1, cron: "" }]);
+    expect(scheduleGapDays("    - cron:")).toBe("the gate cannot read the line `cron: `");
+  });
+
+  it("does not read another key that starts with the same word", () => {
+    expect(cronLines("    cronjob: 1 2 * * *\n    # cron: 1 2 * * *")).toEqual([]);
   });
 });
 

@@ -4,6 +4,7 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { cronLines } from "@mark1russell7/site-pages";
 import { byCode } from "../workspace.ts";
 import { replaceLine, type Break, type Edit, type Rule } from "../rule.ts";
 import { WORKFLOW, blockEnd, childIndent, indentOf, keyValue, workflowLines } from "../workflow.ts";
@@ -156,20 +157,18 @@ function startsPerHour(field: string): number {
  * This function gives the breaks of the schedules: the minute of each `cron` is the minute of the repository and the file. A
  * schedule that starts more than once in each hour starts at equal steps from that minute (`18,48` for each 30 minutes).
  */
-function cronBreaks(file: string, text: string, lines: readonly string[], minute: number): Break[] {
+function cronBreaks(file: string, text: string, minute: number): Break[] {
   const breaks: Break[] = [];
   const originals = text.split(/\r?\n/);
-  lines.forEach((line, index) => {
-    const value = keyValue(line, "cron");
-    if (value === undefined) return;
+  for (const { line, cron: value } of cronLines(text)) {
     const fields = value.split(" ").filter((field) => field !== "");
     const wanted = minuteField(minute, startsPerHour(fields[0] ?? ""));
-    if (fields[0] === wanted) return;
+    if (fields[0] === wanted) continue;
     const expected = [wanted, ...fields.slice(1)].join(" ");
-    const original = originals[index] ?? line;
-    const edits: Edit[] = original.includes(value) ? [{ file, before: text, after: replaceLine(text, index + 1, [original.replace(value, () => expected)]) }] : [];
-    breaks.push({ file, line: index + 1, message: `${file}: the schedule "${value}" starts at minute ${fields[0] ?? "?"}, and the minute of this repository and file is ${String(minute)}.`, fix: `cron: "${expected}"`, edits });
-  });
+    const original = originals[line - 1] ?? "";
+    const edits: Edit[] = original.includes(value) ? [{ file, before: text, after: replaceLine(text, line, [original.replace(value, () => expected)]) }] : [];
+    breaks.push({ file, line, message: `${file}: the schedule "${value}" starts at minute ${fields[0] ?? "?"}, and the minute of this repository and file is ${String(minute)}.`, fix: `cron: "${expected}"`, edits });
+  }
   return breaks;
 }
 
@@ -209,9 +208,9 @@ export const runnerBudget: Rule = {
       const lines = workflowLines(text);
       breaks.push(...matrixBreaks(file, text, lines, limit), ...concurrencyBreaks(file, text, lines, grouped));
       if (options["minute"] !== false) {
-        const schedules = lines.some((line) => keyValue(line, "cron") !== undefined);
+        const schedules = cronLines(text).length > 0;
         if (schedules && repository === undefined) breaks.push({ file, message: `${file} has a schedule, and the rule cannot find the repository (GITHUB_REPOSITORY, or a GitHub URL of the remote origin).` });
-        else if (repository !== undefined) breaks.push(...cronBreaks(file, text, lines, scheduleMinute(repository, file)));
+        else if (repository !== undefined) breaks.push(...cronBreaks(file, text, scheduleMinute(repository, file)));
       }
     }
     return breaks;
