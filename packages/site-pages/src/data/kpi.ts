@@ -55,7 +55,7 @@ function timeProblems(at: unknown, name: string, now: number): string[] {
 /** This function gives the faults of one measure. */
 function measureProblems(value: unknown, index: number, seen: Set<string>, now: number): string[] {
   if (!isRecord(value)) return [`Measure ${index} is not an object.`];
-  const { id, value: amount, unit, at } = value;
+  const { id, value: amount, unit, at, notCounted } = value;
   const problems: string[] = [];
   if (typeof id !== "string" || !SLUG.test(id)) problems.push(`Measure ${index} has no id of lowercase words with single hyphens.`);
   else if (seen.has(id)) problems.push(`The id ${id} occurs two times.`);
@@ -63,6 +63,7 @@ function measureProblems(value: unknown, index: number, seen: Set<string>, now: 
   if (typeof amount !== "number" || !Number.isFinite(amount)) problems.push(`Measure ${index} has no finite number as its value.`);
   if (unit !== undefined && !isText(unit)) problems.push(`Measure ${index} has a unit that is not a text.`);
   if (at !== undefined) problems.push(...timeProblems(at, `The field at of measure ${index}`, now));
+  if (notCounted !== undefined && !isText(notCounted)) problems.push(`Measure ${index} has a field notCounted that is not a text.`);
   return problems;
 }
 
@@ -97,8 +98,8 @@ export function kpiProblems(value: unknown, now: number = Date.now()): string[] 
 }
 
 /** This function gives a copy of a measure with only its known fields. */
-function cleanMeasure({ id, value, unit, at }: KpiMeasure): KpiMeasure {
-  return { id, value, ...(unit === undefined ? {} : { unit }), ...(at === undefined ? {} : { at }) };
+function cleanMeasure({ id, value, unit, at, notCounted }: KpiMeasure): KpiMeasure {
+  return { id, value, ...(unit === undefined ? {} : { unit }), ...(at === undefined ? {} : { at }), ...(notCounted === undefined ? {} : { notCounted }) };
 }
 
 /** This function gives a copy of an engine with only its known fields. */

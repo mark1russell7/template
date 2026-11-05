@@ -37,6 +37,13 @@ describe("kpiFile", () => {
     expect(Object.keys(measure ?? {})).toEqual(["id", "value", "unit", "at"]);
   });
 
+  it("keeps the text of what a measure does not count, as its last field", () => {
+    const measures = [{ notCounted: "Lists that a script draws.", id: "stale-text", value: 0, at: "2026-11-04T08:00:00Z" }];
+    const [measure] = kpiFile({ ...INPUT, measures }, NOW).measures;
+    expect(measure).toEqual({ id: "stale-text", value: 0, at: "2026-11-04T08:00:00Z", notCounted: "Lists that a script draws." });
+    expect(Object.keys(measure ?? {})).toEqual(["id", "value", "at", "notCounted"]);
+  });
+
   it("throws an error with each fault", () => {
     const error = (() => {
       try {
@@ -102,6 +109,8 @@ describe("kpiProblems", () => {
 
   it("refuses an empty unit and an engine with no version", () => {
     expect(faults({ measures: [{ id: "cases", value: 1, unit: " " }] })).toHaveLength(1);
+    expect(faults({ measures: [{ id: "cases", value: 1, notCounted: " " }] })).toHaveLength(1);
+    expect(faults({ measures: [{ id: "cases", value: 1, notCounted: 3 }] })).toHaveLength(1);
     expect(faults({ engines: [{ name: "x" }] })).toHaveLength(1);
     expect(faults({ engines: "x" })).toHaveLength(1);
   });
