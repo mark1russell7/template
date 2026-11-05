@@ -44,6 +44,10 @@ beforeAll(() => {
   write("other-sites/index.html", page(`<h1>Other sites</h1>${FETCH_OTHER}`, OTHER_SITE));
   write("other-sites-own/index.html", page(`<h1>Other sites</h1><img src="missing.png" alt=""><script>fetch("../other-one/", { method: "HEAD" })</script>`, OTHER_SITE));
   write("other-sites-none/index.html", page(`<h1>Other sites</h1><script>fetch("../other-one/", { method: "HEAD" })</script>`));
+  // A table with the class of the cue, and with the merged line of a minifier that the browser refuses: no cue shows.
+  write("dead-cue/index.html", page(`<h1>Dead cue</h1><div class="scroll-cue" style="overflow-x: auto"><table style="min-width: 46rem"><tr><td>${LONG}</td></tr></table></div>`, `<style>@keyframes fades{to{opacity:1}}@supports (animation-timeline:scroll()){.scroll-cue{background-image:none;animation:linear both fades scroll(self inline)}}</style>`));
+  // A clean copy of the same page: the two lines stay apart, and the cue shows.
+  write("live-cue/index.html", page(`<h1>Live cue</h1><div class="scroll-cue" style="overflow-x: auto"><table style="min-width: 46rem"><tr><td>${LONG}</td></tr></table></div>`, `<style>@keyframes fades{to{opacity:1}}@supports (animation-timeline:scroll()){.scroll-cue{background-image:none;animation-name:fades;animation-timeline:scroll(self inline)}}</style>`));
   write("other-sites-bad/index.html", page(`<h1>Other sites</h1>`, `<meta name="site-check-other-paths" content="(">`));
   write("module/index.html", page(`<h1>Module</h1><p>A module script that imports a Node.js module</p><script type="module" src="page.js"></script>`));
   write("module/page.js", `import "node:perf_hooks";\ndocument.querySelector("p").textContent = "ran";`);
@@ -68,7 +72,7 @@ beforeAll(() => {
         `<nav style="overflow-x: auto; ${NOWRAP}">${LONG}</nav>`,
         `<div data-overflow-ok style="overflow-x: auto"><table style="min-width: 46rem"><tr><td>${LONG}</td></tr></table></div>`,
         `<div style="overflow-x: auto"><table data-overflow-ok style="min-width: 46rem"><tr><td>${LONG}</td></tr></table></div>`,
-        `<div class="scroll-cue" style="overflow-x: auto"><table style="min-width: 46rem"><tr><td>${LONG}</td></tr></table></div>`,
+        `<div class="scroll-cue" style="overflow-x: auto; background-image: linear-gradient(#fff, #eee)"><table style="min-width: 46rem"><tr><td>${LONG}</td></tr></table></div>`,
         `<div data-overflow-ok style="overflow: hidden"><div style="${NOWRAP}">${LONG}</div></div>`,
         `<p id="ellipsis" style="overflow: hidden; text-overflow: ellipsis; ${NOWRAP}">${LONG}</p>`,
         `<div style="overflow: hidden"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); ${NOWRAP}">${LONG}</span></div>`,
@@ -144,6 +148,8 @@ describe("cutProblems", () => {
   const cut = (kind: Cut["kind"]): Cut => ({ kind, box: "div.card", element: "table.api", scrollWidth: 736, clientWidth: 302, text: "runMigrations" });
 
   it("tells the element, the box, the widths, the width of the view and the two fixes", () => {
+    expect(cutProblems([{ ...cut("table"), deadCue: true }], 1280)).toEqual([]);
+    expect(cutProblems([{ ...cut("table"), deadCue: true }], 360)[0]).toContain("The box has the class scroll-cue, but its computed style has no animation and no shade.");
     expect(cutProblems([cut("table")], 360)).toEqual([`a table goes out of view at 360 px: table.api in div.card: content of 736 px in a box of 302 px, "runMigrations". Make the table fit, give the box the class scroll-cue, or add data-overflow-ok to the box.`]);
     expect(cutProblems([cut("clip")], 400)).toEqual([`a box cuts text at 400 px: table.api in div.card: content of 736 px in a box of 302 px, "runMigrations". Make the content fit, or add data-overflow-ok to the box.`]);
   });
@@ -198,6 +204,13 @@ describe.skipIf(browser === undefined)("checkSite in a browser", () => {
     settleMs: 100,
     timeoutMs: 30_000,
     ...extra,
+  });
+
+  it("fails a table with the class of the cue when the served CSS gives no cue, and passes a clean copy", async () => {
+    const result = await checkSite(options(["/dead-cue/", "/live-cue/"], { widths: [360], schemes: ["light"] }));
+    const problems = (page: string) => result.views.find((view) => view.page === page)?.problems;
+    expect(problems("/dead-cue/")?.join(" ")).toContain("The box has the class scroll-cue, but its computed style has no animation and no shade.");
+    expect(problems("/live-cue/")).toEqual([]);
   });
 
   it("passes a good page and writes a screenshot of each view", async () => {

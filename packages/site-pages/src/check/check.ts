@@ -78,6 +78,7 @@ export function cutProblems(cuts: readonly Cut[], width: number): string[] {
   const widths = (cut: Cut) => `${cut.element} in ${cut.box}: content of ${cut.scrollWidth} px in a box of ${cut.clientWidth} px, "${cut.text}"`;
   return cuts.flatMap((cut) => {
     if (cut.kind === "clip") return [`a box cuts text at ${width} px: ${widths(cut)}. Make the content fit, or add data-overflow-ok to the box.`];
+    if (cut.deadCue === true) return width < PHONE_WIDTH ? [`a table goes out of view at ${width} px: ${widths(cut)}. The box has the class scroll-cue, but its computed style has no animation and no shade. Read the served CSS.`] : [];
     if (width < PHONE_WIDTH) return [`a table goes out of view at ${width} px: ${widths(cut)}. Make the table fit, give the box the class scroll-cue, or add data-overflow-ok to the box.`];
     return [];
   });
