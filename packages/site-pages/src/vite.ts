@@ -203,17 +203,20 @@ export interface RehypeNode {
 }
 
 /**
- * This function gives the transformer of a rehype plugin. The transformer gives the class `scroll-cue` to each table of a Markdown page.
- * The table also gets a place in the tab order and a label, so a keyboard can scroll it. A site that uses this plugin imports `scroll-cue.css`.
- * Markdown has no way to set the class of a table, so a page of a docs theme needs this plugin.
+ * This function gives the transformer of a rehype plugin. The transformer gives the class `scroll-cue` to each table and each code block (`pre`) of a Markdown page.
+ * Each also gets a place in the tab order, so a keyboard can scroll it. A table also gets a label. A site that uses this plugin imports `scroll-cue.css`.
+ * Markdown has no way to set the class of a table or a code block, so a page of a docs theme needs this plugin.
  */
 export function rehypeScrollCue(): (tree: RehypeNode) => void {
   const visit = (node: RehypeNode): void => {
-    if (node.type === "element" && node.tagName === "table") {
+    if (node.type === "element" && (node.tagName === "table" || node.tagName === "pre")) {
       const properties = node.properties ?? {};
       const names = properties["className"];
       const list = Array.isArray(names) ? names : typeof names === "string" ? [names] : [];
-      node.properties = { ...properties, className: [...list, "scroll-cue"], tabIndex: 0, ariaLabel: "Table. It scrolls sideways on a narrow screen." };
+      const classes = list.includes("scroll-cue") ? list : [...list, "scroll-cue"];
+      // A pre has no role, so a label on it is not allowed. Its text is its content.
+      const label = node.tagName === "table" ? { ariaLabel: "Table. It scrolls sideways on a narrow screen." } : {};
+      node.properties = { ...properties, className: classes, tabIndex: properties["tabIndex"] ?? 0, ...label };
     }
     for (const child of node.children ?? []) visit(child);
   };

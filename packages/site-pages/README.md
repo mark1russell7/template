@@ -77,11 +77,13 @@ The text of the problem has the element, the box, the two widths, the width of t
 a table goes out of view at 360 px: table.api-table in div.table-scroll: content of 736 px in a box of 344 px, "Note". Make the table fit, give the box the class scroll-cue, or add data-overflow-ok to the box.
 ```
 
-The rule for a box that scrolls examines only tables, for these reasons:
+A code block gets the same problem, with the words "a code block" and "Make the lines fit".
 
-- A code block, a hex view, a row of tabs and a carousel are meant to scroll, and a visitor sees that they scroll.
-- A table in a box that scrolls looks complete on a phone, with no scroll bar. The visitor does not see the last columns.
-- The class `scroll-cue` shows a fade at the edge of the box, so a table in such a box does not count. The check reads the computed style of the box. A box with the class, with no animation and no background image, counts.
+The rule for a box that scrolls examines only tables and code blocks (`pre`), for these reasons:
+
+- A table or a code block in a box that scrolls looks complete on a phone, with no scroll bar. The visitor does not see the end of the lines.
+- A hex view, a row of tabs and a carousel are meant to scroll, and a visitor sees that they scroll.
+- The class `scroll-cue` shows a fade at the edge of the box. So a table or a code block in such a box does not count. The check reads the computed style of the box. A box with the class, with no animation and no background image, counts.
 - A false alarm costs more than a miss, because each false alarm needs an exception in the site.
 
 A table is `table`, `role="table"` or `role="grid"`. A desktop view has a scroll bar, so a table in a box that scrolls is not a problem there. `report.json` still shows the table in `measure.cut`.
@@ -406,7 +408,7 @@ import "@mark1russell7/site-pages/scroll-cue.css";
 <pre class="scroll-cue">pnpm add @mark1russell7/site-pages</pre>
 ```
 
-The class sets `overflow-x: auto` and the background color of the box. Set `--scroll-cue-bg` to the background color of the box. In a browser with no scroll timelines, `--scroll-cue-shade` is the color of the shade:
+The class sets `overflow-x: auto`. A browser with scroll timelines keeps the background of the box, so a code block keeps the color of its theme. A browser with no scroll timelines gets the background color `--scroll-cue-bg` and a shade of the color `--scroll-cue-shade`. Set `--scroll-cue-bg` to the background color of the box:
 
 ```css
 .code {
@@ -414,7 +416,7 @@ The class sets `overflow-x: auto` and the background color of the box. Set `--sc
 }
 ```
 
-Markdown has no way to set the class of a table. For a Markdown page, add the plugin `rehypeScrollCue` of the entry `@mark1russell7/site-pages/vite`. It gives the class, a tab stop and a label to each table:
+Markdown has no way to set the class of a table or a code block. For a Markdown page, add the plugin `rehypeScrollCue` of the entry `@mark1russell7/site-pages/vite`. It gives the class and a tab stop to each table and each code block. A table also gets a label. A code block keeps a tab stop that it has:
 
 ```js
 import { rehypeScrollCue } from "@mark1russell7/site-pages/vite";
