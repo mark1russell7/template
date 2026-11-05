@@ -447,13 +447,14 @@ interface KpiFile {
   project: string;
   at: string; // the ISO time of the data in UTC, never the time of the build
   commit: string; // the full commit of the build
-  measures: Array<{ id: string; value: number; unit?: string; at?: string }>;
+  measures: Array<{ id: string; value: number; unit?: string; at?: string; notCounted?: string }>;
   engines?: Array<{ name: string; version: string }>; // the Status page shows them
 }
 ```
 
 - Give `at` from the record of the data. The writer has no default for this field, because a build time hides old data.
 - Give `at` on a measure when its data is from another time than the file. The Status page then shows a date for each measure.
+- Give `notCounted` on a count of faults, for example a count of old text. The text names what the count does not read, so a 0 does not seem to tell more than it measured. The Status page shows the text.
 - Without `commit`, the plugin takes `GITHUB_SHA`, else the head of the repository.
 - A fault in the data stops the build, and the old site stays. A fault is a wrong form, a value that is not finite, a repeated id or a time after the check. The time rules apply to the file and to each measure.
 - A site with no Vite build calls `writeKpi(out, input)` from the root entry, before `site-pages build`.

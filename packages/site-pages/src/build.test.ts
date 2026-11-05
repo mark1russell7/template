@@ -218,7 +218,7 @@ describe("site-pages build", () => {
       project: "widgets",
       at: "2026-10-01T08:00:00Z",
       commit: "b".repeat(40),
-      measures: [{ id: "cases", value: 12, unit: "cases" }, { id: "gaps", value: 0 }],
+      measures: [{ id: "cases", value: 12, unit: "cases" }, { id: "gaps", value: 0, notCounted: "A list that <script> draws." }],
       engines: [{ name: "@acme/engine", version: "1.2.3" }],
     };
     mkdirSync(join(repo, "with-kpi"));
@@ -241,6 +241,8 @@ describe("site-pages build", () => {
     expect(html).toContain("<code>@acme/engine</code> 1.2.3");
     expect(html).toContain("<td>12 cases</td>");
     expect(html).toContain("<td>0</td>");
+    expect(html).toContain("<p><code>gaps</code> does not count: A list that &lt;script&gt; draws.</p>");
+    expect(html).not.toContain("<code>cases</code> does not count");
     expect(html).toContain(`https://github.com/acme/widgets/commit/${kpi.commit}`);
   });
 
