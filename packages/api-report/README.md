@@ -65,6 +65,7 @@ The field `apiReport` of the root `package.json` sets the defaults. The options 
 | `includePrivate` | `false` | Each private package also gets a report. |
 | `publishConfig` | `true` | The fields of `publishConfig` replace the fields of the source. |
 | `tool` | `api-report` | The command that the header of each report names. |
+| `pages` | none | The hand-written pages of an API. See [A page of the API](#a-page-of-the-api). |
 
 A glob knows `*` (a part of one folder name), `?`, `**` (zero or more folders) and `{a,b}`. A repository with no workspace is one package: the root.
 
@@ -76,6 +77,32 @@ A glob knows `*` (a part of one folder name), `?`, `**` (zero or more folders) a
 }
 ```
 
+## A page of the API
+
+A hand-written page can explain each call, but its names can go out of date. The field `pages` holds them. The command `check` fails in these cases:
+
+- The package exports a name, and no code block or code span on the page shows it. Prose does not count, because a type name can also be a common word.
+- A code block imports a name from the package, and that entry does not export it.
+- A code block has a signature with no body, an `interface` or a `type`, and the package does not export that name.
+
+A name that the page leaves out goes in `except`, with its reason. An exception that removes no fault is also a fault, so the list stays current.
+
+```json
+{
+  "apiReport": {
+    "pages": [
+      {
+        "package": "packages/lib",
+        "pages": ["packages/site/src/content/docs/reference/api.mdx"],
+        "except": { "InternalShape": "The type is the input of one function, and the page shows its fields." }
+      }
+    ]
+  }
+}
+```
+
+The check does not read the meaning of the prose. It holds the names, and a person holds the words.
+
 ## Library
 
 The package also exports the functions of the tool:
@@ -86,3 +113,4 @@ The package also exports the functions of the tool:
 - `parseDeclarations(text)` and `statementsOf(text)` read a declaration file.
 - `packageFolders(root, globs)`, `globFolders(root, glob)`, `globToRegExp(glob)` and `workspaceGlobs(root)` find the packages.
 - `diffLines(before, after)` and `unifiedDiff(before, after)` give a line diff.
+- `pageFaults(report, packageName, pages, except)` and `reportEntries(report)` hold a hand-written page against a report.
