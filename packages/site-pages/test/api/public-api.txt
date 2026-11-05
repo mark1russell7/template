@@ -474,6 +474,7 @@ interface KpiMeasure {
   value: number;
   unit?: string;
   at?: string;
+  notCounted?: string;
 }
 
 ### build/chunks/freshness.d.ts#Link
