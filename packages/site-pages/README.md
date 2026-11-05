@@ -409,6 +409,14 @@ The class sets `overflow-x: auto` and the background color of the box. Set `--sc
 }
 ```
 
+Markdown has no way to set the class of a table. For a Markdown page, add the plugin `rehypeScrollCue` of the entry `@mark1russell7/site-pages/vite`. It gives the class, a tab stop and a label to each table:
+
+```js
+import { rehypeScrollCue } from "@mark1russell7/site-pages/vite";
+
+export default defineConfig({ markdown: { rehypePlugins: [rehypeScrollCue] } });
+```
+
 ## The page helpers
 
 The entry `@mark1russell7/site-pages/chrome` has small helpers for the script of a page. It imports no Node.js module, so a site can bundle it for the browser. The package root does not export these helpers. Thus a Node.js program that imports the root gets no DOM types.
