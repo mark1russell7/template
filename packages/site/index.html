@@ -26,7 +26,7 @@
 <main>
   <section class="hero">
     <h1>See each file of a new package before you make it.</h1>
-    <p class="lead">Type a name and pick a preset. The page shows the files that <code>pnpm package add</code> writes. The build of this page started the real CLI for each preset.</p>
+    <p class="lead">This template gives each new repository and package the same files, CI and checks. Type a name and pick a preset. The page shows the files that <code>pnpm package add</code> writes. The build of this page started the real CLI for each preset.</p>
   </section>
 
   <section class="card core" id="scaffold" aria-label="Package preview">
@@ -67,7 +67,7 @@
 
   <section class="section" id="workflows" aria-labelledby="wf-title">
     <h2 id="wf-title">Which jobs and steps run?</h2>
-    <p class="lead small">Pick a shared workflow, the event of the caller and the inputs. The page reads each <code>if</code> of the workflow file.</p>
+    <p class="lead small">The repositories call these shared CI workflows of the template. Pick a workflow, the event of the caller and the inputs. The page reads each <code>if</code> of the workflow file.</p>
     <div class="card wf">
       <div class="wf-controls">
         <label>Workflow <select id="wf-file"></select></label>
@@ -82,10 +82,16 @@
   </section>
 
   <section class="section" id="response" aria-labelledby="response-title">
-    <h2 id="response-title">How does a measured value respond?</h2>
+    <h2 id="response-title">The explorer of measured values, for any site</h2>
+    <p class="lead small" id="response-what">This is the explorer that <code>@mark1russell7/site-pages</code> gives any site. The sample data is a fixed study of packing 0.6.1. <a href="https://mark1russell7.github.io/packing/explorer/">See the live one on the packing site</a>.</p>
     <p class="lead small">Choose a measure, change one or two dimensions and hold the others. The chart shows the measured points, the fitted curve and its held-out error.</p>
     <div class="card">
       <div id="response-explorer"><p class="muted">The chart needs JavaScript.</p></div>
+      <p class="mount-title">These lines mount it on a site. The <code>record</code> is a file in the format <code>response-records/1</code>.</p>
+      <div class="scroll-cue mount" tabindex="0" role="region" aria-label="The lines that mount the explorer"><pre id="response-mount">import { mountExplorer } from "@mark1russell7/site-pages/explorer";
+import "@mark1russell7/site-pages/explorer.css";
+import record from "./record.json";
+mountExplorer(document.getElementById("chart")!, record);</pre></div>
       <p class="muted fine">The script <code>packages/site/scripts/measure-packing.ts</code> measured the fill and the aspect of 660 placements of <code>@mark1russell7/packing</code> from seeded inputs. It writes the same record on each run.</p>
       <!-- data-stamp -->
     </div>
@@ -106,7 +112,7 @@
     <h3>Packages</h3>
     <ul class="rows">
       <li><a href="https://www.npmjs.com/package/@mark1russell7/conventions"><code>@mark1russell7/conventions</code></a><span>One check in CI for the conventions of a repository.</span></li>
-      <li><a href="https://www.npmjs.com/package/@mark1russell7/site-pages"><code>@mark1russell7/site-pages</code></a><span>The Releases page and the Status page of a site, and the site check.</span></li>
+      <li><a href="https://www.npmjs.com/package/@mark1russell7/site-pages"><code>@mark1russell7/site-pages</code></a><span>The Releases page, the Status page and the explorer of a site, and the site check.</span></li>
       <li><a href="https://www.npmjs.com/package/@mark1russell7/api-report"><code>@mark1russell7/api-report</code></a><span>A report of the public API of a package.</span></li>
       <li><a href="https://www.npmjs.com/package/@mark1russell7/boundaries"><code>@mark1russell7/boundaries</code></a><span>The import boundaries of a workspace.</span></li>
       <li><a href="https://www.npmjs.com/package/@mark1russell7/template-cli"><code>@mark1russell7/template-cli</code></a><span>New repositories and packages from the template.</span></li>
