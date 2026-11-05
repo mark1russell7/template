@@ -78,7 +78,4 @@
   }
 
   /* The mask also hides all that is outside the box. Thus the ring of the keyboard focus goes inside the box. */
-  .scroll-cue:focus-visible {
-    outline-offset: -2px;
-  }
 }
