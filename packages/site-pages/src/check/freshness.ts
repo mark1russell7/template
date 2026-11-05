@@ -336,6 +336,32 @@ export function checkFreshness(stamps: DataStamps, options: FreshnessOptions): F
   return { faults, notRun };
 }
 
+/** A time at which the gate must fail for a page, and what the gate says at that time. */
+export interface FailingCase {
+  /** The path of the page. */
+  readonly page: string;
+  /** The ISO time of the case. */
+  readonly at: string;
+  /** The first fault at that time. A case with no fault tells that the gate does not hold the page. */
+  readonly fault?: string;
+}
+
+/**
+ * This function gives one failing case for each page, from the stamps of the site itself. A measured page must fail one
+ * day after its limit, from `options.now`. A fixed study has no age limit, so it must fail before the date of its run.
+ * Stamps that pass and give a case with no fault tell that the gate does not examine that page.
+ */
+export function failingCases(stamps: DataStamps, options: FreshnessOptions): readonly FailingCase[] {
+  return stamps.pages.map((stamp) => {
+    const dates = [...stamp.runs, ...(stamp.inFlight === undefined ? [] : [stamp.inFlight])].map((run) => Date.parse(run.date));
+    const days = stamp.limit?.days ?? options.maxAgeDays ?? MAX_DATA_AGE_DAYS;
+    const time = stamp.study === true ? Math.min(...dates) - DAY_MS : Date.parse(options.now) + (days + 1) * DAY_MS;
+    const at = new Date(time).toISOString();
+    const [fault] = checkFreshness({ schema: stamps.schema, pages: [stamp] }, { ...options, now: at }).faults;
+    return { page: stamp.page, at, ...(fault === undefined ? {} : { fault }) };
+  });
+}
+
 /** The help of the command `site-pages freshness`. */
 export const FRESHNESS_HELP: string = `Usage: site-pages freshness --stamps <file> [options]
 
@@ -346,6 +372,7 @@ Examine the data stamps of the measured pages of a site.
   --help           Show this text.
 
 The exit code is 0 when the stamps pass, 1 for a fault, and 2 for an incorrect command line.
+Stamps that pass also show one failing case for each page. A page with no failing case is a fault.
 `;
 
 /** This function gives the largest gap of the schedule in a workflow file. It gives a text for a file that it cannot read. */
@@ -396,10 +423,20 @@ export async function runFreshnessCli(argv: readonly string[], io: CheckIo, fetc
     if (page.limit !== undefined) schedules[page.limit.workflow] = readSchedule(join(io.cwd, page.limit.workflow));
   }
   const npm = await npmPublishTimes({ packages: [...new Set(engines)], ...(fetcher === undefined ? {} : { fetch: fetcher }) });
-  const result = checkFreshness(parsed.stamps, { now: values.now ?? new Date().toISOString(), times: npm.times, schedules });
+  const options: FreshnessOptions = { now: values.now ?? new Date().toISOString(), times: npm.times, schedules };
+  const result = checkFreshness(parsed.stamps, options);
   for (const problem of [...npm.problems, ...result.notRun]) io.stdout(`Not run: ${problem}\n`);
   for (const fault of result.faults) io.stderr(`${fault}\n`);
   if (result.faults.length > 0) return 1;
   io.stdout(`The data stamps of ${parsed.stamps.pages.length} pages pass.\n`);
-  return 0;
+  let held = true;
+  for (const { page, at, fault } of failingCases(parsed.stamps, options)) {
+    if (fault === undefined) {
+      io.stderr(`${page}: the gate does not fail at ${at}, so it does not hold this page.\n`);
+      held = false;
+    } else {
+      io.stdout(`Failing case at ${at}: ${fault}\n`);
+    }
+  }
+  return held ? 0 : 1;
 }
