@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 158 names
+## . (build/index.d.ts): names
 
 BASE_CSS: build/index.d.ts#BASE_CSS
 type BoardIssue: build/chunks/freshness.d.ts#BoardIssue
@@ -165,7 +165,7 @@ versionCommitTime: build/index.d.ts#versionCommitTime
 versionOfTag: build/index.d.ts#versionOfTag
 writeKpi: build/chunks/freshness.d.ts#writeKpi
 
-## ./chrome (build/chrome.d.ts): 15 names
+## ./chrome (build/chrome.d.ts): names
 
 AttributeValue: build/chrome.d.ts#AttributeValue
 BuildInfo: build/chrome.d.ts#BuildInfo
@@ -183,7 +183,7 @@ nextTheme: build/chrome.d.ts#nextTheme
 setupTheme: build/chrome.d.ts#setupTheme
 showBuild: build/chrome.d.ts#showBuild
 
-## ./explorer (build/explorer/index.d.ts): 35 names
+## ./explorer (build/explorer/index.d.ts): names
 
 type AxisSlot: build/explorer/index.d.ts#AxisSlot
 type AxisSpec: build/explorer/index.d.ts#AxisSpec
@@ -221,7 +221,7 @@ setMeasure: build/explorer/index.d.ts#setMeasure
 settle: build/explorer/index.d.ts#settle
 viewOf: build/explorer/index.d.ts#viewOf
 
-## ./vite (build/vite.d.ts): 24 names
+## ./vite (build/vite.d.ts): names
 
 type BuildInfo: build/chrome.d.ts#BuildInfo
 RehypeNode: build/vite.d.ts#RehypeNode

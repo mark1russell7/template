@@ -16,6 +16,15 @@ The tool reads the fields of `publishConfig` as pnpm publishes them. Thus a sour
 
 TypeScript 7 has no stable compiler API. Thus the tool reads the declaration files as text. It knows the output of `tsc` and of `tsdown`. An unknown form of statement gives an error, not a wrong report.
 
+### The chunks of a bundler
+
+A bundler gives a shared chunk a hash in its name, for example `build/html-o5bDHjNi.d.mts`. The hash changes when the bundler or private code changes. So the report gives each such file a label with no hash: `build/html.chunk.d.mts`, and then `build/html.chunk2.d.mts` for a second chunk of that stem. Chunks of one stem sort by their text, so no hash decides the order. An entry of the package keeps its name. A changed declaration in a chunk still changes the report.
+
+The label is for the report only: it is not a file of the package. Two limits apply:
+
+- A hash of small letters and hyphens only reads as a word, so it stays in the report until the next build. This occurs in approximately 1 of 1,000 builds of a chunk.
+- A bundler can add a number to a local name, for example `Options$1`. The report keeps that name, so a change of that number changes the report.
+
 ## Use
 
 Install the package:

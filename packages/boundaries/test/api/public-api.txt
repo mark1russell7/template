@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 18 names
+## . (build/index.d.ts): names
 
 BoundaryOptions: build/index.d.ts#BoundaryOptions
 Config: build/index.d.ts#Config

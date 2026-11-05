@@ -25,6 +25,81 @@ function body(files: Record<string, unknown>): string {
   return packageReport(fixture(files)).split("\n").slice(HEADER_LINES).join("\n");
 }
 
+describe("the heading of an entry", () => {
+  it("gives no count, so a new name changes only its own lines", () => {
+    const one = body({ "package.json": { name: "p", types: "./index.d.ts" }, "index.d.ts": "export declare const a: 1;\n" });
+    const two = body({ "package.json": { name: "p", types: "./index.d.ts" }, "index.d.ts": "export declare const a: 1;\nexport declare const b: 2;\n" });
+    expect(one).toContain("## . (index.d.ts): names\n");
+    expect(two).toContain("## . (index.d.ts): names\n");
+  });
+});
+
+describe("the chunks of a bundler", () => {
+  /** The files of a package with one entry and one chunk, under a hash. */
+  const built = (hash: string, signature = "(): void"): Record<string, unknown> => ({
+    "package.json": { name: "p", types: "./build/index.d.mts" },
+    "build/index.d.mts": `import { t as html } from "./html-${hash}.mjs";\nexport { html };\n`,
+    [`build/html-${hash}.d.mts`]: `declare function html${signature};\nexport { html as t };\n`,
+  });
+
+  it("gives the same report under a new hash, and no hash shows", () => {
+    const first = body(built("o5bDHjNi"));
+    expect(first).toContain("html: build/html.chunk.d.mts#html\n");
+    expect(first).not.toContain("o5bDHjNi");
+    expect(body(built("P63jvk_V"))).toBe(first);
+  });
+
+  it("changes the report when a signature in a chunk changes, also under a new hash", () => {
+    expect(body(built("P63jvk_V", "(a: string): void"))).not.toBe(body(built("o5bDHjNi")));
+  });
+
+  it("keeps the name of an entry, and a chunk does not take it", () => {
+    const report = body({
+      "package.json": { name: "p", exports: { ".": { types: "./build/html.d.mts" }, "./hashed": { types: "./build/entry-A1b2C3d4.d.mts" } } },
+      "build/html.d.mts": 'export { a } from "./html-A1b2C3d4.mjs";\n',
+      "build/html-A1b2C3d4.d.mts": "export declare const a: 1;\n",
+      "build/entry-A1b2C3d4.d.mts": "export declare const b: 2;\n",
+    });
+    expect(report).toContain("## . (build/html.d.mts)");
+    expect(report).toContain("a: build/html.chunk.d.mts#a\n");
+    expect(report).toContain("## ./hashed (build/entry-A1b2C3d4.d.mts)");
+  });
+
+  it("keeps two chunks of one stem apart, in an order that no hash decides", () => {
+    const two = (first: string, second: string): string =>
+      body({
+        "package.json": { name: "p", types: "./index.d.mts" },
+        "index.d.mts": `export { a } from "./part-${first}.mjs";\nexport { b } from "./part-${second}.mjs";\n`,
+        [`part-${first}.d.mts`]: "export declare const a: 1;\n",
+        [`part-${second}.d.mts`]: "export declare const b: 2;\n",
+      });
+    const report = two("Aaaaaaa1", "Bbbbbbb2");
+    expect(report).toContain("a: part.chunk.d.mts#a\n");
+    expect(report).toContain("b: part.chunk2.d.mts#b\n");
+    expect(two("Zzzzzzz9", "Bbbbbbb2")).toBe(report);
+  });
+
+  it("removes a hash from a module path in a declaration", () => {
+    const report = body({
+      "package.json": { name: "p", types: "./index.d.mts" },
+      "index.d.mts": 'export { a } from "./one-A1b2C3d4.mjs";\n',
+      "one-A1b2C3d4.d.mts": 'export declare const a: typeof import("./two-E5f6G7h8.mjs");\n',
+      "two-E5f6G7h8.d.mts": "export declare const c: 3;\n",
+    });
+    expect(report).toContain("./two.chunk.mjs");
+    expect(report).not.toContain("E5f6G7h8");
+  });
+
+  it("keeps a name with a word in the place of a hash", () => {
+    const report = body({
+      "package.json": { name: "p", types: "./index.d.ts" },
+      "index.d.ts": 'export { a } from "./route-resolver.js";\n',
+      "route-resolver.d.ts": "export declare const a: 1;\n",
+    });
+    expect(report).toContain("a: route-resolver.d.ts#a\n");
+  });
+});
+
 describe("the statements of a declaration file", () => {
   it("splits the statements, and drops the comments and the blank lines", () => {
     const source = [
@@ -239,7 +314,7 @@ describe("the report of a package", () => {
     expect(report).toBe(
       [
         "",
-        "## . (dist/index.d.ts): 5 names",
+        "## . (dist/index.d.ts): names",
         "",
         "type B: dist/b.d.ts#B",
         "C: dist/c.d.ts#C",
@@ -247,7 +322,7 @@ describe("the report of a package", () => {
         "alpha: dist/index.d.ts#alpha",
         "renamed: dist/b.d.ts#b",
         "",
-        "## ./b (dist/b.d.ts): 2 names",
+        "## ./b (dist/b.d.ts): names",
         "",
         "B: dist/b.d.ts#B",
         "b: dist/b.d.ts#b",
@@ -299,8 +374,8 @@ describe("the report of a package", () => {
       "cjs.d.ts": "declare function run(): void;\ndeclare namespace run {\n    const version: string;\n}\nexport = run;\n",
       "def.d.ts": "declare const _default: { a: 1 };\nexport default _default;\n",
     });
-    expect(report).toMatch(/## \. \(index\.d\.ts\): 3 names\n\nE: index\.d\.ts#E\nF: index\.d\.ts#F\nN: index\.d\.ts#N\n/);
-    expect(report).toMatch(/## \.\/cjs \(cjs\.d\.ts\): 1 names\n\nexport=: cjs\.d\.ts#run\n/);
+    expect(report).toMatch(/## \. \(index\.d\.ts\): names\n\nE: index\.d\.ts#E\nF: index\.d\.ts#F\nN: index\.d\.ts#N\n/);
+    expect(report).toMatch(/## \.\/cjs \(cjs\.d\.ts\): names\n\nexport=: cjs\.d\.ts#run\n/);
     expect(report).toMatch(/### cjs\.d\.ts#run\ndeclare function run\(\): void;\ndeclare namespace run \{\n {4}const version: string;\n\}\n/);
     expect(report).toMatch(/default: def\.d\.ts#_default\n/);
   });
@@ -376,7 +451,7 @@ describe("the report of a package", () => {
       },
       "build/index.d.ts": "declare function run(): void;\nexport { run };\n",
     });
-    expect(report).toContain("## . (build/index.d.ts): 1 names\n\nrun: build/index.d.ts#run\n\n## bin: 1 commands\n\ntool: ./build/cli.js\n");
+    expect(report).toContain("## . (build/index.d.ts): names\n\nrun: build/index.d.ts#run\n\n## bin: 1 commands\n\ntool: ./build/cli.js\n");
   });
 
   it("says when a package has no type declarations, and names the entries without one", () => {

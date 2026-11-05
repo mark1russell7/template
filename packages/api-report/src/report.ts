@@ -8,6 +8,13 @@
  * report has no comments and no private members. Thus a change of a comment or of a private field
  * does not change it.
  *
+ * A bundler gives a shared chunk a hash in its name, and the hash changes with the bundler and with
+ * private code. The report gives each such file a label without the hash, so an update of a tool does
+ * not change the report. A changed declaration in a chunk still changes the report.
+ *
+ * The heading of an entry does not give a count of names. Two pull requests that each add a name
+ * change different lines, so they do not conflict on a count.
+ *
  * The text is the same on Windows and on Linux. The line ends
  * are LF, the paths use `/`, and the sort does not use the locale.
  */
@@ -25,6 +32,59 @@ export interface ReportOptions {
   readonly manifest?: Manifest;
   /** The command that the header names, for example `api-report` or `node scripts/api-report.mjs`. */
   readonly tool?: string;
+}
+
+/**
+ * The name of a chunk of a bundler: a stem, a hyphen, a hash of 8 characters and the extension of a
+ * declaration file. For example `html-o5bDHjNi.d.mts`.
+ */
+const CHUNK_NAME = /^(.+)-([A-Za-z0-9_-]{8})(\.d\.[cm]?ts)$/;
+
+/** A hash of a module path in a text, before its extension. It only sorts chunks that have one stem. */
+const HASH_IN_TEXT = /-[A-Za-z0-9_-]{8}(?=\.(?:d\.)?[cm]?[jt]s\b)/g;
+
+/**
+ * This function gives the stem and the extension of the name of a chunk, or null. A tail of small
+ * letters and hyphens is a word (`route-resolver.d.ts`), so the name stays. The hash of a chunk has only
+ * such characters in about 1 of 1,000 builds: then the report shows that hash until the next build.
+ */
+function chunkOf(name: string): { readonly stem: string; readonly extension: string } | null {
+  const match = CHUNK_NAME.exec(name);
+  if (match === null || /^[a-z-]+$/.test(match[2] ?? "")) return null;
+  return { stem: match[1] ?? "", extension: match[3] ?? "" };
+}
+
+/** This function gives the name of a declaration file without its extension: a module path holds that part. */
+const chunkStem = (file: string): string => basename(file).replace(/\.d\.[cm]?ts$/, "");
+
+/**
+ * This function gives the label of each chunk in `files`, by its path: `html.chunk.d.mts`, and then
+ * `html.chunk2.d.mts` for a second chunk of that stem. Chunks of one stem sort by their text without
+ * hashes, so the order does not depend on a hash. A file in `kept` is an entry, and keeps its name. A
+ * label does not take the name of a file that exists.
+ */
+function chunkLabels(files: readonly string[], kept: ReadonlySet<string>): ReadonlyMap<string, string> {
+  const groups = new Map<string, { readonly file: string; readonly stem: string; readonly extension: string; readonly text: string }[]>();
+  for (const file of files) {
+    const chunk = kept.has(file) ? null : chunkOf(basename(file));
+    if (chunk === null) continue;
+    const key = join(dirname(file), `${chunk.stem}${chunk.extension}`);
+    const text = readFileSync(file, "utf8").replace(HASH_IN_TEXT, "");
+    groups.set(key, [...(groups.get(key) ?? []), { file, ...chunk, text }]);
+  }
+  const labels = new Map<string, string>();
+  for (const [, group] of [...groups].sort(([a], [b]) => byCode(a, b))) {
+    let number = 1;
+    for (const { file, stem, extension } of group.sort((a, b) => byCode(a.text, b.text) || byCode(a.file, b.file))) {
+      let label: string;
+      do {
+        label = join(dirname(file), `${stem}.chunk${number === 1 ? "" : number}${extension}`);
+        number += 1;
+      } while (existsSync(label));
+      labels.set(file, label);
+    }
+  }
+  return labels;
 }
 
 /** The binding of an exported name. */
@@ -179,7 +239,15 @@ export const HEADER_LINES = 5;
 export function apiReport(packageName: string, root: string, entries: readonly Entry[], options: ReportOptions = {}): string {
   const manifest = options.manifest ?? {};
   const reader = new Reader(root, manifest);
-  const path = (file: string): string => relativePath(root, file);
+  const entryFiles = entries.flatMap((entry) => (entry.types === undefined ? [] : [resolve(root, entry.types)])).filter((file) => existsSync(file));
+  const labels = chunkLabels([...new Set(entryFiles.flatMap((file) => reader.reached(file)))], new Set(entryFiles));
+  const path = (file: string): string => relativePath(root, labels.get(file) ?? file);
+  /** This function replaces the name of each chunk in a text with its label: a declaration can name a chunk in `import("./x")`. */
+  const plain = (text: string): string => {
+    let result = text;
+    for (const [file, label] of labels) result = result.replaceAll(chunkStem(file), chunkStem(label));
+    return result;
+  };
   const keyOf = (binding: Binding): string =>
     binding.kind === "declaration" ? `${path(binding.file)}#${binding.local}` : binding.kind === "namespace" ? `${path(binding.file)}#*` : `${binding.module}#${binding.name}`;
   const declarations = new Map<string, string>();
@@ -195,7 +263,7 @@ export function apiReport(packageName: string, root: string, entries: readonly E
       const isType = typeOnly || binding.typeOnly;
       lines.push(`${isType ? "type " : ""}${prefix}${name}: ${key}${binding.kind === "declaration" ? "" : ` (${binding.kind})`}`);
       if (binding.kind === "declaration" && !declarations.has(key)) {
-        declarations.set(key, (reader.info(binding.file).locals.get(binding.local) ?? []).join("\n"));
+        declarations.set(key, plain((reader.info(binding.file).locals.get(binding.local) ?? []).join("\n")));
       }
       // The names of a namespace are part of the API: `ns.name`
       if (binding.kind === "namespace" && !parents.has(binding.file)) {
@@ -215,15 +283,15 @@ export function apiReport(packageName: string, root: string, entries: readonly E
     const file = resolve(root, entry.types);
     if (!existsSync(file)) throw new Error(`${entry.subpath}: ${entry.types} is missing. Build the package first.`);
     const bindings = reader.exportsOf(file);
-    lines.push("", `## ${entry.subpath} (${path(file)}): ${bindings.size} names`, "");
+    lines.push("", `## ${entry.subpath} (${path(file)}): names`, "");
     names(bindings, "", new Set([file]), false);
     // The ambient declarations of each file that the entry reaches
     const ambient: string[] = [];
     for (const reached of reader.reached(file)) {
       for (const [label, statements] of reader.info(reached).ambient) {
-        const key = `${path(reached)}#${label}`;
+        const key = plain(`${path(reached)}#${label}`);
         ambient.push(key);
-        if (!declarations.has(key)) declarations.set(key, statements.join("\n"));
+        if (!declarations.has(key)) declarations.set(key, plain(statements.join("\n")));
       }
     }
     for (const key of ambient.sort(byCode)) lines.push(`ambient: ${key}`);
