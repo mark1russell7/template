@@ -92,10 +92,31 @@ function plain(declaration: string): string {
   return declaration.replace(/^(?:export )?(?:declare (?!global\b|module\b))?/gm, "");
 }
 
+/** This pattern finds a name that a bundler changed, to keep two declarations apart: `grid$1`. */
+const BUNDLER_NAME = /\$\d+$/;
+
+/** This function gives the name of the declaration of a line of a report. */
+function localName(item: ReportItem): string {
+  return item.key.slice(item.key.lastIndexOf("#") + 1);
+}
+
+/** This function puts the name of each export of `items` in `code`, where a bundler changed that name. */
+function withExportNames(code: string, items: readonly ReportItem[]): string {
+  let text = code;
+  for (const item of items) {
+    const local = localName(item);
+    if (!BUNDLER_NAME.test(local) || item.name.includes(".") || item.kind !== "declaration") continue;
+    const word = new RegExp(`(?<![\\w$])${local.replace(/\$/g, "\\$")}(?![\\w$])`, "g");
+    text = text.replace(word, () => item.name);
+  }
+  return text;
+}
+
 /**
  * This function gives the Markdown of the page of each export of a package. Each entry has an import with its
  * names. A declaration shows one time, in the first entry that reaches it. A comment tells the name of an
- * export when the declaration has a different name. A comment also tells the package of an external name.
+ * export when the source gave the declaration a different name. A name from a bundler does not show. A
+ * comment also tells the package of an external name.
  */
 export function referencePage(report: string, packageName: string): string {
   const { entries, declarations } = readReport(report);
@@ -130,11 +151,11 @@ export function referencePage(report: string, packageName: string): string {
       const text = declarations.get(item.key);
       if (text === undefined || seen.has(item.key)) continue;
       seen.add(item.key);
-      const local = item.key.slice(item.key.lastIndexOf("#") + 1);
-      const label = item.kind === "ambient" || local === item.name ? "" : `// The export ${item.name}:\n`;
+      const local = localName(item);
+      const label = item.kind === "ambient" || local === item.name || BUNDLER_NAME.test(local) ? "" : `// The export ${item.name}:\n`;
       parts.push(`${label}${plain(text)}`);
     }
-    if (parts.length > 0) blocks.push(fenced(parts.join("\n\n")));
+    if (parts.length > 0) blocks.push(fenced(withExportNames(parts.join("\n\n"), entry.items)));
     out.push(blocks.join("\n\n"));
   }
   return `${out.join("\n")}\n`;

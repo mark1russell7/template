@@ -5,11 +5,14 @@ import { referencePage } from "./reference.ts";
 const REPORT = [
   "# The public API of lib",
   "",
-  "## . (build/index.d.ts): 5 names",
+  "## . (build/index.d.ts): 8 names",
   "",
   "type Options: build/index.d.ts#Options",
   "layout: build/index.d.ts#layout",
   "renamed: build/index.d.ts#layout$1",
+  "aliased: build/index.d.ts#source",
+  "many: build/index.d.ts#many",
+  "useBundled: build/index.d.ts#useBundled",
   "ns: build/ns.d.ts#* (namespace)",
   "ns.inner: build/ns.d.ts#inner",
   "other: elsewhere#other (external)",
@@ -42,6 +45,16 @@ const REPORT = [
   "",
   "### build/index.d.ts#layout",
   "export declare function layout(): void;",
+  "",
+  "### build/index.d.ts#source",
+  "declare function source(): void;",
+  "",
+  "### build/index.d.ts#many",
+  "export declare function many(a: string): string;",
+  "export declare function many(a: number): number;",
+  "",
+  "### build/index.d.ts#useBundled",
+  "export declare function useBundled(a: typeof layout$1): void;",
   "",
   "### build/index.d.ts#layout$1",
   "declare function layout$1(): void;",
@@ -76,8 +89,26 @@ describe("the page of each export", () => {
   });
 
   it("tells the name of an export with a different declaration, and the package of an external name", () => {
-    expect(page).toContain("// The export renamed:\nfunction layout$1(): void;");
+    expect(page).toContain("// The export aliased:\nfunction source(): void;");
     expect(page).toContain("// other comes from the package elsewhere.");
+  });
+
+  it("shows the name of the export where a bundler changed the name of its declaration", () => {
+    expect(page).toContain("function renamed(): void;");
+    expect(page).toContain("function useBundled(a: typeof renamed): void;");
+    expect(page).not.toContain("layout$1");
+    expect(page).not.toContain("// The export renamed:");
+  });
+
+  it("shows each signature of an overload, in one block", () => {
+    expect(page).toContain("function many(a: string): string;\nfunction many(a: number): number;");
+  });
+
+  it("shows a name of two entries in the import of each, and its declaration in the first", () => {
+    const [first, second] = page.split("## `lib/svg`");
+    expect(first).toContain("function layout(): void;");
+    expect(second).toContain("layout,");
+    expect(second).not.toContain("function layout(): void;");
   });
 
   it("shows the members of a namespace and the ambient declarations", () => {
