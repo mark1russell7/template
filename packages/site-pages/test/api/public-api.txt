@@ -150,6 +150,7 @@ statusClassOf: build/index.d.ts#statusClassOf
 statusLead: build/index.d.ts#statusLead
 timelineLayout: build/index.d.ts#timelineLayout
 utcDay: build/index.d.ts#utcDay
+versionCommitTime: build/index.d.ts#versionCommitTime
 versionOfTag: build/index.d.ts#versionOfTag
 writeKpi: build/chunks/freshness.d.ts#writeKpi
 
