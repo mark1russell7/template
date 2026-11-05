@@ -106,7 +106,7 @@ function withExportNames(code: string, items: readonly ReportItem[]): string {
   for (const item of items) {
     const local = localName(item);
     if (!BUNDLER_NAME.test(local) || item.name.includes(".") || item.kind !== "declaration") continue;
-    const word = new RegExp(`(?<![\\w$])${local.replace(/\$/g, "\\$")}(?![\\w$])`, "g");
+    const word = new RegExp(`(?<![\\w$])${local.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&")}(?![\\w$])`, "g");
     text = text.replace(word, () => item.name);
   }
   return text;

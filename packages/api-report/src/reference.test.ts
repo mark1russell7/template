@@ -77,8 +77,14 @@ describe("the page of each export", () => {
   });
 
   it("gives each entry a section with an import of its names", () => {
-    expect(page).toContain('## `lib`\n\n```ts\nimport {\n  type Options, layout, renamed, ns, other,\n} from "lib";\n```');
+    expect(page).toContain('## `lib`\n\n```ts\nimport {\n  type Options, layout, renamed, aliased, many, useBundled, ns, other,\n} from "lib";\n```');
     expect(page).toContain('## `lib/svg`\n\n```ts\nimport {\n  layout, toSvg,\n} from "lib/svg";\n```');
+  });
+
+  it("does not show the file of a declaration, so the name of a chunk stays off the page", () => {
+    const chunked = referencePage(["## . (build/index.d.ts): 1 names", "", "html: build/html-o5bDHjNi.d.mts#html", "", "## Declarations", "", "### build/html-o5bDHjNi.d.mts#html", "export declare function html(): void;", ""].join("\n"), "lib");
+    expect(chunked).toContain("function html(): void;");
+    expect(chunked).not.toContain("o5bDHjNi");
   });
 
   it("shows a declaration with no export or declare word, one time", () => {
