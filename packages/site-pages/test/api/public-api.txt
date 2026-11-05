@@ -210,9 +210,10 @@ setMeasure: build/explorer/index.d.ts#setMeasure
 settle: build/explorer/index.d.ts#settle
 viewOf: build/explorer/index.d.ts#viewOf
 
-## ./vite (build/vite.d.ts): 22 names
+## ./vite (build/vite.d.ts): 24 names
 
 type BuildInfo: build/chrome.d.ts#BuildInfo
+RehypeNode: build/vite.d.ts#RehypeNode
 STAMPS_FILE: build/vite.d.ts#STAMPS_FILE
 STAMP_MARK: build/vite.d.ts#STAMP_MARK
 SiteEnv: build/vite.d.ts#SiteEnv
@@ -229,6 +230,7 @@ SiteStampsPlugin: build/vite.d.ts#SiteStampsPlugin
 SiteTarget: build/vite.d.ts#SiteTarget
 buildInfo: build/vite.d.ts#buildInfo
 commitTime: build/vite.d.ts#commitTime
+rehypeScrollCue: build/vite.d.ts#rehypeScrollCue
 siteBase: build/vite.d.ts#siteBase
 siteKpi: build/vite.d.ts#siteKpi
 siteShell: build/vite.d.ts#siteShell
@@ -1268,6 +1270,14 @@ export declare function versionCommitTime(repoDir: string, file: string): string
 ### build/index.d.ts#versionOfTag
 export declare function versionOfTag(tag: string): TagVersion | null;
 
+### build/vite.d.ts#RehypeNode
+export interface RehypeNode {
+  readonly type: string;
+  readonly tagName?: string;
+  properties?: Record<string, unknown>;
+  readonly children?: readonly RehypeNode[];
+}
+
 ### build/vite.d.ts#STAMPS_FILE
 export declare const STAMPS_FILE = "data-stamps.json";
 
@@ -1360,6 +1370,9 @@ export declare function buildInfo(version?: string, env?: SiteEnv, now?: Date): 
 
 ### build/vite.d.ts#commitTime
 export declare function commitTime(env?: SiteEnv, repoDir?: string): string;
+
+### build/vite.d.ts#rehypeScrollCue
+export declare function rehypeScrollCue(): (tree: RehypeNode) => void;
 
 ### build/vite.d.ts#siteBase
 export declare function siteBase(env?: SiteEnv): string;
