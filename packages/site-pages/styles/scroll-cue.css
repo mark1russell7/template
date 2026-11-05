@@ -1,7 +1,9 @@
 /*
  * @mark1russell7/site-pages/scroll-cue.css: a cue on a box that scrolls sideways.
- * A shade shows at each edge that has more content. When the box is at an end, the shade of that end goes.
- * The cue uses only CSS: two covers scroll with the content, and two shades stay at the edges.
+ * The content fades at each edge that has more content. When the box is at an end, the fade of that end goes.
+ * The cue uses only CSS. The fade shows along all of the edge, also over cells with their own background color.
+ * A browser with no scroll timelines gets two covers that scroll with the content and two shades that stay at the edges.
+ * In such a browser, the shade shows only where the content has no background color.
  *
  * Use: give the class scroll-cue to the box, and set --scroll-cue-bg to the background color of the box.
  *   <pre class="scroll-cue">...</pre>
@@ -18,8 +20,8 @@
   background-image:
     linear-gradient(to right, var(--scroll-cue-bg) 40%, transparent),
     linear-gradient(to left, var(--scroll-cue-bg) 40%, transparent),
-    radial-gradient(farthest-side at 0 50%, var(--scroll-cue-shade), transparent),
-    radial-gradient(farthest-side at 100% 50%, var(--scroll-cue-shade), transparent);
+    linear-gradient(to right, var(--scroll-cue-shade), transparent),
+    linear-gradient(to left, var(--scroll-cue-shade), transparent);
   background-position: left center, right center, left center, right center;
   background-size:
     calc(var(--scroll-cue-size) * 2) 100%,
@@ -28,4 +30,44 @@
     var(--scroll-cue-size) 100%;
   background-repeat: no-repeat;
   background-attachment: local, local, scroll, scroll;
+}
+
+@property --scroll-cue-fade-left {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --scroll-cue-fade-right {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes scroll-cue-fades {
+  0% {
+    --scroll-cue-fade-left: 0px;
+    --scroll-cue-fade-right: calc(var(--scroll-cue-size) * 2);
+  }
+  4% {
+    --scroll-cue-fade-left: calc(var(--scroll-cue-size) * 2);
+  }
+  96% {
+    --scroll-cue-fade-right: calc(var(--scroll-cue-size) * 2);
+  }
+  100% {
+    --scroll-cue-fade-left: calc(var(--scroll-cue-size) * 2);
+    --scroll-cue-fade-right: 0px;
+  }
+}
+
+/* A box with no overflow has no active timeline, so its fades stay at 0 and the mask hides nothing. */
+@supports (animation-timeline: scroll()) {
+  .scroll-cue {
+    background-image: none;
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--scroll-cue-fade-left), #000 calc(100% - var(--scroll-cue-fade-right)), transparent);
+    mask-image: linear-gradient(to right, transparent, #000 var(--scroll-cue-fade-left), #000 calc(100% - var(--scroll-cue-fade-right)), transparent);
+    animation: scroll-cue-fades linear both;
+    animation-timeline: scroll(self inline);
+  }
 }

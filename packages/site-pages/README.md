@@ -81,7 +81,7 @@ The rule for a box that scrolls examines only tables, for these reasons:
 
 - A code block, a hex view, a row of tabs and a carousel are meant to scroll, and a visitor sees that they scroll.
 - A table in a box that scrolls looks complete on a phone, with no scroll bar. The visitor does not see the last columns.
-- The class `scroll-cue` shows a shade at the edge of the box, so a table in such a box does not count. The shade shows only when the cells have no background color of their own.
+- The class `scroll-cue` shows a fade at the edge of the box, so a table in such a box does not count.
 - A false alarm costs more than a miss, because each false alarm needs an exception in the site.
 
 A table is `table`, `role="table"` or `role="grid"`. A desktop view has a scroll bar, so a table in a box that scrolls is not a problem there. `report.json` still shows the table in `measure.cut`.
@@ -371,7 +371,9 @@ The pages operate at a width of 390 px without horizontal scroll. The timeline s
 
 A wide code block or table on a narrow screen scrolls sideways. Without a cue, its text looks cut. The file `scroll-cue.css` of the package gives a cue:
 
-- A shade shows at each edge that has more content. At an end of the box, the shade of that end goes.
+- The content fades at each edge that has more content. At an end of the box, the fade of that end goes.
+- The fade shows along all of the edge of a tall box, and over cells with their own background color.
+- A browser with no scroll timelines gets a shade at the edge. This shade shows only where the content has no background color.
 - The cue uses only CSS. It needs no JavaScript.
 
 Import the file in the site, and give the class `scroll-cue` to the box:
@@ -384,7 +386,7 @@ import "@mark1russell7/site-pages/scroll-cue.css";
 <pre class="scroll-cue">pnpm add @mark1russell7/site-pages</pre>
 ```
 
-The class sets `overflow-x: auto` and the background color of the box. Set `--scroll-cue-bg` to the background color of the box, and `--scroll-cue-shade` to the color of the shade:
+The class sets `overflow-x: auto` and the background color of the box. Set `--scroll-cue-bg` to the background color of the box. In a browser with no scroll timelines, `--scroll-cue-shade` is the color of the shade:
 
 ```css
 .code {
