@@ -73,8 +73,7 @@ export interface Measure {
  * A box that clips counts for each text, because a visitor cannot reach that text. These texts do not count:
  * - a text in a box with `text-overflow` other than `clip` (a person chose the ellipsis),
  * - a text in an element with `data-overflow-ok`, or in that element itself (a person chose the overflow),
- * - a text in a box with the class `scroll-cue` that scrolls, when the computed style of the box has an animation or a
- *   background image (a shade shows the visitor that it scrolls). The class alone shows nothing,
+ * - a text in a box that scrolls with the class `scroll-cue`, and with an animation or a background image for its shade,
  * - a text in `.sr`, `.sr-only`, `.visually-hidden`, `.skip`, `[aria-hidden="true"]`, `select`, `textarea` or `svg`,
  * - a text in a fixed element, which the box does not clip,
  * - a text that is not visible, or with an element around it of 1 px or less or with `opacity: 0`.
