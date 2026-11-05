@@ -61,13 +61,19 @@
   }
 }
 
-/* A box with no overflow has no active timeline, so its fades stay at 0 and the mask hides nothing. */
+/*
+ * A box with no overflow has no active timeline, so its fades stay at 0 and the mask hides nothing.
+ * The rule uses only some of the animation longhands. With all of them, a minifier can write one `animation` line
+ * that holds the timeline, and a browser refuses that line. Then the mask stays, and no box shows a cue.
+ */
 @supports (animation-timeline: scroll()) {
   .scroll-cue {
     background-image: none;
     -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--scroll-cue-fade-left), #000 calc(100% - var(--scroll-cue-fade-right)), transparent);
     mask-image: linear-gradient(to right, transparent, #000 var(--scroll-cue-fade-left), #000 calc(100% - var(--scroll-cue-fade-right)), transparent);
-    animation: scroll-cue-fades linear both;
+    animation-name: scroll-cue-fades;
+    animation-timing-function: linear;
+    animation-fill-mode: both;
     animation-timeline: scroll(self inline);
   }
 }

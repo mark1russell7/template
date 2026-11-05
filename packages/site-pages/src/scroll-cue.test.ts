@@ -24,6 +24,13 @@ describe("the scroll cue style", () => {
     expect(css).toMatch(/background-attachment:\s*local,\s*local,\s*scroll,\s*scroll/);
   });
 
+  it("has no animation shorthand, so that a minifier has no line to merge the timeline into", () => {
+    expect(css).not.toMatch(/animation:/);
+    expect(css).toContain("animation-timeline: scroll(self inline)");
+    // With all the longhands, a minifier also can write one line. Each one that the rule leaves out prevents this.
+    expect(css).not.toMatch(/animation-duration:/);
+  });
+
   it("has no radial shade, which goes out toward the top and the bottom of a tall box", () => {
     expect(css).not.toContain("radial-gradient");
   });
@@ -83,6 +90,13 @@ describe.skipIf(executable === undefined)("the scroll cue in a browser", () => {
     expect(middle).toEqual(CELL);
     expect(left).toEqual(CELL);
     expect(right).not.toEqual(CELL);
+  }, 60_000);
+
+  it("shows no cue with the merged line of a minifier: the browser refuses a timeline in the shorthand", async () => {
+    const merged = css.replace(/animation-name:[^;]*;\s*animation-timing-function:[^;]*;\s*animation-fill-mode:[^;]*;\s*animation-timeline:[^;]*;/, "animation:linear both scroll-cue-fades scroll(self inline);");
+    expect(merged).not.toBe(css);
+    const { right } = await edges(page(100, 900).replace(css, merged), "start");
+    expect(right).toEqual(CELL);
   }, 60_000);
 
   it("shows the cue in the middle of a tall box", async () => {
