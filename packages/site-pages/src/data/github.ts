@@ -158,14 +158,65 @@ export async function githubOpenWork(options: GitHubOptions & { endpoint?: strin
   }
 }
 
-/** This function gives the URL of the next page from a `Link` header of GitHub, or null. */
-function nextPage(link: string | null): string | null {
+/** This function gives the URL of the page with the relation `rel` from a `Link` header of GitHub, or null. */
+function linkedPage(link: string | null, rel: "next" | "last"): string | null {
   if (!link) return null;
   for (const part of link.split(",")) {
-    const match = /<([^>]+)>\s*;\s*rel="next"/.exec(part);
-    if (match?.[1]) return match[1];
+    const match = /<([^>]+)>\s*;\s*rel="([a-z]+)"/.exec(part);
+    if (match?.[1] && match[2] === rel) return match[1];
   }
   return null;
+}
+
+const restHeaders = (token: string): Record<string, string> => ({
+  accept: "application/vnd.github+json",
+  authorization: `Bearer ${token}`,
+  "user-agent": USER_AGENT,
+  "x-github-api-version": "2022-11-28",
+});
+
+/**
+ * This function reads the published releases, the newest first, and stops after the first release for which `enough` is true.
+ * It reads 100 releases on each page, and at most `maxPages` pages.
+ */
+async function readReleasePages(
+  options: GitHubOptions & { endpoint?: string; maxPages?: number },
+  enough: (release: GitHubRelease) => boolean,
+): Promise<GitHubReleases> {
+  const stop = precheck(options);
+  if (stop) return stop;
+  const { owner, repo, token = "", endpoint = GITHUB_API, maxPages = 10, timeoutMs = 15_000 } = options;
+  const fetcher = options.fetch ?? globalThis.fetch;
+  const releases: GitHubRelease[] = [];
+  let url: string | null = `${endpoint}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases?per_page=100`;
+  try {
+    for (let page = 0; url !== null && page < maxPages; page++) {
+      const response: Response = await fetcher(url, { headers: restHeaders(token), signal: AbortSignal.timeout(timeoutMs) });
+      if (response.status === 404) return { available: false, reason: `GitHub has no repository ${owner}/${repo}` };
+      if (!response.ok) return { available: false, reason: `GitHub answered with HTTP ${response.status}` };
+      const body: unknown = await response.json();
+      if (!Array.isArray(body)) return { available: false, reason: "GitHub gave no list of releases" };
+      for (const value of body) {
+        const release = object(value);
+        const tag = release["tag_name"];
+        if (release["draft"] === true || typeof tag !== "string") continue;
+        const entry: GitHubRelease = {
+          tag,
+          name: text(release["name"]) || tag,
+          body: text(release["body"]),
+          publishedAt: text(release["published_at"]) || text(release["created_at"]),
+          url: text(release["html_url"]),
+          prerelease: release["prerelease"] === true,
+        };
+        releases.push(entry);
+        if (enough(entry)) return { available: true, releases };
+      }
+      url = linkedPage(response.headers.get("link"), "next");
+    }
+    return { available: true, releases };
+  } catch (error) {
+    return failure(error, timeoutMs);
+  }
 }
 
 /**
@@ -176,43 +227,62 @@ function nextPage(link: string | null): string | null {
  * @remarks The function reads 100 releases on each page, and at most `maxPages` pages (default 10).
  */
 export async function githubReleases(options: GitHubOptions & { endpoint?: string; maxPages?: number }): Promise<GitHubReleases> {
-  const stop = precheck(options);
-  if (stop) return stop;
-  const { owner, repo, token, endpoint = GITHUB_API, maxPages = 10, timeoutMs = 15_000 } = options;
+  return readReleasePages(options, () => false);
+}
+
+/** The result of `githubReleaseLag`. The field `at` is the time of the read, and `release` is the tag of the release. */
+export type GitHubReleaseLag = { available: true; value: number; at: string; release: string } | { available: false; reason: string };
+
+const DAY_MS = 86_400_000;
+
+/**
+ * This function gives the age in days of the oldest commit after a release, rounded to 2 decimals. It gives 0 when no commit
+ * follows the release.
+ *
+ * @param oldest - The commit date of the oldest commit after the release, or undefined for no commit.
+ * @param now - The time of the read, as an ISO date.
+ */
+export function releaseLagOf(oldest: string | undefined, now: string): number {
+  if (oldest === undefined) return 0;
+  const days = (Date.parse(now) - Date.parse(oldest)) / DAY_MS;
+  return Number.isFinite(days) ? Math.max(0, Math.round(days * 100) / 100) : Number.NaN;
+}
+
+/**
+ * This function reads how many days a branch is ahead of its newest release. That is the age of the oldest commit of the branch
+ * after the newest release whose tag starts with `tagPrefix`. It skips drafts and pre-releases, because a pre-release is not the
+ * version that most users get. It gives `{ available: false, reason }` without a token, after an error, or with no such release.
+ *
+ * @remarks The function reads the releases until it finds one, at most `maxPages` pages of 100 (default 10). It then reads one
+ * commit on each page of the branch since that release, and asks GitHub for the last page only.
+ */
+export async function githubReleaseLag(
+  options: GitHubOptions & { tagPrefix: string; branch?: string; endpoint?: string; maxPages?: number; now?: string },
+): Promise<GitHubReleaseLag> {
+  const { owner, repo, token = "", tagPrefix, branch = "main", endpoint = GITHUB_API, timeoutMs = 15_000 } = options;
+  const now = options.now ?? new Date().toISOString().replace(/\.\d+Z$/, "Z");
+  const wanted = (release: GitHubRelease): boolean => !release.prerelease && release.tag.startsWith(tagPrefix);
+  const releases = await readReleasePages(options, wanted);
+  if (!releases.available) return releases;
+  const release = releases.releases.find(wanted);
+  if (release === undefined) return { available: false, reason: `no release has a tag that starts with ${tagPrefix}` };
+  if (!Number.isFinite(Date.parse(release.publishedAt))) return { available: false, reason: `the release ${release.tag} has no date` };
   const fetcher = options.fetch ?? globalThis.fetch;
-  const releases: GitHubRelease[] = [];
-  let url: string | null = `${endpoint}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases?per_page=100`;
+  const read = async (url: string): Promise<Response> => fetcher(url, { headers: restHeaders(token), signal: AbortSignal.timeout(timeoutMs) });
+  const first = `${endpoint}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?sha=${encodeURIComponent(branch)}&since=${encodeURIComponent(release.publishedAt)}&per_page=1`;
   try {
-    for (let page = 0; url !== null && page < maxPages; page++) {
-      const response: Response = await fetcher(url, {
-        headers: {
-          accept: "application/vnd.github+json",
-          authorization: `Bearer ${token}`,
-          "user-agent": USER_AGENT,
-          "x-github-api-version": "2022-11-28",
-        },
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      if (response.status === 404) return { available: false, reason: `GitHub has no repository ${owner}/${repo}` };
-      if (!response.ok) return { available: false, reason: `GitHub answered with HTTP ${response.status}` };
-      const body: unknown = await response.json();
-      if (!Array.isArray(body)) return { available: false, reason: "GitHub gave no list of releases" };
-      for (const value of body) {
-        const release = object(value);
-        const tag = release["tag_name"];
-        if (release["draft"] === true || typeof tag !== "string") continue;
-        releases.push({
-          tag,
-          name: text(release["name"]) || tag,
-          body: text(release["body"]),
-          publishedAt: text(release["published_at"]) || text(release["created_at"]),
-          url: text(release["html_url"]),
-          prerelease: release["prerelease"] === true,
-        });
-      }
-      url = nextPage(response.headers.get("link"));
-    }
-    return { available: true, releases };
+    let response = await read(first);
+    const last = response.ok ? linkedPage(response.headers.get("link"), "last") : null;
+    if (last !== null) response = await read(last);
+    if (response.status === 404) return { available: false, reason: `GitHub has no branch ${branch} in ${owner}/${repo}` };
+    if (!response.ok) return { available: false, reason: `GitHub answered with HTTP ${response.status}` };
+    const body: unknown = await response.json();
+    if (!Array.isArray(body)) return { available: false, reason: "GitHub gave no list of commits" };
+    const commit = body.length === 0 ? undefined : text(object(object(object(body.at(-1))["commit"])["committer"])["date"]);
+    if (commit === "") return { available: false, reason: "the oldest commit has no date" };
+    const value = releaseLagOf(commit, now);
+    if (!Number.isFinite(value)) return { available: false, reason: "the time of the read is not a date" };
+    return { available: true, value, at: now, release: release.tag };
   } catch (error) {
     return failure(error, timeoutMs);
   }
