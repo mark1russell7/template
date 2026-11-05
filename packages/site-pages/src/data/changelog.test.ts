@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { changelogFaults } from "./changelog.js";
+import { changelogFaults, sectionMarksBreak } from "./changelog.js";
 
 const FIRST = "## 0.1.0\n\nThe first release.\n";
 
@@ -26,11 +26,36 @@ describe("changelogFaults", () => {
     expect(changelogFaults(`## 0.1.1\n\n- Patch the minor axis of the shelf.\n\n${FIRST}`)).toEqual([]);
   });
 
-  it("finds a section with no statement, and a dependency line is not a statement", () => {
-    const text = `## 0.1.2\n\n### Patch Changes\n\n- Updated dependencies [abc1234]\n\n## 0.1.1\n\n${FIRST}`;
-    expect(changelogFaults(text)).toEqual([
-      { version: "0.1.2", kind: "no-statement", statement: "" },
-      { version: "0.1.1", kind: "no-statement", statement: "" },
+  it("finds an empty section", () => {
+    expect(changelogFaults(`## 0.1.1\n\n${FIRST}`)).toEqual([{ version: "0.1.1", kind: "no-statement", statement: "" }]);
+  });
+
+  it("passes a section with only dependency lines when the version rule gives no break", () => {
+    expect(changelogFaults(`## 0.1.2\n\n### Patch Changes\n\n- Updated dependencies [abc1234]\n  - @a/b@1.2.3\n\n${FIRST}`)).toEqual([]);
+    expect(changelogFaults(`## 0.1.2\n\n### Patch Changes\n\n- abc1234: Updated dependencies\n\n${FIRST}`)).toEqual([]);
+  });
+
+  it("finds a section with only dependency lines on a break of the version rule", () => {
+    expect(changelogFaults(`## 0.2.0\n\n### Minor Changes\n\n- Updated dependencies [abc1234]\n\n${FIRST}`)).toEqual([
+      { version: "0.2.0", kind: "no-statement", statement: "" },
+      { version: "0.2.0", kind: "break-unmarked", statement: "" },
+    ]);
+    expect(changelogFaults(`## 1.0.0\n\n- @a/b@1.2.3\n\n${FIRST}`).map((f) => f.kind)).toEqual(["no-statement", "break-unmarked"]);
+  });
+
+  it("does not read a dependency line in a pre-release or in the oldest section as a break", () => {
+    expect(changelogFaults(`## 0.2.0-rc.1\n\n- Updated dependencies [abc1234]\n\n${FIRST}`)).toEqual([]);
+    expect(changelogFaults("## 0.2.0\n\n- Updated dependencies [abc1234]\n")).toEqual([]);
+  });
+
+  it("passes a section with no change in a fixed group, and it still reads a section with a change", () => {
+    const text = `## 0.3.0\n\nA new name.\n\n## 0.2.1\n\n## 0.2.0\n\n### Minor Changes\n\n- Updated dependencies [abc1234]\n\n${FIRST}`;
+    expect(changelogFaults(text, { fixedGroup: true })).toEqual([{ version: "0.3.0", kind: "break-unmarked", statement: "A new name." }]);
+    expect(changelogFaults(text).map((f) => [f.version, f.kind])).toEqual([
+      ["0.3.0", "break-unmarked"],
+      ["0.2.1", "no-statement"],
+      ["0.2.0", "no-statement"],
+      ["0.2.0", "break-unmarked"],
     ]);
   });
 
@@ -48,9 +73,20 @@ describe("changelogFaults", () => {
     ]);
   });
 
-  it("does not count a Changesets MINOR heading as a break mark, and it counts a Major heading", () => {
-    expect(changelogFaults(`## 0.2.0\n\n### Minor Changes\n\n- abc1234: A new option.\n\n${FIRST}`).map((f) => f.kind)).toEqual(["break-unmarked"]);
-    expect(changelogFaults(`## 1.0.0\n\n### Major Changes\n\n- abc1234: A new API.\n\n${FIRST}`)).toEqual([]);
+  it("counts only the two marks of a break", () => {
+    expect(sectionMarksBreak("A new name.\n\n### Breaking\n\n- A new name.")).toBe(true);
+    expect(sectionMarksBreak("### Breaking changes\n\n- A new name.")).toBe(true);
+    expect(sectionMarksBreak("- abc1234: `pack` has breaking changes.")).toBe(true);
+    for (const text of ["### Minor Changes", "### Major Changes", "MINOR before 1.0.0, a break.", "**Breaking:** a new name.", "- Breaking: a new name.", "Breaking changes: N/A", "### Breakingly fast", "A fix with no breaking changes.", "It has no breaking changes."]) {
+      expect(sectionMarksBreak(text), text).toBe(false);
+    }
+  });
+
+  it("finds a break with a heading or a first sentence that is not a mark", () => {
+    for (const body of ["### Minor Changes\n\n- abc1234: A new option.", "MINOR before 1.0.0, a break: a new name."]) {
+      expect(changelogFaults(`## 0.2.0\n\n${body}\n\n${FIRST}`).map((f) => f.kind)).toEqual(["break-unmarked"]);
+    }
+    expect(changelogFaults(`## 1.0.0\n\n### Major Changes\n\n- abc1234: A new API.\n\n${FIRST}`).map((f) => f.kind)).toEqual(["break-unmarked"]);
   });
 
   it("finds a break mark that the version rule does not give", () => {
@@ -64,7 +100,6 @@ describe("changelogFaults", () => {
   it("does not read a statement of no break as a mark", () => {
     expect(changelogFaults(`## 0.1.1\n\nA fix with no breaking changes.\n\n${FIRST}`)).toEqual([]);
     expect(changelogFaults(`## 0.1.1\n\nA fix.\n\nBreaking changes: N/A\n\n${FIRST}`)).toEqual([]);
-    expect(changelogFaults(`## 0.1.1\n\nA fix.\n\n**Breaking:** none\n\n${FIRST}`)).toEqual([]);
   });
 
   it("gives a section two faults when it has both", () => {

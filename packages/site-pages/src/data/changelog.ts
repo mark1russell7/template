@@ -117,7 +117,8 @@ export function parseChangelog(markdown: string): ChangelogSection[] {
 }
 
 /**
- * The kinds of a fault of a changelog section. `no-statement`: the section states no change.
+ * The kinds of a fault of a changelog section. `no-statement`: the section is empty, or it has only
+ * dependency lines on a break of the version rule.
  * `version-kind-only`: its first statement names the kind of the version, and nothing more.
  * `break-unmarked`: the version rule makes the release a break, and the section has no break mark.
  * `mark-without-break`: the section has a break mark, and the version rule makes the release no break.
@@ -136,12 +137,28 @@ export interface ChangelogFault {
 export interface ChangelogFaultOptions {
   /** The oldest version to examine. Older sections can follow older habits, so a caller can leave them out. */
   from?: string;
+  /**
+   * This option states that all the packages of a fixed group raise one version together. Then the
+   * raise of a section with no change comes from another package, and the section has no fault.
+   */
+  fixedGroup?: boolean;
 }
 
 const KIND_WORDS: ReadonlySet<string> = new Set(["major", "minor", "patch"]);
 const FILL_WORDS: ReadonlySet<string> = new Set(["a", "the", "this", "is", "raises", "bumps", "release", "version", "bump"]);
-// A line such as "Breaking changes: N/A" states no break, so "[^\n]*" and the negative look-ahead read the rest of the line
-const BREAK_MARK = /^(?:#{2,6} +|[-*+] +)?(?:\*\*)?breaking\b(?![^\n]*\b(?:n\/a|none)\b)|^#{2,6} +major changes\b|\bhas breaking changes\b/im;
+// The two marks: free words do not count, because a reader cannot tell them from a text that names a break for another reason
+const BREAK_HEADING = /^### Breaking\b/m;
+const BREAK_SENTENCE = /\bhas breaking changes\b/;
+
+/**
+ * This function tells if the text of a version section marks a break. The marks are the heading
+ * `### Breaking` and the words "has breaking changes", for a text that goes through Changesets.
+ *
+ * @remarks A page that counts breaks and {@link changelogFaults} use this one test, so they agree.
+ */
+export function sectionMarksBreak(section: string): boolean {
+  return BREAK_HEADING.test(section) || BREAK_SENTENCE.test(section);
+}
 
 /** This function tells if a statement has only the kind of the version and words that state no change. */
 function namesOnlyKind(statement: string): boolean {
@@ -199,12 +216,22 @@ function firstStatement(section: { heading: string; body: string[] }): string {
   return parsed?.entries[0]?.text ?? "";
 }
 
+/** This function tells if a section has a line that names a new version of a dependency. */
+function hasDependencyLine(section: { body: string[] }): boolean {
+  return section.body.some((line) => {
+    const item = /^[-*+]\s+(.*)$/.exec(line)?.[1];
+    return item !== undefined && DEPENDENCY_ENTRY.test((COMMIT_ENTRY.exec(item)?.[2] ?? item).trim());
+  });
+}
+
 /**
  * This function gives the faults of the version sections of a changelog, in the order of the file.
  * A section can have two faults: one for its statement and one for its break mark.
  *
  * @remarks The break rule does not read a pre-release or the oldest section of the file, because
- * the oldest section has no earlier release to break.
+ * the oldest section has no earlier release to break. A dependency line does not say why the API
+ * broke. Thus a section with only dependency lines has a fault on a break of the version rule. The
+ * option `fixedGroup` removes this fault.
  */
 export function changelogFaults(markdown: string, options: ChangelogFaultOptions = {}): ChangelogFault[] {
   const from = options.from === undefined ? null : versionCore(options.from);
@@ -220,10 +247,12 @@ export function changelogFaults(markdown: string, options: ChangelogFaultOptions
     const fault = (kind: ChangelogFaultKind): void => {
       faults.push({ version: section.version, kind, statement });
     };
-    if (statement === "") fault("no-statement");
-    else if (namesOnlyKind(statement)) fault("version-kind-only");
-    if (section.version.includes("-") || oldest === null || compareCores(core, oldest) === 0) continue;
-    const marked = BREAK_MARK.test(section.body.join("\n"));
+    if (statement === "" && options.fixedGroup === true) continue;
+    const ruled = !section.version.includes("-") && oldest !== null && compareCores(core, oldest) !== 0;
+    if (statement === "" && (!hasDependencyLine(section) || (ruled && ruleGivesBreak(core)))) fault("no-statement");
+    else if (statement !== "" && namesOnlyKind(statement)) fault("version-kind-only");
+    if (!ruled) continue;
+    const marked = sectionMarksBreak(section.body.join("\n"));
     if (ruleGivesBreak(core) && !marked) fault("break-unmarked");
     else if (!ruleGivesBreak(core) && marked) fault("mark-without-break");
   }

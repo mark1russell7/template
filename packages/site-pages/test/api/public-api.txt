@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 151 names
+## . (build/index.d.ts): 152 names
 
 BASE_CSS: build/index.d.ts#BASE_CSS
 type BoardIssue: build/chunks/freshness.d.ts#BoardIssue
@@ -146,6 +146,7 @@ renderStatusPage: build/index.d.ts#renderStatusPage
 roadmapItems: build/index.d.ts#roadmapItems
 runCli: build/index.d.ts#runCli
 safeUrl: build/index.d.ts#safeUrl
+sectionMarksBreak: build/index.d.ts#sectionMarksBreak
 sectionsOf: build/index.d.ts#sectionsOf
 shortDate: build/index.d.ts#shortDate
 slugOf: build/index.d.ts#slugOf
@@ -827,6 +828,7 @@ type ChangelogFaultKind = "no-statement" | "version-kind-only" | "break-unmarked
 ### build/index.d.ts#ChangelogFaultOptions
 interface ChangelogFaultOptions {
   from?: string;
+  fixedGroup?: boolean;
 }
 
 ### build/index.d.ts#ChangelogSection
@@ -1259,6 +1261,9 @@ export declare function runCli(argv: readonly string[], io: CliIo): Promise<numb
 
 ### build/index.d.ts#safeUrl
 export declare function safeUrl(url: string): string | null;
+
+### build/index.d.ts#sectionMarksBreak
+export declare function sectionMarksBreak(section: string): boolean;
 
 ### build/index.d.ts#sectionsOf
 export declare function sectionsOf(items: readonly BoardItem[]): BoardSection[];
