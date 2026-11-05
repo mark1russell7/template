@@ -4,11 +4,13 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { build as viteBuild, resolveConfig, type InlineConfig, type Plugin, type Rolldown } from "vite";
 import { applyTheme } from "./chrome.ts";
-import { buildInfo, siteBase, siteKpi, siteShell, themeScript } from "./vite.ts";
+import type { DataStamps } from "./check/freshness.ts";
+import { buildInfo, siteBase, siteKpi, siteShell, siteStamps, STAMP_MARK, STAMPS_FILE, themeScript } from "./vite.ts";
 
 // The compiler examines this line: Vite accepts the plugin without a cast.
 const asVitePlugin = (options: Parameters<typeof siteShell>[0]): Plugin => siteShell(options);
 const asViteKpi = (...args: Parameters<typeof siteKpi>): Plugin => siteKpi(...args);
+const asViteStamps = (...args: Parameters<typeof siteStamps>): Plugin => siteStamps(...args);
 
 /** This function starts the theme script with a fake page, and gives the attribute that it sets. */
 function runScript(script: string, storage: { getItem(key: string): string | null }): string | undefined {
@@ -177,5 +179,56 @@ describe("siteShell in a real Vite", () => {
   it("stops the build when the data is not correct", async () => {
     const plugins = [asViteKpi({ ...KPI, measures: [] }, { GITHUB_SHA: COMMIT })];
     await expect(viteBuild(config({ plugins, build: { write: false } }))).rejects.toThrow("The file has no measures.");
+  });
+});
+
+describe("siteStamps", () => {
+  let site: string;
+
+  const run = { id: "7", url: "https://example.test/7", date: "2026-11-03T10:00:00Z", engines: { "@scope/engine": "0.7.0" } };
+  const stamps: DataStamps = { schema: "data-stamp/1", pages: [{ page: "index.html", runs: [run] }] };
+
+  beforeEach(() => {
+    site = mkdtempSync(join(tmpdir(), "site-stamps-"));
+  });
+
+  afterEach(() => {
+    rmSync(site, { recursive: true, force: true });
+  });
+
+  /** This function builds one page with the plugin, and gives the output of the build. */
+  const build = async (body: string, input: Parameters<typeof siteStamps>[0]): Promise<Rolldown.RolldownOutput> => {
+    writeFileSync(join(site, "index.html"), `<!doctype html><html><head><title>t</title></head><body>${body}</body></html>`);
+    const config: InlineConfig = { configFile: false, logLevel: "silent", root: site, plugins: [asViteStamps(input)], build: { write: false } };
+    return (await viteBuild(config)) as Rolldown.RolldownOutput;
+  };
+  const asset = (result: Rolldown.RolldownOutput, name: string): string => String((result.output.find((item) => item.fileName === name) as Rolldown.OutputAsset).source);
+
+  it("puts the stamp line in the page, and adds the file that the gate reads", async () => {
+    const result = await build(`<p>Data</p>${STAMP_MARK}`, () => stamps);
+    const html = asset(result, "index.html");
+    expect(html).toContain('class="data-stamp"');
+    expect(html).toContain("on engine 0.7.0");
+    expect(html).not.toContain(STAMP_MARK);
+    expect(JSON.parse(asset(result, STAMPS_FILE))).toEqual(stamps);
+  });
+
+  it("stops the build for a bad stamp", async () => {
+    const bad = { schema: "data-stamp/1", pages: [{ page: "index.html", runs: [{ ...run, date: "soon" }] }] } as DataStamps;
+    await expect(build(STAMP_MARK, bad)).rejects.toThrow("the run has no date");
+  });
+
+  it("stops the build for a mark with no stamp", async () => {
+    const other: DataStamps = { schema: "data-stamp/1", pages: [{ page: "other.html", runs: [run] }] };
+    await expect(build(STAMP_MARK, other)).rejects.toThrow("the stamps have no page index.html");
+  });
+
+  it("stops the build for a stamp with no mark", async () => {
+    await expect(build("<p>Data</p>", stamps)).rejects.toThrow("the page has no mark");
+  });
+
+  it("stops the build for a stamp of a page that the build does not hold", async () => {
+    const both: DataStamps = { schema: "data-stamp/1", pages: [{ page: "index.html", runs: [run] }, { page: "gone.html", runs: [run] }] };
+    await expect(build(STAMP_MARK, both)).rejects.toThrow("the build does not hold: gone.html");
   });
 });
