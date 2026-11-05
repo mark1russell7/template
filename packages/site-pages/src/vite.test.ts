@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { build as viteBuild, resolveConfig, type InlineConfig, type Plugin, type Rolldown } from "vite";
 import { applyTheme } from "./chrome.ts";
 import type { DataStamps } from "./check/freshness.ts";
-import { buildInfo, siteBase, siteKpi, siteShell, siteStamps, STAMP_MARK, STAMPS_FILE, themeScript } from "./vite.ts";
+import { buildInfo, commitTime, siteBase, siteKpi, siteShell, siteStamps, STAMP_MARK, STAMPS_FILE, themeScript } from "./vite.ts";
 
 // The compiler examines this line: Vite accepts the plugin without a cast.
 const asVitePlugin = (options: Parameters<typeof siteShell>[0]): Plugin => siteShell(options);
@@ -230,5 +230,17 @@ describe("siteStamps", () => {
   it("stops the build for a stamp of a page that the build does not hold", async () => {
     const both: DataStamps = { schema: "data-stamp/1", pages: [{ page: "index.html", runs: [run] }, { page: "gone.html", runs: [run] }] };
     await expect(build(STAMP_MARK, both)).rejects.toThrow("the build does not hold: gone.html");
+  });
+});
+
+describe("commitTime", () => {
+  it("gives the time of the commit in UTC, and the same time for the head by its name", () => {
+    const time = commitTime({});
+    expect(new Date(time).toISOString()).toBe(time);
+    expect(commitTime({ GITHUB_SHA: "HEAD" })).toBe(time);
+  });
+
+  it("stops the build when git cannot read the commit", () => {
+    expect(() => commitTime({ GITHUB_SHA: "0000000000000000000000000000000000000000" })).toThrow(/cannot read the commit/);
   });
 });

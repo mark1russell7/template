@@ -432,6 +432,8 @@ The theme `auto` removes `data-theme`, and the CSS of the site then obeys `prefe
 
 The file `kpi.json` at the root of a site holds the measures of the project, in the format `kpi/1`. A reader outside the site takes the numbers from this file.
 
+A count that the build reads from the source is true at the commit of the build. Use `commitTime()` from `@mark1russell7/site-pages/vite` for its `at`.
+
 ```ts
 import { defineConfig } from "vite";
 import { siteKpi } from "@mark1russell7/site-pages/vite";
