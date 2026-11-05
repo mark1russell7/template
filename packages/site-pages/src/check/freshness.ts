@@ -3,7 +3,7 @@
  * Each stamp names the page, its runs, their dates and their engine versions.
  * The gate fails on a page with no versions or no run date, and on old data with no newer run in flight.
  * The gate also fails on a run that started behind the engines on npm.
- * A fixed study has no age limit. A page with a longer limit names the reason and the scheduled workflow that meets the limit.
+ * A study has an age limit and a scheduled workflow, or it says why it needs no limit. A page with a longer limit names the reason and the workflow.
  * This file imports only Node.js and the folder `data`, so `reusable-pages.yml` starts it with no npm release of the package.
  */
 
@@ -27,7 +27,16 @@ export const MAX_MINORS_BEHIND = 1;
 /** The longest limit of a page, in days, with no ruling for that site. */
 export const MAX_LIMIT_DAYS_WITHOUT_RULING = 14;
 
+/** The longest limit of a study, in days, with no ruling for that site. The runs of a study are heavy. */
+export const MAX_STUDY_LIMIT_DAYS = 30;
+
+/** The last time at which a limit can start. A limit turns on at this time if its site did not turn it on before. */
+export const LAST_LIMIT_START = "2026-12-07T00:00:00Z";
+
 const DAY_MS = 86_400_000;
+
+/** The form of a full commit. */
+const FULL_COMMIT = /^[0-9a-f]{40}$/;
 
 /** One run that gives the data of a page. */
 export interface DataRun {
@@ -39,6 +48,8 @@ export interface DataRun {
   readonly engines: Readonly<Record<string, string>>;
   /** The words for data that no CI run made, for example `lab run` or `hand count`. The page shows them in place of `run`. */
   readonly method?: string;
+  /** The full commit of the code that ran. It is not the commit that added a copy of the data. A study with a limit in force needs it. */
+  readonly commit?: string;
 }
 
 /** The age limit of one page, in place of `MAX_DATA_AGE_DAYS`. */
@@ -51,6 +62,16 @@ export interface DataLimit {
   readonly workflow: string;
   /** The link to the public ruling. A limit over `MAX_LIMIT_DAYS_WITHOUT_RULING` needs it. */
   readonly ruling?: string;
+  /** The ISO time at which the age rule and the commit rule start, at most `LAST_LIMIT_START`. A site removes this field at the first green read of its workflow. */
+  readonly startsAt?: string;
+}
+
+/** The two statements of a study with no age limit. The page shows both. */
+export interface NoAgeLimit {
+  /** The reason that no run of the current code can reproduce the numbers. */
+  readonly reproduce: string;
+  /** The reason that the page claims nothing about today. */
+  readonly today: string;
 }
 
 /** The stamp of one measured page. */
@@ -60,10 +81,12 @@ export interface PageStamp {
   readonly runs: readonly DataRun[];
   /** The run on newer engines that is in progress. */
   readonly inFlight?: DataRun;
-  /** The page shows a fixed study of the versions of its runs, so its data has no age limit. It makes no claim about a newer release. */
+  /** The page shows a study of the versions of its runs. A study has a `limit` or the field `noLimit`, and the rule of the engines does not apply to it. */
   readonly study?: true;
   /** The age limit of this page, in place of the default. */
   readonly limit?: DataLimit;
+  /** The statements of a study with no age limit. */
+  readonly noLimit?: NoAgeLimit;
 }
 
 /** The content of a file of data stamps. */
@@ -112,6 +135,7 @@ function runFaults(raw: unknown, at: string, study = false): string[] {
   if (typeof run["url"] !== "string" || !run["url"].startsWith("https://")) faults.push(`${label}: the run has no https link.`);
   if (typeof run["date"] !== "string" || !Number.isFinite(Date.parse(run["date"]))) faults.push(`${label}: the run has no date.`);
   if (run["method"] !== undefined && (typeof run["method"] !== "string" || run["method"].trim() === "")) faults.push(`${label}: the method of the run is not text.`);
+  if (run["commit"] !== undefined && (typeof run["commit"] !== "string" || !FULL_COMMIT.test(run["commit"]))) faults.push(`${label}: the commit of the run is not a full commit.`);
   const engines = record(run["engines"]);
   if (engines === null || Object.keys(engines).length === 0) return [...faults, `${label}: the run names no engine versions.`];
   for (const [name, version] of Object.entries(engines)) {
@@ -122,7 +146,7 @@ function runFaults(raw: unknown, at: string, study = false): string[] {
 }
 
 /** This function gives the faults of the age limit of one page. */
-function limitFaults(raw: unknown, at: string): string[] {
+function limitFaults(raw: unknown, at: string, study: boolean): string[] {
   const limit = record(raw);
   if (limit === null) return [`${at}: the limit is not an object.`];
   const faults: string[] = [];
@@ -132,9 +156,26 @@ function limitFaults(raw: unknown, at: string): string[] {
   if (typeof limit["workflow"] !== "string" || limit["workflow"] === "") faults.push(`${at}: the limit names no workflow.`);
   const ruling = limit["ruling"];
   if (ruling !== undefined && (typeof ruling !== "string" || !ruling.startsWith("https://"))) faults.push(`${at}: the ruling of the limit has no https link.`);
-  if (typeof days === "number" && days > MAX_LIMIT_DAYS_WITHOUT_RULING && ruling === undefined) {
-    faults.push(`${at}: a limit over ${MAX_LIMIT_DAYS_WITHOUT_RULING} days needs a ruling for this site.`);
+  const longest = study ? MAX_STUDY_LIMIT_DAYS : MAX_LIMIT_DAYS_WITHOUT_RULING;
+  if (typeof days === "number" && days > longest && ruling === undefined) {
+    faults.push(`${at}: a limit over ${longest} days needs a ruling for this site.`);
   }
+  const startsAt = limit["startsAt"];
+  if (startsAt !== undefined) {
+    if (typeof startsAt !== "string" || !Number.isFinite(Date.parse(startsAt))) faults.push(`${at}: the start of the limit has no date.`);
+    else if (Date.parse(startsAt) > Date.parse(LAST_LIMIT_START)) faults.push(`${at}: the start of the limit is after ${LAST_LIMIT_START.slice(0, 10)}.`);
+  }
+  return faults;
+}
+
+/** This function gives the faults of the statements of a study with no age limit. */
+function noLimitFaults(raw: unknown, at: string): string[] {
+  const statements = record(raw);
+  if (statements === null) return [`${at}: the field noLimit is not an object.`];
+  const faults: string[] = [];
+  const said = (value: unknown): boolean => typeof value === "string" && value.trim() !== "";
+  if (!said(statements["reproduce"])) faults.push(`${at}: the field noLimit does not say why no run of the current code can reproduce the numbers.`);
+  if (!said(statements["today"])) faults.push(`${at}: the field noLimit does not say why the page claims nothing about today.`);
   return faults;
 }
 
@@ -143,9 +184,14 @@ function ageRuleFaults(page: Record<string, unknown>, at: string): string[] {
   const faults: string[] = [];
   const study = page["study"];
   if (study !== undefined && study !== true) faults.push(`${at}: the field study is not true.`);
-  if (study === true && page["limit"] !== undefined) faults.push(`${at}: a fixed study has no limit.`);
-  if (study === true && page["inFlight"] !== undefined) faults.push(`${at}: a fixed study has no run in flight.`);
-  if (page["limit"] !== undefined) faults.push(...limitFaults(page["limit"], at));
+  const limit = page["limit"];
+  const noLimit = page["noLimit"];
+  if (study === true && limit === undefined && noLimit === undefined) faults.push(`${at}: a study needs a limit, or the field noLimit.`);
+  if (limit !== undefined && noLimit !== undefined) faults.push(`${at}: a page has a limit or the field noLimit, not both.`);
+  if (study !== true && noLimit !== undefined) faults.push(`${at}: only a study has the field noLimit.`);
+  if (study === true && page["inFlight"] !== undefined) faults.push(`${at}: a study has no run in flight.`);
+  if (limit !== undefined) faults.push(...limitFaults(limit, at, study === true));
+  if (noLimit !== undefined) faults.push(...noLimitFaults(noLimit, at));
   return faults;
 }
 
@@ -302,7 +348,9 @@ function hasNewerEngine(run: DataRun, than: DataRun): boolean {
  * - The engines of the newest run are at most `maxMinorsBehind` behind npm at the start of that run.
  * - A run in flight has the same age limit, so an old stamp does not hold the gate open.
  * - A page with its own limit uses that limit, and the schedule of its workflow meets the limit.
- * - A fixed study has no age limit and no limit of the engines, because it tells about the versions that it names.
+ * - A study has no limit of the engines, because it tells about the versions that it names.
+ * - A study with a limit in force names the commit of each run. A study with no limit has no age rule.
+ * - A limit with `startsAt` applies the age rule and the commit rule from that time. The schedule rule applies at once.
  */
 export function checkFreshness(stamps: DataStamps, options: FreshnessOptions): FreshnessCheck {
   const { times, maxAgeDays: defaultAge = MAX_DATA_AGE_DAYS, maxMinorsBehind = MAX_MINORS_BEHIND, schedules = {} } = options;
@@ -313,8 +361,10 @@ export function checkFreshness(stamps: DataStamps, options: FreshnessOptions): F
     for (const run of [...stamp.runs, ...(stamp.inFlight === undefined ? [] : [stamp.inFlight])]) {
       if (ageInDays(run.date, now) < 0) faults.push(`${stamp.page}: the run ${run.id} has a date after the check.`);
     }
-    if (stamp.study === true) continue;
+    if (stamp.study === true && stamp.limit === undefined) continue;
     const maxAgeDays = stamp.limit?.days ?? defaultAge;
+    const startsAt = stamp.limit?.startsAt;
+    const inForce = startsAt === undefined || Date.parse(startsAt) <= now;
     if (stamp.limit !== undefined) {
       const gap = schedules[stamp.limit.workflow];
       if (gap === undefined || typeof gap === "string") faults.push(`${stamp.page}: the limit of ${maxAgeDays} days has no schedule that the gate can read in ${stamp.limit.workflow}: ${gap ?? "the check has no read of this workflow"}.`);
@@ -325,9 +375,13 @@ export function checkFreshness(stamps: DataStamps, options: FreshnessOptions): F
     if (flight !== undefined && !flying) faults.push(`${stamp.page}: the run ${flight.id} is in flight for more than ${maxAgeDays} days.`);
     for (const run of stamp.runs) {
       const age = ageInDays(run.date, now);
-      if (age > maxAgeDays && !(flying && hasNewerEngine(flight, run))) {
+      if (inForce && age > maxAgeDays && !(flying && hasNewerEngine(flight, run))) {
         faults.push(`${stamp.page}: the run ${run.id} is ${age.toFixed(1)} days old, over the limit of ${maxAgeDays}, and no run on newer engines is in flight.`);
       }
+    }
+    if (stamp.study === true) {
+      if (inForce) for (const run of stamp.runs) if (run.commit === undefined) faults.push(`${stamp.page}: the run ${run.id} names no commit.`);
+      continue;
     }
     const newest = flight ?? [...stamp.runs].sort((a, b) => Date.parse(a.date) - Date.parse(b.date)).at(-1);
     if (newest === undefined) continue;
@@ -355,14 +409,15 @@ export interface FailingCase {
 
 /**
  * This function gives one failing case for each page, from the stamps of the site itself. A measured page must fail one
- * day after its limit, from `options.now`. A fixed study has no age limit, so it must fail before the date of its run.
+ * day after its limit, from `options.now` or the start of the limit. A study with no limit must fail before the date of its run.
  * Stamps that pass and give a case with no fault tell that the gate does not examine that page.
  */
 export function failingCases(stamps: DataStamps, options: FreshnessOptions): readonly FailingCase[] {
   return stamps.pages.map((stamp) => {
     const dates = [...stamp.runs, ...(stamp.inFlight === undefined ? [] : [stamp.inFlight])].map((run) => Date.parse(run.date));
     const days = stamp.limit?.days ?? options.maxAgeDays ?? MAX_DATA_AGE_DAYS;
-    const time = stamp.study === true ? Math.min(...dates) - DAY_MS : Date.parse(options.now) + (days + 1) * DAY_MS;
+    const from = Math.max(Date.parse(options.now), Date.parse(stamp.limit?.startsAt ?? options.now));
+    const time = stamp.study === true && stamp.limit === undefined ? Math.min(...dates) - DAY_MS : from + (days + 1) * DAY_MS;
     const at = new Date(time).toISOString();
     const [fault] = checkFreshness({ schema: stamps.schema, pages: [stamp] }, { ...options, now: at }).faults;
     return { page: stamp.page, at, ...(fault === undefined ? {} : { fault }) };

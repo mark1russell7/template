@@ -24,6 +24,11 @@ describe("the data stamp of the home page", () => {
     expect(checkFreshness(withPage(notStudy), { now: LATER, times: [] }).faults).not.toEqual([]);
   });
 
+  it("is refused with no statement of why it has no limit", () => {
+    const { noLimit: _noLimit, ...silent } = page;
+    expect(parseDataStamps(withPage(silent))).toMatchObject({ ok: false, faults: ["index.html: a study needs a limit, or the field noLimit."] });
+  });
+
   it("is refused with no engine version, because a study names its version", () => {
     const [run] = page.runs;
     const parsed = parseDataStamps(withPage({ ...page, runs: [{ ...run, engines: {} } as NonNullable<typeof run>] }));

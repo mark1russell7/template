@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { NpmVersionTime } from "../data/types.ts";
-import { checkFreshness, cronLines, DATA_STAMP_SCHEMA, failingCases, latestAt, minorsBehind, parseDataStamps, runFreshnessCli, scheduleGapDays, type DataLimit, type FreshnessOptions, type DataRun, type DataStamps, type PageStamp } from "./freshness.ts";
+import { checkFreshness, cronLines, DATA_STAMP_SCHEMA, failingCases, latestAt, minorsBehind, parseDataStamps, runFreshnessCli, scheduleGapDays, type DataLimit, type NoAgeLimit, type FreshnessOptions, type DataRun, type DataStamps, type PageStamp } from "./freshness.ts";
 
 const ENGINE = "@scope/engine";
 const NOW = "2026-11-10T12:00:00Z";
@@ -141,11 +141,20 @@ describe("checkFreshness", () => {
   });
 });
 
-describe("a fixed study", () => {
+describe("a study with no limit", () => {
   const page = (over: Partial<PageStamp>): DataStamps => ({ schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", runs: [run({ date: "2026-01-01T00:00:00Z", engines: { [ENGINE]: "0.1.0" } })], ...over }] });
+  const noLimit: NoAgeLimit = { reproduce: "The code of the study is gone.", today: "The page tells of one day." };
 
   it("has no age limit and no limit of the engines", () => {
-    expect(check(page({ study: true }))).toEqual({ faults: [], notRun: [] });
+    expect(check(page({ study: true, noLimit }))).toEqual({ faults: [], notRun: [] });
+    expect(parseDataStamps(page({ study: true, noLimit })).ok).toBe(true);
+  });
+
+  it("needs both statements, or a limit", () => {
+    expect(parseDataStamps(page({ study: true }))).toMatchObject({ ok: false, faults: ["index.html: a study needs a limit, or the field noLimit."] });
+    expect(parseDataStamps(page({ study: true, noLimit: { ...noLimit, reproduce: " " } }))).toMatchObject({ ok: false, faults: ["index.html: the field noLimit does not say why no run of the current code can reproduce the numbers."] });
+    expect(parseDataStamps(page({ study: true, noLimit: { ...noLimit, today: "" } }))).toMatchObject({ ok: false, faults: ["index.html: the field noLimit does not say why the page claims nothing about today."] });
+    expect(parseDataStamps(page({ noLimit }))).toMatchObject({ ok: false, faults: ["index.html: only a study has the field noLimit."] });
   });
 
   it("fails on the same old data with no field study", () => {
@@ -153,21 +162,81 @@ describe("a fixed study", () => {
   });
 
   it("still fails on a date after the check", () => {
-    const future: DataStamps = { schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", runs: [run({ date: "2027-01-01T00:00:00Z" })], study: true }] };
+    const future: DataStamps = { schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", runs: [run({ date: "2027-01-01T00:00:00Z" })], study: true, noLimit }] };
     expect(check(future).faults[0]).toContain("a date after the check");
   });
 
-  it("refuses a limit and a run in flight", () => {
+  it("refuses a limit together with the statements, and a run in flight", () => {
     const limit: DataLimit = { days: 7, reason: "Weekly.", workflow: "w.yml" };
-    expect(parseDataStamps(page({ study: true, limit }))).toMatchObject({ ok: false, faults: ["index.html: a fixed study has no limit."] });
-    expect(parseDataStamps(page({ study: true, inFlight: run() }))).toMatchObject({ ok: false, faults: ["index.html: a fixed study has no run in flight."] });
+    expect(parseDataStamps(page({ study: true, limit, noLimit }))).toMatchObject({ ok: false, faults: ["index.html: a page has a limit or the field noLimit, not both."] });
+    expect(parseDataStamps(page({ study: true, noLimit, inFlight: run() }))).toMatchObject({ ok: false, faults: ["index.html: a study has no run in flight."] });
   });
 
   it("can name a two-part image tag, and another page cannot", () => {
     const tagged = [run({ engines: { redis: "7.4" } })];
-    expect(parseDataStamps(page({ study: true, runs: tagged }))).toMatchObject({ ok: true });
+    expect(parseDataStamps(page({ study: true, noLimit, runs: tagged }))).toMatchObject({ ok: true });
     expect(parseDataStamps(page({ runs: tagged }))).toMatchObject({ ok: false });
-    expect(parseDataStamps(page({ study: true, runs: [run({ engines: { redis: "latest" } })] }))).toMatchObject({ ok: false });
+    expect(parseDataStamps(page({ study: true, noLimit, runs: [run({ engines: { redis: "latest" } })] }))).toMatchObject({ ok: false });
+  });
+});
+
+describe("a study with a limit", () => {
+  const WORKFLOW = ".github/workflows/study.yml";
+  const COMMIT = "abcdef0123456789abcdef0123456789abcdef01";
+  const limit: DataLimit = { days: 30, reason: "The runs are heavy.", workflow: WORKFLOW };
+  const aged = (days: number, over: Partial<DataRun> = {}): DataRun =>
+    run({ date: new Date(Date.parse(NOW) - days * 86_400_000).toISOString(), commit: COMMIT, engines: { [ENGINE]: "0.1.0", redis: "7.4" }, ...over });
+  const page = (runs: readonly DataRun[], over: Partial<DataLimit> = {}): DataStamps => ({ schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", study: true, runs, limit: { ...limit, ...over } }] });
+  const faults = (stamp: DataStamps, gap: number = 28): readonly string[] => checkFreshness(stamp, { now: NOW, times, schedules: { [WORKFLOW]: gap } }).faults;
+
+  it("passes inside the limit, with no limit of the engines and with a two-part tag", () => {
+    expect(parseDataStamps(page([aged(29)])).ok).toBe(true);
+    expect(faults(page([aged(29)]))).toEqual([]);
+  });
+
+  it("fails over the limit, and for each old run of the page", () => {
+    expect(faults(page([aged(31)]))).toEqual(["index.html: the run 7 is 31.0 days old, over the limit of 30, and no run on newer engines is in flight."]);
+    expect(faults(page([aged(1), aged(31, { id: "8" })]))).toEqual(["index.html: the run 8 is 31.0 days old, over the limit of 30, and no run on newer engines is in flight."]);
+  });
+
+  it("fails on a schedule slower than the limit: a monthly line has a gap of 31 days", () => {
+    expect(scheduleGapDays('on:\n  schedule:\n    - cron: "0 5 1 * *"\n')).toBe(31);
+    expect(scheduleGapDays('on:\n  schedule:\n    - cron: "0 5 8,30 * *"\n')).toBeLessThanOrEqual(30);
+    expect(faults(page([aged(1)]), 31)[0]).toContain("a gap of 31.0 days, over the limit of 30");
+  });
+
+  it("fails on a run with no commit, and refuses a commit that is not full", () => {
+    expect(faults(page([aged(1, { commit: undefined as unknown as string })]))).toEqual(["index.html: the run 7 names no commit."]);
+    expect(parseDataStamps(page([aged(1, { commit: "abcdef0" })]))).toMatchObject({ ok: false, faults: ["index.html, run 7: the commit of the run is not a full commit."] });
+  });
+
+  it("takes up to 30 days with no ruling, and a page that is not a study takes up to 14", () => {
+    expect(parseDataStamps(page([aged(1)], { days: 31 }))).toMatchObject({ ok: false, faults: ["index.html: a limit over 30 days needs a ruling for this site."] });
+    expect(parseDataStamps(page([aged(1)], { days: 31, ruling: "https://example.com/ruling" })).ok).toBe(true);
+    const notStudy: DataStamps = { schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", runs: [run()], limit: { ...limit, days: 15 } }] };
+    expect(parseDataStamps(notStudy)).toMatchObject({ ok: false, faults: ["index.html: a limit over 14 days needs a ruling for this site."] });
+  });
+
+  it("keeps the age rule and the commit rule off before the start, and the schedule rule on", () => {
+    const old = aged(60, { commit: undefined as unknown as string });
+    const start = { startsAt: "2026-12-07T00:00:00Z" };
+    expect(parseDataStamps(page([old], start)).ok).toBe(true);
+    expect(faults(page([old], start))).toEqual([]);
+    expect(faults(page([old], start), 31)[0]).toContain("a gap of 31.0 days");
+    const after = checkFreshness(page([old], start), { now: "2026-12-07T00:00:00Z", times, schedules: { [WORKFLOW]: 28 } }).faults;
+    expect(after[0]).toContain("over the limit of 30");
+    expect(after).toContain("index.html: the run 7 names no commit.");
+  });
+
+  it("refuses a start after the last start, and a start with no date", () => {
+    expect(parseDataStamps(page([aged(1)], { startsAt: "2026-12-07T00:00:01Z" }))).toMatchObject({ ok: false, faults: ["index.html: the start of the limit is after 2026-12-07."] });
+    expect(parseDataStamps(page([aged(1)], { startsAt: "soon" }))).toMatchObject({ ok: false, faults: ["index.html: the start of the limit has no date."] });
+  });
+
+  it("gives a failing case after the start of the limit", () => {
+    const [one] = failingCases(page([aged(1)], { startsAt: "2026-12-07T00:00:00Z" }), { now: NOW, times, schedules: { [WORKFLOW]: 28 } });
+    expect(one?.at).toBe("2027-01-07T00:00:00.000Z");
+    expect(one?.fault).toContain("over the limit of 30");
   });
 });
 
@@ -299,8 +368,8 @@ describe("failingCases", () => {
     expect(flying?.fault).toContain("in flight for more than 3");
   });
 
-  it("fails a fixed study before the date of its run", () => {
-    const [one] = cases({ schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", runs: [run()], study: true }] });
+  it("fails a study with no limit before the date of its run", () => {
+    const [one] = cases({ schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", runs: [run()], study: true, noLimit: { reproduce: "Gone.", today: "One day." } }] });
     expect(one?.at).toBe("2026-11-08T00:00:00.000Z");
     expect(one?.fault).toContain("has a date after the check");
   });
@@ -361,6 +430,27 @@ describe("runFreshnessCli", () => {
     const broken = await start(["--stamps", file("bad.json", "{"), "--now", NOW]);
     expect(broken.code).toBe(1);
     expect(broken.err).toContain("cannot be read");
+  });
+
+  // The flip of the age check: one stamp with an old date fails, and a clean copy passes, in the same test.
+  it("flip: the age check of a study fails on old data, and a clean copy passes", async () => {
+    file("study.yml", 'on:\n  schedule:\n    - cron: "0 5 8,30 * *"\n');
+    const limit: DataLimit = { days: 30, reason: "The runs are heavy.", workflow: "study.yml" };
+    const page = (date: string) => ({ schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", study: true, limit, runs: [run({ date, commit: "abcdef0123456789abcdef0123456789abcdef01", engines: { redis: "7.4" } })] }] });
+    const clean = await start(["--stamps", file("clean-study.json", page("2026-11-09T00:00:00Z")), "--now", NOW]);
+    expect(clean.code).toBe(0);
+    expect(clean.out).toContain("Failing case at 2026-12-11T12:00:00.000Z: index.html: the run 7");
+    const old = await start(["--stamps", file("old-study.json", page("2026-10-10T00:00:00Z")), "--now", NOW]);
+    expect(old.code).toBe(1);
+    expect(old.err).toContain("the run 7 is 31.5 days old, over the limit of 30");
+  });
+
+  it("flip: the age check of a page with the default limit fails on old data, and a clean copy passes", async () => {
+    const clean = await start(["--stamps", file("clean-page.json", stamps([run()])), "--now", NOW]);
+    expect(clean.code).toBe(0);
+    const old = await start(["--stamps", file("old-page.json", stamps([run({ date: "2026-11-06T00:00:00Z" })])), "--now", NOW]);
+    expect(old.code).toBe(1);
+    expect(old.err).toContain("the run 7 is 4.5 days old, over the limit of 3");
   });
 
   it("exits with 2 on an incorrect command line, and gives the help", async () => {
