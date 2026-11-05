@@ -117,6 +117,120 @@ export function parseChangelog(markdown: string): ChangelogSection[] {
 }
 
 /**
+ * The kinds of a fault of a changelog section. `no-statement`: the section states no change.
+ * `version-kind-only`: its first statement names the kind of the version, and nothing more.
+ * `break-unmarked`: the version rule makes the release a break, and the section has no break mark.
+ * `mark-without-break`: the section has a break mark, and the version rule makes the release no break.
+ */
+export type ChangelogFaultKind = "no-statement" | "version-kind-only" | "break-unmarked" | "mark-without-break";
+
+/** One fault of one version section of a changelog. */
+export interface ChangelogFault {
+  version: string;
+  kind: ChangelogFaultKind;
+  /** The first statement of the section, or an empty text when it has none. */
+  statement: string;
+}
+
+/** The options of {@link changelogFaults}. */
+export interface ChangelogFaultOptions {
+  /** The oldest version to examine. Older sections can follow older habits, so a caller can leave them out. */
+  from?: string;
+}
+
+const KIND_WORDS: ReadonlySet<string> = new Set(["major", "minor", "patch"]);
+const FILL_WORDS: ReadonlySet<string> = new Set(["a", "the", "this", "is", "raises", "bumps", "release", "version", "bump"]);
+// A line such as "Breaking changes: N/A" states no break, so "[^\n]*" and the negative look-ahead read the rest of the line
+const BREAK_MARK = /^(?:#{2,6} +|[-*+] +)?(?:\*\*)?breaking\b(?![^\n]*\b(?:n\/a|none)\b)|^#{2,6} +major changes\b|\bhas breaking changes\b/im;
+
+/** This function tells if a statement has only the kind of the version and words that state no change. */
+function namesOnlyKind(statement: string): boolean {
+  const words = statement.toLowerCase().match(/[\p{L}\p{N}`]+/gu) ?? [];
+  return words.some((word) => KIND_WORDS.has(word)) && words.every((word) => KIND_WORDS.has(word) || FILL_WORDS.has(word));
+}
+
+/** This function gives the three numbers of a version without its pre-release text, or null for another text. */
+function versionCore(version: string): readonly [number, number, number] | null {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-|$)/.exec(version);
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
+}
+
+/** This function compares two versions without their pre-release texts. */
+function compareCores(a: readonly number[], b: readonly number[]): number {
+  return (a[0] ?? 0) - (b[0] ?? 0) || (a[1] ?? 0) - (b[1] ?? 0) || (a[2] ?? 0) - (b[2] ?? 0);
+}
+
+/**
+ * This function tells if the version rule makes a release a break. Before 1.0.0, a break raises
+ * MINOR. From 1.0.0, a break raises MAJOR.
+ */
+function ruleGivesBreak([major, minor, patch]: readonly [number, number, number]): boolean {
+  if (patch !== 0) return false;
+  return major === 0 ? minor > 0 : minor === 0;
+}
+
+/** This function gives the version and the body of each version section. Another heading of level 1 or 2 ends a section. */
+function versionSections(markdown: string): { version: string; heading: string; body: string[] }[] {
+  const sections: { version: string; heading: string; body: string[] }[] = [];
+  let section: { version: string; heading: string; body: string[] } | null = null;
+  for (const line of markdown.split(/\r?\n/)) {
+    const heading = VERSION_HEADING.exec(line);
+    if (heading?.[1] !== undefined) {
+      section = { version: heading[1], heading: line, body: [] };
+      sections.push(section);
+    } else if (/^#{1,2}\s/.test(line)) {
+      section = null;
+    } else {
+      section?.body.push(line);
+    }
+  }
+  return sections;
+}
+
+/**
+ * This function gives the first statement of a section: the first sentence of its first paragraph,
+ * else the first change of its lists. A dependency line is not a change.
+ */
+function firstStatement(section: { heading: string; body: string[] }): string {
+  const blocks = section.body.join("\n").split(/\n[ \t]*\n/).map((block) => block.trim());
+  const first = blocks.find((block) => block !== "" && !block.startsWith("#"));
+  if (first !== undefined && !/^[-*+]\s/.test(first)) return firstSentence(first);
+  const [parsed] = parseChangelog([section.heading, ...section.body].join("\n"));
+  return parsed?.entries[0]?.text ?? "";
+}
+
+/**
+ * This function gives the faults of the version sections of a changelog, in the order of the file.
+ * A section can have two faults: one for its statement and one for its break mark.
+ *
+ * @remarks The break rule does not read a pre-release or the oldest section of the file, because
+ * the oldest section has no earlier release to break.
+ */
+export function changelogFaults(markdown: string, options: ChangelogFaultOptions = {}): ChangelogFault[] {
+  const from = options.from === undefined ? null : versionCore(options.from);
+  if (options.from !== undefined && from === null) throw new RangeError(`"${options.from}" is not a version.`);
+  const sections = versionSections(markdown);
+  const cores = sections.map((section) => versionCore(section.version)).filter((core) => core !== null);
+  const oldest = cores.reduce<(typeof cores)[number] | null>((low, core) => (low === null || compareCores(core, low) < 0 ? core : low), null);
+  const faults: ChangelogFault[] = [];
+  for (const section of sections) {
+    const core = versionCore(section.version);
+    if (core === null || (from !== null && compareCores(core, from) < 0)) continue;
+    const statement = firstStatement(section);
+    const fault = (kind: ChangelogFaultKind): void => {
+      faults.push({ version: section.version, kind, statement });
+    };
+    if (statement === "") fault("no-statement");
+    else if (namesOnlyKind(statement)) fault("version-kind-only");
+    if (section.version.includes("-") || oldest === null || compareCores(core, oldest) === 0) continue;
+    const marked = BREAK_MARK.test(section.body.join("\n"));
+    if (ruleGivesBreak(core) && !marked) fault("break-unmarked");
+    else if (!ruleGivesBreak(core) && marked) fault("mark-without-break");
+  }
+  return faults;
+}
+
+/**
  * This function gives the changes of the text of a GitHub release: one change for each top-level
  * list item. Fenced code is not read.
  */

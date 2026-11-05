@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 147 names
+## . (build/index.d.ts): 151 names
 
 BASE_CSS: build/index.d.ts#BASE_CSS
 type BoardIssue: build/chunks/freshness.d.ts#BoardIssue
@@ -14,6 +14,9 @@ type BoardSection: build/index.d.ts#BoardSection
 type BuildOptions: build/index.d.ts#BuildOptions
 type BuildResult: build/index.d.ts#BuildResult
 type ChangelogEntry: build/index.d.ts#ChangelogEntry
+type ChangelogFault: build/index.d.ts#ChangelogFault
+type ChangelogFaultKind: build/index.d.ts#ChangelogFaultKind
+type ChangelogFaultOptions: build/index.d.ts#ChangelogFaultOptions
 type ChangelogSection: build/index.d.ts#ChangelogSection
 type ChangelogSource: build/index.d.ts#ChangelogSource
 type CheckState: build/chunks/freshness.d.ts#CheckState
@@ -87,6 +90,7 @@ type TimelineOptions: build/index.d.ts#TimelineOptions
 UsageError: build/index.d.ts#UsageError
 build: build/index.d.ts#build
 buildStatusBoard: build/index.d.ts#buildStatusBoard
+changelogFaults: build/index.d.ts#changelogFaults
 changelogVersions: build/index.d.ts#changelogVersions
 checkFreshness: build/chunks/freshness.d.ts#checkFreshness
 checkStateOf: build/index.d.ts#checkStateOf
@@ -809,6 +813,21 @@ interface ChangelogEntry {
   text: string;
 }
 
+### build/index.d.ts#ChangelogFault
+interface ChangelogFault {
+  version: string;
+  kind: ChangelogFaultKind;
+  statement: string;
+}
+
+### build/index.d.ts#ChangelogFaultKind
+type ChangelogFaultKind = "no-statement" | "version-kind-only" | "break-unmarked" | "mark-without-break";
+
+### build/index.d.ts#ChangelogFaultOptions
+interface ChangelogFaultOptions {
+  from?: string;
+}
+
 ### build/index.d.ts#ChangelogSection
 interface ChangelogSection {
   version: string;
@@ -1087,6 +1106,9 @@ export declare function build(options: BuildOptions): Promise<BuildResult>;
 
 ### build/index.d.ts#buildStatusBoard
 export declare function buildStatusBoard(input: StatusBoardInput): StatusBoardData;
+
+### build/index.d.ts#changelogFaults
+export declare function changelogFaults(markdown: string, options?: ChangelogFaultOptions): ChangelogFault[];
 
 ### build/index.d.ts#changelogVersions
 export declare function changelogVersions(markdown: string): string[];
