@@ -1,0 +1,39 @@
+name: TC skipped
+on:
+  pull_request:
+permissions: {}
+jobs:
+  first:
+    runs-on: ubuntu-latest
+    steps:
+      - run: exit 1
+  after:
+    needs: [first]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo unused
+  never:
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo unused
+  ok-after:
+    name: TC after OK
+    if: ${{ !cancelled() }}
+    needs: [after]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: echo "$NEEDS" | jq -r 'to_entries[] | "\(.key) \(.value.result)"'
+  ok-never:
+    name: TC never OK
+    if: ${{ !cancelled() }}
+    needs: [never]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: echo "$NEEDS" | jq -r 'to_entries[] | "\(.key) \(.value.result)"'
