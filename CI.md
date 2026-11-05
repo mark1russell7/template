@@ -67,7 +67,7 @@ jobs:
 
 ### The check of the ruleset
 
-Each workflow of the merge gate has one summary job, with the name `<Name> OK`. The template has two: `ci-ok` (name `CI OK`) of `ci.yml` and `security-ok` (name `Security OK`) of `security.yml`. A summary job needs each other job of its file. It starts also after a failure (`if: always()`).
+Each workflow of the merge gate has one summary job, with the name `<Name> OK`. The template has two: `ci-ok` (name `CI OK`) of `ci.yml` and `security-ok` (name `Security OK`) of `security.yml`. A summary job needs each other job of its file. It starts also after a failure (`if: ${{ !cancelled() }}`). After a cancel it does not ask for a runner. It concludes `cancelled`, which does not pass the ruleset, and the next run does not wait behind it.
 
 A summary job passes only when each job passed. A job can be skipped only when the list `ALLOW_SKIP` of the summary job names it. For example, outside the template, the `if` of `presets` skips it. Each other skipped job fails the summary. An empty `needs` also fails it, because a job that did not start is not a pass.
 
@@ -174,7 +174,7 @@ jobs:
 
   bench-ok:
     name: Bench OK
-    if: always()
+    if: ${{ !cancelled() }}
     needs: [changes, bench]
     runs-on: ubuntu-latest
     permissions: {}

@@ -4,6 +4,7 @@
 import type { Rule } from "../rule.ts";
 import { changelogVersion } from "./changelog-version.ts";
 import { cuePreset } from "./cue-preset.ts";
+import { gateAfterCancel } from "./gate-after-cancel.ts";
 import { gateTrigger } from "./gate-trigger.ts";
 import { homePackage } from "./home-package.ts";
 import { licenseFile } from "./license-file.ts";
@@ -57,6 +58,7 @@ export const RULES: readonly Rule[] = [
   mainRunsFinish,
   pushMainOnly,
   pipeFails,
+  gateAfterCancel,
   gateTrigger,
   homePackage,
   licenseFile,
@@ -66,4 +68,4 @@ export const RULES: readonly Rule[] = [
 ];
 
 export { publishedMinor };
-export { apiReportScript, changelogVersion, cuePreset, gateTrigger, homePackage, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, workspaceProtocol };
+export { apiReportScript, changelogVersion, cuePreset, gateAfterCancel, gateTrigger, homePackage, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, workspaceProtocol };

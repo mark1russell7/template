@@ -72,6 +72,7 @@ declaredName: build/index.d.ts#declaredName
 defaultOptions: build/index.d.ts#defaultOptions
 findHomes: build/index.d.ts#findHomes
 formatResult: build/index.d.ts#formatResult
+gateAfterCancel: build/index.d.ts#gateAfterCancel
 gateTrigger: build/index.d.ts#gateTrigger
 githubFetch: build/index.d.ts#githubFetch
 globFolders: build/index.d.ts#globFolders
@@ -488,6 +489,9 @@ export declare function findHomes(query: string, homes?: readonly Home[]): reado
 
 ### build/index.d.ts#formatResult
 export declare function formatResult(result: CheckResult): string;
+
+### build/index.d.ts#gateAfterCancel
+export declare const gateAfterCancel: Rule;
 
 ### build/index.d.ts#gateTrigger
 export declare const gateTrigger: Rule;
