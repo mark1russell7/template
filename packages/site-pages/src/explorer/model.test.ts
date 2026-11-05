@@ -1,4 +1,4 @@
-import { fitResponse, type ResponseData, type ResponseRecord } from "@mark1russell7/rigor-statistics";
+import { fitResponse, heldOutError, type ResponseData, type ResponseRecord } from "@mark1russell7/rigor-statistics";
 import { describe, expect, it } from "vitest";
 import {
   axisChoices,
@@ -402,6 +402,29 @@ describe("viewOf", () => {
     const surface = viewOf(bare, settle(bare, { measure: "time", x: "size", y: "width", hold: { strategy: "plain" } }));
     const dots = surface.panels[0];
     expect(dots?.kind === "points" ? dots.points : []).toHaveLength(27);
+  });
+
+  it("draws no fit for a measure where the model is no better than a plain mean, and it says so", () => {
+    const noise = data();
+    const noisy = fitResponse({ ...noise, points: noise.points.map((p, i) => ({ ...p, measures: { ...p.measures, score: (i * 7919) % 101 } })) }, { log: ["time"] });
+    expect(heldOutError(noisy, "score").skill).toBeLessThanOrEqual(0);
+    const view = viewOf(noisy, settle(noisy, { hold: { strategy: "plain", width: 0 } }));
+    expect(view.panels.map((p) => p.kind)).toEqual(["points"]);
+    expect(view.modelText).toContain("no better than a plain mean");
+    expect(view.errorText).toContain("no better than the mean");
+    expect(view.error?.skill).toBe(heldOutError(noisy, "score").skill);
+    const surface = viewOf(noisy, settle(noisy, { x: "size", y: "width", hold: { strategy: "plain" } }));
+    expect(surface.panels.map((p) => p.kind)).toEqual(["points"]);
+    const facets = viewOf(noisy, settle(noisy, { facet: "strategy", hold: { width: 0 } }));
+    expect(facets.panels.map((p) => p.kind)).toEqual(["points", "points", "points"]);
+  });
+
+  it("keeps the fit of a measure that beats the mean beside a measure that does not", () => {
+    const noise = data();
+    const noisy = fitResponse({ ...noise, points: noise.points.map((p, i) => ({ ...p, measures: { ...p.measures, score: (i * 7919) % 101 } })) }, { log: ["time"] });
+    const view = viewOf(noisy, settle(noisy, { measure: "time", hold: { strategy: "plain", width: 0 } }));
+    expect(heldOutError(noisy, "time").skill).toBeGreaterThan(0);
+    expect(view.panels[0]?.kind).toBe("curve");
   });
 
   it("gives the text of a refused request, and it does not throw", () => {
