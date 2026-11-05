@@ -201,6 +201,18 @@ The pipeline needs the full history for the tags and the commits. Use `fetch-dep
 
 For a monorepo with one version for all its packages, give `--group` and the name of one package. Then only its changelog gives the versions, and the dates come from its tags. Without `--group`, each version of each source is a version.
 
+`changelogFaults(markdown, { from, fixedGroup })` examines a changelog and gives its faults:
+
+- An empty section.
+- A section with only dependency lines on a break of the version rule.
+- A first statement that names only the version kind.
+- A break of the version rule with no mark.
+- A mark on a release with no break.
+
+The option `from` leaves out older sections. The option `fixedGroup` passes a section with no change or with only PATCH changes, because its raise comes from another package of the group.
+
+`sectionMarksBreak(section)` tells if the text of a section marks a break. The marks are the heading `### Breaking` and the words "has breaking changes". A page that counts breaks uses this function.
+
 A repository can have no changelog and no GitHub release. Then each npm version of each package of `--packages` is a release:
 
 - The label is the version when there is one package. With more packages, the label is the name without its scope and the version, for example `service@0.5.8`.
