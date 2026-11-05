@@ -1,0 +1,26 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "An Expo SDK names one version of each of its native packages. The command `expo install --fix` changes those versions with the SDK, so Renovate gives them only patch updates.",
+  "packageRules": [
+    {
+      "description": "Renovate does not give a major or minor update to a package that the Expo SDK decides.",
+      "matchManagers": ["npm"],
+      "matchPackageNames": [
+        "expo",
+        "expo-*",
+        "@expo/*",
+        "react",
+        "react-dom",
+        "@types/react",
+        "@types/react-dom",
+        "react-native",
+        "react-native-*",
+        "@react-native/*",
+        "@react-native-async-storage/*",
+        "@react-native-community/*"
+      ],
+      "matchUpdateTypes": ["major", "minor"],
+      "enabled": false
+    }
+  ]
+}
