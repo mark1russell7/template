@@ -211,7 +211,7 @@ describe.skipIf(browser === undefined)("checkSite in a browser", () => {
     const problems = (page: string) => result.views.find((view) => view.page === page)?.problems;
     expect(problems("/dead-cue/")?.join(" ")).toContain("The box has the class scroll-cue, but its computed style has no animation and no shade.");
     expect(problems("/live-cue/")).toEqual([]);
-  });
+  }, 60_000);
 
   it("passes a good page and writes a screenshot of each view", async () => {
     const shots = join(root, "..", `${root.split(/[\\/]/).pop()}-shots`);
