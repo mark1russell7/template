@@ -24,6 +24,19 @@ describe("the data stamp of the home page", () => {
     expect(checkFreshness(withPage(notStudy), { now: LATER, times: [] }).faults).not.toEqual([]);
   });
 
+  it("pins its subject to the exact version that the stamp names, and names that pin on the page", () => {
+    const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { devDependencies: Record<string, string> };
+    const version = page.runs[0]?.engines["@mark1russell7/packing"];
+    expect(manifest.devDependencies["@mark1russell7/packing"]).toBe(version);
+    expect(page.noLimit?.reproduce).toContain(`packing ${version ?? ""}, pinned to that exact version`);
+    expect(renderDataStamp(page)).toContain(`The subject is packing ${version ?? ""}`);
+  });
+
+  it("is refused with no statement of why it has no limit", () => {
+    const { noLimit: _noLimit, ...silent } = page;
+    expect(parseDataStamps(withPage(silent))).toMatchObject({ ok: false, faults: ["index.html: a study needs a limit, or the field noLimit."] });
+  });
+
   it("is refused with no engine version, because a study names its version", () => {
     const [run] = page.runs;
     const parsed = parseDataStamps(withPage({ ...page, runs: [{ ...run, engines: {} } as NonNullable<typeof run>] }));
@@ -32,5 +45,31 @@ describe("the data stamp of the home page", () => {
 
   it("tells in plain words which version the page measured", () => {
     expect(renderDataStamp(page)).toContain("The measured numbers of this page are a fixed study of packing 0.6.1. They tell nothing about a newer release.");
+  });
+});
+
+describe("the section of the explorer", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const main = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+
+  it("says first what the chart is, with the version of the stamp", () => {
+    const what = /<p class="lead small" id="response-what">(.*?)<\/p>/.exec(html)?.[1] ?? "";
+    const version = STAMPS.pages[0]?.runs[0]?.engines["@mark1russell7/packing"];
+    expect(what.startsWith(`This is the explorer that <code>@mark1russell7/site-pages</code> gives any site. The sample data is a fixed study of packing ${version}.`)).toBe(true);
+  });
+
+  it("links to the live explorer of packing", () => {
+    expect(html).toContain('href="https://mark1russell7.github.io/packing/explorer/"');
+  });
+
+  it("shows the entry and the function that this page mounts", () => {
+    const mount = /<pre id="response-mount">([\s\S]*?)<\/pre>/.exec(html)?.[1] ?? "";
+    const style = readFileSync(new URL("./style.css", import.meta.url), "utf8");
+    expect(mount).toContain('from "@mark1russell7/site-pages/explorer"');
+    expect(main).toContain('import("@mark1russell7/site-pages/explorer")');
+    expect(mount).toContain('import "@mark1russell7/site-pages/explorer.css"');
+    expect(style).toContain('@import "@mark1russell7/site-pages/explorer.css"');
+    expect(mount).toContain("mountExplorer(document.getElementById");
+    expect(main).toContain("explorer.mountExplorer(");
   });
 });
