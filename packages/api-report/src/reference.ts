@@ -95,7 +95,7 @@ function plain(declaration: string): string {
 /**
  * This function gives the Markdown of the page of each export of a package. Each entry has an import with its
  * names. A declaration shows one time, in the first entry that reaches it. A comment tells the name of an
- * export when the declaration has a different name, and the package of a name that comes from a different package.
+ * export when the declaration has a different name. A comment also tells the package of an external name.
  */
 export function referencePage(report: string, packageName: string): string {
   const { entries, declarations } = readReport(report);
