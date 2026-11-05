@@ -46,6 +46,7 @@ export {
   mainCheck,
   noBuildOutput,
   noLocalPaths,
+  pagesAfterRelease,
   pagesSite,
   pinnedGitDeps,
   pushMainOnly,
