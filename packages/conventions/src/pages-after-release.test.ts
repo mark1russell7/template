@@ -98,6 +98,16 @@ describe("pages-after-release", () => {
     fixes(["  workflow_run:", "    workflows:", "      - CI", "    types: [completed]", ...DAILY], ["  workflow_run:", "    workflows:", "      - CI", "      - Release", "    types: [completed]", ...DAILY]);
   });
 
+  it("gives no edit for a list of one name with no brackets", () => {
+    const breaks = check(one(pages(["  workflow_run:", "    workflows: CI", "    types: [completed]", ...DAILY]))).breaks;
+    expect(breaks).toHaveLength(1);
+    expect(breaks[0]?.edits).toBeUndefined();
+  });
+
+  it("adds the release inside the list when a comment follows it", () => {
+    fixes(["  workflow_run:", "    workflows: [CI] # see [1]", "    types: [completed]", ...DAILY], ["  workflow_run:", "    workflows: [CI, Release] # see [1]", "    types: [completed]", ...DAILY]);
+  });
+
   it("adds a daily schedule at the minute of the repository and the file", () => {
     fixes([...PUSH, ...AFTER, "  workflow_dispatch:"], [...PUSH, ...AFTER, "  workflow_dispatch:", "  # Each day, in case a release fails after it publishes", "  schedule:", '    - cron: "17 5 * * *"']);
   });

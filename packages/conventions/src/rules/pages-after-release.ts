@@ -118,7 +118,10 @@ export function addPagesTriggers(text: string, facts: FixFacts): string | undefi
         splices.push({ at: end, remove: 0, insert: [`${" ".repeat(indentOf(lines[end - 1] ?? ""))}- ${facts.release}`] });
       } else {
         const original = text.split(/\r?\n/)[named.at] ?? "";
-        splices.push({ at: named.at, remove: 1, insert: [original.replace(/\]/, () => `, ${facts.release}]`)] });
+        // The first bracket closes the list. A later one is in a comment.
+        const close = original.indexOf("]");
+        if (close < 0) return undefined;
+        splices.push({ at: named.at, remove: 1, insert: [`${original.slice(0, close)}, ${facts.release}${original.slice(close)}`] });
       }
     }
   }

@@ -308,7 +308,7 @@ jobs:
 ```
 
 - A repository that publishes a package also starts Pages after a release, with `workflow_run` of `Release`, and on each day. A release starts no Pages run by itself, so the Releases page is behind npm until the next build. The rule `pages-after-release` of `@mark1russell7/conventions` examines both triggers, and `conventions fix` writes them.
-- A build after a release takes the newest commit of `main`, not the commit of the release. A release takes longer than a build, so a later push can already be on the site. A release that a person starts by hand also starts this build.
+- A build after a release takes the commit of `green-main`, not the commit of the release: the newest commit of `main`, or the newest green commit when CI failed on it. A release takes longer than a build, so a later push can already be on the site. A release that a person starts by hand also starts this build.
 - A caller on `workflow_run` after CI is also correct. A failed CI run, a CI run of a pull request and a CI run of a push to a different branch build nothing. The job `build` examines the branch, so the filter `branches: [main]` of the caller is not necessary.
 - A scheduled build uses the commit of `green-main`. The input `pending` goes to that action.
 - The inputs of `site-pages` go to the action: `site-pages-version`, `roadmap`, `base`, `packages`, `changesets`, `group`, `css`, `site-name` and `data-only`.
