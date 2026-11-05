@@ -11,12 +11,15 @@ export {
   checkStateOf,
   githubGreenRun,
   githubOpenWork,
+  githubReleaseLag,
   githubReleases,
   greenRunOf,
   GITHUB_API,
   GITHUB_GRAPHQL,
+  releaseLagOf,
   type GitHubGreenRun,
   type GitHubOptions,
+  type GitHubReleaseLag,
   type WorkflowRunEnd,
 } from "./data/github.ts";
 export { npmPublishTimes, NPM_REGISTRY, type NpmOptions } from "./data/npm.ts";
