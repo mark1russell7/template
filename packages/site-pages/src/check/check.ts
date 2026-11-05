@@ -146,14 +146,19 @@ export const LOAD_WATCH = `addEventListener("error", (event) => {
   console.error("failed to load " + element.tagName.toLowerCase() + ": " + (element.getAttribute("src") ?? element.getAttribute("href") ?? "(inline)"));
 }, true);`;
 
+/** This expression reads the pattern of the paths that other sites of the origin serve. An empty text means no pattern. */
+const OTHER_PATHS = `document.querySelector('meta[name="site-check-other-paths"]')?.content ?? ""`;
+
 /** The problems that the events of the page gave, since the last `reset`. */
 interface Events {
   reset(): void;
-  problems(): string[];
+  /** This function gives the problems. A refused request to a path that `other` matches is not a problem. */
+  problems(other?: RegExp): string[];
 }
 
 function watch(page: Page, origin: string): Events {
   let problems: string[] = [];
+  let refused: { url: string; status: number }[] = [];
   const urls = new Map<string, string>();
   const own = (url: string) => {
     try {
@@ -178,7 +183,7 @@ function watch(page: Page, origin: string): Events {
   });
   page.on("Network.responseReceived", (params) => {
     const response = params["response"] as { url: string; status: number };
-    if (response.status >= 400 && own(response.url)) problems.push(`HTTP ${response.status}: ${response.url}`);
+    if (response.status >= 400 && own(response.url)) refused.push(response);
   });
   page.on("Network.loadingFailed", (params) => {
     const url = urls.get(String(params["requestId"])) ?? "";
@@ -188,8 +193,12 @@ function watch(page: Page, origin: string): Events {
   return {
     reset: () => {
       problems = [];
+      refused = [];
     },
-    problems: () => [...new Set(problems)],
+    problems: (other) => {
+      const shown = refused.filter((response) => other?.test(new URL(response.url).pathname) !== true);
+      return [...new Set([...problems, ...shown.map((response) => `HTTP ${response.status}: ${response.url}`)])];
+    },
   };
 }
 
@@ -205,6 +214,7 @@ interface ViewInput {
 async function checkView(page: Page, events: Events, input: ViewInput): Promise<ViewResult> {
   const { target, path, width, scheme, withProbe, options } = input;
   const view: ViewResult = { page: path, width, scheme, ok: false, problems: [] };
+  let other: RegExp | undefined;
   try {
     await page.send("Emulation.setDeviceMetricsOverride", { width, height: 900, deviceScaleFactor: 1, mobile: width < PHONE_WIDTH });
     await page.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: scheme }] });
@@ -218,6 +228,8 @@ async function checkView(page: Page, events: Events, input: ViewInput): Promise<
     await loaded;
     await page.evaluate("document.fonts ? document.fonts.ready.then(() => true) : true");
     await new Promise((done) => setTimeout(done, options.settleMs));
+    const pattern = await page.evaluate<string>(OTHER_PATHS);
+    if (pattern !== "") other = new RegExp(pattern);
     const measure = await page.evaluate<Measure>(MEASURE);
     view.measure = measure;
     // The screen width, not innerWidth: a phone browser can zoom out a page that is too wide.
@@ -242,7 +254,7 @@ async function checkView(page: Page, events: Events, input: ViewInput): Promise<
   } catch (error) {
     view.problems.push(error instanceof Error ? error.message : String(error));
   }
-  view.problems.push(...events.problems());
+  view.problems.push(...events.problems(other));
   view.ok = view.problems.length === 0;
   return view;
 }
