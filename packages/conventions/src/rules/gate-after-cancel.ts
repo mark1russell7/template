@@ -64,7 +64,7 @@ export const gateAfterCancel: Rule = {
   fix: "Write `if: ${{ !cancelled() }}` in the summary job. Do not add other parts to this condition: a job that an `if` skips counts as a pass for a required check.",
   sources: [
     { repo: "highways", rule: "ci", doc: "runs 41971833871 and 41978983438 (2026-11-05): the new run waited behind the summary jobs of the cancelled run" },
-    { repo: "client", rule: "ci", doc: "ci.yml (2026-11-05): two jobs of the file have if: always(), and each pull request push cancels the run before it" },
+    { repo: "client", rule: "ci", doc: "ci.yml (2026-11-05): the job CI OK has if: always(), and a new push of a pull request cancels the run before it" },
     { repo: "template", rule: "gate", doc: "pull request 189 (2026-11-05): the test of a cancel in the queue, a cancel in a job, a time limit, a failed need and a skipped need" },
   ],
   options: {},
