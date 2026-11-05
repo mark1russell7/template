@@ -4,7 +4,7 @@
 # and private members. The command `api-report check` compares this file with the built .d.ts files.
 # To accept a change of the API, start the build, then `api-report update`, and review the diff.
 
-## . (build/index.d.ts): 144 names
+## . (build/index.d.ts): 145 names
 
 ACTIONS_COMMIT: build/index.d.ts#ACTIONS_COMMIT
 type AuditSource: build/index.d.ts#AuditSource
@@ -103,6 +103,7 @@ noLocalPaths: build/index.d.ts#noLocalPaths
 npmLookup: build/index.d.ts#npmLookup
 npmUrl: build/index.d.ts#npmUrl
 packageFolders: build/index.d.ts#packageFolders
+pagesAfterRelease: build/index.d.ts#pagesAfterRelease
 pagesCalls: build/index.d.ts#pagesCalls
 pagesSite: build/index.d.ts#pagesSite
 parseConfig: build/index.d.ts#parseConfig
@@ -579,6 +580,9 @@ export declare function npmUrl(name: string, version: string): string;
 
 ### build/index.d.ts#packageFolders
 export declare function packageFolders(root: string, globs?: readonly string[] | undefined): string[];
+
+### build/index.d.ts#pagesAfterRelease
+export declare const pagesAfterRelease: Rule;
 
 ### build/index.d.ts#pagesCalls
 export declare function pagesCalls(text: string, workflows?: readonly string[]): PagesCall[];

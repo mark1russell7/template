@@ -18,6 +18,13 @@ function buildGuard(): string {
   return match[1] ?? "";
 }
 
+/** The expression of the commit that the job build takes, after the output of the step green. */
+function buildRef(): string {
+  const match = /ref: \$\{\{ steps\.green\.outputs\.sha \|\| (.+) \}\}\n/.exec(workflow);
+  assert.ok(match, "The checkout of the job build has a ref.");
+  return match[1] ?? "";
+}
+
 /**
  * This function evaluates the guard for an event. It knows only the operators of the guard:
  * ==, !=, && and || on the values of the github context and on strings.
@@ -62,5 +69,32 @@ describe("the guard of the job build of reusable-pages.yml", () => {
   it("builds nothing after a failed CI run or a CI run of a pull request", () => {
     assert.equal(evaluate(guard, workflowRun({ conclusion: "failure" })), false);
     assert.equal(evaluate(guard, workflowRun({ event: "pull_request" })), false);
+  });
+
+  it("builds after a release of a push and after a release that a person starts", () => {
+    assert.equal(evaluate(guard, workflowRun({ name: "Release" })), true);
+    assert.equal(evaluate(guard, workflowRun({ name: "Release", event: "workflow_dispatch" })), true);
+  });
+
+  it("builds nothing after a failed release, or a release that a person starts on a different branch", () => {
+    assert.equal(evaluate(guard, workflowRun({ name: "Release", conclusion: "failure" })), false);
+    assert.equal(evaluate(guard, workflowRun({ name: "Release", event: "workflow_dispatch", head_branch: "feature" })), false);
+  });
+});
+
+describe("the commit of the job build of reusable-pages.yml", () => {
+  const ref = buildRef();
+  const run = (workflow_run: Record<string, unknown> | undefined): unknown => evaluate(ref, { sha: "newest", event: { workflow_run } });
+
+  it("takes the commit of the CI run after CI", () => {
+    assert.equal(run({ name: "CI", head_sha: "tested" }), "tested");
+  });
+
+  it("takes the newest commit of main after a release, so that the site does not go back", () => {
+    assert.equal(run({ name: "Release", head_sha: "released" }), "newest");
+  });
+
+  it("takes the newest commit for an event that is not a workflow_run", () => {
+    assert.equal(run(undefined), "newest");
   });
 });

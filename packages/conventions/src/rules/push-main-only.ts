@@ -285,7 +285,7 @@ function convert(text: string, file: string, finding: Finding, facts: Facts): st
 }
 
 /** This function gives the default branch: the event file of GitHub Actions, the `HEAD` of the remote, or else `main`. */
-function defaultBranch(context: RuleContext): string {
+export function defaultBranch(context: RuleContext): string {
   const file = context.env["GITHUB_EVENT_PATH"];
   if (file !== undefined && file !== "") {
     try {
