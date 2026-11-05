@@ -69,6 +69,11 @@ check("site-check off: the step Site check does not run", await until(() => step
 click('[data-event="schedule"]');
 check("a scheduled build runs the step of green-main", await until(() => step("Shared actions (green-main)").includes("runs")), step("Shared actions (green-main)"));
 
+// The response explorer says first what it is, before a reader meets a chart of another project.
+const responseWhat = $("#response-what")?.textContent ?? "";
+check("the explorer says first that it is the explorer of site-pages", responseWhat.startsWith("This is the explorer that @mark1russell7/site-pages gives any site."), responseWhat);
+check("the explorer links to the live one of packing", $("#response-what a")?.getAttribute("href") === "https://mark1russell7.github.io/packing/explorer/", responseWhat);
+
 // The response explorer: a curve, a surface, panels, and a dimension of one strategy only.
 const rx = (selector: string): Element[] => $$(`#response-explorer ${selector}`);
 const rxText = (selector: string): string => $(`#response-explorer ${selector}`)?.textContent ?? "";

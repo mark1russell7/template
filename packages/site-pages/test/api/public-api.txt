@@ -38,6 +38,7 @@ type GitHubGreenRun: build/chunks/freshness.d.ts#GitHubGreenRun
 type GitHubOpenWork: build/chunks/freshness.d.ts#GitHubOpenWork
 type GitHubOptions: build/chunks/freshness.d.ts#GitHubOptions
 type GitHubRelease: build/chunks/freshness.d.ts#GitHubRelease
+type GitHubReleaseLag: build/chunks/freshness.d.ts#GitHubReleaseLag
 type GitHubReleases: build/chunks/freshness.d.ts#GitHubReleases
 type GitHubRunProgress: build/chunks/freshness.d.ts#GitHubRunProgress
 HELP: build/index.d.ts#HELP
@@ -116,6 +117,7 @@ firstSentence: build/index.d.ts#firstSentence
 gitTagDates: build/index.d.ts#gitTagDates
 githubGreenRun: build/chunks/freshness.d.ts#githubGreenRun
 githubOpenWork: build/chunks/freshness.d.ts#githubOpenWork
+githubReleaseLag: build/chunks/freshness.d.ts#githubReleaseLag
 githubReleases: build/chunks/freshness.d.ts#githubReleases
 githubRunProgress: build/chunks/freshness.d.ts#githubRunProgress
 globFiles: build/index.d.ts#globFiles
@@ -153,6 +155,7 @@ readKpi: build/chunks/freshness.d.ts#readKpi
 readReleases: build/index.d.ts#readReleases
 readStatusBoard: build/index.d.ts#readStatusBoard
 releaseBodyEntries: build/index.d.ts#releaseBodyEntries
+releaseLagOf: build/chunks/freshness.d.ts#releaseLagOf
 releaseReading: build/index.d.ts#releaseReading
 releaseSummary: build/index.d.ts#releaseSummary
 releasesLead: build/index.d.ts#releasesLead
@@ -491,6 +494,17 @@ interface GitHubRelease {
   prerelease: boolean;
 }
 
+### build/chunks/freshness.d.ts#GitHubReleaseLag
+type GitHubReleaseLag = {
+  available: true;
+  value: number;
+  at: string;
+  release: string;
+} | {
+  available: false;
+  reason: string;
+};
+
 ### build/chunks/freshness.d.ts#GitHubReleases
 type GitHubReleases = {
   available: true;
@@ -698,6 +712,15 @@ declare function githubOpenWork(options: GitHubOptions & {
   first?: number;
 }): Promise<GitHubOpenWork>;
 
+### build/chunks/freshness.d.ts#githubReleaseLag
+declare function githubReleaseLag(options: GitHubOptions & {
+  tagPrefix: string;
+  branch?: string;
+  endpoint?: string;
+  maxPages?: number;
+  now?: string;
+}): Promise<GitHubReleaseLag>;
+
 ### build/chunks/freshness.d.ts#githubReleases
 declare function githubReleases(options: GitHubOptions & {
   endpoint?: string;
@@ -737,6 +760,9 @@ declare function parseDataStamps(raw: unknown): DataStampsParse;
 
 ### build/chunks/freshness.d.ts#readKpi
 declare function readKpi(text: string, now?: number): KpiFile;
+
+### build/chunks/freshness.d.ts#releaseLagOf
+declare function releaseLagOf(oldest: string | undefined, now: string): number;
 
 ### build/chunks/freshness.d.ts#runProgressOf
 declare function runProgressOf(run: {

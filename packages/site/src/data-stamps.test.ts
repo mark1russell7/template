@@ -47,3 +47,29 @@ describe("the data stamp of the home page", () => {
     expect(renderDataStamp(page)).toContain("The measured numbers of this page are a fixed study of packing 0.6.1. They tell nothing about a newer release.");
   });
 });
+
+describe("the section of the explorer", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const main = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+
+  it("says first what the chart is, with the version of the stamp", () => {
+    const what = /<p class="lead small" id="response-what">(.*?)<\/p>/.exec(html)?.[1] ?? "";
+    const version = STAMPS.pages[0]?.runs[0]?.engines["@mark1russell7/packing"];
+    expect(what.startsWith(`This is the explorer that <code>@mark1russell7/site-pages</code> gives any site. The sample data is a fixed study of packing ${version}.`)).toBe(true);
+  });
+
+  it("links to the live explorer of packing", () => {
+    expect(html).toContain('href="https://mark1russell7.github.io/packing/explorer/"');
+  });
+
+  it("shows the entry and the function that this page mounts", () => {
+    const mount = /<pre id="response-mount">([\s\S]*?)<\/pre>/.exec(html)?.[1] ?? "";
+    const style = readFileSync(new URL("./style.css", import.meta.url), "utf8");
+    expect(mount).toContain('from "@mark1russell7/site-pages/explorer"');
+    expect(main).toContain('import("@mark1russell7/site-pages/explorer")');
+    expect(mount).toContain('import "@mark1russell7/site-pages/explorer.css"');
+    expect(style).toContain('@import "@mark1russell7/site-pages/explorer.css"');
+    expect(mount).toContain("mountExplorer(document.getElementById");
+    expect(main).toContain("explorer.mountExplorer(");
+  });
+});
