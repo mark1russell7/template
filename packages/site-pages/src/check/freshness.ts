@@ -27,7 +27,7 @@ export const MAX_MINORS_BEHIND = 1;
 /** The longest limit of a page, in days, with no ruling for that site. */
 export const MAX_LIMIT_DAYS_WITHOUT_RULING = 14;
 
-/** The longest limit of a study, in days, with no ruling for that site. The runs of a study are heavy. */
+/** The longest limit of a study, in days, also with a ruling. A study over `MAX_LIMIT_DAYS_WITHOUT_RULING` also needs a ruling. */
 export const MAX_STUDY_LIMIT_DAYS = 30;
 
 /** The last time at which a limit can start. A limit turns on at this time if its site did not turn it on before. */
@@ -156,10 +156,10 @@ function limitFaults(raw: unknown, at: string, study: boolean): string[] {
   if (typeof limit["workflow"] !== "string" || limit["workflow"] === "") faults.push(`${at}: the limit names no workflow.`);
   const ruling = limit["ruling"];
   if (ruling !== undefined && (typeof ruling !== "string" || !ruling.startsWith("https://"))) faults.push(`${at}: the ruling of the limit has no https link.`);
-  const longest = study ? MAX_STUDY_LIMIT_DAYS : MAX_LIMIT_DAYS_WITHOUT_RULING;
-  if (typeof days === "number" && days > longest && ruling === undefined) {
-    faults.push(`${at}: a limit over ${longest} days needs a ruling for this site.`);
+  if (typeof days === "number" && days > MAX_LIMIT_DAYS_WITHOUT_RULING && ruling === undefined) {
+    faults.push(`${at}: a limit over ${MAX_LIMIT_DAYS_WITHOUT_RULING} days needs a ruling for this site.`);
   }
+  if (study && typeof days === "number" && days > MAX_STUDY_LIMIT_DAYS) faults.push(`${at}: the limit of a study is at most ${MAX_STUDY_LIMIT_DAYS} days.`);
   const startsAt = limit["startsAt"];
   if (startsAt !== undefined) {
     if (typeof startsAt !== "string" || !Number.isFinite(Date.parse(startsAt))) faults.push(`${at}: the start of the limit has no date.`);

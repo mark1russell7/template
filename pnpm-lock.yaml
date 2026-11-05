@@ -297,7 +297,7 @@ importers:
         specifier: ^2.0.0
         version: 2.1.1
       '@mark1russell7/packing':
-        specifier: ^0.6.1
+        specifier: 0.6.1
         version: 0.6.1
       '@mark1russell7/rigor-generators':
         specifier: ^0.1.3

@@ -24,6 +24,14 @@ describe("the data stamp of the home page", () => {
     expect(checkFreshness(withPage(notStudy), { now: LATER, times: [] }).faults).not.toEqual([]);
   });
 
+  it("pins its subject to the exact version that the stamp names, and names that pin on the page", () => {
+    const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { devDependencies: Record<string, string> };
+    const version = page.runs[0]?.engines["@mark1russell7/packing"];
+    expect(manifest.devDependencies["@mark1russell7/packing"]).toBe(version);
+    expect(page.noLimit?.reproduce).toContain(`packing ${version ?? ""}, pinned to that exact version`);
+    expect(renderDataStamp(page)).toContain(`The subject is packing ${version ?? ""}`);
+  });
+
   it("is refused with no statement of why it has no limit", () => {
     const { noLimit: _noLimit, ...silent } = page;
     expect(parseDataStamps(withPage(silent))).toMatchObject({ ok: false, faults: ["index.html: a study needs a limit, or the field noLimit."] });

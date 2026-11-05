@@ -8,7 +8,7 @@ export const RECORD_SHA256 = "b130cd98ecbd8868ccbde114a27b676e046e6b4bca897b81ea
 
 /**
  * These stamps name the record of the response explorer. The script measured one fixed set of placements of one version.
- * The record is a sample for the explorer, so it has no age limit, and the page says why.
+ * The record is a sample for the explorer, so it has no age limit, and the page says why. The site pins its subject to the exact version.
  */
 export const STAMPS: DataStamps = {
   schema: DATA_STAMP_SCHEMA,
@@ -17,7 +17,7 @@ export const STAMPS: DataStamps = {
       page: "index.html",
       study: true,
       noLimit: {
-        reproduce: "The record measures that version only, so a run of the current packing code measures another version.",
+        reproduce: "The subject is packing 0.6.1, pinned to that exact version in this site, so newer packing code gives no number of this record.",
         today: "The record is a sample that shows the explorer, and this page claims nothing about packing today.",
       },
       runs: [

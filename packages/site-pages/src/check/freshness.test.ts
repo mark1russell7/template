@@ -183,7 +183,7 @@ describe("a study with no limit", () => {
 describe("a study with a limit", () => {
   const WORKFLOW = ".github/workflows/study.yml";
   const COMMIT = "abcdef0123456789abcdef0123456789abcdef01";
-  const limit: DataLimit = { days: 30, reason: "The runs are heavy.", workflow: WORKFLOW };
+  const limit: DataLimit = { days: 30, reason: "The runs are heavy.", workflow: WORKFLOW, ruling: "https://example.com/ruling" };
   const aged = (days: number, over: Partial<DataRun> = {}): DataRun =>
     run({ date: new Date(Date.parse(NOW) - days * 86_400_000).toISOString(), commit: COMMIT, engines: { [ENGINE]: "0.1.0", redis: "7.4" }, ...over });
   const page = (runs: readonly DataRun[], over: Partial<DataLimit> = {}): DataStamps => ({ schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", study: true, runs, limit: { ...limit, ...over } }] });
@@ -210,11 +210,15 @@ describe("a study with a limit", () => {
     expect(parseDataStamps(page([aged(1, { commit: "abcdef0" })]))).toMatchObject({ ok: false, faults: ["index.html, run 7: the commit of the run is not a full commit."] });
   });
 
-  it("takes up to 30 days with no ruling, and a page that is not a study takes up to 14", () => {
-    expect(parseDataStamps(page([aged(1)], { days: 31 }))).toMatchObject({ ok: false, faults: ["index.html: a limit over 30 days needs a ruling for this site."] });
-    expect(parseDataStamps(page([aged(1)], { days: 31, ruling: "https://example.com/ruling" })).ok).toBe(true);
-    const notStudy: DataStamps = { schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", runs: [run()], limit: { ...limit, days: 15 } }] };
-    expect(parseDataStamps(notStudy)).toMatchObject({ ok: false, faults: ["index.html: a limit over 14 days needs a ruling for this site."] });
+  it("takes up to 14 days with no ruling, up to 30 days with a ruling, and no more", () => {
+    const { ruling: _ruling, ...noRuling } = limit;
+    const bare = (days: number): DataStamps => ({ schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", study: true, runs: [aged(1)], limit: { ...noRuling, days } }] });
+    expect(parseDataStamps(bare(14)).ok).toBe(true);
+    expect(parseDataStamps(bare(20))).toMatchObject({ ok: false, faults: ["index.html: a limit over 14 days needs a ruling for this site."] });
+    expect(parseDataStamps(page([aged(1)], { days: 30 })).ok).toBe(true);
+    expect(parseDataStamps(page([aged(1)], { days: 31 }))).toMatchObject({ ok: false, faults: ["index.html: the limit of a study is at most 30 days."] });
+    const notStudy: DataStamps = { schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", runs: [run()], limit: { ...limit, days: 31 } }] };
+    expect(parseDataStamps(notStudy).ok).toBe(true);
   });
 
   it("keeps the age rule and the commit rule off before the start, and the schedule rule on", () => {
@@ -435,7 +439,7 @@ describe("runFreshnessCli", () => {
   // The flip of the age check: one stamp with an old date fails, and a clean copy passes, in the same test.
   it("flip: the age check of a study fails on old data, and a clean copy passes", async () => {
     file("study.yml", 'on:\n  schedule:\n    - cron: "0 5 8,30 * *"\n');
-    const limit: DataLimit = { days: 30, reason: "The runs are heavy.", workflow: "study.yml" };
+    const limit: DataLimit = { days: 30, reason: "The runs are heavy.", workflow: "study.yml", ruling: "https://example.com/ruling" };
     const page = (date: string) => ({ schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", study: true, limit, runs: [run({ date, commit: "abcdef0123456789abcdef0123456789abcdef01", engines: { redis: "7.4" } })] }] });
     const clean = await start(["--stamps", file("clean-study.json", page("2026-11-09T00:00:00Z")), "--now", NOW]);
     expect(clean.code).toBe(0);
@@ -443,6 +447,17 @@ describe("runFreshnessCli", () => {
     const old = await start(["--stamps", file("old-study.json", page("2026-10-10T00:00:00Z")), "--now", NOW]);
     expect(old.code).toBe(1);
     expect(old.err).toContain("the run 7 is 31.5 days old, over the limit of 30");
+  });
+
+  it("flip: a study with a limit of 20 days and no ruling fails, and a clean copy with a ruling passes", async () => {
+    file("study20.yml", 'on:\n  schedule:\n    - cron: "0 5 * * 1"\n');
+    const limit: DataLimit = { days: 20, reason: "The runs are heavy.", workflow: "study20.yml" };
+    const page = (more: Partial<DataLimit>) => ({ schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", study: true, limit: { ...limit, ...more }, runs: [run({ commit: "abcdef0123456789abcdef0123456789abcdef01" })] }] });
+    const clean = await start(["--stamps", file("ruled-study.json", page({ ruling: "https://example.com/ruling" })), "--now", NOW]);
+    expect(clean.code).toBe(0);
+    const bare = await start(["--stamps", file("bare-study.json", page({})), "--now", NOW]);
+    expect(bare.code).toBe(1);
+    expect(bare.err).toContain("index.html: a limit over 14 days needs a ruling for this site.");
   });
 
   it("flip: the age check of a page with the default limit fails on old data, and a clean copy passes", async () => {
