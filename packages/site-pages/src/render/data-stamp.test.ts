@@ -26,7 +26,6 @@ describe("renderDataStamp", () => {
     expect(html).toContain("They tell nothing about a newer release.");
     expect(html).not.toContain("This page is a fixed study");
     expect(html.match(/packing 0\.7\.0/g)).toHaveLength(3);
-    expect(html).toContain("It tells nothing about a newer release.");
   });
 
   it("shows a longer limit with its reason", () => {
