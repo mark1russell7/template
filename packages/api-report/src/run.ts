@@ -6,6 +6,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { unifiedDiff } from "./diff.ts";
 import { byCode, relativePath, type Manifest } from "./entries.ts";
+import { pageFaults, type ApiPage } from "./page.ts";
 import { DEFAULT_TOOL, packageReport } from "./report.ts";
 import { globFolders, packageFolders, workspaceGlobs } from "./workspace.ts";
 
@@ -24,6 +25,8 @@ export interface ApiReportConfig {
   readonly publishConfig?: boolean;
   /** The command that the header of each report names. The default is `api-report`. */
   readonly tool?: string;
+  /** The hand-written pages of an API. The command `check` holds their names against the report of each package. */
+  readonly pages?: readonly ApiPage[];
 }
 
 /** The command: `check` compares the reports, and `update` writes them. */
@@ -54,6 +57,8 @@ export interface PackageResult {
   /** The change from the committed report to the new report, in the unified format. */
   readonly diff?: string;
   readonly error?: string;
+  /** The faults of the hand-written pages of this package against its report. */
+  readonly pageFaults?: readonly string[];
 }
 
 /** The result of `runReports`. */
@@ -95,9 +100,35 @@ export function readConfig(root: string): ApiReportConfig {
     if (typeof item !== "boolean") throw new Error(`apiReport.${key} must be true or false.`);
     result[key] = item;
   }
-  const unknown = Object.keys(config).filter((key) => !["packages", "report", "tool", "includePrivate", "publishConfig"].includes(key));
+  const pages = config["pages"];
+  if (pages !== undefined) result.pages = readPages(pages);
+  const unknown = Object.keys(config).filter((key) => !["packages", "report", "tool", "includePrivate", "publishConfig", "pages"].includes(key));
   if (unknown.length > 0) throw new Error(`apiReport has unknown fields: ${unknown.join(", ")}.`);
   return result;
+}
+
+/** This function reads the field `pages` of `apiReport`. */
+function readPages(value: unknown): readonly ApiPage[] {
+  if (!Array.isArray(value)) throw new Error("apiReport.pages must be an array.");
+  return value.map((item: unknown, index): ApiPage => {
+    const at = `apiReport.pages[${index}]`;
+    if (typeof item !== "object" || item === null || Array.isArray(item)) throw new Error(`${at} must be an object.`);
+    const { package: folder, pages, except } = item as Record<string, unknown>;
+    if (typeof folder !== "string" || folder === "") throw new Error(`${at}.package must be a string.`);
+    if (!Array.isArray(pages) || pages.length === 0 || !pages.every((page) => typeof page === "string")) throw new Error(`${at}.pages must be an array of paths.`);
+    if (except === undefined) return { package: folder, pages };
+    if (typeof except !== "object" || except === null || Array.isArray(except) || !Object.values(except).every((reason) => typeof reason === "string")) {
+      throw new Error(`${at}.except must be an object of names and reasons.`);
+    }
+    return { package: folder, pages, except: except as Record<string, string> };
+  });
+}
+
+/** This function gives the faults of the pages of one package. A file that does not exist is a fault. */
+function faultsOfPages(root: string, entry: ApiPage, report: string, packageName: string): string[] {
+  const missing = entry.pages.filter((page) => !existsSync(resolve(root, page)));
+  if (missing.length > 0) return missing.map((page) => `${page}: the page does not exist.`);
+  return pageFaults(report, packageName, entry.pages.map((page) => readFileSync(resolve(root, page), "utf8")), entry.except);
 }
 
 /** This function makes sure that the path of a report stays in its package folder. */
@@ -132,6 +163,7 @@ export function runReports(options: RunOptions): RunResult {
   const named = options.folders !== undefined && options.folders.length > 0;
   const folders = named ? (options.folders ?? []).map((folder) => resolve(root, folder)) : packageFolders(root, options.packages);
   const results: PackageResult[] = [];
+  const skipped = new Set<string>();
   for (const folder of folders) {
     const shown = relativePath(root, folder) || ".";
     const file = join(folder, report);
@@ -152,6 +184,7 @@ export function runReports(options: RunOptions): RunResult {
     }
     // A private package has no public API. A named folder gets a report all the same.
     if (manifest.private === true && !named && options.includePrivate !== true) {
+      skipped.add(folder);
       if (current === undefined) results.push({ folder: shown, file: shownFile, status: "private" });
       else {
         if (options.mode === "update") rmSync(file);
@@ -169,8 +202,12 @@ export function runReports(options: RunOptions): RunResult {
       results.push({ folder: shown, file: shownFile, status: "error", error: error instanceof Error ? error.message : String(error) });
       continue;
     }
+    const faults = (options.pages ?? [])
+      .filter((entry) => resolve(root, entry.package) === folder)
+      .flatMap((entry) => faultsOfPages(root, entry, text, manifest.name ?? ""));
+    const onPages = options.mode === "check" && faults.length > 0 ? { pageFaults: faults } : {};
     if (current === text) {
-      results.push({ folder: shown, file: shownFile, status: "same" });
+      results.push({ folder: shown, file: shownFile, status: "same", ...onPages });
       continue;
     }
     if (options.mode === "update") {
@@ -178,10 +215,15 @@ export function runReports(options: RunOptions): RunResult {
       writeFileSync(file, text);
     }
     const diff = unifiedDiff(current ?? "", text, { from: current === undefined ? "/dev/null" : `a/${shownFile}`, to: `b/${shownFile}` });
-    results.push({ folder: shown, file: shownFile, status: current === undefined ? "new" : "changed", diff });
+    results.push({ folder: shown, file: shownFile, status: current === undefined ? "new" : "changed", diff, ...onPages });
   }
   if (!named) {
     const read = new Set(folders);
+    for (const entry of options.pages ?? []) {
+      const pageFolder = resolve(root, entry.package);
+      if (read.has(pageFolder) && !skipped.has(pageFolder)) continue;
+      results.push({ folder: entry.package, file: entry.pages[0] ?? "", status: "error", error: "the field pages names a package that the command does not read" });
+    }
     for (const folder of globbedFolders(root, options.packages)) {
       const file = join(folder, report);
       if (read.has(folder) || !existsSync(file)) continue;
@@ -193,7 +235,7 @@ export function runReports(options: RunOptions): RunResult {
     }
   }
   const failed = results.some(
-    (result) => result.status === "error" || (options.mode === "check" && (result.status === "changed" || result.status === "new" || result.status === "stale")),
+    (result) => (result.pageFaults?.length ?? 0) > 0 || result.status === "error" || (options.mode === "check" && (result.status === "changed" || result.status === "new" || result.status === "stale")),
   );
   return { mode: options.mode, packages: results, failed };
 }
@@ -223,6 +265,9 @@ export function formatResult(result: RunResult, tool: string = DEFAULT_TOOL): st
   list(update ? "Written (new)" : "No report", by("new"), (item) => (update ? item.file : `${item.folder} (${item.file})`));
   list(update ? "Removed (the command does not read the package)" : "A report of a package that the command does not read", by("stale"), (item) => item.file);
   list("Errors", by("error"), (item) => `${item.folder}: ${item.error ?? "unknown error"}`);
+  for (const item of result.packages) {
+    if ((item.pageFaults?.length ?? 0) > 0) out.push(`The page of the API of ${item.folder} differs from its report:`, ...(item.pageFaults ?? []).map((fault) => `  ${fault}`));
+  }
   let text = `${out.join("\n")}\n`;
   if (!update) {
     for (const item of by("changed")) text += `\n${shortDiff(item.diff ?? "")}`;
@@ -237,10 +282,12 @@ export function formatResult(result: RunResult, tool: string = DEFAULT_TOOL): st
 export function summaryMarkdown(result: RunResult): string {
   const changed = result.packages.filter((item) => item.status === "changed" || item.status === "new");
   const other = result.packages.filter((item) => item.status === "stale" || item.status === "error");
-  if (changed.length === 0 && other.length === 0) return "";
+  const pages = result.packages.flatMap((item) => (item.pageFaults ?? []).map((fault) => `- \`${item.folder}\`: ${fault}`));
+  if (changed.length === 0 && other.length === 0 && pages.length === 0) return "";
   const out = ["### Public API reports", ""];
   for (const item of changed) out.push(`<details><summary><code>${item.file}</code> (${item.status})</summary>`, "", "```diff", shortDiff(item.diff ?? "").replace(/\n$/, ""), "```", "", "</details>", "");
   for (const item of other) out.push(`- \`${item.file}\`: ${item.status === "stale" ? "a report of a package that the command does not read" : (item.error ?? "error")}`);
+  out.push(...pages);
   return `${out.join("\n")}\n`;
 }
 
@@ -266,7 +313,7 @@ export const USAGE: string = `Usage: api-report <check | update> [options] [<pac
   --no-publish-config    Read the fields of package.json without publishConfig.
   -h, --help             Show this text.
 
-The field "apiReport" of the root package.json can set packages, report, includePrivate, publishConfig and tool.
+The field "apiReport" of the root package.json can set packages, report, includePrivate, publishConfig, tool and pages.
 `;
 
 /** An error of the arguments: exit code 2 and the help text. */

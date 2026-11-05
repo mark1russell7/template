@@ -18,6 +18,21 @@ function buildGuard(): string {
   return match[1] ?? "";
 }
 
+/** The expression of the commit that the job build takes, after the output of the step green. */
+function buildRef(): string {
+  const match = /ref: \$\{\{ steps\.green\.outputs\.sha \|\| (.+) \}\}\n/.exec(workflow);
+  assert.ok(match, "The checkout of the job build has a ref.");
+  return match[1] ?? "";
+}
+
+/** The expression of the "if" key of a step of the job build, from the line before that key. */
+function stepCondition(line: string): string {
+  const at = workflow.indexOf(`${line}\n        if: `);
+  assert.ok(at >= 0, `The step "${line.trim()}" has an if key.`);
+  const start = at + line.length + "\n        if: ".length;
+  return workflow.slice(start, workflow.indexOf("\n", start));
+}
+
 /**
  * This function evaluates the guard for an event. It knows only the operators of the guard:
  * ==, !=, && and || on the values of the github context and on strings.
@@ -62,5 +77,48 @@ describe("the guard of the job build of reusable-pages.yml", () => {
   it("builds nothing after a failed CI run or a CI run of a pull request", () => {
     assert.equal(evaluate(guard, workflowRun({ conclusion: "failure" })), false);
     assert.equal(evaluate(guard, workflowRun({ event: "pull_request" })), false);
+  });
+
+  it("builds after a release of a push and after a release that a person starts", () => {
+    assert.equal(evaluate(guard, workflowRun({ name: "Release" })), true);
+    assert.equal(evaluate(guard, workflowRun({ name: "Release", event: "workflow_dispatch" })), true);
+  });
+
+  it("builds nothing after a failed release, or a release that a person starts on a different branch", () => {
+    assert.equal(evaluate(guard, workflowRun({ name: "Release", conclusion: "failure" })), false);
+    assert.equal(evaluate(guard, workflowRun({ name: "Release", event: "workflow_dispatch", head_branch: "feature" })), false);
+  });
+});
+
+describe("the commit of the job build of reusable-pages.yml", () => {
+  const ref = buildRef();
+  const run = (workflow_run: Record<string, unknown> | undefined): unknown => evaluate(ref, { sha: "newest", event: { workflow_run } });
+
+  it("takes the commit of the CI run after CI", () => {
+    assert.equal(run({ name: "CI", head_sha: "tested" }), "tested");
+  });
+
+  it("takes the newest commit for an event that is not a workflow_run", () => {
+    assert.equal(run(undefined), "newest");
+  });
+});
+
+describe("the step green of the job build of reusable-pages.yml", () => {
+  const condition = stepCondition("      - id: green");
+  const asks = (github: unknown): boolean => Boolean(evaluate(condition, github));
+
+  it("gets the shared actions on the same condition", () => {
+    assert.equal(stepCondition("      - name: Shared actions (green-main)"), condition);
+  });
+
+  it("gives the commit on a schedule and after a release, so that the site does not go back and no red commit deploys", () => {
+    assert.equal(asks({ event_name: "schedule", event: {} }), true);
+    assert.equal(asks({ event_name: "workflow_run", event: { workflow_run: { name: "Release" } } }), true);
+  });
+
+  it("gives no commit after CI, on a push or by hand, so these keep their own commit", () => {
+    assert.equal(asks({ event_name: "workflow_run", event: { workflow_run: { name: "CI" } } }), false);
+    assert.equal(asks({ event_name: "push", event: {} }), false);
+    assert.equal(asks({ event_name: "workflow_dispatch", event: {} }), false);
   });
 });

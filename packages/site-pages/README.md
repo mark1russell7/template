@@ -161,6 +161,8 @@ The gate has three rules. A fault of one rule gives the exit code 1.
 2. The data of a page is at most 3 days old (`MAX_DATA_AGE_DAYS`), or a run on newer engines is in flight. The stamp of that run is at most 3 days old, so an old stamp does not hold the gate open.
 3. The engines of the newest run are at most 1 minor version behind npm at the start of the run (`MAX_MINORS_BEHIND`). A release during a long run does not fail the gate.
 
+Stamps that pass also show one failing case for each page, in the log of each build. A measured page must fail one day after its limit. A fixed study must fail before the date of its run. A page with no failing case gives the exit code 1, so each site that uses the gate shows that the gate holds it.
+
 Two fields of a stamp change the age rule:
 
 - `"study": true` marks a fixed study. The data has no age limit, and the rule 3 does not apply. The run names the method or the run, the date and the engine version. The stamp line tells in plain words that the page is a fixed study of that version. A page with a claim about the current engine is not a fixed study.
@@ -198,6 +200,18 @@ The date of a version comes from the git tag, else from the GitHub release, else
 The pipeline needs the full history for the tags and the commits. Use `fetch-depth: 0` in `actions/checkout`.
 
 For a monorepo with one version for all its packages, give `--group` and the name of one package. Then only its changelog gives the versions, and the dates come from its tags. Without `--group`, each version of each source is a version.
+
+`changelogFaults(markdown, { from, fixedGroup })` examines a changelog and gives its faults:
+
+- An empty section.
+- A section with only dependency lines on a break of the version rule.
+- A first statement that names only the version kind.
+- A break of the version rule with no mark.
+- A mark on a release with no break.
+
+The option `from` leaves out older sections. The option `fixedGroup` passes a section with no change or with only PATCH changes, because its raise comes from another package of the group.
+
+`sectionMarksBreak(section)` tells if the text of a section marks a break. The marks are the heading `### Breaking` and the words "has breaking changes". A page that counts breaks uses this function.
 
 A repository can have no changelog and no GitHub release. Then each npm version of each package of `--packages` is a release:
 
@@ -395,6 +409,14 @@ The class sets `overflow-x: auto` and the background color of the box. Set `--sc
 .code {
   --scroll-cue-bg: var(--code-bg);
 }
+```
+
+Markdown has no way to set the class of a table. For a Markdown page, add the plugin `rehypeScrollCue` of the entry `@mark1russell7/site-pages/vite`. It gives the class, a tab stop and a label to each table:
+
+```js
+import { rehypeScrollCue } from "@mark1russell7/site-pages/vite";
+
+export default defineConfig({ markdown: { rehypePlugins: [rehypeScrollCue] } });
 ```
 
 ## The page helpers
