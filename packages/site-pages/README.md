@@ -396,6 +396,7 @@ A wide code block or table on a narrow screen scrolls sideways. Without a cue, i
 
 - The content fades at each edge that has more content. At an end of the box, the fade of that end goes.
 - The fade shows along all of the edge of a tall box, and over cells with their own background color.
+- The ring of the keyboard focus shows inside the box, because the mask of the fade hides all that is outside the box.
 - A browser with no scroll timelines gets a shade at the edge. This shade shows only where the content has no background color.
 - The cue uses only CSS. It needs no JavaScript.
 
