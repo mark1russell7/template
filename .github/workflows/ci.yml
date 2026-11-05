@@ -121,7 +121,7 @@ jobs:
   # file goes in needs, so the ruleset never has to change, and gh pr merge --auto waits for the whole gate.
   ci-ok:
     name: CI OK
-    if: always()
+    if: ${{ !cancelled() }}
     needs: [ci, presets, stamp]
     runs-on: ubuntu-latest
     timeout-minutes: 2

@@ -65,7 +65,7 @@ The field `apiReport` of the root `package.json` sets the defaults. The options 
 | `includePrivate` | `false` | Each private package also gets a report. |
 | `publishConfig` | `true` | The fields of `publishConfig` replace the fields of the source. |
 | `tool` | `api-report` | The command that the header of each report names. |
-| `pages` | none | The hand-written pages of an API. See [A page of the API](#a-page-of-the-api). |
+| `pages` | none | The pages of an API. See [A page of the API](#a-page-of-the-api). |
 
 A glob knows `*` (a part of one folder name), `?`, `**` (zero or more folders) and `{a,b}`. A repository with no workspace is one package: the root.
 
@@ -103,6 +103,29 @@ A name that the page leaves out goes in `except`, with its reason. An exception 
 
 The check does not read the meaning of the prose. It holds the names, and a person holds the words.
 
+### A page of each export
+
+A library with many exports can keep each name on a page that the report makes. The field `reference` gives the file of that page.
+
+```json
+{
+  "apiReport": {
+    "pages": [
+      {
+        "package": "packages/lib",
+        "pages": ["packages/site/src/content/docs/reference/api.mdx"],
+        "reference": "packages/site/src/content/docs/reference/each-export.md"
+      }
+    ]
+  }
+}
+```
+
+- The command `update` writes the file. Do not edit it.
+- The command `check` fails when the file differs from the text that the report gives.
+- The file has a section for each entry, with an import of its names and their declarations. It has no comments, because the report has none.
+- The hand-written pages explain the main calls. The first rule above does not apply to them, because the file shows each export. The rules for imports and declarations still apply. The list `pages` can be empty.
+
 ## Library
 
 The package also exports the functions of the tool:
@@ -113,4 +136,5 @@ The package also exports the functions of the tool:
 - `parseDeclarations(text)` and `statementsOf(text)` read a declaration file.
 - `packageFolders(root, globs)`, `globFolders(root, glob)`, `globToRegExp(glob)` and `workspaceGlobs(root)` find the packages.
 - `diffLines(before, after)` and `unifiedDiff(before, after)` give a line diff.
-- `pageFaults(report, packageName, pages, except)` and `reportEntries(report)` hold a hand-written page against a report.
+- `pageFaults(report, packageName, pages, except, complete)` and `reportEntries(report)` hold a hand-written page against a report.
+- `referencePage(report, packageName)` gives the Markdown of the page of each export.
