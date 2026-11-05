@@ -1,7 +1,7 @@
 /**
  * The check of a hand-written page of an API against the report of its package. A page can explain each
- * call, and the check holds its names: each export shows in the code of the page, and the page gives no
- * name as an export that the package does not have.
+ * call, and the check holds its names. Each export shows in the code of the page. The page gives no name
+ * as an export that the package does not have.
  */
 import { byCode } from "./entries.ts";
 
@@ -60,7 +60,7 @@ function codeOf(text: string): { readonly blocks: readonly string[]; readonly sp
   return { blocks, spans };
 }
 
-/** This function tells whether the code has `name` as a whole word. */
+/** This function is true if the code has `name` as a whole word. */
 function hasWord(code: string, name: string): boolean {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`(?<![\\w$])${escaped}(?![\\w$])`).test(code);

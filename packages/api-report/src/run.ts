@@ -163,6 +163,7 @@ export function runReports(options: RunOptions): RunResult {
   const named = options.folders !== undefined && options.folders.length > 0;
   const folders = named ? (options.folders ?? []).map((folder) => resolve(root, folder)) : packageFolders(root, options.packages);
   const results: PackageResult[] = [];
+  const skipped = new Set<string>();
   for (const folder of folders) {
     const shown = relativePath(root, folder) || ".";
     const file = join(folder, report);
@@ -183,6 +184,7 @@ export function runReports(options: RunOptions): RunResult {
     }
     // A private package has no public API. A named folder gets a report all the same.
     if (manifest.private === true && !named && options.includePrivate !== true) {
+      skipped.add(folder);
       if (current === undefined) results.push({ folder: shown, file: shownFile, status: "private" });
       else {
         if (options.mode === "update") rmSync(file);
@@ -218,7 +220,8 @@ export function runReports(options: RunOptions): RunResult {
   if (!named) {
     const read = new Set(folders);
     for (const entry of options.pages ?? []) {
-      if (read.has(resolve(root, entry.package))) continue;
+      const pageFolder = resolve(root, entry.package);
+      if (read.has(pageFolder) && !skipped.has(pageFolder)) continue;
       results.push({ folder: entry.package, file: entry.pages[0] ?? "", status: "error", error: "the field pages names a package that the command does not read" });
     }
     for (const folder of globbedFolders(root, options.packages)) {
