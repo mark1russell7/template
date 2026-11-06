@@ -126,14 +126,17 @@ jobs:
         HTML
         # The probe of the site check: the button of the test site writes "done".
         echo 'click("#go"); check("the button writes done", await until(() => $("#out").textContent === "done"));' > test-site-probe.js
+        # The probe of a second page (site-check-page-probes): the Releases page of site-pages has a heading.
+        echo 'check("the releases page has a heading", $("h1") !== null);' > test-releases-probe.js
       out: test-site
       env: '{"TEST_SITE": "actions-test"}'
       packages: "@mark1russell7/template-cli,@mark1russell7/site-pages"
       roadmap: docs/ROADMAP.md
-      # The check of the home and of the two pages of site-pages, with the probe on the home
+      # The check of the home and of the two pages of site-pages, with a probe on the home and one on /releases/
       site-check: true
       site-check-pages: /,/releases/,/status/
       site-check-probe: test-site-probe.js
+      site-check-page-probes: /releases/=test-releases-probe.js
       deploy: false
 
   pages-check:
