@@ -278,15 +278,21 @@ A step that needs `id-token: write` stays in `release.yml`, for example a publis
 on:
   push:
     branches: [main]
+  # After a release, so that the Releases page has the new version (the rule pages-after-release)
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+    branches: [main]
   schedule:
     - cron: "17 */3 * * *"
   workflow_dispatch:
 
 permissions: {}
 
+# A deployment in progress always ends. A newer run replaces only a run that waits (the rule main-runs-finish).
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   pages:
