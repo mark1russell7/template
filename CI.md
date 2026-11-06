@@ -8,6 +8,7 @@ The template holds the CI, the release and the Pages workflows of the repositori
 | `.github/workflows/reusable-release-build.yml` | Workflow | Builds and packs the published packages, and writes the plan of the tags. |
 | `.github/actions/npm-publish` | Action | Publishes the tarballs to npm with trusted publishing (OIDC) and provenance. |
 | `.github/workflows/reusable-release-tag.yml` | Workflow | Makes a git tag and a GitHub release for each published version. |
+| `.github/workflows/reusable-mutation.yml` | Workflow | Starts the mutation tests of each package with Stryker, with a gate for each package. |
 | `.github/workflows/reusable-pages.yml` | Workflow | Builds a site, adds the Releases page and the Status page, and deploys it to GitHub Pages. |
 | `.github/actions/security-scan` | Action | Scans the dependencies and the code with the dependency review, osv-scanner and CodeQL, in one job. |
 | `.github/workflows/reusable-security.yml` | Workflow | Deprecated. The same scans in three jobs ("Security", "The old workflow"). |
@@ -40,6 +41,19 @@ The job starts all the scripts, also after a failure. Then it fails with the nam
 | `timeout-minutes` | `15` | The time limit of each job of the matrix. |
 | `changesets` | `true` | The changeset check on a pull request (refer to the next section). |
 | `changeset-ignore` | (empty) | More globs of files that need no changeset. |
+| `coverage` | `false` | After the scripts, the first cell of the matrix starts the tests of each package with Vitest again, with coverage (refer to "Coverage"). |
+| `coverage-floor` | `0` | The lowest percent of each measure of each package. `0` is no floor. |
+
+### Coverage
+
+With `coverage: true`, the action `coverage` starts `vitest run` with coverage in each package whose `test` script starts Vitest. Only the first cell of the matrix does it.
+
+- The summary of the job gets a table: the statements, branches, functions and lines of each package.
+- The artifact `coverage` has `coverage-summary.json` and `coverage-final.json` of each package.
+- A package with no summary fails the step. Its tests failed, or it does not have `@vitest/coverage-v8`.
+- With `coverage-floor`, a package with a measure under the floor fails the step. The message names the package and the measure.
+
+Each package with Vitest needs `@vitest/coverage-v8` in its `devDependencies`, with the version of its Vitest. The configuration of the coverage in `vitest.config.ts` (for example `include` and `exclude`) stays. The action sets only the reporters and the folder `coverage`.
 
 ### The changeset check
 
@@ -269,6 +283,44 @@ A step that needs `id-token: write` stays in `release.yml`, for example a publis
 - Put it in a job after the job `publish`, with only the permissions that it needs.
 - The job does no checkout and no install. It reads its files from the artifact `release`.
 - The output `published` of the job `publish` and the output `after-pack` of the job `build` tell the job when to operate.
+
+## Mutation
+
+The workflow `reusable-mutation.yml` starts the mutation tests of a repository with [Stryker](https://stryker-mutator.io) and `@mark1russell7/rigor-mutation`. A mutation test changes the source a little (a mutant) and starts the tests. The score is the percent of the mutants that the tests detect.
+
+The lane file `mutation.json` of the repository names the packages, their globs, their parts and their gates. The README of `@mark1russell7/rigor-mutation` tells its format. The repository has these `devDependencies`: `@mark1russell7/rigor-mutation`, `@stryker-mutator/core` and `@stryker-mutator/vitest-runner`, 10.1.0 or later. Stryker 10.0 started no test on each mutant with Vitest 5.
+
+The job `plan` checks the disabled mutants (`rigor-mutation disables`) and gives the selections. The job `mutate` starts Stryker for each selection on its own runner. Then it applies the gate of the package. A selection under its gate fails, and the message names it. The artifact `mutation-<selection>` has the HTML and JSON reports.
+
+A mutation run is long. Thus a repository starts it from a scheduled workflow, not from each pull request. The workflow states its size in its `env` (the fleet watch compares the real run with it):
+
+```yaml
+on:
+  schedule:
+    - cron: "<minute> 4 * * 1"
+  workflow_dispatch:
+env:
+  STATED_JOBS: 3
+  STATED_JOB_MINUTES: 90
+  STATED_REASON: one runner for each part of the package
+jobs:
+  mutation:
+    uses: mark1russell7/template/.github/workflows/reusable-mutation.yml@<commit> # main
+```
+
+`STATED_JOBS` is the number of jobs, with the job `plan`. `STATED_JOB_MINUTES` is the sum of the minutes of the jobs.
+
+| Input | Default | What it sets |
+|---|---|---|
+| `selections` | (empty) | The packages or parts to mutate, separated by spaces or commas. Empty gives each part of each package with parts, and each other package. |
+| `lane` | `mutation.json` | The lane file. |
+| `concurrency` | `4` | The test processes of Stryker on each runner. |
+| `max-parallel` | `2` | The runners at the same time. |
+| `timeout-minutes` | `120` | The time limit of each selection. Divide a package into parts when one selection needs more. |
+| `node-version` | `26` | The Node.js version. |
+| `working-directory` | `.` | The folder of the root `package.json`. |
+
+The gates are in the lane file, not in an input. Thus a local run and CI use the same gate.
 
 ## Pages
 

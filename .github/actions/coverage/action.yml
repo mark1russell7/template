@@ -1,0 +1,45 @@
+name: coverage
+description: >-
+  Starts the tests of each package whose test script starts Vitest, with coverage. The summary of the job gets a table
+  of the four measures of each package, and the artifact coverage has the reports. An optional floor fails the step.
+inputs:
+  floor:
+    description: The lowest percent of each measure (statements, branches, functions, lines) of each package. 0 is no floor.
+    default: "0"
+  working-directory:
+    description: The folder of the root package.json, relative to the root of the repository.
+    default: "."
+runs:
+  using: composite
+  steps:
+    # Each package needs @vitest/coverage-v8 (the provider of Vitest), with the version of its Vitest.
+    - name: Coverage
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        FLOOR: ${{ inputs.floor }}
+        SCRIPT: ${{ github.action_path }}/coverage.ts
+      run: |
+        mapfile -t dirs < <(pnpm ls -r --json --depth -1 | node "$SCRIPT" packages)
+        if [ ${#dirs[@]} -eq 0 ]; then
+          echo "::notice::No package has a test script that starts Vitest."
+          exit 0
+        fi
+        for dir in "${dirs[@]}"; do
+          echo "::group::coverage of $dir"
+          # A failure of the tests gives no summary, and the summary step below names the package.
+          (cd "$dir" && pnpm exec vitest run --coverage.enabled --coverage.reporter=json-summary --coverage.reporter=json --coverage.reporter=text-summary --coverage.reportsDirectory=coverage) || true
+          echo "::endgroup::"
+        done
+        node "$SCRIPT" summary "$FLOOR" "${dirs[@]}" >> "$GITHUB_STEP_SUMMARY"
+    - name: Coverage reports
+      if: always()
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: coverage
+        path: |
+          ${{ inputs.working-directory }}/**/coverage/coverage-summary.json
+          ${{ inputs.working-directory }}/**/coverage/coverage-final.json
+          !${{ inputs.working-directory }}/**/node_modules/**
+        if-no-files-found: warn
+        retention-days: 14
