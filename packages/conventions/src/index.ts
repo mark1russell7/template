@@ -66,6 +66,7 @@ export {
   typedFiles,
   typedScripts,
   unreleasedChange,
+  workflowParses,
   workspaceProtocol,
 } from "./rules/index.ts";
 export { DEFAULT_ALLOWED, HOME_PATTERNS } from "./rules/no-local-paths.ts";
@@ -75,6 +76,7 @@ export { repositoryOfRemote, scheduleMinute } from "./rules/runner-budget.ts";
 export { declaredName, messageOf, repoOf, signaturesOf } from "./rules/home-package.ts";
 export { HOME_EXPORTS } from "./home-exports.ts";
 export { authorOf, LICENSE_TEXTS, licenseFileOf, mitText, repositoryIsPublic } from "./rules/license-file.ts";
+export { GITHUB_YAML, yamlFaults, type YamlFault } from "./rules/workflow-parses.ts";
 export { PAGES_WORKFLOWS, pagesCalls, type PagesCall } from "./rules/pages-site.ts";
 export { ACTIONS_COMMIT, convertGate, prPathFilters, summaryName, type PathFilter } from "./rules/gate-trigger.ts";
 export { SECURITY_SCAN_COMMIT, SECURITY_SCAN_INPUTS, SECURITY_TIMEOUT_MINUTES, securityCallers, withOneJob, type SecurityCaller } from "./rules/security-one-job.ts";

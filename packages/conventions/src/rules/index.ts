@@ -32,6 +32,7 @@ import { typedFiles } from "./typed-files.ts";
 import { typedScripts } from "./typed-scripts.ts";
 import { trustPolicy } from "./trust-policy.ts";
 import { unreleasedChange } from "./unreleased-change.ts";
+import { workflowParses } from "./workflow-parses.ts";
 import { workspaceProtocol } from "./workspace-protocol.ts";
 
 /** Each rule of the check. */
@@ -55,6 +56,7 @@ export const RULES: readonly Rule[] = [
   mainCheck,
   testsRequired,
   roadmapParses,
+  workflowParses,
   runnerBudget,
   mainRunsFinish,
   pushMainOnly,
@@ -70,4 +72,4 @@ export const RULES: readonly Rule[] = [
 ];
 
 export { publishedMinor };
-export { apiReportScript, changelogVersion, cuePreset, gateAfterCancel, gateTrigger, securityOneJob, homePackage, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, workspaceProtocol };
+export { apiReportScript, changelogVersion, cuePreset, gateAfterCancel, gateTrigger, securityOneJob, homePackage, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, workflowParses, workspaceProtocol };

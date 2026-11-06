@@ -17,6 +17,7 @@ DEFAULT_ALLOWED: build/index.d.ts#DEFAULT_ALLOWED
 DEPENDENCY_FIELDS: build/index.d.ts#DEPENDENCY_FIELDS
 type Edit: build/index.d.ts#Edit
 type FixResult: build/index.d.ts#FixResult
+GITHUB_YAML: build/index.d.ts#GITHUB_YAML
 HOMES: build/index.d.ts#HOMES
 HOME_EXPORTS: build/index.d.ts#HOME_EXPORTS
 HOME_PATTERNS: build/index.d.ts#HOME_PATTERNS
@@ -61,6 +62,7 @@ type Workflow: build/index.d.ts#Workflow
 type WorkflowInput: build/index.d.ts#WorkflowInput
 type WorkflowJob: build/index.d.ts#WorkflowJob
 type WorkflowStep: build/index.d.ts#WorkflowStep
+type YamlFault: build/index.d.ts#YamlFault
 annotations: build/index.d.ts#annotations
 apiReportScript: build/index.d.ts#apiReportScript
 authorOf: build/index.d.ts#authorOf
@@ -158,8 +160,10 @@ typedScripts: build/index.d.ts#typedScripts
 unreleasedChange: build/index.d.ts#unreleasedChange
 unreleasedChangeRule: build/index.d.ts#unreleasedChangeRule
 withOneJob: build/index.d.ts#withOneJob
+workflowParses: build/index.d.ts#workflowParses
 workspaceGlobs: build/index.d.ts#workspaceGlobs
 workspaceProtocol: build/index.d.ts#workspaceProtocol
+yamlFaults: build/index.d.ts#yamlFaults
 
 ## bin: 1 commands
 
@@ -234,6 +238,9 @@ interface FixResult {
   readonly passes: number;
   readonly result: CheckResult;
 }
+
+### build/index.d.ts#GITHUB_YAML
+export declare const GITHUB_YAML: RegExp;
 
 ### build/index.d.ts#HOMES
 export declare const HOMES: readonly Home[];
@@ -461,6 +468,13 @@ interface WorkflowStep {
   readonly label: string;
   readonly if: string;
   readonly uses: string;
+}
+
+### build/index.d.ts#YamlFault
+interface YamlFault {
+  readonly line: number;
+  readonly column: number;
+  readonly message: string;
 }
 
 ### build/index.d.ts#annotations
@@ -762,8 +776,14 @@ export declare function withOneJob(text: string, commit?: string): {
   reason: string;
 };
 
+### build/index.d.ts#workflowParses
+export declare const workflowParses: Rule;
+
 ### build/index.d.ts#workspaceGlobs
 export declare function workspaceGlobs(root: string): string[] | undefined;
 
 ### build/index.d.ts#workspaceProtocol
 export declare const workspaceProtocol: Rule;
+
+### build/index.d.ts#yamlFaults
+export declare function yamlFaults(text: string): YamlFault[];
