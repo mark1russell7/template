@@ -118,10 +118,6 @@ on:
         description: A JavaScript or TypeScript file of the repository that tests the interactive core of the home (the probe of site-pages check).
         type: string
         default: ""
-      site-check-page-probes:
-        description: The probe of each page that needs one, as <page>=<file> pairs separated by commas, for example /structures/=src/structures-probe.ts. A page with no pair has no probe from this list. The first page takes site-check-probe or a pair, not both.
-        type: string
-        default: ""
       site-check-playwright:
         description: The version of playwright-core whose Chromium the check uses.
         type: string
@@ -272,7 +268,6 @@ jobs:
           site-check-pages: ${{ inputs.site-check-pages }}
           site-check-widths: ${{ inputs.site-check-widths }}
           site-check-probe: ${{ inputs.site-check-probe }}
-          site-check-page-probes: ${{ inputs.site-check-page-probes }}
           site-check-playwright: ${{ inputs.site-check-playwright }}
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
