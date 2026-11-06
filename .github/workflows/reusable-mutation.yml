@@ -37,10 +37,6 @@ on:
         description: The number of test processes of Stryker on each runner.
         type: number
         default: 4
-      max-parallel:
-        description: The number of runners at the same time. The runners are shared by all repositories of the account.
-        type: number
-        default: 2
       timeout-minutes:
         description: The time limit of each selection.
         type: number
@@ -109,8 +105,9 @@ jobs:
     timeout-minutes: ${{ inputs.timeout-minutes }}
     strategy:
       fail-fast: false
-      # The runners are shared by all repositories of the account (the rule runner-budget)
-      max-parallel: ${{ inputs.max-parallel }}
+      # The runners are shared by all repositories of the account. The rule runner-budget reads only a number here,
+      # so this is not an input.
+      max-parallel: 2
       matrix:
         selection: ${{ fromJSON(needs.plan.outputs.selections) }}
     defaults:

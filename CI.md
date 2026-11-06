@@ -315,7 +315,6 @@ jobs:
 | `selections` | (empty) | The packages or parts to mutate, separated by spaces or commas. Empty gives each part of each package with parts, and each other package. |
 | `lane` | `mutation.json` | The lane file. |
 | `concurrency` | `4` | The test processes of Stryker on each runner. |
-| `max-parallel` | `2` | The runners at the same time. |
 | `timeout-minutes` | `120` | The time limit of each selection. Divide a package into parts when one selection needs more. |
 | `node-version` | `26` | The Node.js version. |
 | `working-directory` | `.` | The folder of the root `package.json`. |
