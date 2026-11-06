@@ -16,7 +16,10 @@ inputs:
     description: The widths of the check in CSS pixels, separated by commas. Empty gives 360,400,1280.
     default: ""
   site-check-probe:
-    description: A JavaScript or TypeScript file of the repository that tests the interactive core of the first page.
+    description: >-
+      The probes: JavaScript or TypeScript files of the repository that test the interactive core of a page, separated by
+      commas. A file with no page is the probe of the first page. A pair <page>=<file> is the probe of that page, for
+      example /structures/=src/structures-probe.ts. A page with no probe has none. The first page takes one probe only.
     default: ""
   site-check-playwright:
     description: The version of playwright-core whose Chromium the check uses.
@@ -51,7 +54,21 @@ runs:
         [ -z "$BASE" ] || args+=(--base "$BASE")
         [ -z "$PAGES" ] || args+=(--pages "$PAGES")
         [ -z "$WIDTHS" ] || args+=(--widths "$WIDTHS")
-        [ -z "$PROBE" ] || args+=(--probe "$PROBE")
+        # Each item of the list is a file (the first page) or a pair <page>=<file>. An item of only spaces adds nothing.
+        IFS=',' read -ra items <<< "$PROBE"
+        first=""
+        for item in "${items[@]}"; do
+          item="${item#"${item%%[![:space:]]*}"}"
+          item="${item%"${item##*[![:space:]]}"}"
+          if [ -z "$item" ]; then continue; fi
+          case "$item" in
+            *=*) args+=(--page-probe "$item") ;;
+            *)
+              if [ -n "$first" ]; then echo "::error::site-check-probe has two probes for the first page: $first and $item"; exit 2; fi
+              first="$item"
+              args+=(--probe "$item") ;;
+          esac
+        done
         node "$GITHUB_ACTION_PATH/../../../packages/site-pages/src/check/main.ts" "${args[@]}"
     # The screenshots, report.json and summary.md, also of a failed check, for a review of the site.
     - name: Screenshots of the site check

@@ -126,14 +126,16 @@ jobs:
         HTML
         # The probe of the site check: the button of the test site writes "done".
         echo 'click("#go"); check("the button writes done", await until(() => $("#out").textContent === "done"));' > test-site-probe.js
+        # The probe of a second page (a pair <page>=<file> of site-check-probe): the Releases page of site-pages has a heading.
+        echo 'check("the releases page has a heading", $("h1") !== null);' > test-releases-probe.js
       out: test-site
       env: '{"TEST_SITE": "actions-test"}'
       packages: "@mark1russell7/template-cli,@mark1russell7/site-pages"
       roadmap: docs/ROADMAP.md
-      # The check of the home and of the two pages of site-pages, with the probe on the home
+      # The check of the home and of the two pages of site-pages, with a probe on the home and one on /releases/
       site-check: true
       site-check-pages: /,/releases/,/status/
-      site-check-probe: test-site-probe.js
+      site-check-probe: test-site-probe.js, /releases/=test-releases-probe.js
       deploy: false
 
   pages-check:
@@ -162,7 +164,7 @@ jobs:
             test -s "$OUT/$f" || { echo "::error::$f is missing"; exit 1; }
             echo "ok $f ($(wc -c < "$OUT/$f") bytes)"
           done
-          node -e 'const r = require(process.argv[1]); const n = r.views.length; if (!r.ok || n !== 18) { console.error("::error::the site check has", n, "views, not 18, or did not pass"); process.exit(1); } const p = r.views.filter((v) => v.probe?.length > 0).length; if (p !== 3) { console.error("::error::the probe ran in", p, "views, not 3"); process.exit(1); } console.log("site check:", n, "views passed, the probe in", p)' "$CHECK/report.json"
+          node -e 'const r = require(process.argv[1]); const n = r.views.length; if (!r.ok || n !== 18) { console.error("::error::the site check has", n, "views, not 18, or did not pass"); process.exit(1); } const p = r.views.filter((v) => v.probe?.length > 0).length; if (p !== 6) { console.error("::error::the probe ran in", p, "views, not 6 (3 widths of 2 pages)"); process.exit(1); } console.log("site check:", n, "views passed, the probe in", p)' "$CHECK/report.json"
           for w in 360 400 1280; do for s in light dark; do for page in home releases status; do
             test -s "$CHECK/$page-$w-$s.png" || { echo "::error::the screenshot $page-$w-$s.png is missing"; exit 1; }
           done; done; done
