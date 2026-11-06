@@ -105,6 +105,7 @@ mergeHomes: build/index.d.ts#mergeHomes
 messageOf: build/index.d.ts#messageOf
 minorOf: build/index.d.ts#minorOf
 mitText: build/index.d.ts#mitText
+namedVersions: build/index.d.ts#namedVersions
 noBuildOutput: build/index.d.ts#noBuildOutput
 noLocalPaths: build/index.d.ts#noLocalPaths
 npmLookup: build/index.d.ts#npmLookup
@@ -145,6 +146,7 @@ scheduleMinute: build/index.d.ts#scheduleMinute
 scriptsOf: build/index.d.ts#scriptsOf
 securityCallers: build/index.d.ts#securityCallers
 securityOneJob: build/index.d.ts#securityOneJob
+setVersions: build/index.d.ts#setVersions
 sharedDocsRule: build/index.d.ts#sharedDocsRule
 signaturesOf: build/index.d.ts#signaturesOf
 sourceMain: build/index.d.ts#sourceMain
@@ -159,6 +161,7 @@ typedFiles: build/index.d.ts#typedFiles
 typedScripts: build/index.d.ts#typedScripts
 unreleasedChange: build/index.d.ts#unreleasedChange
 unreleasedChangeRule: build/index.d.ts#unreleasedChangeRule
+versionTitle: build/index.d.ts#versionTitle
 withOneJob: build/index.d.ts#withOneJob
 workflowParses: build/index.d.ts#workflowParses
 workspaceGlobs: build/index.d.ts#workspaceGlobs
@@ -607,6 +610,9 @@ export declare function minorOf(version: string): Minor | undefined;
 ### build/index.d.ts#mitText
 export declare function mitText(year: number, holder: string): string;
 
+### build/index.d.ts#namedVersions
+export declare function namedVersions(title: string): string[];
+
 ### build/index.d.ts#noBuildOutput
 export declare const noBuildOutput: Rule;
 
@@ -727,6 +733,9 @@ export declare function securityCallers(text: string): SecurityCaller[];
 ### build/index.d.ts#securityOneJob
 export declare const securityOneJob: Rule;
 
+### build/index.d.ts#setVersions
+export declare function setVersions(context: RuleContext, from: string, to: string): string[] | undefined;
+
 ### build/index.d.ts#sharedDocsRule
 export declare function sharedDocsRule(fetchHomes?: HomeFetch): Rule;
 
@@ -768,6 +777,9 @@ export declare const unreleasedChange: Rule;
 
 ### build/index.d.ts#unreleasedChangeRule
 export declare function unreleasedChangeRule(lookup?: RegistryLookup): Rule;
+
+### build/index.d.ts#versionTitle
+export declare const versionTitle: Rule;
 
 ### build/index.d.ts#withOneJob
 export declare function withOneJob(text: string, commit?: string): {
