@@ -36,6 +36,11 @@ export interface CheckOptions {
   schemes: readonly ("light" | "dark")[];
   /** The code of a probe: the body of an async function (see `probeExpression`). It runs on the first page, in the light scheme, at each width. */
   probe?: string | undefined;
+  /**
+   * The probe of each page: a map from a page of `pages` to the code of its probe. Each probe operates on its page, in the first
+   * scheme, at each width. A page with no entry has no probe. The first page takes `probe` or an entry of this map, not both.
+   */
+  probes?: Readonly<Record<string, string>> | undefined;
   /** The folder for the screenshots, `report.json` and `summary.md`. */
   shots?: string | undefined;
   /** The browser executable. */
@@ -91,6 +96,21 @@ export function pageSlug(page: string): string {
 }
 
 /**
+ * This function gives the code of the probe of each page of `pages`, in the same order. A page with no probe gives undefined.
+ * `probe` goes to the first page, and each entry of `probes` goes to its page.
+ *
+ * @throws Error when a key of `probes` is not a page, or when the first page has `probe` and an entry of `probes`
+ */
+export function pageProbes(options: Pick<CheckOptions, "pages" | "probe" | "probes">): (string | undefined)[] {
+  const probes = options.probes ?? {};
+  const unknown = Object.keys(probes).filter((page) => !options.pages.includes(page));
+  if (unknown.length > 0) throw new Error(`a probe names a page that the check does not open: ${unknown.join(", ")}. The pages are ${options.pages.join(", ")}.`);
+  const first = options.pages[0];
+  if (options.probe !== undefined && first !== undefined && Object.hasOwn(probes, first)) throw new Error(`the first page ${first} has two probes: give it probe or an entry of probes, not both`);
+  return options.pages.map((page, index) => (Object.hasOwn(probes, page) ? probes[page] : index === 0 ? options.probe : undefined));
+}
+
+/**
  * This function checks the site. It starts one browser and, for `out`, one server, and stops both at
  * the end.
  *
@@ -101,6 +121,7 @@ export async function checkSite(options: CheckOptions): Promise<CheckResult> {
   const executable = findBrowser(options.browser);
   if (executable === undefined) throw new Error("no Chromium browser was found: give --browser, set SITE_CHECK_BROWSER, or install the Chromium of Playwright");
   if (options.pages.length === 0) throw new Error("no page to check");
+  const probes = pageProbes(options);
   const server = options.out !== undefined ? await serve(options.out, options.base ?? "/") : undefined;
   const home = server?.url ?? options.url;
   if (home === undefined) throw new Error("give out or url");
@@ -117,8 +138,8 @@ export async function checkSite(options: CheckOptions): Promise<CheckResult> {
       const target = new URL(path.replace(/^\/+/, ""), homeUrl).href;
       for (const width of options.widths) {
         for (const scheme of options.schemes) {
-          const withProbe = options.probe !== undefined && index === 0 && scheme === options.schemes[0];
-          const view = await checkView(page, events, { target, path, width, scheme, withProbe, options });
+          const probe = scheme === options.schemes[0] ? probes[index] : undefined;
+          const view = await checkView(page, events, { target, path, width, scheme, probe, options });
           views.push(view);
           log(`${view.ok ? "PASS" : "FAIL"} ${path} ${width} ${scheme}${view.measure ? ` scrollWidth=${view.measure.scrollWidth} innerWidth=${view.measure.innerWidth}` : ""}${view.probe ? ` probe ${view.probe.filter((c) => c.ok).length}/${view.probe.length}` : ""}${view.problems.length > 0 ? `\n  - ${view.problems.join("\n  - ")}` : ""}`);
         }
@@ -208,12 +229,13 @@ interface ViewInput {
   path: string;
   width: number;
   scheme: "light" | "dark";
-  withProbe: boolean;
+  /** The code of the probe of this view, or undefined for no probe. */
+  probe: string | undefined;
   options: CheckOptions;
 }
 
 async function checkView(page: Page, events: Events, input: ViewInput): Promise<ViewResult> {
-  const { target, path, width, scheme, withProbe, options } = input;
+  const { target, path, width, scheme, probe, options } = input;
   const view: ViewResult = { page: path, width, scheme, ok: false, problems: [] };
   let other: RegExp | undefined;
   try {
@@ -246,8 +268,8 @@ async function checkView(page: Page, events: Events, input: ViewInput): Promise<
       writeFileSync(file, Buffer.from(shot.data, "base64"));
       view.shot = file;
     }
-    if (withProbe && options.probe !== undefined) {
-      const checks = (await page.evaluate<ProbeCheck[] | undefined>(probeExpression(options.probe))) ?? [];
+    if (probe !== undefined) {
+      const checks = (await page.evaluate<ProbeCheck[] | undefined>(probeExpression(probe))) ?? [];
       view.probe = checks;
       if (checks.length === 0) view.problems.push("the probe made no check");
       for (const check of checks.filter((entry) => !entry.ok)) view.problems.push(`probe: ${check.name}${check.detail ? ` (${check.detail})` : ""}`);
@@ -313,6 +335,10 @@ Options:
                        wait, until, $, $$, type and click. It runs on the first page, in the first
                        scheme, at each width. A .ts, .mts or .cts file is TypeScript: the check
                        removes its types and its line export {}.
+  --page-probe <page>=<file>
+                       The probe of one page of --pages, for example /structures/=probe.ts. Give
+                       the option one time for each page. A page with no probe has none. The
+                       first page takes --probe or --page-probe, not both.
   --shots <dir>        The folder for the screenshots, report.json and summary.md
   --browser <file>     The Chromium executable (default: $SITE_CHECK_BROWSER, the Chromium of
                        Playwright, else Chrome or Edge)
@@ -325,7 +351,7 @@ With $GITHUB_STEP_SUMMARY, the check adds its table to the job summary.
 
 /** This function runs the `check` command with its arguments, without the word `check`. */
 export async function runCheckCli(argv: readonly string[], io: CheckIo): Promise<number> {
-  let values: Record<string, string | boolean | undefined>;
+  let values: Record<string, string | boolean | string[] | undefined>;
   try {
     ({ values } = parseArgs({
       args: [...argv],
@@ -339,6 +365,7 @@ export async function runCheckCli(argv: readonly string[], io: CheckIo): Promise
         widths: { type: "string" },
         schemes: { type: "string" },
         probe: { type: "string" },
+        "page-probe": { type: "string", multiple: true },
         shots: { type: "string" },
         browser: { type: "string" },
         settle: { type: "string" },
@@ -383,21 +410,43 @@ export async function runCheckCli(argv: readonly string[], io: CheckIo): Promise
   }
   if (base !== undefined) base = `/${base.replace(/^\/+|\/+$/g, "")}/`.replace(/^\/\/$/, "/");
   const at = (file: string) => (isAbsolute(file) ? file : resolve(io.cwd, file));
+  /** This function reads a probe file. A TypeScript file loses its types. A file that cannot be read gives an Error. */
+  const readProbe = (file: string): string | Error => {
+    let code: string;
+    try {
+      code = readFileSync(at(file), "utf8");
+    } catch (error) {
+      return new Error(`the probe file ${file} cannot be read: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (!TYPESCRIPT_PROBE.test(file)) return code;
+    try {
+      return probeScript(code);
+    } catch (error) {
+      return new Error(`the types of the probe file ${file} cannot be removed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
   const probeFile = text("probe");
   let probe: string | undefined;
   if (probeFile !== undefined) {
-    try {
-      probe = readFileSync(at(probeFile), "utf8");
-    } catch (error) {
-      return usage(`the probe file ${probeFile} cannot be read: ${error instanceof Error ? error.message : String(error)}`);
-    }
-    if (TYPESCRIPT_PROBE.test(probeFile)) {
-      try {
-        probe = probeScript(probe);
-      } catch (error) {
-        return usage(`the types of the probe file ${probeFile} cannot be removed: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
+    const code = readProbe(probeFile);
+    if (code instanceof Error) return usage(code.message);
+    probe = code;
+  }
+  const probes: Record<string, string> = {};
+  for (const entry of (values["page-probe"] as string[] | undefined) ?? []) {
+    const split = entry.indexOf("=");
+    const page = entry.slice(0, split).trim();
+    const file = entry.slice(split + 1).trim();
+    if (split <= 0 || file === "") return usage(`--page-probe must be <page>=<file>, not "${entry}"`);
+    if (Object.hasOwn(probes, page)) return usage(`--page-probe gives two probes for the page ${page}`);
+    const code = readProbe(file);
+    if (code instanceof Error) return usage(code.message);
+    probes[page] = code;
+  }
+  try {
+    pageProbes({ pages, probe, probes });
+  } catch (error) {
+    return usage(error instanceof Error ? error.message : String(error));
   }
   const shots = text("shots");
   const result = await checkSite({
@@ -408,6 +457,7 @@ export async function runCheckCli(argv: readonly string[], io: CheckIo): Promise
     widths,
     schemes: schemes as ("light" | "dark")[],
     probe,
+    probes,
     shots: shots === undefined ? undefined : at(shots),
     browser: text("browser"),
     settleMs,

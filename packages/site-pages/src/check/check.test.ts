@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { Script } from "node:vm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { findBrowser } from "./browser.ts";
-import { cell, checkSite, cutProblems, pageSlug, PHONE_WIDTH, runCheckCli, summary, type CheckOptions } from "./check.ts";
+import { cell, checkSite, cutProblems, pageProbes, pageSlug, PHONE_WIDTH, runCheckCli, summary, type CheckOptions } from "./check.ts";
 import { MEASURE, type Cut } from "./measure.ts";
 import { resolveFile, serve } from "./serve.ts";
 
@@ -170,6 +170,20 @@ describe("MEASURE", () => {
   });
 });
 
+describe("pageProbes", () => {
+  it("gives probe to the first page and each entry of probes to its page, and no probe to the other pages", () => {
+    expect(pageProbes({ pages: ["/", "/a/", "/b/"], probe: "home" })).toEqual(["home", undefined, undefined]);
+    expect(pageProbes({ pages: ["/", "/a/", "/b/"], probe: "home", probes: { "/b/": "b" } })).toEqual(["home", undefined, "b"]);
+    expect(pageProbes({ pages: ["/", "/a/"], probes: { "/": "first", "/a/": "a" } })).toEqual(["first", "a"]);
+    expect(pageProbes({ pages: ["/", "/a/"] })).toEqual([undefined, undefined]);
+  });
+
+  it("refuses an entry for a page that the check does not open, and two probes for the first page", () => {
+    expect(() => pageProbes({ pages: ["/"], probes: { "/nope/": "x" } })).toThrow("a probe names a page that the check does not open: /nope/");
+    expect(() => pageProbes({ pages: ["/", "/a/"], probe: "home", probes: { "/": "first" } })).toThrow("the first page / has two probes");
+  });
+});
+
 describe("runCheckCli", () => {
   const io = () => {
     const out: string[] = [];
@@ -186,6 +200,23 @@ describe("runCheckCli", () => {
       const run = io();
       expect(await runCheckCli(argv, run.io), argv.join(" ")).toBe(2);
       expect(run.err.join("")).toContain("site-pages check:");
+    }
+  });
+  it("refuses a wrong --page-probe with code 2 and tells why", async () => {
+    writeFileSync(join(root, "page-probe.js"), `check("ok", true)`);
+    const cases: [string[], string][] = [
+      [["--page-probe", "/wide/"], "--page-probe must be <page>=<file>"],
+      [["--page-probe", "=page-probe.js"], "--page-probe must be <page>=<file>"],
+      [["--page-probe", "/nope/=page-probe.js"], "a probe names a page that the check does not open: /nope/"],
+      [["--page-probe", "/wide/=no-such-file.js"], "the probe file no-such-file.js cannot be read"],
+      [["--page-probe", "/wide/=page-probe.js", "--page-probe", "/wide/=page-probe.js"], "two probes for the page /wide/"],
+      [["--probe", "page-probe.js", "--page-probe", "/=page-probe.js"], "the first page / has two probes"],
+    ];
+    for (const [extra, message] of cases) {
+      const run = io();
+      const argv = ["--url", "http://x/", "--pages", "/,/wide/", ...extra];
+      expect(await runCheckCli(argv, run.io), argv.join(" ")).toBe(2);
+      expect(run.err.join("")).toContain(message);
     }
   });
 });
@@ -320,5 +351,26 @@ describe.skipIf(browser === undefined)("checkSite in a browser", () => {
     expect(thrown.views[0]?.problems.join("\n")).toContain("probe: the probe runs to its end (Error: no element: #missing");
     const none = await checkSite(options(["/"], { widths: [1280], schemes: ["light"], probe: `await wait(1)` }));
     expect(none.views[0]?.problems).toEqual(["the probe made no check"]);
+  }, 120_000);
+
+  it("runs the probe of each page on its page, fails the page whose probe fails, and runs no probe on a page with no entry", async () => {
+    const result = await checkSite(
+      options(["/", "/wide/", "/scroller/"], {
+        widths: [1280],
+        probe: `click("#go"); check("the button writes done", await until(() => $("#out").textContent === "done"));`,
+        probes: { "/wide/": `check("the wide block is narrow", $("#wide").offsetWidth < 500, String($("#wide").offsetWidth))` },
+      }),
+    );
+    expect(result.views.map((view) => [view.page, view.scheme, view.probe?.length ?? 0])).toEqual([
+      ["/", "light", 1],
+      ["/", "dark", 0],
+      ["/wide/", "light", 1],
+      ["/wide/", "dark", 0],
+      ["/scroller/", "light", 0],
+      ["/scroller/", "dark", 0],
+    ]);
+    expect(result.ok).toBe(false);
+    expect(result.views.filter((view) => !view.ok).map((view) => [view.page, view.problems])).toEqual([["/wide/", ["probe: the wide block is narrow (900)"]]]);
+    expect(summary(result)).toContain("| `/wide/` | 1280 | light | **fail** (probe 0/1) | probe: the wide block is narrow (900) |");
   }, 120_000);
 });
