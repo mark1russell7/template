@@ -49,8 +49,12 @@ type RuleConfig: build/index.d.ts#RuleConfig
 type RuleContext: build/index.d.ts#RuleContext
 type RuleOutcome: build/index.d.ts#RuleOutcome
 type RuleResult: build/index.d.ts#RuleResult
+SECURITY_SCAN_COMMIT: build/index.d.ts#SECURITY_SCAN_COMMIT
+SECURITY_SCAN_INPUTS: build/index.d.ts#SECURITY_SCAN_INPUTS
+SECURITY_TIMEOUT_MINUTES: build/index.d.ts#SECURITY_TIMEOUT_MINUTES
 SHIPPED_FIELDS: build/index.d.ts#SHIPPED_FIELDS
 STRICT_OPTIONS: build/index.d.ts#STRICT_OPTIONS
+type SecurityCaller: build/index.d.ts#SecurityCaller
 TRAIN_SCOPES: build/index.d.ts#TRAIN_SCOPES
 UNSHIPPED_FILES: build/index.d.ts#UNSHIPPED_FILES
 USAGE: build/index.d.ts#USAGE
@@ -139,6 +143,8 @@ runGit: build/index.d.ts#runGit
 runnerBudget: build/index.d.ts#runnerBudget
 scheduleMinute: build/index.d.ts#scheduleMinute
 scriptsOf: build/index.d.ts#scriptsOf
+securityCallers: build/index.d.ts#securityCallers
+securityOneJob: build/index.d.ts#securityOneJob
 sharedDocsRule: build/index.d.ts#sharedDocsRule
 signaturesOf: build/index.d.ts#signaturesOf
 sourceMain: build/index.d.ts#sourceMain
@@ -153,6 +159,7 @@ typedFiles: build/index.d.ts#typedFiles
 typedScripts: build/index.d.ts#typedScripts
 unreleasedChange: build/index.d.ts#unreleasedChange
 unreleasedChangeRule: build/index.d.ts#unreleasedChangeRule
+withOneJob: build/index.d.ts#withOneJob
 workflowParses: build/index.d.ts#workflowParses
 workspaceGlobs: build/index.d.ts#workspaceGlobs
 workspaceProtocol: build/index.d.ts#workspaceProtocol
@@ -400,11 +407,26 @@ interface RuleResult {
   readonly note?: string;
 }
 
+### build/index.d.ts#SECURITY_SCAN_COMMIT
+export declare const SECURITY_SCAN_COMMIT: string;
+
+### build/index.d.ts#SECURITY_SCAN_INPUTS
+export declare const SECURITY_SCAN_INPUTS: readonly string[];
+
+### build/index.d.ts#SECURITY_TIMEOUT_MINUTES
+export declare const SECURITY_TIMEOUT_MINUTES = 30;
+
 ### build/index.d.ts#SHIPPED_FIELDS
 export declare const SHIPPED_FIELDS: readonly string[];
 
 ### build/index.d.ts#STRICT_OPTIONS
 export declare const STRICT_OPTIONS: readonly ["strict", "noImplicitAny", "strictNullChecks", "strictFunctionTypes", "strictBindCallApply", "strictPropertyInitialization", "strictBuiltinIteratorReturn", "noImplicitThis", "useUnknownInCatchVariables", "alwaysStrict", "noUncheckedIndexedAccess", "exactOptionalPropertyTypes", "noImplicitOverride", "noImplicitReturns", "noFallthroughCasesInSwitch", "noPropertyAccessFromIndexSignature", "erasableSyntaxOnly"];
+
+### build/index.d.ts#SecurityCaller
+interface SecurityCaller {
+  readonly line: number;
+  readonly id: string;
+}
 
 ### build/index.d.ts#TRAIN_SCOPES
 export declare const TRAIN_SCOPES: readonly ["@mark1russell7/*", "@procedures/*"];
@@ -699,6 +721,12 @@ export declare function scheduleMinute(repository: string, file: string): number
 ### build/index.d.ts#scriptsOf
 export declare function scriptsOf(scripts: Readonly<Record<string, unknown>>, name: string, seen?: Set<string>): string[];
 
+### build/index.d.ts#securityCallers
+export declare function securityCallers(text: string): SecurityCaller[];
+
+### build/index.d.ts#securityOneJob
+export declare const securityOneJob: Rule;
+
 ### build/index.d.ts#sharedDocsRule
 export declare function sharedDocsRule(fetchHomes?: HomeFetch): Rule;
 
@@ -740,6 +768,13 @@ export declare const unreleasedChange: Rule;
 
 ### build/index.d.ts#unreleasedChangeRule
 export declare function unreleasedChangeRule(lookup?: RegistryLookup): Rule;
+
+### build/index.d.ts#withOneJob
+export declare function withOneJob(text: string, commit?: string): {
+  text: string;
+} | {
+  reason: string;
+};
 
 ### build/index.d.ts#workflowParses
 export declare const workflowParses: Rule;

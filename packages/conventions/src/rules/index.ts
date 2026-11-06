@@ -6,6 +6,7 @@ import { changelogVersion } from "./changelog-version.ts";
 import { cuePreset } from "./cue-preset.ts";
 import { gateAfterCancel } from "./gate-after-cancel.ts";
 import { gateTrigger } from "./gate-trigger.ts";
+import { securityOneJob } from "./security-one-job.ts";
 import { homePackage } from "./home-package.ts";
 import { licenseFile } from "./license-file.ts";
 import { mainCheck } from "./main-check.ts";
@@ -62,6 +63,7 @@ export const RULES: readonly Rule[] = [
   pipeFails,
   gateAfterCancel,
   gateTrigger,
+  securityOneJob,
   homePackage,
   licenseFile,
   pagesSite,
@@ -70,4 +72,4 @@ export const RULES: readonly Rule[] = [
 ];
 
 export { publishedMinor };
-export { apiReportScript, changelogVersion, cuePreset, gateAfterCancel, gateTrigger, homePackage, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, workflowParses, workspaceProtocol };
+export { apiReportScript, changelogVersion, cuePreset, gateAfterCancel, gateTrigger, securityOneJob, homePackage, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, workflowParses, workspaceProtocol };
