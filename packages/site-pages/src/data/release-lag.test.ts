@@ -33,26 +33,47 @@ function fakeGitHub(table: Record<string, Answer>): { fetch: typeof fetch; urls:
 const API = "https://api.github.com/repos/o/r";
 const release = (tag: string, published_at: string, more: Record<string, unknown> = {}) => ({ tag_name: tag, published_at, ...more });
 const commit = (date: string) => ({ commit: { committer: { date } } });
-const SINCE = `${API}/commits?sha=main&since=${encodeURIComponent("2026-11-01T00:00:00Z")}&per_page=1`;
+/** The comparison of the tag of a release with main, with one commit on each page. */
+const compareOf = (tag: string): string => `${API}/compare/${encodeURIComponent(tag)}...main?per_page=1`;
+const COMPARE = compareOf("pkg@1.0.0");
 
 describe("the read from GitHub", () => {
   const options = { owner: "o", repo: "r", token: "t", tagPrefix: "pkg@", now: NOW };
 
-  it("takes the newest release of the prefix, skips a pre-release, and reads the last page of the commits", async () => {
+  it("takes the newest release of the prefix, skips a pre-release, and reads the oldest commit that the tag does not contain", async () => {
     const github = fakeGitHub({
       [`${API}/releases?per_page=100`]: {
         body: [release("other@2.0.0", "2026-11-04T00:00:00Z"), release("pkg@1.1.0-rc.0", "2026-11-03T00:00:00Z", { prerelease: true }), release("pkg@1.0.0", "2026-11-01T00:00:00Z")],
         link: `<${API}/releases?per_page=100&page=2>; rel="next"`,
       },
-      [SINCE]: { body: [commit("2026-11-05T00:00:00Z")], link: `<${SINCE}&page=2>; rel="next", <${SINCE}&page=3>; rel="last"` },
-      [`${SINCE}&page=3`]: { body: [commit("2026-11-02T12:00:00Z")] },
+      // 350 commits after the tag: the first page of one commit holds the oldest of them
+      [COMPARE]: { body: { ahead_by: 350, commits: [commit("2026-11-02T12:00:00Z")] }, link: `<${COMPARE}&page=2>; rel="next", <${COMPARE}&page=350>; rel="last"` },
     });
     expect(await githubReleaseLag({ ...options, fetch: github.fetch })).toEqual({ available: true, value: 3, at: NOW, release: "pkg@1.0.0" });
-    expect(github.urls).toEqual([`${API}/releases?per_page=100`, SINCE, `${SINCE}&page=3`]);
+    expect(github.urls).toEqual([`${API}/releases?per_page=100`, COMPARE]);
   });
 
-  it("gives 0 when no commit follows the release, with one page of commits", async () => {
-    const github = fakeGitHub({ [`${API}/releases?per_page=100`]: { body: [release("pkg@1.0.0", "2026-11-01T00:00:00Z")] }, [SINCE]: { body: [] } });
+  it("counts a commit merged after the tag and before the release was published", async () => {
+    // The tag was made at 02:51, a pull request merged at 02:54, and the release was published at 03:14 (coeval v0.22.0, 2026-11-04).
+    const github = fakeGitHub({
+      [`${API}/releases?per_page=100`]: { body: [release("v0.22.0", "2026-11-04T03:14:58Z")] },
+      [compareOf("v0.22.0")]: { body: { ahead_by: 32, commits: [commit("2026-11-04T02:54:31Z")] } },
+    });
+    expect(await githubReleaseLag({ ...options, tagPrefix: "v", fetch: github.fetch })).toEqual({ available: true, value: 1.38, at: NOW, release: "v0.22.0" });
+  });
+
+  it("takes the newest release in the order of GitHub, not the highest version, and encodes a tag with a scope", async () => {
+    // A fix of an older line, released after a newer version, is the newest release.
+    const github = fakeGitHub({
+      [`${API}/releases?per_page=100`]: { body: [release("@s/pkg@1.0.5", "2026-11-04T00:00:00Z"), release("@s/pkg@2.0.0", "2026-11-03T00:00:00Z")] },
+      [compareOf("@s/pkg@1.0.5")]: { body: { ahead_by: 0, commits: [] } },
+    });
+    expect(await githubReleaseLag({ ...options, tagPrefix: "@s/pkg@", fetch: github.fetch })).toEqual({ available: true, value: 0, at: NOW, release: "@s/pkg@1.0.5" });
+    expect(github.urls[1]).toBe(`${API}/compare/%40s%2Fpkg%401.0.5...main?per_page=1`);
+  });
+
+  it("gives 0 when no commit follows the release", async () => {
+    const github = fakeGitHub({ [`${API}/releases?per_page=100`]: { body: [release("pkg@1.0.0", "2026-11-01T00:00:00Z")] }, [COMPARE]: { body: { ahead_by: 0, commits: [] } } });
     expect(await githubReleaseLag({ ...options, fetch: github.fetch })).toEqual({ available: true, value: 0, at: NOW, release: "pkg@1.0.0" });
   });
 
@@ -60,8 +81,10 @@ describe("the read from GitHub", () => {
     expect((await githubReleaseLag({ ...options, token: undefined })).available).toBe(false);
     const none = fakeGitHub({ [`${API}/releases?per_page=100`]: { body: [release("other@1.0.0", "2026-11-01T00:00:00Z")] } });
     expect(await githubReleaseLag({ ...options, fetch: none.fetch })).toEqual({ available: false, reason: "no release has a tag that starts with pkg@" });
-    const broken = fakeGitHub({ [`${API}/releases?per_page=100`]: { body: [release("pkg@1.0.0", "2026-11-01T00:00:00Z")] }, [SINCE]: { body: {}, status: 500 } });
+    const broken = fakeGitHub({ [`${API}/releases?per_page=100`]: { body: [release("pkg@1.0.0", "2026-11-01T00:00:00Z")] }, [COMPARE]: { body: {}, status: 500 } });
     expect(await githubReleaseLag({ ...options, fetch: broken.fetch })).toEqual({ available: false, reason: "GitHub answered with HTTP 500" });
+    const gone = fakeGitHub({ [`${API}/releases?per_page=100`]: { body: [release("pkg@1.0.0", "2026-11-01T00:00:00Z")] } });
+    expect(await githubReleaseLag({ ...options, fetch: gone.fetch })).toEqual({ available: false, reason: "GitHub has no tag pkg@1.0.0 or no branch main in o/r" });
   });
 
   it("leaves githubReleases as it was: it reads each page and skips only the drafts", async () => {

@@ -159,7 +159,7 @@ export async function githubOpenWork(options: GitHubOptions & { endpoint?: strin
 }
 
 /** This function gives the URL of the page with the relation `rel` from a `Link` header of GitHub, or null. */
-function linkedPage(link: string | null, rel: "next" | "last"): string | null {
+function linkedPage(link: string | null, rel: "next"): string | null {
   if (!link) return null;
   for (const part of link.split(",")) {
     const match = /<([^>]+)>\s*;\s*rel="([a-z]+)"/.exec(part);
@@ -250,11 +250,14 @@ export function releaseLagOf(oldest: string | undefined, now: string): number {
 
 /**
  * This function reads how many days a branch is ahead of its newest release. That is the age of the oldest commit of the branch
- * after the newest release whose tag starts with `tagPrefix`. It skips drafts and pre-releases, because a pre-release is not the
- * version that most users get. It gives `{ available: false, reason }` without a token, after an error, or with no such release.
+ * that is not in the newest release of the tag prefix `tagPrefix`. It skips drafts and pre-releases, because
+ * a pre-release is not the version that most users get. It gives `{ available: false, reason }` without a token, after an error,
+ * or with no such release.
  *
- * @remarks The function reads the releases until it finds one, at most `maxPages` pages of 100 (default 10). It then reads one
- * commit on each page of the branch since that release, and asks GitHub for the last page only.
+ * @remarks The function reads the releases until it finds one, at most `maxPages` pages of 100 (default 10). It then compares the
+ * tag with the branch, with one commit on each page. GitHub gives the commits of a comparison from the oldest, so the first page
+ * holds the oldest commit. A commit that is merged after the tag and before the release is published counts, because it is not
+ * in the release. The time of the release does not decide.
  */
 export async function githubReleaseLag(
   options: GitHubOptions & { tagPrefix: string; branch?: string; endpoint?: string; maxPages?: number; now?: string },
@@ -269,16 +272,14 @@ export async function githubReleaseLag(
   if (!Number.isFinite(Date.parse(release.publishedAt))) return { available: false, reason: `the release ${release.tag} has no date` };
   const fetcher = options.fetch ?? globalThis.fetch;
   const read = async (url: string): Promise<Response> => fetcher(url, { headers: restHeaders(token), signal: AbortSignal.timeout(timeoutMs) });
-  const first = `${endpoint}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?sha=${encodeURIComponent(branch)}&since=${encodeURIComponent(release.publishedAt)}&per_page=1`;
+  const compare = `${endpoint}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/compare/${encodeURIComponent(release.tag)}...${encodeURIComponent(branch)}?per_page=1`;
   try {
-    let response = await read(first);
-    const last = response.ok ? linkedPage(response.headers.get("link"), "last") : null;
-    if (last !== null) response = await read(last);
-    if (response.status === 404) return { available: false, reason: `GitHub has no branch ${branch} in ${owner}/${repo}` };
+    const response = await read(compare);
+    if (response.status === 404) return { available: false, reason: `GitHub has no tag ${release.tag} or no branch ${branch} in ${owner}/${repo}` };
     if (!response.ok) return { available: false, reason: `GitHub answered with HTTP ${response.status}` };
-    const body: unknown = await response.json();
-    if (!Array.isArray(body)) return { available: false, reason: "GitHub gave no list of commits" };
-    const commit = body.length === 0 ? undefined : text(object(object(object(body.at(-1))["commit"])["committer"])["date"]);
+    const commits = object(await response.json())["commits"];
+    if (!Array.isArray(commits)) return { available: false, reason: "GitHub gave no list of commits" };
+    const commit = commits.length === 0 ? undefined : text(object(object(object(commits[0])["commit"])["committer"])["date"]);
     if (commit === "") return { available: false, reason: "the oldest commit has no date" };
     const value = releaseLagOf(commit, now);
     if (!Number.isFinite(value)) return { available: false, reason: "the time of the read is not a date" };

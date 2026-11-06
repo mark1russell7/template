@@ -9,7 +9,8 @@ The template holds the CI, the release and the Pages workflows of the repositori
 | `.github/actions/npm-publish` | Action | Publishes the tarballs to npm with trusted publishing (OIDC) and provenance. |
 | `.github/workflows/reusable-release-tag.yml` | Workflow | Makes a git tag and a GitHub release for each published version. |
 | `.github/workflows/reusable-pages.yml` | Workflow | Builds a site, adds the Releases page and the Status page, and deploys it to GitHub Pages. |
-| `.github/workflows/reusable-security.yml` | Workflow | Scans the dependencies and the code with the dependency review, osv-scanner and CodeQL. |
+| `.github/actions/security-scan` | Action | Scans the dependencies and the code with the dependency review, osv-scanner and CodeQL, in one job. |
+| `.github/workflows/reusable-security.yml` | Workflow | Deprecated. The same scans in three jobs ("Security", "The old workflow"). |
 | `.github/workflows/reusable-ai-review.yml` | Workflow | Gives a pull request a review by Claude on request (the `ai-review` label), comment only (`AI-REVIEW.md`). |
 | `.github/workflows/reusable-codex-review.yml` | Workflow | Gives a pull request a second review by an OpenAI model, comment only (`CODEX-REVIEW.md`). |
 
@@ -67,7 +68,7 @@ jobs:
 
 ### The check of the ruleset
 
-Each workflow of the merge gate has one summary job, with the name `<Name> OK`. The template has two: `ci-ok` (name `CI OK`) of `ci.yml` and `security-ok` (name `Security OK`) of `security.yml`. A summary job needs each other job of its file. It starts also after a failure (`if: ${{ !cancelled() }}`). After a cancel it does not ask for a runner. It concludes `cancelled`, which does not pass the ruleset, and the next run does not wait behind it.
+Each workflow of the merge gate has one summary job, with the name `<Name> OK`. The template has two: `ci-ok` (name `CI OK`) of `ci.yml` and `security-ok` (name `Security OK`) of `security.yml`. A summary job needs each other job of its file (`Security OK` has no other job, and does the scans itself, as "Security" tells). It starts also after a failure (`if: ${{ !cancelled() }}`). After a cancel it does not ask for a runner. It concludes `cancelled`, which does not pass the ruleset, and the next run does not wait behind it.
 
 A summary job passes only when each job passed. A job can be skipped only when the list `ALLOW_SKIP` of the summary job names it. For example, outside the template, the `if` of `presets` skips it. Each other skipped job fails the summary. An empty `needs` also fails it, because a job that did not start is not a pass.
 
@@ -277,15 +278,21 @@ A step that needs `id-token: write` stays in `release.yml`, for example a publis
 on:
   push:
     branches: [main]
+  # After a release, so that the Releases page has the new version (the rule pages-after-release)
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+    branches: [main]
   schedule:
     - cron: "17 */3 * * *"
   workflow_dispatch:
 
 permissions: {}
 
+# A deployment in progress always ends. A newer run replaces only a run that waits (the rule main-runs-finish).
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   pages:
@@ -340,15 +347,19 @@ jobs:
 
 ## Security
 
-`reusable-security.yml` has three jobs. On a pull request, a job fails only for a new finding at or above `fail-on-severity`. On a push, a schedule or a manual run, the jobs upload their findings to code scanning. Then they do not fail. Thus the Security tab shows the old findings, and the old findings do not block a pull request.
+The action `security-scan` has three scans in one job. On a pull request, a scan fails only for a new finding at or above `fail-on-severity`. On a push, a schedule or a manual run, the scans upload their findings to code scanning. Then they do not fail. Thus the Security tab shows the old findings, and the old findings do not block a pull request.
 
-| Job | On a pull request | On a push, a schedule or a manual run |
+| Scan | On a pull request | On a push, a schedule or a manual run |
 |---|---|---|
-| `dependency-review` | GitHub compares the dependencies of the base and of the pull request. The job fails for a new dependency with a known vulnerability. | The job does not start. |
-| `osv-scanner` | The job scans the lockfiles of the base and of the pull request. It fails for a vulnerability that only the pull request has. | The job scans all the lockfiles and uploads the results. |
-| `codeql` | CodeQL analyzes the source with no build. The job fails for an alert on a line that the pull request adds or changes. | CodeQL analyzes the source and uploads the results. |
+| `dependency-review` | GitHub compares the dependencies of the base and of the pull request. The scan fails for a new dependency with a known vulnerability. | The scan does not start. |
+| `osv-scanner` | The scan reads the lockfiles of the base and of the pull request. It fails for a vulnerability that only the pull request has. | The scan reads all the lockfiles and uploads the results. |
+| `codeql` | CodeQL analyzes the source with no build. The scan fails for an alert on a line that the pull request adds or changes. | CodeQL analyzes the source and uploads the results. |
 
-The caller job gives the permissions. The workflow gives each job only the permissions that it needs:
+Each scan starts also when an earlier scan failed. The last step of the action fails when a scan fails, and its error names that scan. The summary of the run shows a table of the scans. If the inputs start a scan and no step of it starts, the last step also fails.
+
+The job is the summary job `Security OK` ("The check of the ruleset"). One job asks for one runner. Before, the scans had three jobs and a summary job, and each job waited in the queue for its runner. The scans start one after the other, so a run takes approximately 15 seconds more.
+
+The job of the caller gives the permissions and the time limit. A composite action cannot set `timeout-minutes` for its job:
 
 ```yaml
 on:
@@ -362,36 +373,45 @@ on:
 permissions: {}
 
 concurrency:
-  group: security-${{ github.ref }}
-  cancel-in-progress: true
+  group: security-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  security:
-    uses: mark1russell7/template/.github/workflows/reusable-security.yml@<commit> # main
+  security-ok:
+    name: Security OK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       security-events: write
       actions: read
+    steps:
+      - uses: mark1russell7/template/.github/actions/security-scan@<commit> # main
 ```
 
 | Input | Default | What it sets |
 |---|---|---|
 | `fail-on-severity` | `high` | A pull request fails for a new finding at or above this severity: `low`, `moderate`, `high` or `critical`. |
-| `dependency-review` | `true` | The job `dependency-review`. |
+| `dependency-review` | `true` | The scan `dependency-review`. |
 | `dependency-review-scopes` | `runtime, development, unknown` | The scopes of the dependencies that the dependency review examines. |
-| `osv` | `true` | The job `osv-scanner`. |
+| `osv` | `true` | The scan `osv-scanner`. |
 | `osv-lockfile` | (empty) | The lockfiles of osv-scanner, separated by spaces. Empty scans each lockfile of the repository. |
-| `codeql` | `true` | The job `codeql`. |
-| `codeql-languages` | `javascript-typescript,actions` | The CodeQL languages. The job skips a language with no files in the repository. |
+| `codeql` | `true` | The scan `codeql`. |
+| `codeql-languages` | `javascript-typescript,actions` | The CodeQL languages. The scan skips a language with no files in the repository. |
 | `codeql-build-mode` | `none` | The CodeQL build mode. |
-| `timeout-minutes` | `30` | The time limit of the jobs `osv-scanner` and `codeql`. |
 
-- The job `dependency-review` gets `contents: read`. The jobs `osv-scanner` and `codeql` also get `security-events: write` for the upload and `actions: read`.
-- No job installs or starts the code of the repository.
+- The action checks out the repository. On a pull request, the checkout is the merge commit, with its base as the first parent.
+- `security-events: write` lets the scans upload the results. `actions: read` lets CodeQL and the upload read the run in a private repository. The dependency review needs only `contents: read`.
+- No step installs or starts the code of the repository.
 - The severity of a finding is its CVSS score or its CodeQL `security-severity`. `high` is 7.0 or more, and `critical` is 9.0 or more.
 - A file `osv-scanner.toml` next to a lockfile tells osv-scanner which vulnerabilities to ignore.
 - A repository with the default setup of code scanning sets `codeql: false`, because the default setup refuses the results of a CodeQL workflow.
-- CodeQL in a private repository needs GitHub Advanced Security. Thus only the public repositories use this workflow.
+- CodeQL in a private repository needs GitHub Advanced Security. Thus only the public repositories use this action.
+- The last step starts `verdict.ts` with the Node of the runner. Node 22.18 or later runs TypeScript with no build, and the `ubuntu-latest` image has such a Node.
+
+### The old workflow
+
+`reusable-security.yml` is deprecated. It has the same scans in three jobs, and a repository that pins it continues to work. To change to the action, replace the jobs `security` and `security-ok` of the caller with the one job above. Keep the job name `Security OK`, because the ruleset needs that check. A later release of the template removes the workflow.
 
 ## Pins and Renovate
 
@@ -413,7 +433,7 @@ uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<full commit SHA>
 The workflows of the template call the shared workflows and actions by a local path, for example `./.github/workflows/reusable-ci.yml`. Thus each pull request of the template tests them:
 
 - `ci.yml` tests `reusable-ci.yml`.
-- `security.yml` tests `reusable-security.yml`.
+- `security.yml` tests the action `security-scan`. The tests of `scripts/workflows/security-scan.test.ts` examine the last step of the action, with no scan.
 - `actions-test.yml` tests the actions, `reusable-pages.yml` and the release workflows, with `dry-run`. It publishes nothing. On a pull request, it sets the input `require-main` of the release build to `false`.
 - `ai-review.yml` tests `reusable-ai-review.yml`, and `codex-review.yml` tests `reusable-codex-review.yml`. Without its API key, a review stops at once with a note.
 - The tests of `scripts/ai-review/` examine the request, the redaction and the post of the second review, with no network.

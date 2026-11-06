@@ -496,7 +496,7 @@ Two functions read a measure from GitHub at the build. Each result has the `at` 
 | Function | Measure |
 | --- | --- |
 | `githubGreenRun({ owner, repo, token, workflow })` | The scheduled runs of a workflow that passed in a row, from the newest run |
-| `githubReleaseLag({ owner, repo, token, tagPrefix, branch })` | The age in days of the oldest commit of the branch after the newest release of the tag prefix. Drafts and pre-releases do not count. |
+| `githubReleaseLag({ owner, repo, token, tagPrefix, branch })` | The age in days of the oldest commit of the branch that is not in the newest release of the tag prefix. Drafts and pre-releases do not count. |
 | `githubRunProgress({ owner, repo, token, runId })` | The state of one run and the time of the newest end of its jobs. The rule `hold` of the freshness gate reads it. |
 
 ## The shell of a site

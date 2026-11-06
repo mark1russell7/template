@@ -1,3 +1,7 @@
+# DEPRECATED: use the action .github/actions/security-scan. It runs the same scans in one job, so a run asks for one
+# runner, not four (CI.md, "Security"). This workflow stays for the repositories that pin it. A later release of
+# the template removes it.
+#
 # The shared security scans of the repositories of mark1russell7 (CI.md).
 #
 # The workflow has three jobs. On a pull request, a job fails only for a new finding at or above the
@@ -26,7 +30,6 @@
 #         security-events: write
 #         actions: read
 #
-# The template itself calls it by the local path, so each pull request of the template tests it.
 name: Reusable security
 
 on:
