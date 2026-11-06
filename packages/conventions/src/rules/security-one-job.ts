@@ -38,7 +38,11 @@ function trimmedEnd(lines: readonly string[], start: number): number {
 }
 
 /** This function gives the id of the job of the line `at`. */
-const idOf = (line: string): string => line.trim().replace(/:.*$/, "").replace(/^["']|["']$/g, "");
+const idOf = (line: string): string => {
+  const text = line.trim();
+  const colon = text.indexOf(":");
+  return (colon < 0 ? text : text.slice(0, colon)).replace(/^["']|["']$/g, "");
+};
 
 /** This function gives the jobs of a workflow that use the shared workflow `reusable-security.yml`. */
 export function securityCallers(text: string): SecurityCaller[] {
@@ -67,8 +71,8 @@ function needsOf(lines: readonly string[], job: number): string[] {
 }
 
 /**
- * This function gives the text with one job in place of the job of the shared workflow and its summary job, or the reason
- * that a person must change it. The new job keeps the id of the summary job and the name `Security OK`, which the ruleset
+ * This function puts one job in place of the job of the shared workflow and its summary job. If it cannot, it gives the
+ * reason that a person must change the file. The new job keeps the id of the summary job and the name `Security OK`, which the ruleset
  * needs. It gives the inputs of the caller to the action, and `timeout-minutes` to the job.
  */
 export function withOneJob(text: string, commit: string = SECURITY_SCAN_COMMIT): { text: string } | { reason: string } {
