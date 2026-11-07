@@ -575,6 +575,7 @@ The explorer obeys these rules:
 
 - **A bad record.** The explorer reads a record only through `parseResponseRecord`. It shows each fault with its path, and it does not throw.
 - **Conditions.** A dimension with `when` has its parent at a level inside `when`. The controls disable a choice that a view refuses, and they tell why.
+- **Held values that do not apply.** A held dimension whose parent is at an other level goes in one closed fold, after the held values that change the view. The fold tells their count, and it stays open or closed when the view changes.
 - **The band.** The band shows `low` to `high`. It fades with the distance from the nearest measured point.
 - **The time of a surface.** The field `nearest` reads each point at each place. So `planSteps` bounds the grid from the point count before the call. After a surface that passes the budget, `nextStepsCap` makes the next grid smaller.
 - **A table model.** A table model has no smooth surface, so the view shows cells.

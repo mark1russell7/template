@@ -507,6 +507,8 @@ function mountRecord(host: HTMLElement, record: ResponseRecord, options: Explore
   let frame = 0;
   let drawnWidth = 0;
   let view: ExplorerView | undefined;
+  // The fold of the held values that do not apply stays open or closed when the controls draw again.
+  let idleOpen = false;
 
   const controls = h("div", { class: "rx-controls" });
   const panels = h("div", { class: "rx-panels" });
@@ -595,7 +597,7 @@ function mountRecord(host: HTMLElement, record: ResponseRecord, options: Explore
       dimensionSelect("Up", "y", axisChoices(record, state, "y"), state.y, "None (a curve)", (id) => update(setAxis(record, state, "y", id))),
       dimensionSelect("Panels", "facet", facetChoices(record, state), state.facet, "One panel", (id) => update(setFacet(record, state, id))),
     );
-    const holds = holdControls(record, state).map((control) => {
+    const holdOf = (control: HoldControl): HTMLElement => {
       if (control.kind === "stops") {
         return stopSlider(control, `hold:${control.id}`, (value) => {
           state = setHold(record, state, control.id, value);
@@ -604,8 +606,15 @@ function mountRecord(host: HTMLElement, record: ResponseRecord, options: Explore
       }
       const levels = control.options.map((option) => ({ text: option.text, checked: option.value === control.value, disabled: option.disabled, reason: option.reason, choose: () => update(setHold(record, state, control.id, option.value)) }));
       return levelGroup(control.label, `hold:${control.id}`, `rx-${mount}-${control.id}`, levels, control.note);
+    };
+    // A held value that does not apply at the level of its parent goes in one closed fold, so the visitor sees first the values that change the view.
+    const holds = holdControls(record, state);
+    const idle = holds.filter((control) => !control.applies);
+    const fold = idle.length === 0 ? null : h("details", { class: "rx-idle", open: idleOpen }, h("summary", {}, `Held values that do not apply (${idle.length})`), h("div", { class: "rx-idle-list" }, ...idle.map(holdOf)));
+    fold?.addEventListener("toggle", () => {
+      idleOpen = fold.open;
     });
-    const held = holds.length === 0 ? [] : [h("p", { class: "rx-section" }, "Held values"), ...holds];
+    const held = holds.length === 0 ? [] : [h("p", { class: "rx-section" }, "Held values"), ...holds.filter((control) => control.applies).map(holdOf), ...(fold === null ? [] : [fold])];
     controls.replaceChildren(measures, axes, ...held);
     if (focused !== undefined) {
       const keyed = [...controls.querySelectorAll<HTMLElement>("[data-key]")].find((el) => el.dataset["key"] === focused);
