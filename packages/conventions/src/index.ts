@@ -58,6 +58,7 @@ export {
   RULES,
   runnerBudget,
   securityOneJob,
+  sharedCi,
   sourceMain,
   testsRequired,
   trustPolicy,
@@ -81,6 +82,7 @@ export { GITHUB_YAML, yamlFaults, type YamlFault } from "./rules/workflow-parses
 export { PAGES_WORKFLOWS, pagesCalls, type PagesCall } from "./rules/pages-site.ts";
 export { ACTIONS_COMMIT, convertGate, prPathFilters, summaryName, type PathFilter } from "./rules/gate-trigger.ts";
 export { SECURITY_SCAN_COMMIT, SECURITY_SCAN_INPUTS, SECURITY_TIMEOUT_MINUTES, securityCallers, withOneJob, type SecurityCaller } from "./rules/security-one-job.ts";
+export { SHARED_ACTIONS, SHARED_CI, SHARED_WORKFLOWS, callsSharedCi } from "./rules/shared-ci.ts";
 export { isGitSpecifier, isPinned } from "./rules/pinned-git-deps.ts";
 export { isSourcePath, pathsOf } from "./rules/source-main.ts";
 export { STRICT_OPTIONS } from "./rules/cue-preset.ts";

@@ -52,6 +52,9 @@ type RuleResult: build/index.d.ts#RuleResult
 SECURITY_SCAN_COMMIT: build/index.d.ts#SECURITY_SCAN_COMMIT
 SECURITY_SCAN_INPUTS: build/index.d.ts#SECURITY_SCAN_INPUTS
 SECURITY_TIMEOUT_MINUTES: build/index.d.ts#SECURITY_TIMEOUT_MINUTES
+SHARED_ACTIONS: build/index.d.ts#SHARED_ACTIONS
+SHARED_CI: build/index.d.ts#SHARED_CI
+SHARED_WORKFLOWS: build/index.d.ts#SHARED_WORKFLOWS
 SHIPPED_FIELDS: build/index.d.ts#SHIPPED_FIELDS
 STRICT_OPTIONS: build/index.d.ts#STRICT_OPTIONS
 type SecurityCaller: build/index.d.ts#SecurityCaller
@@ -67,6 +70,7 @@ annotations: build/index.d.ts#annotations
 apiReportScript: build/index.d.ts#apiReportScript
 authorOf: build/index.d.ts#authorOf
 blockHash: build/index.d.ts#blockHash
+callsSharedCi: build/index.d.ts#callsSharedCi
 changelogSection: build/index.d.ts#changelogSection
 cleanPath: build/index.d.ts#cleanPath
 codePackages: build/index.d.ts#codePackages
@@ -147,6 +151,7 @@ scriptsOf: build/index.d.ts#scriptsOf
 securityCallers: build/index.d.ts#securityCallers
 securityOneJob: build/index.d.ts#securityOneJob
 setVersions: build/index.d.ts#setVersions
+sharedCi: build/index.d.ts#sharedCi
 sharedDocsRule: build/index.d.ts#sharedDocsRule
 signaturesOf: build/index.d.ts#signaturesOf
 sourceMain: build/index.d.ts#sourceMain
@@ -419,6 +424,15 @@ export declare const SECURITY_SCAN_INPUTS: readonly string[];
 ### build/index.d.ts#SECURITY_TIMEOUT_MINUTES
 export declare const SECURITY_TIMEOUT_MINUTES = 30;
 
+### build/index.d.ts#SHARED_ACTIONS
+export declare const SHARED_ACTIONS: readonly string[];
+
+### build/index.d.ts#SHARED_CI
+export declare const SHARED_CI = "mark1russell7/template/.github/workflows/reusable-ci.yml";
+
+### build/index.d.ts#SHARED_WORKFLOWS
+export declare const SHARED_WORKFLOWS: readonly string[];
+
 ### build/index.d.ts#SHIPPED_FIELDS
 export declare const SHIPPED_FIELDS: readonly string[];
 
@@ -491,6 +505,9 @@ export declare function authorOf(author: unknown): string | undefined;
 
 ### build/index.d.ts#blockHash
 export declare const blockHash: (body: readonly string[]) => string;
+
+### build/index.d.ts#callsSharedCi
+export declare function callsSharedCi(file: string, text: string): boolean;
 
 ### build/index.d.ts#changelogSection
 export declare function changelogSection(markdown: string, version: string, name: string): string | undefined;
@@ -735,6 +752,9 @@ export declare const securityOneJob: Rule;
 
 ### build/index.d.ts#setVersions
 export declare function setVersions(context: RuleContext, from: string, to: string): string[] | undefined;
+
+### build/index.d.ts#sharedCi
+export declare const sharedCi: Rule;
 
 ### build/index.d.ts#sharedDocsRule
 export declare function sharedDocsRule(fetchHomes?: HomeFetch): Rule;
