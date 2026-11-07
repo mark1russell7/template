@@ -219,6 +219,20 @@ For a monorepo with one version for all its packages, give `--group` and the nam
 
 The option `from` leaves out older sections. The option `fixedGroup` passes a section with no change or with only PATCH changes, because its raise comes from another package of the group.
 
+### The changelog gate
+
+The command `build` reads each changelog with `changelogReading`. A repository puts the oldest version of its gate in its root `package.json`:
+
+```json
+{ "sitePages": { "changelogFrom": "0.1.0" } }
+```
+
+- With the field, a fault in a section of that version or newer stops the build with code 1. The error names each section and its fault.
+- Without the field, the build gives a warning with the count of the sections with a fault, and it does not fail.
+- In both cases, `status.json` holds the reading in the field `changelog`, and the Status page shows the count. A reader of all the sites can thus list each repository, also a repository with no gate.
+
+To join the gate, a repository adds the field with no change to its code. Older sections can follow older habits, so the repository picks the first version that has no fault.
+
 `sectionMarksBreak(section)` tells if the text of a section marks a break. The marks are the heading `### Breaking` and the words "has breaking changes". A page that counts breaks uses this function.
 
 A repository can have no changelog and no GitHub release. Then each npm version of each package of `--packages` is a release:

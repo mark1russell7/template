@@ -8,7 +8,8 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { headCommit, originRepository } from "./data/git.ts";
 import { KPI_FILE, KpiError, readKpi } from "./data/kpi.ts";
-import { readReleases, ReleaseDataError } from "./data/releases.ts";
+import { changelogGateProblem, changelogReading } from "./data/changelog.ts";
+import { readChangelogFrom, readChangelogs, readReleases, ReleaseDataError } from "./data/releases.ts";
 import { readStatusBoard, RoadmapParseError } from "./data/status.ts";
 import type { Release, StatusBoardData } from "./data/types.ts";
 import { plural } from "./render/html.ts";
@@ -81,6 +82,13 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
   const out = isAbsolute(options.out) ? options.out : resolve(repoDir, options.out);
   const fetcher = options.fetch ? { fetch: options.fetch } : {};
 
+  const changelogs = readChangelogs(repoDir, options.changesets);
+  const reading = changelogs.length === 0 ? undefined : changelogReading(changelogs, readChangelogFrom(repoDir));
+  const problem = reading === undefined ? null : changelogGateProblem(reading);
+  if (problem !== null) throw new ReleaseDataError(problem);
+  if (reading !== undefined && reading.from === null && reading.faults.length > 0) {
+    warn(`${reading.faults.length} of ${reading.sections} version sections of the changelogs break the rules of a changelog section. The build does not fail, because package.json has no field sitePages.changelogFrom.`);
+  }
   const releases = await readReleases({
     repoDir,
     repository,
@@ -96,7 +104,7 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
   const kpiPath = join(out, KPI_FILE);
   const kpi = existsSync(kpiPath) ? readKpi(readFileSync(kpiPath, "utf8"), Date.parse(now)) : undefined;
   const board = await readStatusBoard({ repoDir, roadmap: options.roadmap ?? null, owner, repo, token: options.token, commit, generatedAt: now, ...fetcher });
-  const status: StatusBoardData = kpi === undefined ? board : { ...board, kpi };
+  const status: StatusBoardData = { ...board, ...(kpi === undefined ? {} : { kpi }), ...(reading === undefined ? {} : { changelog: reading }) };
   if (!status.github.available) warn(`the status page has no GitHub data: ${status.github.reason ?? "no reason"}.`);
 
   const files: string[] = [];

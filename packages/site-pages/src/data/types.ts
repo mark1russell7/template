@@ -166,6 +166,30 @@ export interface KpiFile {
   engines?: KpiEngine[];
 }
 
+/** One fault of a version section, with the changelog file that has it. */
+export interface ChangelogFileFault {
+  /** The path of the changelog file in the repository, with `/`. */
+  file: string;
+  version: string;
+  /** The kind of the fault, as `changelogFaults` gives it. */
+  kind: "no-statement" | "version-kind-only" | "break-unmarked" | "mark-without-break";
+  /** The first statement of the section, or an empty text when it has none. */
+  statement: string;
+}
+
+/** The reading of the changelogs of a repository against the rules of a version section. */
+export interface ChangelogReading {
+  /**
+   * The oldest version that the gate examines: the field `sitePages.changelogFrom` of the root
+   * `package.json`. It is null when the repository has no such field. Then the reading only reports.
+   */
+  from: string | null;
+  /** The count of the version sections of the changelogs that the reading examined. */
+  sections: number;
+  /** The faults of those sections, in the order of the files. */
+  faults: ChangelogFileFault[];
+}
+
 /** The data of the status page, as `status.json` holds it. */
 export interface StatusBoardData {
   /** The ISO time of the build that read the data. */
@@ -181,4 +205,6 @@ export interface StatusBoardData {
   github: { available: boolean; reason?: string; totals?: OpenWorkTotals };
   /** The content of `kpi.json`, when the site has that file. */
   kpi?: KpiFile;
+  /** The reading of the changelogs, when the repository has a changelog. */
+  changelog?: ChangelogReading;
 }

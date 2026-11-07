@@ -4,6 +4,8 @@
  * change is one `- <short sha>: <text>` entry. The next lines of an entry have an indent.
  */
 
+import type { ChangelogFileFault, ChangelogReading } from "./types.ts";
+
 /** One entry of a changelog section or of a release text. */
 export interface ChangelogEntry {
   /** The short SHA of the commit, or null for an entry without a commit. */
@@ -268,6 +270,38 @@ export function changelogFaults(markdown: string, options: ChangelogFaultOptions
     }
   }
   return faults;
+}
+
+/**
+ * This function reads the changelog files of a repository against the rules of a version section.
+ * With a `from` version, it examines the sections of that version and newer. With null, it examines all the sections.
+ *
+ * @throws RangeError when `from` is not a version
+ */
+export function changelogReading(changelogs: readonly { file: string; markdown: string }[], from: string | null): ChangelogReading {
+  const core = from === null ? null : versionCore(from);
+  if (from !== null && core === null) throw new RangeError(`"${from}" is not a version.`);
+  let sections = 0;
+  const faults: ChangelogFileFault[] = [];
+  for (const { file, markdown } of changelogs) {
+    for (const section of versionSections(markdown)) {
+      const own = versionCore(section.version);
+      if (own !== null && (core === null || compareCores(own, core) >= 0)) sections += 1;
+    }
+    for (const fault of changelogFaults(markdown, from === null ? {} : { from })) faults.push({ file, ...fault });
+  }
+  return { from, sections, faults };
+}
+
+/**
+ * This function gives the problem of a changelog reading for the build, or null. A reading with a
+ * `from` version and a fault fails the build. A reading with no `from` version only reports.
+ */
+export function changelogGateProblem(reading: ChangelogReading, limit = 20): string | null {
+  if (reading.from === null || reading.faults.length === 0) return null;
+  const lines = reading.faults.slice(0, limit).map((fault) => `  ${fault.file} ${fault.version}: ${fault.kind}${fault.statement === "" ? "" : ` ("${fault.statement.slice(0, 80)}")`}`);
+  const more = reading.faults.length > limit ? [`  and ${reading.faults.length - limit} more`] : [];
+  return [`${reading.faults.length} of ${reading.sections} version sections from ${reading.from} break the rules of a changelog section:`, ...lines, ...more].join("\n");
 }
 
 /**

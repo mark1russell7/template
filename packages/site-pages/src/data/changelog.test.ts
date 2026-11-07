@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { changelogFaults, sectionMarksBreak } from "./changelog.js";
+import { changelogFaults, changelogGateProblem, changelogReading, sectionMarksBreak } from "./changelog.js";
 
 const FIRST = "## 0.1.0\n\nThe first release.\n";
 
@@ -142,5 +142,38 @@ describe("changelogFaults", () => {
 
   it("reads a file with no section", () => {
     expect(changelogFaults("# Changelog\n")).toEqual([]);
+  });
+});
+
+describe("changelogReading and changelogGateProblem", () => {
+  const TEXT = ["## 0.2.0", "", "### Minor Changes", "", "- abc1234: A new option.", "", "## 0.1.1", "", "### Patch Changes", "", "- abc1235: A fix.", "", FIRST].join("\n");
+  const FILES = [{ file: "packages/a/CHANGELOG.md", markdown: TEXT }];
+
+  it("reads all the sections with no from version, and only reports", () => {
+    const reading = changelogReading(FILES, null);
+    expect(reading).toEqual({ from: null, sections: 3, faults: [{ file: "packages/a/CHANGELOG.md", version: "0.2.0", kind: "break-unmarked", statement: "A new option." }] });
+    expect(changelogGateProblem(reading)).toBeNull();
+  });
+
+  it("reads the sections from the from version, and gives the problem of a fault", () => {
+    const reading = changelogReading(FILES, "0.1.1");
+    expect(reading.sections).toBe(2);
+    expect(changelogGateProblem(reading)).toBe('1 of 2 version sections from 0.1.1 break the rules of a changelog section:\n  packages/a/CHANGELOG.md 0.2.0: break-unmarked ("A new option.")');
+    expect(changelogReading(FILES, "0.2.1")).toEqual({ from: "0.2.1", sections: 0, faults: [] });
+    expect(changelogGateProblem(changelogReading(FILES, "0.2.1"))).toBeNull();
+  });
+
+  it("counts the faults past the limit of the problem", () => {
+    const many = Array.from({ length: 3 }, (_, index) => ({ file: `p${index}/CHANGELOG.md`, markdown: TEXT }));
+    expect(changelogGateProblem(changelogReading(many, "0.1.0"), 2)?.split("\n")).toEqual([
+      "3 of 9 version sections from 0.1.0 break the rules of a changelog section:",
+      '  p0/CHANGELOG.md 0.2.0: break-unmarked ("A new option.")',
+      '  p1/CHANGELOG.md 0.2.0: break-unmarked ("A new option.")',
+      "  and 1 more",
+    ]);
+  });
+
+  it("refuses a from version that is not a version", () => {
+    expect(() => changelogReading(FILES, "next")).toThrow(RangeError);
   });
 });
