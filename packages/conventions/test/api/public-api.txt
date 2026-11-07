@@ -52,6 +52,7 @@ type RuleResult: build/index.d.ts#RuleResult
 SECURITY_SCAN_COMMIT: build/index.d.ts#SECURITY_SCAN_COMMIT
 SECURITY_SCAN_INPUTS: build/index.d.ts#SECURITY_SCAN_INPUTS
 SECURITY_TIMEOUT_MINUTES: build/index.d.ts#SECURITY_TIMEOUT_MINUTES
+SERVICE_PACKAGE: build/index.d.ts#SERVICE_PACKAGE
 SHARED_ACTIONS: build/index.d.ts#SHARED_ACTIONS
 SHARED_CI: build/index.d.ts#SHARED_CI
 SHARED_WORKFLOWS: build/index.d.ts#SHARED_WORKFLOWS
@@ -141,6 +142,7 @@ repositoryOfRemote: build/index.d.ts#repositoryOfRemote
 requiredScripts: build/index.d.ts#requiredScripts
 roadmapOfLine: build/index.d.ts#roadmapOfLine
 roadmapParses: build/index.d.ts#roadmapParses
+runCalls: build/index.d.ts#runCalls
 runChecks: build/index.d.ts#runChecks
 runCli: build/index.d.ts#runCli
 runFix: build/index.d.ts#runFix
@@ -150,6 +152,7 @@ scheduleMinute: build/index.d.ts#scheduleMinute
 scriptsOf: build/index.d.ts#scriptsOf
 securityCallers: build/index.d.ts#securityCallers
 securityOneJob: build/index.d.ts#securityOneJob
+serviceRunMain: build/index.d.ts#serviceRunMain
 setVersions: build/index.d.ts#setVersions
 sharedCi: build/index.d.ts#sharedCi
 sharedDocsRule: build/index.d.ts#sharedDocsRule
@@ -423,6 +426,9 @@ export declare const SECURITY_SCAN_INPUTS: readonly string[];
 
 ### build/index.d.ts#SECURITY_TIMEOUT_MINUTES
 export declare const SECURITY_TIMEOUT_MINUTES = 30;
+
+### build/index.d.ts#SERVICE_PACKAGE
+export declare const SERVICE_PACKAGE = "@mark1russell7/service";
 
 ### build/index.d.ts#SHARED_ACTIONS
 export declare const SHARED_ACTIONS: readonly string[];
@@ -723,6 +729,9 @@ export declare function roadmapOfLine(line: string): string | undefined;
 ### build/index.d.ts#roadmapParses
 export declare const roadmapParses: Rule;
 
+### build/index.d.ts#runCalls
+export declare function runCalls(text: string): number[];
+
 ### build/index.d.ts#runChecks
 export declare function runChecks(options: CheckOptions): CheckResult;
 
@@ -749,6 +758,9 @@ export declare function securityCallers(text: string): SecurityCaller[];
 
 ### build/index.d.ts#securityOneJob
 export declare const securityOneJob: Rule;
+
+### build/index.d.ts#serviceRunMain
+export declare const serviceRunMain: Rule;
 
 ### build/index.d.ts#setVersions
 export declare function setVersions(context: RuleContext, from: string, to: string): string[] | undefined;
