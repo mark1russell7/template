@@ -109,11 +109,11 @@ export const HOMES: readonly Home[] = [
   {
     area: "service",
     title: "Services and servers",
-    covers: "a service declared as data, its lifecycle and checks, jittered loops, clocks, backoff and retries (service); the HTTP, WebSocket and MCP host of procedures (peer)",
+    covers: "a service declared as data, its lifecycle and checks, jittered loops, clocks, backoff and retries, and concurrency on its clock: channels, select, tickers, time-outs, worker pools, pipelines, fan-in and fan-out (service); the HTTP, WebSocket and MCP host of procedures (peer)",
     packages: ["@mark1russell7/service", "@procedures/peer"],
     repo: "mark1russell7/systems",
     state: "published",
-    words: ["server", "http server", "lifecycle", "shutdown", "health", "loop", "clock", "backoff", "retry", "jitter", "websocket"],
+    words: ["server", "http server", "lifecycle", "shutdown", "health", "loop", "clock", "backoff", "retry", "jitter", "websocket", "channel", "select", "ticker", "worker pool", "pipeline", "fan-in", "fan-out", "concurrency"],
     signatures: ["exponentialBackoff", "backoffDelay", "withRetry", "retryWithBackoff", "withJitter"],
     note: "A server package is made with the template preset service. @procedures/peer is in mark1russell7/client.",
   },
@@ -150,11 +150,11 @@ export const HOMES: readonly Home[] = [
   {
     area: "data-structures",
     title: "Collections and graphs of dependencies",
-    covers: "lists, deques, maps, trees and heaps; DAGs, cycles, topological order. @procedures/collections and @procedures/dag are the same code as procedures: new code goes to @mark1russell7/collections",
+    covers: "lists, deques, maps, trees and heaps; DAGs, cycles, topological order; the typed event emitter that evented collections use. @procedures/collections and @procedures/dag are the same code as procedures: new code goes to @mark1russell7/collections",
     packages: ["@mark1russell7/collections", "@procedures/collections", "@procedures/dag"],
     repo: "mark1russell7/collections",
     state: "published",
-    words: ["list", "queue", "deque", "heap", "tree map", "graph", "dag", "topological", "cycle"],
+    words: ["list", "queue", "deque", "heap", "tree map", "graph", "dag", "topological", "cycle", "event emitter", "emitter", "listener", "subscribe", "unsubscribe"],
     signatures: ["topoSort", "topologicalSort", "toposort", "topoOrder", "detectCycles?", "findCycles?"],
   },
   {
