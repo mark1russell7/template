@@ -51,6 +51,7 @@ With `coverage: true`, the action `coverage` starts `vitest run` with coverage i
 - The summary of the job gets a table: the statements, branches, functions and lines of each package.
 - The artifact `coverage` has `coverage-summary.json` and `coverage-final.json` of each package.
 - A package with no summary fails the step. Its tests failed, or it does not have `@vitest/coverage-v8`.
+- A package whose tests fail also fails the step, after the summary. The thresholds of its Vitest config can cause this. The message names the package and the exit code.
 - With `coverage-floor`, a package with a measure under the floor fails the step. The message names the package and the measure.
 
 Each package with Vitest needs `@vitest/coverage-v8` in its `devDependencies`, with the version of its Vitest. The configuration of the coverage in `vitest.config.ts` (for example `include` and `exclude`) stays. The action sets only the reporters and the folder `coverage`.
@@ -292,7 +293,9 @@ The lane file `mutation.json` of the repository names the packages, their globs,
 
 The job `plan` checks the disabled mutants (`rigor-mutation disables`) and gives the selections. The job `mutate` starts Stryker for each selection on its own runner. Then it applies the gate of the package. A selection under its gate fails, and the message names it. The artifact `mutation-<selection>` has the HTML and JSON reports.
 
-A mutation run is long. Thus a repository starts it from a scheduled workflow, not from each pull request. The workflow states its size in its `env` (the fleet watch compares the real run with it):
+Stryker stops after `stop-minutes`, before the time limit of the job. Then the job writes "no score" to the summary, uploads the report and fails. The job `gate` starts after each `mutate` job, also after a failure. It reads the report of each selection and applies the gate again. A selection with no report fails, and the gate names it.
+
+A mutation run is long. Thus a repository starts it from a scheduled workflow, not from each pull request. The workflow states its size in its `env`. A check compares the real run with these values:
 
 ```yaml
 on:
@@ -316,6 +319,7 @@ jobs:
 | `lane` | `mutation.json` | The lane file. |
 | `concurrency` | `4` | The test processes of Stryker on each runner. |
 | `timeout-minutes` | `120` | The time limit of each selection. Divide a package into parts when one selection needs more. |
+| `stop-minutes` | `0` | The time after which Stryker stops. `0` gives `timeout-minutes` minus 10. |
 | `node-version` | `26` | The Node.js version. |
 | `working-directory` | `.` | The folder of the root `package.json`. |
 

@@ -1,7 +1,8 @@
 # The shared mutation tests of the repositories of mark1russell7 (CI.md), with Stryker and
 # @mark1russell7/rigor-mutation. The lane file of the repository (mutation.json) names the packages, their
 # parts and their gates. The job plan gives the selections, and the job mutate starts Stryker for each selection
-# on its own runner. Each selection fails when its score is under the gate of its package.
+# on its own runner. Each selection fails when its score is under the gate of its package. The job gate then reads
+# the report of each selection, so a selection with no report also fails by name.
 #
 # The repository has @mark1russell7/rigor-mutation, @stryker-mutator/core and @stryker-mutator/vitest-runner
 # (10.1.0 or later) in its devDependencies. A repository calls it from its own scheduled workflow, and states the
@@ -41,6 +42,12 @@ on:
         description: The time limit of each selection.
         type: number
         default: 120
+      stop-minutes:
+        description: >-
+          The time after which Stryker stops, so that the job can still write the summary and upload the report. 0
+          gives timeout-minutes minus 10. A selection that Stryker stops has no score, and it fails.
+        type: number
+        default: 0
       node-version:
         description: The Node.js version.
         type: string
@@ -134,14 +141,32 @@ jobs:
         id: stryker
         env:
           CONCURRENCY: ${{ inputs.concurrency }}
+          STOP_MINUTES: ${{ inputs.stop-minutes }}
+          TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
         run: |
+          stop=$STOP_MINUTES
+          if [ "$stop" -eq 0 ]; then stop=$((TIMEOUT_MINUTES - 10)); fi
+          if [ "$stop" -le 0 ]; then
+            echo "::error::stop-minutes is $stop. Give a positive stop-minutes, or a timeout-minutes above 10."
+            exit 1
+          fi
           dir=$(pnpm exec rigor-mutation dir "$SELECTION" --lane "$LANE")
           echo "dir=$dir" >> "$GITHUB_OUTPUT"
           pnpm exec rigor-mutation config "$SELECTION" --lane "$LANE" --concurrency "$CONCURRENCY" --out "$RUNNER_TEMP/stryker.config.json"
           # Stryker starts in the folder of the package. The bins of the root are also on the path.
           root_bin=$(pwd)/node_modules/.bin
           cd "$dir"
-          PATH="$root_bin:$PATH" pnpm exec stryker run "$RUNNER_TEMP/stryker.config.json"
+          # timeout stops Stryker before the time limit of the job, so the next steps still start. It sends TERM to the
+          # group of processes, and KILL one minute later.
+          set +e
+          PATH="$root_bin:$PATH" timeout --kill-after=1m "${stop}m" pnpm exec stryker run "$RUNNER_TEMP/stryker.config.json"
+          code=$?
+          set -e
+          if [ "$code" -eq 124 ] || [ "$code" -eq 137 ]; then
+            echo "::error::$SELECTION: Stryker stopped after $stop minutes, no score."
+            echo "- $SELECTION: Stryker stopped after $stop minutes, no score." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$code"
       - name: Score
         run: pnpm exec rigor-mutation scores "$SELECTION" --lane "$LANE" --summary "$GITHUB_STEP_SUMMARY"
       - name: Mutation report
@@ -152,3 +177,48 @@ jobs:
           path: ${{ inputs.working-directory }}/${{ steps.stryker.outputs.dir }}/reports/mutation/
           if-no-files-found: warn
           retention-days: 30
+
+  # The gate reads the report of each selection again. A runner that stopped, failed to start or uploaded no report
+  # has no score, and the gate names it. Thus one check tells if each selection has a score at its gate.
+  gate:
+    needs: [plan, mutate]
+    if: ${{ !cancelled() && needs.plan.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: ${{ inputs.working-directory }}/package.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: pnpm
+          cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      # Each artifact goes into its own folder: <path>/mutation-<selection>/.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: mutation-*
+          path: ${{ runner.temp }}/mutation
+      - name: Gate
+        env:
+          LANE: ${{ inputs.lane }}
+          SELECTIONS: ${{ needs.plan.outputs.selections }}
+          REPORTS: ${{ runner.temp }}/mutation
+        run: |
+          { echo "### Mutation gate"; echo; } >> "$GITHUB_STEP_SUMMARY"
+          status=0
+          for name in $(node -e 'for (const s of JSON.parse(process.argv[1])) console.log(s)' "$SELECTIONS"); do
+            # A selection with no report fails: "scores" names the missing file.
+            if out=$(pnpm exec rigor-mutation scores "$name" --lane "$LANE" --report "$REPORTS/mutation-$name/mutation.json"); then :; else status=1; fi
+            echo "$out"
+            echo "- $(head -n 1 <<< "$out")" >> "$GITHUB_STEP_SUMMARY"
+          done
+          exit "$status"

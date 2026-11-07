@@ -25,13 +25,22 @@ runs:
           echo "::notice::No package has a test script that starts Vitest."
           exit 0
         fi
+        failed=()
         for dir in "${dirs[@]}"; do
           echo "::group::coverage of $dir"
-          # A failure of the tests gives no summary, and the summary step below names the package.
-          (cd "$dir" && pnpm exec vitest run --coverage.enabled --coverage.reporter=json-summary --coverage.reporter=json --coverage.reporter=text-summary --coverage.reportsDirectory=coverage) || true
+          # The step continues after a failure, so the summary has each package. The thresholds of the Vitest config
+          # of a package also fail its run. The step fails after the summary, and names each package that failed.
+          if (cd "$dir" && pnpm exec vitest run --coverage.enabled --coverage.reporter=json-summary --coverage.reporter=json --coverage.reporter=text-summary --coverage.reportsDirectory=coverage); then :; else
+            code=$?
+            failed+=("$dir (exit code $code)")
+          fi
           echo "::endgroup::"
         done
         node "$SCRIPT" summary "$FLOOR" "${dirs[@]}" >> "$GITHUB_STEP_SUMMARY"
+        if [ ${#failed[@]} -gt 0 ]; then
+          for f in "${failed[@]}"; do echo "::error::The tests with coverage failed in $f."; done
+          exit 1
+        fi
     - name: Coverage reports
       if: always()
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
