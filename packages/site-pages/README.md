@@ -132,7 +132,11 @@ check("the linter finds a word", await until(() => $$(".finding").length === 1),
 
 For a TypeScript probe, the check removes the types and the line `export {};` before it runs the probe. Thus the typecheck of the site examines the probe, and the site needs no build step for it. Each line stays at its position, so the line of an error is the line of the source. Declare the functions of the table with `declare const`, and add `export {};` at the end, so the file is a module. `probeScript` does the same operation for a script of your own.
 
-The check runs the probe on the first page, in the first scheme, at each width. The folder of `--shots` gets a screenshot of each view, `report.json` and `summary.md`. The exit code is 0 when each view passes, 1 when a view fails, and 2 for an incorrect command line.
+The check runs the probe on the first page, in the first scheme, at each width.
+
+To probe other pages, give `--page-probe <page>=<file>` one time for each page, for example `--page-probe /structures/=structures-probe.ts`. A page with no probe has none. The first page takes `--probe` or `--page-probe`, not both. In `checkSite`, the option `probes` is the same map, from a page to the code of its probe.
+
+The folder of `--shots` gets a screenshot of each view, `report.json` and `summary.md`. The exit code is 0 when each view passes, 1 when a view fails, and 2 for an incorrect command line.
 
 The check finds a browser in this order: `--browser`, `$SITE_CHECK_BROWSER`, the newest Chromium of Playwright, and then Chrome or Edge. The folder `src/check` imports only Node.js. Thus Node.js 22.18 or later can start `src/check/main.ts` with no install. The workflow `reusable-pages.yml` of the template uses it this way.
 
@@ -497,7 +501,7 @@ Two functions read a measure from GitHub at the build. Each result has the `at` 
 | Function | Measure |
 | --- | --- |
 | `githubGreenRun({ owner, repo, token, workflow })` | The scheduled runs of a workflow that passed in a row, from the newest run |
-| `githubReleaseLag({ owner, repo, token, tagPrefix, branch })` | The age in days of the oldest commit of the branch after the newest release of the tag prefix. Drafts and pre-releases do not count. |
+| `githubReleaseLag({ owner, repo, token, tagPrefix, branch })` | The age in days of the oldest commit of the first-parent line of the branch that is not in the newest release of the tag prefix. A merge commit counts at its own date. Drafts and pre-releases do not count. |
 
 ## The shell of a site
 

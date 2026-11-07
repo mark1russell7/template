@@ -5,6 +5,9 @@
  */
 import { byCode } from "./entries.ts";
 
+/** The value of one field of the front matter of the page of each export. */
+export type FrontmatterValue = string | number | boolean;
+
 /** One package and the pages that tell its API: an item of the field `pages` of `apiReport`. */
 export interface ApiPage {
   /** The folder of the package, relative to the root. */
@@ -13,6 +16,8 @@ export interface ApiPage {
   readonly pages: readonly string[];
   /** The file of a page of each export, relative to the root. The command `update` writes it from the report, and the command `check` compares it. */
   readonly reference?: string;
+  /** The fields that the page of each export adds to its front matter, for example the `order` of a site. A field `title` or `description` replaces the default. */
+  readonly frontmatter?: Readonly<Record<string, FrontmatterValue>>;
   /** The names that the check does not examine, each with its reason. */
   readonly except?: Readonly<Record<string, string>>;
 }

@@ -57,6 +57,7 @@ export {
   roadmapParses,
   RULES,
   runnerBudget,
+  securityOneJob,
   sourceMain,
   testsRequired,
   trustPolicy,
@@ -65,6 +66,8 @@ export {
   typedFiles,
   typedScripts,
   unreleasedChange,
+  versionTitle,
+  workflowParses,
   workspaceProtocol,
 } from "./rules/index.ts";
 export { DEFAULT_ALLOWED, HOME_PATTERNS } from "./rules/no-local-paths.ts";
@@ -74,8 +77,10 @@ export { repositoryOfRemote, scheduleMinute } from "./rules/runner-budget.ts";
 export { declaredName, messageOf, repoOf, signaturesOf } from "./rules/home-package.ts";
 export { HOME_EXPORTS } from "./home-exports.ts";
 export { authorOf, LICENSE_TEXTS, licenseFileOf, mitText, repositoryIsPublic } from "./rules/license-file.ts";
+export { GITHUB_YAML, yamlFaults, type YamlFault } from "./rules/workflow-parses.ts";
 export { PAGES_WORKFLOWS, pagesCalls, type PagesCall } from "./rules/pages-site.ts";
 export { ACTIONS_COMMIT, convertGate, prPathFilters, summaryName, type PathFilter } from "./rules/gate-trigger.ts";
+export { SECURITY_SCAN_COMMIT, SECURITY_SCAN_INPUTS, SECURITY_TIMEOUT_MINUTES, securityCallers, withOneJob, type SecurityCaller } from "./rules/security-one-job.ts";
 export { isGitSpecifier, isPinned } from "./rules/pinned-git-deps.ts";
 export { isSourcePath, pathsOf } from "./rules/source-main.ts";
 export { STRICT_OPTIONS } from "./rules/cue-preset.ts";
@@ -84,6 +89,7 @@ export { IGNORE_AFTER, TRAIN_SCOPES } from "./rules/trust-policy.ts";
 export { configsOfScript, scriptsOf } from "./rules/typed-files.ts";
 export { lockedVersions, minorOf, publishedMinorRule, reachOf, type Minor } from "./rules/published-minor.ts";
 export { NPM_REGISTRY, npmLookup, SHIPPED_FIELDS, UNSHIPPED_FILES, unreleasedChangeRule, type RegistryAnswer, type RegistryLookup } from "./rules/unreleased-change.ts";
+export { namedVersions, setVersions } from "./rules/version-title.ts";
 export { readWorkflow, type Workflow, type WorkflowInput, type WorkflowJob, type WorkflowStep } from "./workflow.ts";
 export { blockHash, githubFetch, HOME_TIMEOUT_MS, sharedDocsRule, type HomeAnswer, type HomeFetch } from "./rules/shared-docs.ts";
 export {

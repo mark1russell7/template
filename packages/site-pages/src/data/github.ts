@@ -159,7 +159,7 @@ export async function githubOpenWork(options: GitHubOptions & { endpoint?: strin
 }
 
 /** This function gives the URL of the page with the relation `rel` from a `Link` header of GitHub, or null. */
-function linkedPage(link: string | null, rel: "next" | "last"): string | null {
+function linkedPage(link: string | null, rel: "next"): string | null {
   if (!link) return null;
   for (const part of link.split(",")) {
     const match = /<([^>]+)>\s*;\s*rel="([a-z]+)"/.exec(part);
@@ -248,13 +248,53 @@ export function releaseLagOf(oldest: string | undefined, now: string): number {
   return Number.isFinite(days) ? Math.max(0, Math.round(days * 100) / 100) : Number.NaN;
 }
 
+/** The most pages of 100 commits that `githubReleaseLag` reads from one comparison. */
+const COMPARE_PAGES = 20;
+
+/** A commit of a comparison: its SHA, the SHAs of its parents, the first parent first, and its commit date. */
+interface CompareCommit {
+  sha: string;
+  parents: string[];
+  date: string;
+}
+
+function compareCommit(value: unknown): CompareCommit {
+  const commit = object(value);
+  const parents = Array.isArray(commit["parents"]) ? commit["parents"].map((parent) => text(object(parent)["sha"])) : [];
+  return { sha: text(commit["sha"]), parents, date: text(object(object(commit["commit"])["committer"])["date"]) };
+}
+
 /**
- * This function reads how many days a branch is ahead of its newest release. That is the age of the oldest commit of the branch
- * after the newest release whose tag starts with `tagPrefix`. It skips drafts and pre-releases, because a pre-release is not the
- * version that most users get. It gives `{ available: false, reason }` without a token, after an error, or with no such release.
+ * This function follows the first-parent line of `commits` from its tip. `commits` are the commits of a branch that a tag does
+ * not contain. The function gives the commit date and the first parent of the oldest commit of that line. The tip is the one
+ * commit that is not a parent of another commit of the list. The function gives undefined for no commit, and null when the list
+ * has no single tip.
+ */
+function oldestFirstParent(commits: readonly CompareCommit[]): { date: string; parent: string } | undefined | null {
+  if (commits.length === 0) return undefined;
+  const bySha = new Map(commits.map((commit) => [commit.sha, commit]));
+  const parents = new Set(commits.flatMap((commit) => commit.parents));
+  const tips = commits.filter((commit) => !parents.has(commit.sha));
+  if (tips.length !== 1 || tips[0] === undefined) return null;
+  let line: CompareCommit = tips[0];
+  for (let next = bySha.get(line.parents[0] ?? ""); next !== undefined; next = bySha.get(next.parents[0] ?? "")) line = next;
+  return { date: line.date, parent: line.parents[0] ?? "" };
+}
+
+/**
+ * This function reads how many days a branch is ahead of its newest release. That is the age of the oldest commit of the
+ * first-parent line of the branch that the newest release of `tagPrefix` does not contain. It skips drafts and pre-releases,
+ * because a pre-release is not the version that most users get. It gives `{ available: false, reason }` without a token, after an error,
+ * or with no such release.
  *
- * @remarks The function reads the releases until it finds one, at most `maxPages` pages of 100 (default 10). It then reads one
- * commit on each page of the branch since that release, and asks GitHub for the last page only.
+ * @remarks The function reads the releases until it finds one, at most `maxPages` pages of 100 (default 10). It then compares the
+ * tag with the branch, and reads each commit of the comparison, at most 2,000. A change lands on the branch as a commit of its
+ * first-parent line: a squash, a merge commit, or a rebased commit.
+ *
+ * The function follows that line from the tip of the branch back to the tag, and takes the date of its oldest commit. A tag
+ * that is not on that line gives `{ available: false, reason }`. So a merge commit counts at the time of the merge, not at the older
+ * dates of the commits that it brings. A commit that lands after the tag and before the release is published counts, because it
+ * is not in the release. The time of the release does not decide.
  */
 export async function githubReleaseLag(
   options: GitHubOptions & { tagPrefix: string; branch?: string; endpoint?: string; maxPages?: number; now?: string },
@@ -269,18 +309,34 @@ export async function githubReleaseLag(
   if (!Number.isFinite(Date.parse(release.publishedAt))) return { available: false, reason: `the release ${release.tag} has no date` };
   const fetcher = options.fetch ?? globalThis.fetch;
   const read = async (url: string): Promise<Response> => fetcher(url, { headers: restHeaders(token), signal: AbortSignal.timeout(timeoutMs) });
-  const first = `${endpoint}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?sha=${encodeURIComponent(branch)}&since=${encodeURIComponent(release.publishedAt)}&per_page=1`;
+  let url: string | null = `${endpoint}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/compare/${encodeURIComponent(release.tag)}...${encodeURIComponent(branch)}?per_page=100`;
   try {
-    let response = await read(first);
-    const last = response.ok ? linkedPage(response.headers.get("link"), "last") : null;
-    if (last !== null) response = await read(last);
-    if (response.status === 404) return { available: false, reason: `GitHub has no branch ${branch} in ${owner}/${repo}` };
-    if (!response.ok) return { available: false, reason: `GitHub answered with HTTP ${response.status}` };
-    const body: unknown = await response.json();
-    if (!Array.isArray(body)) return { available: false, reason: "GitHub gave no list of commits" };
-    const commit = body.length === 0 ? undefined : text(object(object(object(body.at(-1))["commit"])["committer"])["date"]);
-    if (commit === "") return { available: false, reason: "the oldest commit has no date" };
-    const value = releaseLagOf(commit, now);
+    const commits: CompareCommit[] = [];
+    let ahead = 0;
+    let base = "";
+    for (let page = 0; url !== null; page++) {
+      if (page === COMPARE_PAGES) return { available: false, reason: `the branch has more than ${COMPARE_PAGES * 100} commits after ${release.tag}` };
+      const response: Response = await read(url);
+      if (response.status === 404) return { available: false, reason: `GitHub has no tag ${release.tag} or no branch ${branch} in ${owner}/${repo}` };
+      if (!response.ok) return { available: false, reason: `GitHub answered with HTTP ${response.status}` };
+      const body = object(await response.json());
+      const listed = body["commits"];
+      if (!Array.isArray(listed)) return { available: false, reason: "GitHub gave no list of commits" };
+      if (page === 0) {
+        const status = text(body["status"]);
+        if (status !== "ahead" && status !== "identical") return { available: false, reason: `the tag ${release.tag} is not on ${branch} (the comparison is ${status || "unknown"})` };
+        ahead = typeof body["ahead_by"] === "number" ? body["ahead_by"] : 0;
+        base = text(object(body["merge_base_commit"])["sha"]);
+      }
+      for (const value of listed) commits.push(compareCommit(value));
+      url = linkedPage(response.headers.get("link"), "next");
+    }
+    if (commits.length < ahead) return { available: false, reason: `GitHub listed ${commits.length} of the ${ahead} commits after ${release.tag}` };
+    const oldest = oldestFirstParent(commits);
+    if (oldest === null) return { available: false, reason: `the commits after ${release.tag} have no single tip` };
+    if (oldest !== undefined && oldest.parent !== base) return { available: false, reason: `the tag ${release.tag} is not on the first-parent line of ${branch}` };
+    if (oldest?.date === "") return { available: false, reason: "the oldest commit has no date" };
+    const value = releaseLagOf(oldest?.date, now);
     if (!Number.isFinite(value)) return { available: false, reason: "the time of the read is not a date" };
     return { available: true, value, at: now, release: release.tag };
   } catch (error) {
