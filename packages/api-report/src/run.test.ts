@@ -293,6 +293,26 @@ describe("check and update", () => {
     expect(() => readConfig(workspace({ apiReport: { pages: [{ package: "packages/a", pages: [], reference: 1 }] } }))).toThrow("must be a path in the repository");
   });
 
+  it("writes the fields of frontmatter into the page of each export, and holds them in the check", () => {
+    const pages = [{ package: "packages/a", pages: [], reference: "each.mdx", frontmatter: { order: 42 } }];
+    const root = workspace({ apiReport: { pages } });
+    expect(cli(root, ["update"]).code).toBe(0);
+    const page = readFileSync(join(root, "each.mdx"), "utf8");
+    expect(page).toContain("declarations.\"\norder: 42\n---\n");
+    expect(cli(root, ["check"]).code).toBe(0);
+    writeFileSync(join(root, "each.mdx"), page.replace("order: 42", "order: 7"));
+    expect(cli(root, ["check"]).stdout).toContain("each.mdx: the page differs from the report.");
+
+    const read = (frontmatter: unknown, reference: unknown = "each.mdx") => () =>
+      readConfig(workspace({ apiReport: { pages: [{ package: "packages/a", pages: [], reference, frontmatter }] } }));
+    expect(read({ order: 42 })).not.toThrow();
+    expect(read({ order: 42 }, null)).toThrow("must be a path in the repository");
+    expect(() => readConfig(workspace({ apiReport: { pages: [{ package: "packages/a", pages: ["a.md"], frontmatter: { order: 1 } }] } }))).toThrow("frontmatter needs the field reference");
+    expect(read([1])).toThrow("must be an object of fields");
+    expect(read({ "a b": 1 })).toThrow("is not a plain name");
+    expect(read({ order: null })).toThrow("must be a text, a number or a boolean");
+  });
+
   it("gives exit code 2 and the help for wrong arguments", () => {
     expect(cli(temp, []).code).toBe(2);
     expect(cli(temp, ["check", "--bad"]).stderr).toContain("An unknown option: --bad");

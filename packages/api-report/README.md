@@ -135,6 +135,25 @@ A library with many exports can keep each name on a page that the report makes. 
 - The file has a section for each entry, with an import of its names and their declarations. It has no comments, because the report has none.
 - The hand-written pages explain the main calls. The first rule above does not apply to them, because the file shows each export. The rules for imports and declarations still apply. The list `pages` can be empty.
 
+A site can need more fields in the front matter of the page, for example an `order` for its menu. The field `frontmatter` gives them. A field `title` or `description` replaces the default text.
+
+```json
+{
+  "apiReport": {
+    "pages": [
+      {
+        "package": "packages/lib",
+        "pages": [],
+        "reference": "packages/site/content/docs/each-export.mdx",
+        "frontmatter": { "order": 42 }
+      }
+    ]
+  }
+}
+```
+
+Each value is a text, a number or a boolean. The field `frontmatter` needs the field `reference`.
+
 ## Library
 
 The package also exports the functions of the tool:
@@ -146,4 +165,4 @@ The package also exports the functions of the tool:
 - `packageFolders(root, globs)`, `globFolders(root, glob)`, `globToRegExp(glob)` and `workspaceGlobs(root)` find the packages.
 - `diffLines(before, after)` and `unifiedDiff(before, after)` give a line diff.
 - `pageFaults(report, packageName, pages, except, complete)` and `reportEntries(report)` hold a hand-written page against a report.
-- `referencePage(report, packageName)` gives the Markdown of the page of each export.
+- `referencePage(report, packageName, frontmatter)` gives the Markdown of the page of each export. The argument `frontmatter` is optional.

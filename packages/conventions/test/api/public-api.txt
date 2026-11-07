@@ -17,6 +17,7 @@ DEFAULT_ALLOWED: build/index.d.ts#DEFAULT_ALLOWED
 DEPENDENCY_FIELDS: build/index.d.ts#DEPENDENCY_FIELDS
 type Edit: build/index.d.ts#Edit
 type FixResult: build/index.d.ts#FixResult
+GITHUB_YAML: build/index.d.ts#GITHUB_YAML
 HOMES: build/index.d.ts#HOMES
 HOME_EXPORTS: build/index.d.ts#HOME_EXPORTS
 HOME_PATTERNS: build/index.d.ts#HOME_PATTERNS
@@ -48,8 +49,12 @@ type RuleConfig: build/index.d.ts#RuleConfig
 type RuleContext: build/index.d.ts#RuleContext
 type RuleOutcome: build/index.d.ts#RuleOutcome
 type RuleResult: build/index.d.ts#RuleResult
+SECURITY_SCAN_COMMIT: build/index.d.ts#SECURITY_SCAN_COMMIT
+SECURITY_SCAN_INPUTS: build/index.d.ts#SECURITY_SCAN_INPUTS
+SECURITY_TIMEOUT_MINUTES: build/index.d.ts#SECURITY_TIMEOUT_MINUTES
 SHIPPED_FIELDS: build/index.d.ts#SHIPPED_FIELDS
 STRICT_OPTIONS: build/index.d.ts#STRICT_OPTIONS
+type SecurityCaller: build/index.d.ts#SecurityCaller
 TRAIN_SCOPES: build/index.d.ts#TRAIN_SCOPES
 UNSHIPPED_FILES: build/index.d.ts#UNSHIPPED_FILES
 USAGE: build/index.d.ts#USAGE
@@ -57,6 +62,7 @@ type Workflow: build/index.d.ts#Workflow
 type WorkflowInput: build/index.d.ts#WorkflowInput
 type WorkflowJob: build/index.d.ts#WorkflowJob
 type WorkflowStep: build/index.d.ts#WorkflowStep
+type YamlFault: build/index.d.ts#YamlFault
 annotations: build/index.d.ts#annotations
 apiReportScript: build/index.d.ts#apiReportScript
 authorOf: build/index.d.ts#authorOf
@@ -99,6 +105,7 @@ mergeHomes: build/index.d.ts#mergeHomes
 messageOf: build/index.d.ts#messageOf
 minorOf: build/index.d.ts#minorOf
 mitText: build/index.d.ts#mitText
+namedVersions: build/index.d.ts#namedVersions
 noBuildOutput: build/index.d.ts#noBuildOutput
 noLocalPaths: build/index.d.ts#noLocalPaths
 npmLookup: build/index.d.ts#npmLookup
@@ -137,6 +144,9 @@ runGit: build/index.d.ts#runGit
 runnerBudget: build/index.d.ts#runnerBudget
 scheduleMinute: build/index.d.ts#scheduleMinute
 scriptsOf: build/index.d.ts#scriptsOf
+securityCallers: build/index.d.ts#securityCallers
+securityOneJob: build/index.d.ts#securityOneJob
+setVersions: build/index.d.ts#setVersions
 sharedDocsRule: build/index.d.ts#sharedDocsRule
 signaturesOf: build/index.d.ts#signaturesOf
 sourceMain: build/index.d.ts#sourceMain
@@ -151,8 +161,12 @@ typedFiles: build/index.d.ts#typedFiles
 typedScripts: build/index.d.ts#typedScripts
 unreleasedChange: build/index.d.ts#unreleasedChange
 unreleasedChangeRule: build/index.d.ts#unreleasedChangeRule
+versionTitle: build/index.d.ts#versionTitle
+withOneJob: build/index.d.ts#withOneJob
+workflowParses: build/index.d.ts#workflowParses
 workspaceGlobs: build/index.d.ts#workspaceGlobs
 workspaceProtocol: build/index.d.ts#workspaceProtocol
+yamlFaults: build/index.d.ts#yamlFaults
 
 ## bin: 1 commands
 
@@ -227,6 +241,9 @@ interface FixResult {
   readonly passes: number;
   readonly result: CheckResult;
 }
+
+### build/index.d.ts#GITHUB_YAML
+export declare const GITHUB_YAML: RegExp;
 
 ### build/index.d.ts#HOMES
 export declare const HOMES: readonly Home[];
@@ -393,11 +410,26 @@ interface RuleResult {
   readonly note?: string;
 }
 
+### build/index.d.ts#SECURITY_SCAN_COMMIT
+export declare const SECURITY_SCAN_COMMIT: string;
+
+### build/index.d.ts#SECURITY_SCAN_INPUTS
+export declare const SECURITY_SCAN_INPUTS: readonly string[];
+
+### build/index.d.ts#SECURITY_TIMEOUT_MINUTES
+export declare const SECURITY_TIMEOUT_MINUTES = 30;
+
 ### build/index.d.ts#SHIPPED_FIELDS
 export declare const SHIPPED_FIELDS: readonly string[];
 
 ### build/index.d.ts#STRICT_OPTIONS
 export declare const STRICT_OPTIONS: readonly ["strict", "noImplicitAny", "strictNullChecks", "strictFunctionTypes", "strictBindCallApply", "strictPropertyInitialization", "strictBuiltinIteratorReturn", "noImplicitThis", "useUnknownInCatchVariables", "alwaysStrict", "noUncheckedIndexedAccess", "exactOptionalPropertyTypes", "noImplicitOverride", "noImplicitReturns", "noFallthroughCasesInSwitch", "noPropertyAccessFromIndexSignature", "erasableSyntaxOnly"];
+
+### build/index.d.ts#SecurityCaller
+interface SecurityCaller {
+  readonly line: number;
+  readonly id: string;
+}
 
 ### build/index.d.ts#TRAIN_SCOPES
 export declare const TRAIN_SCOPES: readonly ["@mark1russell7/*", "@procedures/*"];
@@ -439,6 +471,13 @@ interface WorkflowStep {
   readonly label: string;
   readonly if: string;
   readonly uses: string;
+}
+
+### build/index.d.ts#YamlFault
+interface YamlFault {
+  readonly line: number;
+  readonly column: number;
+  readonly message: string;
 }
 
 ### build/index.d.ts#annotations
@@ -571,6 +610,9 @@ export declare function minorOf(version: string): Minor | undefined;
 ### build/index.d.ts#mitText
 export declare function mitText(year: number, holder: string): string;
 
+### build/index.d.ts#namedVersions
+export declare function namedVersions(title: string): string[];
+
 ### build/index.d.ts#noBuildOutput
 export declare const noBuildOutput: Rule;
 
@@ -685,6 +727,15 @@ export declare function scheduleMinute(repository: string, file: string): number
 ### build/index.d.ts#scriptsOf
 export declare function scriptsOf(scripts: Readonly<Record<string, unknown>>, name: string, seen?: Set<string>): string[];
 
+### build/index.d.ts#securityCallers
+export declare function securityCallers(text: string): SecurityCaller[];
+
+### build/index.d.ts#securityOneJob
+export declare const securityOneJob: Rule;
+
+### build/index.d.ts#setVersions
+export declare function setVersions(context: RuleContext, from: string, to: string): string[] | undefined;
+
 ### build/index.d.ts#sharedDocsRule
 export declare function sharedDocsRule(fetchHomes?: HomeFetch): Rule;
 
@@ -727,8 +778,24 @@ export declare const unreleasedChange: Rule;
 ### build/index.d.ts#unreleasedChangeRule
 export declare function unreleasedChangeRule(lookup?: RegistryLookup): Rule;
 
+### build/index.d.ts#versionTitle
+export declare const versionTitle: Rule;
+
+### build/index.d.ts#withOneJob
+export declare function withOneJob(text: string, commit?: string): {
+  text: string;
+} | {
+  reason: string;
+};
+
+### build/index.d.ts#workflowParses
+export declare const workflowParses: Rule;
+
 ### build/index.d.ts#workspaceGlobs
 export declare function workspaceGlobs(root: string): string[] | undefined;
 
 ### build/index.d.ts#workspaceProtocol
 export declare const workspaceProtocol: Rule;
+
+### build/index.d.ts#yamlFaults
+export declare function yamlFaults(text: string): YamlFault[];

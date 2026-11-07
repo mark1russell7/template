@@ -32,6 +32,11 @@ The shared workflow `reusable-pages.yml` uses `green-main` and `site-pages` (`CI
 on:
   push:
     branches: [main]
+  # After a release, so that the Releases page has the new version (the rule pages-after-release)
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+    branches: [main]
   # Every 3 hours, so that the Status page shows the open pull requests and issues of now
   schedule:
     - cron: "17 */3 * * *"
@@ -39,9 +44,10 @@ on:
 
 permissions: {}
 
+# A deployment in progress always ends. A newer run replaces only a run that waits (the rule main-runs-finish).
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   pages:

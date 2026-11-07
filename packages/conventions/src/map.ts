@@ -160,11 +160,11 @@ export const HOMES: readonly Home[] = [
   {
     area: "optional",
     title: "Optional values",
-    covers: "a value that is present or absent, with the functor and monad laws",
+    covers: "a value that is present or absent, and Result, a value or an error (1.2.0), with the functor and monad laws",
     packages: ["@mark1russell7/optional"],
     repo: "mark1russell7/optional",
     state: "published",
-    words: ["option", "maybe", "some", "none", "monad", "functor"],
+    words: ["option", "maybe", "some", "none", "monad", "functor", "result", "either", "error"],
     note: "@mark1russell7/render-optional is a second copy. It moves to @mark1russell7/optional.",
   },
   {

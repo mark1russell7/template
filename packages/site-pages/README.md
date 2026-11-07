@@ -132,7 +132,11 @@ check("the linter finds a word", await until(() => $$(".finding").length === 1),
 
 For a TypeScript probe, the check removes the types and the line `export {};` before it runs the probe. Thus the typecheck of the site examines the probe, and the site needs no build step for it. Each line stays at its position, so the line of an error is the line of the source. Declare the functions of the table with `declare const`, and add `export {};` at the end, so the file is a module. `probeScript` does the same operation for a script of your own.
 
-The check runs the probe on the first page, in the first scheme, at each width. The folder of `--shots` gets a screenshot of each view, `report.json` and `summary.md`. The exit code is 0 when each view passes, 1 when a view fails, and 2 for an incorrect command line.
+The check runs the probe on the first page, in the first scheme, at each width.
+
+To probe other pages, give `--page-probe <page>=<file>` one time for each page, for example `--page-probe /structures/=structures-probe.ts`. A page with no probe has none. The first page takes `--probe` or `--page-probe`, not both. In `checkSite`, the option `probes` is the same map, from a page to the code of its probe.
+
+The folder of `--shots` gets a screenshot of each view, `report.json` and `summary.md`. The exit code is 0 when each view passes, 1 when a view fails, and 2 for an incorrect command line.
 
 The check finds a browser in this order: `--browser`, `$SITE_CHECK_BROWSER`, the newest Chromium of Playwright, and then Chrome or Edge. The folder `src/check` imports only Node.js. Thus Node.js 22.18 or later can start `src/check/main.ts` with no install. The workflow `reusable-pages.yml` of the template uses it this way.
 
@@ -511,7 +515,7 @@ Two functions read a measure from GitHub at the build. Each result has the `at` 
 | Function | Measure |
 | --- | --- |
 | `githubGreenRun({ owner, repo, token, workflow })` | The scheduled runs of a workflow that passed in a row, from the newest run |
-| `githubReleaseLag({ owner, repo, token, tagPrefix, branch })` | The age in days of the oldest commit of the branch after the newest release of the tag prefix. Drafts and pre-releases do not count. |
+| `githubReleaseLag({ owner, repo, token, tagPrefix, branch })` | The age in days of the oldest commit of the first-parent line of the branch that is not in the newest release of the tag prefix. A merge commit counts at its own date. Drafts and pre-releases do not count. |
 
 ## The shell of a site
 
@@ -585,6 +589,7 @@ The explorer obeys these rules:
 
 - **A bad record.** The explorer reads a record only through `parseResponseRecord`. It shows each fault with its path, and it does not throw.
 - **Conditions.** A dimension with `when` has its parent at a level inside `when`. The controls disable a choice that a view refuses, and they tell why.
+- **Held values that do not apply.** A held dimension whose parent is at an other level goes in one closed fold, after the held values that change the view. The fold tells their count, and it stays open or closed when the view changes.
 - **The band.** The band shows `low` to `high`. It fades with the distance from the nearest measured point.
 - **The time of a surface.** The field `nearest` reads each point at each place. So `planSteps` bounds the grid from the point count before the call. After a surface that passes the budget, `nextStepsCap` makes the next grid smaller.
 - **A table model.** A table model has no smooth surface, so the view shows cells.

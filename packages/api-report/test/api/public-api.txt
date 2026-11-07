@@ -15,6 +15,7 @@ type DeclarationInfo: build/index.d.ts#DeclarationInfo
 type DiffLine: build/index.d.ts#DiffLine
 type Entry: build/index.d.ts#Entry
 type EntryFile: build/index.d.ts#EntryFile
+type FrontmatterValue: build/index.d.ts#FrontmatterValue
 HEADER_LINES: build/index.d.ts#HEADER_LINES
 type ImportBinding: build/index.d.ts#ImportBinding
 type LocalExport: build/index.d.ts#LocalExport
@@ -67,6 +68,7 @@ interface ApiPage {
   readonly package: string;
   readonly pages: readonly string[];
   readonly reference?: string;
+  readonly frontmatter?: Readonly<Record<string, FrontmatterValue>>;
   readonly except?: Readonly<Record<string, string>>;
 }
 
@@ -135,6 +137,9 @@ interface EntryFile {
   readonly subpath: string;
   readonly path: string;
 }
+
+### build/index.d.ts#FrontmatterValue
+type FrontmatterValue = string | number | boolean;
 
 ### build/index.d.ts#HEADER_LINES
 export declare const HEADER_LINES = 5;
@@ -279,7 +284,7 @@ export declare function publishedManifest(manifest: Manifest): Manifest;
 export declare function readConfig(root: string): ApiReportConfig;
 
 ### build/index.d.ts#referencePage
-export declare function referencePage(report: string, packageName: string): string;
+export declare function referencePage(report: string, packageName: string, frontmatter?: Readonly<Record<string, FrontmatterValue>>): string;
 
 ### build/index.d.ts#reportEntries
 export declare function reportEntries(report: string): ReadonlyMap<string, ReadonlySet<string>>;
