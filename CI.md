@@ -289,13 +289,17 @@ A step that needs `id-token: write` stays in `release.yml`, for example a publis
 
 The workflow `reusable-mutation.yml` starts the mutation tests of a repository with [Stryker](https://stryker-mutator.io) and `@mark1russell7/rigor-mutation`. A mutation test changes the source a little (a mutant) and starts the tests. The score is the percent of the mutants that the tests detect.
 
-The lane file `mutation.json` of the repository names the packages, their globs, their parts and their gates. The README of `@mark1russell7/rigor-mutation` tells its format. The repository has these `devDependencies`: `@mark1russell7/rigor-mutation`, `@stryker-mutator/core` and `@stryker-mutator/vitest-runner`, 10.1.0 or later. Stryker 10.0 started no test on each mutant with Vitest 5.
+The lane file `mutation.json` of the repository names the packages, their globs, their parts and their gates. The README of `@mark1russell7/rigor-mutation` tells its format. The repository has these `devDependencies`: `@mark1russell7/rigor-mutation`, `@stryker-mutator/core` and `@stryker-mutator/vitest-runner`, 10.1.0 or later. Stryker 10.0 started no test on each mutant with Vitest 5. The workflow needs `@mark1russell7/rigor-mutation` 0.1.3 or later.
 
-The job `plan` checks the disabled mutants (`rigor-mutation disables`) and gives the selections. The job `mutate` starts Stryker for each selection on its own runner. Then it applies the gate of the package. A selection under its gate fails, and the message names it. The artifact `mutation-<selection>` has the HTML and JSON reports.
+The job `plan` checks the disabled mutants (`rigor-mutation disables`) and the relative paths of each package (`rigor-mutation load-check`). Then it gives the selections. Stryker copies the folder of each package, so a relative path that leaves the folder finds no file in the copy. A test file that does not load fails no test, so the plan fails before any runner starts. The job `mutate` starts Stryker for each selection on its own runner. Then it applies the gate of the package. A selection under its gate fails, and the message names it. The artifact `mutation-<selection>` has the HTML and JSON reports.
 
 Stryker stops after `stop-minutes`, before the time limit of the job. Then the job writes "no score" to the summary, uploads the report and fails. The job `gate` starts after each `mutate` job, also after a failure. It reads the report of each selection and applies the gate again. A selection with no report fails, and the gate names it.
 
-Three inputs change a run. They need `@mark1russell7/rigor-mutation` 0.1.1 or later.
+A score is a read of the tests only when the run read all of them. Thus `Score` and the job `gate` also fail a selection when its report does not read a test file on the disk (`--test-files`). The field `notRead` of the package in the lane names each exception, with its reason.
+
+Four inputs change a run.
+
+- `test-counts` names a file with the last good count of the tests of each selection. A count that fell by more than `maxTestFall` percent of the lane fails the selection. The default is 20. The job `gate` uploads the new counts as the artifact `mutation-test-counts`. Commit the file after a good run.
 
 - `dry-run` starts only the tests of each selection under Stryker, with no mutant. Start it on a pull request that changes the lane files or the test config. A selection whose tests fail under Stryker then fails before the long run. A dry run has no score, so `Score` and the job `gate` do not run.
 - `changed` names the changed files, from the folder of the lane file. Only the runs with a changed file start, and each run mutates only its changed files. A plan with no run starts no job `mutate`.
@@ -329,6 +333,7 @@ jobs:
 | `dry-run` | `false` | Start only the tests, with no mutant and no gate. |
 | `changed` | (empty) | The changed files, separated by commas or lines. Only their runs start. It takes an empty `selections`. |
 | `report-only` | `false` | Write the scores, but do not fail a score under the gate. |
+| `test-counts` | (empty) | The file of the last good test counts. A fall of a count fails the selection. Empty compares no count. |
 | `node-version` | `26` | The Node.js version. |
 | `working-directory` | `.` | The folder of the root `package.json`. |
 

@@ -4,8 +4,12 @@
 # on its own runner. Each selection fails when its score is under the gate of its package. The job gate then reads
 # the report of each selection, so a selection with no report also fails by name.
 #
-# The repository has @mark1russell7/rigor-mutation, @stryker-mutator/core and @stryker-mutator/vitest-runner
-# (10.1.0 or later) in its devDependencies. A repository calls it from its own scheduled workflow, and states the
+# A score is a read of the tests only when the run loaded and read all of them. Thus the plan fails a relative path
+# that leaves a package (load-check), and a selection fails when the report does not read a test file on the disk
+# (--test-files). With the input test-counts, a selection also fails when its count of tests fell (--last).
+#
+# The repository has @mark1russell7/rigor-mutation (0.1.3 or later), @stryker-mutator/core and
+# @stryker-mutator/vitest-runner (10.1.0 or later) in its devDependencies. A repository calls it from its own scheduled workflow, and states the
 # size of the run (CI.md):
 #
 #   on:
@@ -67,6 +71,13 @@ on:
           a sample, so it is usually report only.
         type: boolean
         default: false
+      test-counts:
+        description: >-
+          A file with the last good count of the tests of each selection, relative to the working directory. A fall of
+          more than maxTestFall percent of the lane (default 20) fails the selection. The job gate uploads the new
+          counts as the artifact mutation-test-counts. Commit it after a good run. Empty compares no count.
+        type: string
+        default: ""
       node-version:
         description: The Node.js version.
         type: string
@@ -107,6 +118,12 @@ jobs:
         env:
           LANE: ${{ inputs.lane }}
         run: pnpm exec rigor-mutation disables --lane "$LANE"
+      # Stryker copies the folder of each package. A relative path that leaves it finds no file in the copy, and a test
+      # file that does not load fails no test. So the plan fails before any runner starts.
+      - name: Load check
+        env:
+          LANE: ${{ inputs.lane }}
+        run: pnpm exec rigor-mutation load-check --lane "$LANE"
       - name: Plan
         id: plan
         env:
@@ -209,8 +226,11 @@ jobs:
         if: ${{ !inputs.dry-run }}
         env:
           REPORT_ONLY: ${{ inputs.report-only }}
+          TEST_COUNTS: ${{ inputs.test-counts }}
         run: |
-          if pnpm exec rigor-mutation scores "$SELECTION" --lane "$LANE" --summary "$GITHUB_STEP_SUMMARY"; then :
+          options=(--test-files)
+          if [ -n "$TEST_COUNTS" ]; then options+=(--last "$TEST_COUNTS"); fi
+          if pnpm exec rigor-mutation scores "$SELECTION" --lane "$LANE" --summary "$GITHUB_STEP_SUMMARY" "${options[@]}"; then :
           elif [ "$REPORT_ONLY" = "true" ]; then echo "::warning::$SELECTION is under its gate. This run is report only."
           else exit 1
           fi
@@ -258,15 +278,33 @@ jobs:
           SELECTIONS: ${{ needs.plan.outputs.selections }}
           REPORTS: ${{ runner.temp }}/mutation
           REPORT_ONLY: ${{ inputs.report-only }}
+          TEST_COUNTS: ${{ inputs.test-counts }}
         run: |
           if [ "$REPORT_ONLY" = "true" ]; then title="Mutation gate (report only)"; else title="Mutation gate"; fi
           { echo "### $title"; echo; } >> "$GITHUB_STEP_SUMMARY"
+          options=(--test-files)
+          if [ -n "$TEST_COUNTS" ]; then
+            # The new file starts as a copy of the old one, so a selection that did not run keeps its count.
+            counts="$RUNNER_TEMP/counts/$(basename "$TEST_COUNTS")"
+            mkdir -p "$RUNNER_TEMP/counts"
+            if [ -f "$TEST_COUNTS" ]; then cp "$TEST_COUNTS" "$counts"; fi
+            options+=(--last "$TEST_COUNTS" --write-last "$counts")
+          fi
           status=0
           for name in $(node -e 'for (const s of JSON.parse(process.argv[1])) console.log(s)' "$SELECTIONS"); do
             # A selection with no report fails: "scores" names the missing file.
-            if out=$(pnpm exec rigor-mutation scores "$name" --lane "$LANE" --report "$REPORTS/mutation-$name/mutation.json"); then :; else status=1; fi
+            if out=$(pnpm exec rigor-mutation scores "$name" --lane "$LANE" --report "$REPORTS/mutation-$name/mutation.json" "${options[@]}"); then :; else status=1; fi
             echo "$out"
             echo "- $(head -n 1 <<< "$out")" >> "$GITHUB_STEP_SUMMARY"
           done
           if [ "$REPORT_ONLY" = "true" ]; then exit 0; fi
           exit "$status"
+      # The counts of the selections that passed. Commit the file as test-counts after a good run.
+      - name: Test counts
+        if: ${{ !cancelled() && inputs.test-counts != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-test-counts
+          path: ${{ runner.temp }}/counts/
+          if-no-files-found: warn
+          retention-days: 30
