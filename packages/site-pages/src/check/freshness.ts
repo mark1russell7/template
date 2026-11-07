@@ -3,6 +3,7 @@
  * Each stamp names the page, its runs, their dates and their engine versions.
  * The gate fails on a page with no versions or no run date, and on old data with no newer run in flight.
  * The gate also fails on a run that started behind the engines on npm.
+ * A page can hold a slow run in flight past the age limit while its jobs end, up to a cap. The gate reads the jobs from GitHub.
  * A study has an age limit and a scheduled workflow, or it says why it needs no limit. A page with a longer limit names the reason and the workflow.
  * This file imports only Node.js and the folder `data`, so `reusable-pages.yml` starts it with no npm release of the package.
  */
@@ -10,6 +11,7 @@
 import { readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { parseArgs } from "node:util";
+import { githubRunProgress, type RunProgress } from "../data/github.ts";
 import { npmPublishTimes } from "../data/npm.ts";
 import type { NpmVersionTime } from "../data/types.ts";
 import { compareVersions, parseVersion } from "../data/versions.ts";
@@ -33,7 +35,14 @@ export const MAX_STUDY_LIMIT_DAYS = 30;
 /** The last time at which a limit can start. A limit turns on at this time if its site did not turn it on before. */
 export const LAST_LIMIT_START = "2026-12-07T00:00:00Z";
 
+/** The longest hold of a run in flight, in hours from the start of the run. */
+export const MAX_HOLD_HOURS = 96;
+
+/** The largest gap with no end of a job, in hours, that a hold can permit. A failing case one day after the limit always fails with it. */
+export const MAX_STALL_HOURS = 24;
+
 const DAY_MS = 86_400_000;
+const HOUR_MS = 3_600_000;
 
 /** The form of a full commit. */
 const FULL_COMMIT = /^[0-9a-f]{40}$/;
@@ -74,6 +83,19 @@ export interface NoAgeLimit {
   readonly today: string;
 }
 
+/**
+ * The hold of a run in flight past the age limit. The run counts as in flight while one of its jobs ended in the last `stallHours`.
+ * The hold ends at `until`, when the run fails or is cancelled, or when the gate cannot read the run.
+ */
+export interface FlightHold {
+  /** The ISO time of the end of the hold, at most `MAX_HOLD_HOURS` after the start of the run in flight. */
+  readonly until: string;
+  /** The largest gap with no end of a job, in hours, at most `MAX_STALL_HOURS`. */
+  readonly stallHours: number;
+  /** The reason for the hold, as one sentence. */
+  readonly reason: string;
+}
+
 /** The stamp of one measured page. */
 export interface PageStamp {
   readonly page: string;
@@ -81,6 +103,8 @@ export interface PageStamp {
   readonly runs: readonly DataRun[];
   /** The run on newer engines that is in progress. */
   readonly inFlight?: DataRun;
+  /** The hold of the run in flight past the age limit. A page with a hold has a run in flight. */
+  readonly hold?: FlightHold;
   /** The page shows a study of the versions of its runs. A study has a `limit` or the field `noLimit`, and the rule of the engines does not apply to it. */
   readonly study?: true;
   /** The age limit of this page, in place of the default. */
@@ -110,6 +134,8 @@ export interface FreshnessOptions {
   readonly maxMinorsBehind?: number;
   /** The schedule of each workflow of a limit. A number is the largest gap between its starts in days. A text tells why the gate cannot read it. */
   readonly schedules?: Readonly<Record<string, number | string>>;
+  /** The progress of each run in flight with a hold, by the id of the run. A text tells why the gate cannot read it. */
+  readonly progress?: Readonly<Record<string, RunProgress | string>>;
 }
 
 /** The result of `checkFreshness`. */
@@ -179,6 +205,25 @@ function noLimitFaults(raw: unknown, at: string): string[] {
   return faults;
 }
 
+/** This function gives the faults of the hold of a run in flight. */
+function holdFaults(raw: unknown, flight: unknown, at: string): string[] {
+  const hold = record(raw);
+  if (hold === null) return [`${at}: the hold is not an object.`];
+  const faults: string[] = [];
+  const run = record(flight);
+  if (run === null) faults.push(`${at}: a hold needs a run in flight.`);
+  const until = hold["until"];
+  const end = typeof until === "string" ? Date.parse(until) : Number.NaN;
+  if (!Number.isFinite(end)) faults.push(`${at}: the hold has no end time.`);
+  const start = run !== null && typeof run["date"] === "string" ? Date.parse(run["date"]) : Number.NaN;
+  if (Number.isFinite(end) && Number.isFinite(start) && end <= start) faults.push(`${at}: the hold ends before the start of the run in flight.`);
+  if (Number.isFinite(end) && Number.isFinite(start) && end - start > MAX_HOLD_HOURS * HOUR_MS) faults.push(`${at}: the hold ends more than ${MAX_HOLD_HOURS} hours after the start of the run in flight.`);
+  const stall = hold["stallHours"];
+  if (typeof stall !== "number" || !Number.isFinite(stall) || stall <= 0 || stall > MAX_STALL_HOURS) faults.push(`${at}: the hold needs a count of stall hours above 0 and at most ${MAX_STALL_HOURS}.`);
+  if (typeof hold["reason"] !== "string" || hold["reason"].trim() === "") faults.push(`${at}: the hold has no reason.`);
+  return faults;
+}
+
 /** This function gives the faults of the fields of a page that change the age rule. */
 function ageRuleFaults(page: Record<string, unknown>, at: string): string[] {
   const faults: string[] = [];
@@ -192,6 +237,7 @@ function ageRuleFaults(page: Record<string, unknown>, at: string): string[] {
   if (study === true && page["inFlight"] !== undefined) faults.push(`${at}: a study has no run in flight.`);
   if (limit !== undefined) faults.push(...limitFaults(limit, at, study === true));
   if (noLimit !== undefined) faults.push(...noLimitFaults(noLimit, at));
+  if (page["hold"] !== undefined) faults.push(...holdFaults(page["hold"], page["inFlight"], at));
   return faults;
 }
 
@@ -342,6 +388,21 @@ function hasNewerEngine(run: DataRun, than: DataRun): boolean {
 }
 
 /**
+ * This function gives the reason that a hold ends at a time, or undefined while the hold keeps the run in flight.
+ * A run with no progress that the gate can read does not keep its hold.
+ */
+function holdEnd(hold: FlightHold, flight: DataRun, progress: RunProgress | string | undefined, now: number): string | undefined {
+  if (now > Date.parse(hold.until)) return `the hold ended at ${hold.until}`;
+  if (progress === undefined) return "the gate has no read of the progress of the run";
+  if (typeof progress === "string") return `the gate cannot read the progress of the run: ${progress}`;
+  if (progress.status === "completed" && progress.conclusion !== "success") return `the run ended with the result ${progress.conclusion ?? "unknown"}`;
+  const last = progress.lastJobEnd ?? flight.date;
+  const gap = (now - Date.parse(last)) / HOUR_MS;
+  if (gap > hold.stallHours) return `no job of the run ended in the last ${hold.stallHours} hours${progress.lastJobEnd === null ? "" : `, and the last job ended at ${last}`}`;
+  return undefined;
+}
+
+/**
  * This function applies the rules of the gate to the stamps.
  *
  * - The data of each page is at most `maxAgeDays` old, or a run on newer engines is in flight.
@@ -351,6 +412,7 @@ function hasNewerEngine(run: DataRun, than: DataRun): boolean {
  * - A study has no limit of the engines, because it tells about the versions that it names.
  * - A study with a limit in force names the commit of each run. A study with no limit has no age rule.
  * - A limit with `startsAt` applies the age rule and the commit rule from that time. The schedule rule applies at once.
+ * - A hold keeps a slow run in flight past the age limit, to the end of the hold. A job of the run must end in each `stallHours`.
  */
 export function checkFreshness(stamps: DataStamps, options: FreshnessOptions): FreshnessCheck {
   const { times, maxAgeDays: defaultAge = MAX_DATA_AGE_DAYS, maxMinorsBehind = MAX_MINORS_BEHIND, schedules = {} } = options;
@@ -371,8 +433,10 @@ export function checkFreshness(stamps: DataStamps, options: FreshnessOptions): F
       else if (gap > maxAgeDays) faults.push(`${stamp.page}: the schedule of ${stamp.limit.workflow} has a gap of ${gap.toFixed(1)} days, over the limit of ${maxAgeDays}.`);
     }
     const flight = stamp.inFlight;
-    const flying = flight !== undefined && ageInDays(flight.date, now) <= maxAgeDays;
-    if (flight !== undefined && !flying) faults.push(`${stamp.page}: the run ${flight.id} is in flight for more than ${maxAgeDays} days.`);
+    const young = flight !== undefined && ageInDays(flight.date, now) <= maxAgeDays;
+    const ended = flight === undefined || stamp.hold === undefined || young ? undefined : holdEnd(stamp.hold, flight, options.progress?.[flight.id], now);
+    const flying = young || (flight !== undefined && stamp.hold !== undefined && ended === undefined);
+    if (flight !== undefined && !flying) faults.push(`${stamp.page}: the run ${flight.id} is in flight for more than ${maxAgeDays} days${ended === undefined ? "" : `, and its hold ends: ${ended}`}.`);
     for (const run of stamp.runs) {
       const age = ageInDays(run.date, now);
       if (inForce && age > maxAgeDays && !(flying && hasNewerEngine(flight, run))) {
@@ -446,6 +510,18 @@ function readSchedule(path: string): number | string {
   }
 }
 
+/** The form of the link of a GitHub Actions run. */
+const ACTIONS_RUN = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/actions\/runs\/(\d+)\/?$/;
+
+/** This function reads the progress of a run in flight from GitHub. It gives a text when the link is not of a run, or when GitHub does not answer. */
+async function readProgress(run: DataRun, token: string | undefined, fetcher: typeof fetch | undefined): Promise<RunProgress | string> {
+  const match = ACTIONS_RUN.exec(run.url);
+  if (match === null) return `the link ${run.url} is not a GitHub Actions run`;
+  const [, owner = "", repo = "", runId = ""] = match;
+  const read = await githubRunProgress({ owner, repo, runId, token, ...(fetcher === undefined ? {} : { fetch: fetcher }) });
+  return read.available ? { status: read.status, conclusion: read.conclusion, lastJobEnd: read.lastJobEnd } : read.reason;
+}
+
 /** This function is the command `site-pages freshness`. The `fetch` option is for a test. */
 export async function runFreshnessCli(argv: readonly string[], io: CheckIo, fetcher?: typeof fetch): Promise<number> {
   let values: { stamps?: string | undefined; now?: string | undefined; help?: boolean | undefined };
@@ -485,7 +561,14 @@ export async function runFreshnessCli(argv: readonly string[], io: CheckIo, fetc
     if (page.limit !== undefined) schedules[page.limit.workflow] = readSchedule(join(io.cwd, page.limit.workflow));
   }
   const npm = await npmPublishTimes({ packages: [...new Set(engines)], ...(fetcher === undefined ? {} : { fetch: fetcher }) });
-  const options: FreshnessOptions = { now: values.now ?? new Date().toISOString(), times: npm.times, schedules };
+  const progress: Record<string, RunProgress | string> = {};
+  for (const page of parsed.stamps.pages) {
+    if (page.hold === undefined || page.inFlight === undefined) continue;
+    const read = await readProgress(page.inFlight, io.env["GITHUB_TOKEN"], fetcher);
+    progress[page.inFlight.id] = read;
+    io.stdout(`Hold of the run ${page.inFlight.id} to ${page.hold.until}: ${typeof read === "string" ? `not read, ${read}` : `${read.status}, the last job ended at ${read.lastJobEnd ?? "no time"}`}.\n`);
+  }
+  const options: FreshnessOptions = { now: values.now ?? new Date().toISOString(), times: npm.times, schedules, progress };
   const result = checkFreshness(parsed.stamps, options);
   for (const problem of [...npm.problems, ...result.notRun]) io.stdout(`Not run: ${problem}\n`);
   for (const fault of result.faults) io.stderr(`${fault}\n`);

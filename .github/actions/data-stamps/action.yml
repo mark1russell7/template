@@ -15,4 +15,6 @@ runs:
       shell: bash
       env:
         STAMPS: ${{ inputs.stamps }}
+        # The gate reads the jobs of a run in flight with a hold. The caller job gives the permission actions: read.
+        GITHUB_TOKEN: ${{ github.token }}
       run: node "$GITHUB_ACTION_PATH/../../../packages/site-pages/src/check/freshness-main.ts" --stamps "$STAMPS"
