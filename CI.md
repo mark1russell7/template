@@ -295,6 +295,12 @@ The job `plan` checks the disabled mutants (`rigor-mutation disables`) and gives
 
 Stryker stops after `stop-minutes`, before the time limit of the job. Then the job writes "no score" to the summary, uploads the report and fails. The job `gate` starts after each `mutate` job, also after a failure. It reads the report of each selection and applies the gate again. A selection with no report fails, and the gate names it.
 
+Three inputs change a run. They need `@mark1russell7/rigor-mutation` 0.1.1 or later.
+
+- `dry-run` starts only the tests of each selection under Stryker, with no mutant. Start it on a pull request that changes the lane files or the test config. A selection whose tests fail under Stryker then fails before the long run. A dry run has no score, so `Score` and the job `gate` do not run.
+- `changed` names the changed files, from the folder of the lane file. Only the runs with a changed file start, and each run mutates only its changed files. A plan with no run starts no job `mutate`.
+- `report-only` writes the scores, but a score under the gate fails nothing. A run of the changed files of a night is a sample of the package, so it is report only. The weekly run of all files keeps the gate.
+
 A mutation run is long. Thus a repository starts it from a scheduled workflow, not from each pull request. The workflow states its size in its `env`. A check compares the real run with these values:
 
 ```yaml
@@ -320,6 +326,9 @@ jobs:
 | `concurrency` | `4` | The test processes of Stryker on each runner. |
 | `timeout-minutes` | `120` | The time limit of each selection. Divide a package into parts when one selection needs more. |
 | `stop-minutes` | `0` | The time after which Stryker stops. `0` gives `timeout-minutes` minus 10. |
+| `dry-run` | `false` | Start only the tests, with no mutant and no gate. |
+| `changed` | (empty) | The changed files, separated by commas or lines. Only their runs start. It takes an empty `selections`. |
+| `report-only` | `false` | Write the scores, but do not fail a score under the gate. |
 | `node-version` | `26` | The Node.js version. |
 | `working-directory` | `.` | The folder of the root `package.json`. |
 

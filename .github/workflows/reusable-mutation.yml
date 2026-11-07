@@ -48,6 +48,25 @@ on:
           gives timeout-minutes minus 10. A selection that Stryker stops has no score, and it fails.
         type: number
         default: 0
+      dry-run:
+        description: >-
+          Start only the tests of each selection under Stryker, with no mutant. Use it on a pull request that changes
+          the lane files. A dry run has no score, so the gate does not run.
+        type: boolean
+        default: false
+      changed:
+        description: >-
+          The changed files, separated by commas or lines, from the folder of the lane file (for example the output of
+          git diff --name-only). Only the runs with a changed file start, and each mutates only its changed files.
+          Empty mutates all files. It takes an empty selections.
+        type: string
+        default: ""
+      report-only:
+        description: >-
+          Write the scores, but do not fail a selection under its gate. A run that mutates only the changed files is
+          a sample, so it is usually report only.
+        type: boolean
+        default: false
       node-version:
         description: The Node.js version.
         type: string
@@ -93,8 +112,17 @@ jobs:
         env:
           LANE: ${{ inputs.lane }}
           SELECTIONS: ${{ inputs.selections }}
+          CHANGED: ${{ inputs.changed }}
         run: |
-          if [ -z "${SELECTIONS//[ ,]/}" ]; then
+          if [ -n "${CHANGED//[[:space:],]/}" ]; then
+            if [ -n "${SELECTIONS//[ ,]/}" ]; then
+              echo "::error::changed takes an empty selections. The runs come from the changed files."
+              exit 1
+            fi
+            tr ',' '\n' <<< "$CHANGED" > "$RUNNER_TEMP/changed.txt"
+            names=$(pnpm exec rigor-mutation list --runs --changed "$RUNNER_TEMP/changed.txt" --lane "$LANE")
+            if [ -z "$names" ]; then echo "No selection has a changed file. No mutate job starts." >> "$GITHUB_STEP_SUMMARY"; fi
+          elif [ -z "${SELECTIONS//[ ,]/}" ]; then
             names=$(pnpm exec rigor-mutation list --runs --lane "$LANE")
           else
             names=$(tr ', ' '\n\n' <<< "$SELECTIONS" | grep -v '^$')
@@ -107,6 +135,8 @@ jobs:
 
   mutate:
     needs: plan
+    # A matrix with no value is an error, so a plan with no selection starts no job.
+    if: ${{ needs.plan.outputs.selections != '[]' }}
     name: mutate (${{ matrix.selection }})
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout-minutes }}
@@ -143,6 +173,8 @@ jobs:
           CONCURRENCY: ${{ inputs.concurrency }}
           STOP_MINUTES: ${{ inputs.stop-minutes }}
           TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+          DRY_RUN: ${{ inputs.dry-run }}
+          CHANGED: ${{ inputs.changed }}
         run: |
           stop=$STOP_MINUTES
           if [ "$stop" -eq 0 ]; then stop=$((TIMEOUT_MINUTES - 10)); fi
@@ -152,7 +184,13 @@ jobs:
           fi
           dir=$(pnpm exec rigor-mutation dir "$SELECTION" --lane "$LANE")
           echo "dir=$dir" >> "$GITHUB_OUTPUT"
-          pnpm exec rigor-mutation config "$SELECTION" --lane "$LANE" --concurrency "$CONCURRENCY" --out "$RUNNER_TEMP/stryker.config.json"
+          options=()
+          if [ "$DRY_RUN" = "true" ]; then options+=(--dry-run); fi
+          if [ -n "${CHANGED//[[:space:],]/}" ]; then
+            tr ',' '\n' <<< "$CHANGED" > "$RUNNER_TEMP/changed.txt"
+            options+=(--changed "$RUNNER_TEMP/changed.txt")
+          fi
+          pnpm exec rigor-mutation config "$SELECTION" --lane "$LANE" --concurrency "$CONCURRENCY" "${options[@]}" --out "$RUNNER_TEMP/stryker.config.json"
           # Stryker starts in the folder of the package. The bins of the root are also on the path.
           root_bin=$(pwd)/node_modules/.bin
           cd "$dir"
@@ -168,9 +206,16 @@ jobs:
           fi
           exit "$code"
       - name: Score
-        run: pnpm exec rigor-mutation scores "$SELECTION" --lane "$LANE" --summary "$GITHUB_STEP_SUMMARY"
+        if: ${{ !inputs.dry-run }}
+        env:
+          REPORT_ONLY: ${{ inputs.report-only }}
+        run: |
+          if pnpm exec rigor-mutation scores "$SELECTION" --lane "$LANE" --summary "$GITHUB_STEP_SUMMARY"; then :
+          elif [ "$REPORT_ONLY" = "true" ]; then echo "::warning::$SELECTION is under its gate. This run is report only."
+          else exit 1
+          fi
       - name: Mutation report
-        if: always() && steps.stryker.outputs.dir != ''
+        if: always() && !inputs.dry-run && steps.stryker.outputs.dir != ''
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mutation-${{ matrix.selection }}
@@ -182,7 +227,7 @@ jobs:
   # has no score, and the gate names it. Thus one check tells if each selection has a score at its gate.
   gate:
     needs: [plan, mutate]
-    if: ${{ !cancelled() && needs.plan.result == 'success' }}
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.selections != '[]' && !inputs.dry-run }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -212,8 +257,10 @@ jobs:
           LANE: ${{ inputs.lane }}
           SELECTIONS: ${{ needs.plan.outputs.selections }}
           REPORTS: ${{ runner.temp }}/mutation
+          REPORT_ONLY: ${{ inputs.report-only }}
         run: |
-          { echo "### Mutation gate"; echo; } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$REPORT_ONLY" = "true" ]; then title="Mutation gate (report only)"; else title="Mutation gate"; fi
+          { echo "### $title"; echo; } >> "$GITHUB_STEP_SUMMARY"
           status=0
           for name in $(node -e 'for (const s of JSON.parse(process.argv[1])) console.log(s)' "$SELECTIONS"); do
             # A selection with no report fails: "scores" names the missing file.
@@ -221,4 +268,5 @@ jobs:
             echo "$out"
             echo "- $(head -n 1 <<< "$out")" >> "$GITHUB_STEP_SUMMARY"
           done
+          if [ "$REPORT_ONLY" = "true" ]; then exit 0; fi
           exit "$status"
