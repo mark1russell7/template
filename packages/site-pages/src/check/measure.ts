@@ -8,12 +8,13 @@ export interface Cut {
   /**
    * The kind of the box:
    * - `clip`: the box has `overflow-x: hidden` or `clip`, so a visitor cannot reach the text,
-   * - `table`: the box scrolls, and the text is in a table.
+   * - `table`: the box scrolls, and the text is in a table,
+   * - `code`: the box scrolls, and the text is in a code block (`pre`).
    */
-  kind: "clip" | "table";
+  kind: "clip" | "table" | "code";
   /** The box. */
   box: string;
-  /** The table, or the element of the text. */
+  /** The table, the code block, or the element of the text. */
   element: string;
   /** The width of the content of the box, in CSS pixels. */
   scrollWidth: number;
@@ -56,8 +57,8 @@ export interface Measure {
  * than the box by more than 1 px. An element with `overflow-x: clip` is always a box, because it can report no overflow.
  * The text counts when a line of it ends more than 1 px past the right edge of the box.
  *
- * A box that scrolls counts only for text in a table (`table`, `role="table"` or `role="grid"`).
- * A code block, a hex view, a row of tabs and a carousel in such a box are meant to scroll.
+ * A box that scrolls counts only for text in a table (`table`, `role="table"` or `role="grid"`) or in a code block (`pre`).
+ * A hex view, a row of tabs and a carousel in such a box are meant to scroll, and they do not count.
  * A box that clips counts for each text, because a visitor cannot reach that text. These texts do not count:
  * - a text in a box with `text-overflow` other than `clip` (a person chose the ellipsis),
  * - a text in an element with `data-overflow-ok`, or in that element itself (a person chose the overflow),
@@ -145,14 +146,17 @@ export const MEASURE = `(() => {
     if (s.textOverflow !== "clip") continue;
     const scrolls = s.overflowX === "auto" || s.overflowX === "scroll";
     const table = e.closest("table,[role=table],[role=grid]");
-    if (scrolls && !(table && box.contains(table))) continue;
+    const code = e.closest("pre");
+    const inTable = !!table && box.contains(table);
+    const inCode = !inTable && !!code && box.contains(code);
+    if (scrolls && !inTable && !inCode) continue;
     const left = box.getBoundingClientRect().left + box.clientLeft;
     range.selectNodeContents(t);
     const end = Math.max(...[...range.getClientRects()].filter((r) => r.width > 0).map((r) => r.right));
     if (end <= left + box.clientWidth + 1) continue;
     const hasCue = scrolls && box.classList.contains("scroll-cue");
     if (e.closest("[data-overflow-ok]") || (hasCue && cueShows(box)) || !shown(e)) continue;
-    cuts.set(box, { ...(hasCue ? { deadCue: true } : {}), kind: scrolls ? "table" : "clip", box: name(box), element: name(scrolls ? table : e), scrollWidth: Math.max(box.scrollWidth, Math.ceil(end - left)), clientWidth: box.clientWidth, text: t.data.trim().replace(/\\s+/g, " ").slice(0, 40) });
+    cuts.set(box, { ...(hasCue ? { deadCue: true } : {}), kind: scrolls ? (inTable ? "table" : "code") : "clip", box: name(box), element: name(scrolls ? (inTable ? table : code) : e), scrollWidth: Math.max(box.scrollWidth, Math.ceil(end - left)), clientWidth: box.clientWidth, text: t.data.trim().replace(/\\s+/g, " ").slice(0, 40) });
   }
   return {
     innerWidth,

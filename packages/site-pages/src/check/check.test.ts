@@ -35,7 +35,7 @@ beforeAll(() => {
   write("wide/index.html", page(`<h1>Wide</h1><div id="wide" style="width: 900px">A wide block</div>`));
   write("fixed-empty/index.html", page(`<h1>Panel</h1><aside id="panel" style="position: fixed; top: 0; left: 200px; width: 100%; height: 100vh"><div id="inner" style="width: 100%"><p style="width: 100px">Short</p></div></aside>`));
   write("fixed-text/index.html", page(`<h1>Panel</h1><aside id="over" style="position: fixed; top: 0; left: 200px; width: 100%; white-space: nowrap">This text is long, and the screen cuts it at the right edge of the view</aside>`));
-  write("scroller/index.html", page(`<h1>Scroller</h1><div data-overflow-ok style="overflow-x: auto"><table><tr><td style="min-width: 900px">A wide table in a scroller</td></tr></table></div><pre style="overflow-x:auto">a long line of code that is wider than a phone screen, in a pre that scrolls</pre>`));
+  write("scroller/index.html", page(`<h1>Scroller</h1><div data-overflow-ok style="overflow-x: auto"><table><tr><td style="min-width: 900px">A wide table in a scroller</td></tr></table></div><pre class="scroll-cue" style="overflow-x:auto; background-image: linear-gradient(#fff, #eee)">a long line of code that is wider than a phone screen, in a pre that scrolls</pre>`));
   write("broken/index.html", page(`<h1>Broken</h1><img src="missing.png" alt=""><script>console.error("bad thing")</script>`));
   write("throws/index.html", page(`<h1>Throws</h1><script>throw new Error("boom")</script>`));
   write("empty/index.html", page(``));
@@ -58,6 +58,9 @@ beforeAll(() => {
   write("clip-table/index.html", page(`<h1>Clip</h1><div id="card" style="overflow: hidden"><table style="min-width: 46rem"><tr><td>${LONG}</td></tr></table></div>`));
   write("clip-text/index.html", page(`<h1>Clip</h1><div id="card" style="overflow-x: clip"><p id="line" style="${NOWRAP}">${LONG} ${LONG}</p></div>`));
   write("clip-scroller/index.html", page(`<h1>Clip</h1><div id="card" style="overflow: hidden"><div style="width: 4000px; overflow-x: auto"><p style="${NOWRAP}">${LONG} ${LONG}</p></div></div>`));
+  // A code block of a highlighter: the text is in a span in a code element in the pre that scrolls.
+  write("wide-code/index.html", page(`<h1>Wide code</h1><pre id="wide-code" style="overflow-x: auto"><code><span>${LONG} ${LONG} ${LONG} ${LONG}</span></code></pre>`));
+  write("dead-code-cue/index.html", page(`<h1>Dead cue</h1><pre class="scroll-cue" style="overflow-x: auto">${LONG} ${LONG}</pre>`));
   write("wide-table/index.html", page(`<h1>Wide table</h1><div style="overflow-x: auto"><table style="min-width: 2000px"><tr><td>${LONG} ${LONG} ${LONG}</td></tr></table></div>`));
   write("over-1px/index.html", page(`<h1>Over</h1>${fit(-3)}`));
   write("under-1px/index.html", page(`<h1>Under</h1>${fit(-0.6)}`));
@@ -66,8 +69,8 @@ beforeAll(() => {
     page(
       [
         `<h1>Fine</h1>`,
-        `<pre id="code" style="overflow-x: auto">${LONG}</pre>`,
-        `<div style="overflow: hidden"><pre id="code-in-card" style="overflow-x: auto">${LONG}</pre></div>`,
+        `<pre id="code" class="scroll-cue" style="overflow-x: auto; background-image: linear-gradient(#fff, #eee)">${LONG}</pre>`,
+        `<div style="overflow: hidden"><pre id="code-in-card" data-overflow-ok style="overflow-x: auto">${LONG}</pre></div>`,
         `<div id="hex" style="overflow-x: auto; ${NOWRAP}; font-family: monospace"><div>00000000  47 49 46 38 39 61 01 00  01 00 80 00 00 ff ff ff 00 00 00 21 f9 04 01 00 00 00 00 2c 00 00 00 00</div></div>`,
         `<nav style="overflow-x: auto; ${NOWRAP}">${LONG}</nav>`,
         `<div data-overflow-ok style="overflow-x: auto"><table style="min-width: 46rem"><tr><td>${LONG}</td></tr></table></div>`,
@@ -153,6 +156,13 @@ describe("cutProblems", () => {
     expect(cutProblems([cut("table")], 360)).toEqual([`a table goes out of view at 360 px: table.api in div.card: content of 736 px in a box of 302 px, "runMigrations". Make the table fit, give the box the class scroll-cue, or add data-overflow-ok to the box.`]);
     expect(cutProblems([cut("clip")], 400)).toEqual([`a box cuts text at 400 px: table.api in div.card: content of 736 px in a box of 302 px, "runMigrations". Make the content fit, or add data-overflow-ok to the box.`]);
   });
+  it("names a code block in the text of its problem", () => {
+    const code: Cut = { kind: "code", box: "pre#x", element: "pre#x", scrollWidth: 736, clientWidth: 302, text: "pnpm add" };
+    expect(cutProblems([code], 360)).toEqual([`a code block goes out of view at 360 px: pre#x in pre#x: content of 736 px in a box of 302 px, "pnpm add". Make the lines fit, give the box the class scroll-cue, or add data-overflow-ok to the box.`]);
+    expect(cutProblems([{ ...code, deadCue: true }], 360)[0]).toMatch(/^a code block goes out of view at 360 px: .* The box has the class scroll-cue, but its computed style has no animation and no shade\./);
+    expect(cutProblems([code], PHONE_WIDTH)).toEqual([]);
+  });
+
   it("reports a clip at each width, and a table in a scroller only on a phone", () => {
     expect(cutProblems([cut("clip")], 1280)).toHaveLength(1);
     expect(cutProblems([cut("table")], PHONE_WIDTH - 1)).toHaveLength(1);
@@ -319,6 +329,16 @@ describe.skipIf(browser === undefined)("checkSite in a browser", () => {
     expect(at("/clip-text/", 360)).toContain("a box cuts text at 360 px: p#line in div#card");
     expect(at("/clip-text/", 1280)).toContain("a box cuts text at 1280 px: p#line in div#card");
     expect(at("/clip-scroller/", 360)).toContain("a box cuts text at 360 px: p in div#card");
+  }, 120_000);
+
+  it("finds a code block wider than its box with no cue on a phone, and a dead cue on a code block", async () => {
+    const result = await checkSite(options(["/wide-code/", "/dead-code-cue/"], { widths: [360, 1280], schemes: ["light"] }));
+    const at = (page: string, width: number) => result.views.find((view) => view.page === page && view.width === width);
+    expect(at("/wide-code/", 360)?.problems.join(" ")).toContain("a code block goes out of view at 360 px: pre#wide-code in pre#wide-code");
+    expect(at("/wide-code/", 1280)?.problems).toEqual([]);
+    expect(at("/wide-code/", 1280)?.measure?.cut[0]).toMatchObject({ kind: "code", element: "pre#wide-code", box: "pre#wide-code" });
+    expect(at("/dead-code-cue/", 360)?.problems.join(" ")).toContain("a code block goes out of view at 360 px: pre.scroll-cue in pre.scroll-cue");
+    expect(at("/dead-code-cue/", 360)?.problems.join(" ")).toContain("The box has the class scroll-cue, but its computed style has no animation and no shade.");
   }, 120_000);
 
   it("reports a table in a scroller on a desktop in the measure, not as a problem", async () => {
