@@ -107,6 +107,10 @@
 .rx-field select { width: 100%; min-height: 2.25rem; border: 1px solid var(--rx-rule); background: var(--rx-surface); border-radius: 0.4rem; padding: 0.2rem 0.35rem; color: var(--rx-ink); font: inherit; }
 .rx-field select:hover { border-color: var(--rx-accent); }
 .rx-hold { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: 0.25rem; }
+/* The fold of the held values that do not apply at the level of their parent. It is closed at the start. */
+.rx-idle { min-width: 0; }
+.rx-idle summary { cursor: pointer; padding: 0.4rem 0; font-size: 0.85rem; color: var(--rx-accent); }
+.rx-idle-list { display: grid; gap: 0.75rem; padding-top: 0.5rem; }
 .rx-name, .rx-section { font-size: 0.85rem; color: var(--rx-muted); padding: 0; margin: 0; }
 .rx-section { text-transform: uppercase; letter-spacing: 0.07em; font-size: 0.75rem; border-top: 1px solid var(--rx-rule); padding-top: 0.6rem; }
 .rx-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }

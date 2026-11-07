@@ -100,9 +100,13 @@ rxChoose("facet", "");
 const rxMaxrects = rxChip("maxrects");
 if (rxMaxrects !== null) click(rxMaxrects);
 check("the strategy maxrects opens its rule", await until(() => rxChip("cp")?.disabled === false), rxChip("cp")?.disabled);
+// A held value that does not apply goes in one closed fold, after the values that change the view.
+const rxFold = (): HTMLDetailsElement | null => (rxChip("cp")?.closest("details.rx-idle") ?? null) as HTMLDetailsElement | null;
+check("the rule of maxrects is outside the fold at maxrects", rxFold() === null, rxFold()?.outerHTML.slice(0, 120));
 const rxSkyline = rxChip("skyline");
 if (rxSkyline !== null) click(rxSkyline);
 check("the strategy skyline closes the rule of maxrects", await until(() => rxChip("cp")?.disabled === true), rxChip("cp")?.disabled);
+check("the rule of maxrects is in the closed fold at skyline", rxFold()?.open === false && /^Held values that do not apply \(\d+\)$/.test(rxFold()?.querySelector("summary")?.textContent ?? ""), rxFold()?.querySelector("summary")?.textContent);
 
 const before = document.documentElement.dataset["theme"] ?? "";
 click("#theme");
