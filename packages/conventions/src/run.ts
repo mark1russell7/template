@@ -1,12 +1,14 @@
 /**
  * The commands `check`, `fix` and `--list` of the bin `conventions`, as functions. `runChecks` starts the
  * rules, `runFix` writes the edits of the breaks, and `runCli` reads the arguments and writes the result.
+ * The commands `pre-push` and `hook install` are in `pre-push.ts`.
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { addedFiles } from "./change.ts";
 import { findHomes, HOMES, mapMarkdown, mapText, mergeHomes, readOverlay, type Home } from "./map.ts";
 import { parseConfig, type ConventionsConfig } from "./config.ts";
+import { installHook, prePush } from "./pre-push.ts";
 import { matchesAny, runGit, type Break, type Manifest, type PackageInfo, type Rule, type RuleContext } from "./rule.ts";
 import { RULES } from "./rules/index.ts";
 import { packageFolders, relativePath } from "./workspace.ts";
@@ -283,6 +285,8 @@ export interface CliIo {
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly stdout: (text: string) => void;
   readonly stderr: (text: string) => void;
+  /** The standard input. The bin reads it only for the command `pre-push`, which reads the refs of the push from git. */
+  readonly stdin?: string;
 }
 
 /** The help text of the bin. */
@@ -290,12 +294,21 @@ export const USAGE: string = `Usage: conventions check [options]
        conventions fix [options]
        conventions --list
        conventions map [words] [--markdown | --json] [--overlay <file>]
+       conventions pre-push <remote> [<url>]
+       conventions hook install
 
   check                 Start each rule. Exit code 1 when a rule has a break.
   fix                   Write the fixes of the breaks that have one, and check again. Exit code 1 when a break stays.
   --list                Show each rule: why, fix, options, state and the audit rows that it comes from.
   map                   Show the home package of each area of code, or of the areas that match the words.
                         --markdown writes the table with the rule, and --overlay adds the homes of a JSON file.
+  pre-push              The git hook pre-push starts it. It reads the refs of the push on the standard input, and
+                        examines each new commit with the private name list: the message, the paths and the added
+                        lines. Exit code 1 on a break. The list is the JSON file of CONVENTIONS_PRIVATE_NAMES_FILE, else
+                        of the git config conventions.privateNamesFile. CONVENTIONS_PRIVATE_PATTERNS adds one regular
+                        expression on each line. With neither, it writes a "No read" line and gives 0.
+  hook install          Write the hook pre-push into the hooks folder of git. It keeps a hook that it did not write.
+                        In CI, or outside a git repository, it does nothing.
 
   --root <folder>       The root of the repository. The default is the current folder.
   --rule <id>           Only this rule. Use it again for more rules.
@@ -333,6 +346,8 @@ class UsageError extends Error {}
 /** This function starts the bin with the arguments `args`, and gives its exit code. */
 export function runCli(args: readonly string[], io: CliIo): number {
   if (args[0] === "map") return runMap(args.slice(1), io);
+  if (args[0] === "pre-push") return runPrePush(args.slice(1), io);
+  if (args[0] === "hook") return runHook(args.slice(1), io);
   let check = false;
   let fix = false;
   let list = false;
@@ -438,4 +453,26 @@ function runMap(args: readonly string[], io: CliIo): number {
   else if (format === "markdown") io.stdout(mapMarkdown(found));
   else io.stdout(mapText(found));
   return 0;
+}
+
+/** The command `pre-push`: the arguments of the git hook, the remote and its URL. */
+function runPrePush(args: readonly string[], io: CliIo): number {
+  const remote = args[0];
+  if (remote === undefined || remote.startsWith("-") || args.length > 2) {
+    io.stderr(`conventions: The command pre-push takes the name of the remote and, after it, its URL.\n\n${USAGE}`);
+    return 2;
+  }
+  const top = runGit(io.cwd, ["rev-parse", "--show-toplevel"])?.trim() ?? "";
+  const root = top === "" ? io.cwd : top;
+  const url = args[1];
+  return prePush({ remote, ...(url === undefined ? {} : { url }), input: io.stdin ?? "", env: io.env, root, git: (gitArgs) => runGit(root, gitArgs) }, io);
+}
+
+/** The command `hook install`: it writes the git hook pre-push. */
+function runHook(args: readonly string[], io: CliIo): number {
+  if (args.length !== 1 || args[0] !== "install") {
+    io.stderr(`conventions: The command hook takes one argument: install.\n\n${USAGE}`);
+    return 2;
+  }
+  return installHook({ cwd: io.cwd, env: io.env, git: (gitArgs) => runGit(io.cwd, gitArgs) }, io);
 }
