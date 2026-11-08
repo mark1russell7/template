@@ -4,26 +4,30 @@ description: >-
   On a pull request, a scan fails only for a new finding at or above fail-on-severity. On a push, a schedule or a
   manual run, the scans upload their findings to code scanning and do not fail on findings. Each scan runs also when
   an earlier scan failed. The last step fails, and names each scan that failed. The job of the caller gives the
-  permissions and the time limit (CI.md, "Security").
+  permissions and the time limit (CI.md, "Security"). In a private repository, the default "auto" skips the dependency
+  review, CodeQL and the upload of osv-scanner, because they need GitHub Advanced Security. A warning names each skip.
 inputs:
   fail-on-severity:
     description: The lowest severity of a new finding that fails a pull request. One of low, moderate, high or critical.
     default: high
   dependency-review:
-    description: Run the dependency review on pull requests ("true" or "false").
-    default: "true"
+    description: Run the dependency review on pull requests ("true", "false" or "auto"). "auto" runs it in a public repository only.
+    default: auto
   dependency-review-scopes:
     description: The scopes of the dependencies that the dependency review examines, separated by commas. The scopes are runtime, development and unknown.
     default: runtime, development, unknown
   osv:
     description: Run osv-scanner ("true" or "false").
     default: "true"
+  osv-upload:
+    description: Upload the results of osv-scanner to code scanning on a push, a schedule or a manual run ("true", "false" or "auto"). "auto" uploads in a public repository only.
+    default: auto
   osv-lockfile:
     description: The lockfiles that osv-scanner scans, separated by spaces. Empty scans each lockfile that osv-scanner finds in the repository.
     default: ""
   codeql:
-    description: Run CodeQL ("true" or "false"). Set "false" in a repository that uses the default setup of code scanning, because the two conflict.
-    default: "true"
+    description: Run CodeQL ("true", "false" or "auto"). "auto" runs it in a public repository only. Set "false" in a repository that uses the default setup of code scanning, because the two conflict.
+    default: auto
   codeql-languages:
     description: The CodeQL languages, separated by commas. The scan skips a language that has no files in the repository.
     default: javascript-typescript,actions
@@ -38,6 +42,23 @@ runs:
   # of a scan has "!cancelled()" in its condition, so a scan runs also when an earlier scan failed. A step also
   # needs the steps before it in its own scan, so a scan stops at its first failed step, as a job does.
   steps:
+    # In a private repository with no GitHub Advanced Security, the dependency review and code scanning refuse the
+    # run. The value "auto" of an input runs its part only in a public repository (choice.ts). "true" and "false" keep
+    # their meaning. The last step gives a warning for each scan that "auto" skips, so a skip does not look like a pass.
+    - name: Choose the scans
+      id: choice
+      shell: bash
+      env:
+        DEPENDENCY_REVIEW: ${{ inputs.dependency-review }}
+        CODEQL: ${{ inputs.codeql }}
+        OSV_UPLOAD: ${{ inputs.osv-upload }}
+        # The payload of a schedule has no repository. Then the step reads the visibility from the API.
+        PRIVATE: ${{ github.event.repository.private }}
+        EVENT: ${{ github.event_name }}
+        GH_TOKEN: ${{ github.token }}
+        CHOICE: ${{ github.action_path }}/choice.ts
+      run: node "$CHOICE"
+
     - name: Check out the repository
       id: checkout
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -51,7 +72,7 @@ runs:
     # graph through the API. It does not read the checkout.
     - name: Dependency review
       id: dependency-review_scan
-      if: ${{ !cancelled() && inputs.dependency-review == 'true' && github.event_name == 'pull_request' }}
+      if: ${{ !cancelled() && steps.choice.outputs.dependency-review == 'true' && github.event_name == 'pull_request' }}
       uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
       with:
         fail-on-severity: ${{ inputs.fail-on-severity }}
@@ -230,17 +251,31 @@ runs:
       id: osv-scanner_check
       if: ${{ !cancelled() && steps.osv-scanner_scan.conclusion == 'success' }}
       shell: bash
+      env:
+        UPLOAD: ${{ steps.choice.outputs.osv-upload }}
       run: |
         if [ ! -s osv.sarif ]; then
           echo "::error::osv-scanner wrote no results. The log of the step \"Scan\" tells why."
           exit 1
         fi
         count=$(node -e 'const s = JSON.parse(require("node:fs").readFileSync("osv.sarif", "utf8")); console.log((s.runs ?? []).reduce((n, run) => n + (run.results ?? []).length, 0));')
-        echo "osv-scanner found $count vulnerable packages. The Security tab shows them." >> "$GITHUB_STEP_SUMMARY"
+        if [ "$UPLOAD" = "true" ]; then
+          echo "osv-scanner found $count vulnerable packages. The Security tab shows them." >> "$GITHUB_STEP_SUMMARY"
+        else
+          # With no upload, no Security tab shows the results, so the summary of the run lists them
+          echo "::warning title=osv-scanner upload skipped::osv-scanner found $count vulnerable packages. The input osv-upload is off for this repository, so the summary of the run lists them and code scanning does not get them."
+          node - >> "$GITHUB_STEP_SUMMARY" <<'JS'
+        const sarif = JSON.parse(require("node:fs").readFileSync("osv.sarif", "utf8"));
+        const cell = (text) => String(text ?? "").split("\n")[0].replace(/\|/g, "\\|");
+        const rows = (sarif.runs ?? []).flatMap((run) => (run.results ?? []).map((result) => `| ${cell(result.ruleId)} | ${cell(result.message?.text)} | ${cell(result.locations?.[0]?.physicalLocation?.artifactLocation?.uri)} |`));
+        console.log("### osv-scanner: vulnerable packages (not uploaded to code scanning)\n");
+        console.log(rows.length === 0 ? "osv-scanner found no vulnerable package." : ["| Vulnerability | Message | Lockfile |", "|---|---|---|", ...rows].join("\n"));
+        JS
+        fi
 
     - name: Upload the results to code scanning
       id: osv-scanner_upload
-      if: ${{ !cancelled() && steps.osv-scanner_check.outcome == 'success' }}
+      if: ${{ !cancelled() && steps.osv-scanner_check.outcome == 'success' && steps.choice.outputs.osv-upload == 'true' }}
       uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
       with:
         sarif_file: osv.sarif
@@ -264,7 +299,7 @@ runs:
     # CodeQL fails for a language with no source files, so the scan skips such a language
     - name: Languages
       id: codeql_languages
-      if: ${{ !cancelled() && inputs.codeql == 'true' && steps.checkout.outcome == 'success' }}
+      if: ${{ !cancelled() && steps.choice.outputs.codeql == 'true' && steps.checkout.outcome == 'success' }}
       shell: bash
       env:
         LANGUAGES: ${{ inputs.codeql-languages }}
@@ -381,6 +416,7 @@ runs:
         # output (the dependency changes of a big lock change) makes the environment too large for the start of bash.
         STEPS: |
           {
+          "choice": { "outcome": "${{ steps.choice.outcome }}", "conclusion": "${{ steps.choice.conclusion }}" },
           "checkout": { "outcome": "${{ steps.checkout.outcome }}", "conclusion": "${{ steps.checkout.conclusion }}" },
           "dependency-review_scan": { "outcome": "${{ steps.dependency-review_scan.outcome }}", "conclusion": "${{ steps.dependency-review_scan.conclusion }}" },
           "osv-scanner_args": { "outcome": "${{ steps.osv-scanner_args.outcome }}", "conclusion": "${{ steps.osv-scanner_args.conclusion }}" },
@@ -399,9 +435,11 @@ runs:
           "codeql_analyze": { "outcome": "${{ steps.codeql_analyze.outcome }}", "conclusion": "${{ steps.codeql_analyze.conclusion }}" },
           "codeql_new-alerts": { "outcome": "${{ steps.codeql_new-alerts.outcome }}", "conclusion": "${{ steps.codeql_new-alerts.conclusion }}" }
           }
-        DEPENDENCY_REVIEW: ${{ inputs.dependency-review == 'true' && github.event_name == 'pull_request' }}
+        DEPENDENCY_REVIEW: ${{ steps.choice.outputs.dependency-review == 'true' && github.event_name == 'pull_request' }}
         OSV_SCANNER: ${{ inputs.osv == 'true' }}
-        CODEQL: ${{ inputs.codeql == 'true' }}
+        CODEQL: ${{ steps.choice.outputs.codeql == 'true' }}
+        # The scans that "auto" skips in a private repository. The step gives a warning for each one.
+        SKIPPED: ${{ steps.choice.outputs.skipped }}
         VERDICT: ${{ github.action_path }}/verdict.ts
       # Node 22.18 and later run TypeScript with no build. The ubuntu-latest image has such a Node.
       run: node "$VERDICT"

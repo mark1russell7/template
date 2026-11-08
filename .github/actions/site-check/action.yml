@@ -1,7 +1,7 @@
 name: site-check
 description: >-
   Checks a built site in a headless Chromium at phone and desktop widths, in light and dark. A failed check fails the
-  step, so a deploy after it does not start. The artifact site-check has the screenshots and the report.
+  step, so a deploy after it does not start. The artifact site-check (the input artifact-name) has the screenshots and the report.
 inputs:
   out:
     description: The folder of the built site.
@@ -32,6 +32,11 @@ inputs:
       true: also the navigation crawl (site-pages nav). It fails on a page more than 2 clicks from home, a page with no
       way back to home, a link of the site that opens a new tab, a link to a missing page, and a page with no site bar.
     default: "false"
+  artifact-name:
+    description: >-
+      The name of the artifact with the screenshots and the report. Two calls in one run need two names: a download
+      by name gets only the latest artifact of the name, and download-artifact also lists by ID only the latest.
+    default: site-check
 runs:
   using: composite
   steps:
@@ -97,7 +102,7 @@ runs:
       if: always()
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
-        name: site-check
+        name: ${{ inputs.artifact-name }}
         path: ${{ runner.temp }}/site-check
         if-no-files-found: warn
         retention-days: 14

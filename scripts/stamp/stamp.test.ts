@@ -83,6 +83,18 @@ describe("the stamp", () => {
     );
   });
 
+  it("gives a security workflow that also passes in a private repository: the pinned action, and no checkout of the template", async () => {
+    const { out, sha } = await stamped();
+    const security = read(out, ".github/workflows/security.yml");
+    assert.ok(security.includes(`uses: mark1russell7/template/.github/actions/security-scan@${sha} # main`));
+    // A sparse checkout before the action leaves a partial clone, and in a private repository the checkout of the base then fails
+    for (const each of security.split(/\n {6}- /).filter((text) => text.includes("sparse-checkout:"))) {
+      assert.match(each, /^if: github\.repository == 'mark1russell7\/template'\n/);
+    }
+    // The action chooses the scans: "auto" skips the parts that need GitHub Advanced Security in a private repository
+    assert.doesNotMatch(security, /\b(dependency-review|codeql|osv-upload): /);
+  });
+
   it("stops when the folder exists", async () => {
     const { out } = await stamped();
     await assert.rejects(stamp({ name: "demo-repo", description: "x", template, out, ref: "HEAD", latest: () => "1.0.0" }), /The folder exists/);
