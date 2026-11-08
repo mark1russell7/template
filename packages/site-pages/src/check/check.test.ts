@@ -89,6 +89,26 @@ beforeAll(() => {
     ),
   );
   write("404.html", page(`<h1>Not found</h1>`));
+  // The islands of Astro: an island with client:visible starts when one of its children comes into view, and then removes the
+  // attribute ssr. The island of coeval /learn/replay/ is below the first screen, and its content is wider than a phone.
+  const island = (client: string, child: string, extra = "") =>
+    `<astro-island ssr client="${client}" component-url="/_astro/${client}.js"${extra}><div class="child" ${child}>The content before the start</div></astro-island>`;
+  const start = (delay: number) =>
+    `<script>for (const island of document.querySelectorAll("astro-island[client=visible]")) new IntersectionObserver((entries, observer) => { if (!entries.some((entry) => entry.isIntersecting)) return; observer.disconnect(); setTimeout(() => { island.firstElementChild.innerHTML = '<div style="width: 900px">The journal of the replay, in one wide row</div>'; island.removeAttribute("ssr"); }, ${String(delay)}); }).observe(island.firstElementChild);</script>`;
+  const islandCss = `<style>astro-island { display: contents }</style>`;
+  write("island-below/index.html", page(`<h1>Replay</h1><div style="height: 3000px">The text above the island</div>${island("visible", "")}${start(50)}`, islandCss));
+  write(
+    "island-stuck/index.html",
+    page(
+      [
+        `<h1>Stuck</h1><div style="height: 3000px">The text above the islands</div>`,
+        island("load", ""),
+        island("visible", `style="display: none"`),
+        island("media", "", ` opts='{"name":"Menu","value":"(max-width: 1px)"}'`),
+      ].join(""),
+      islandCss,
+    ),
+  );
 });
 
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -392,5 +412,18 @@ describe.skipIf(browser === undefined)("checkSite in a browser", () => {
     expect(result.ok).toBe(false);
     expect(result.views.filter((view) => !view.ok).map((view) => [view.page, view.problems])).toEqual([["/wide/", ["probe: the wide block is narrow (900)"]]]);
     expect(summary(result)).toContain("| `/wide/` | 1280 | light | **fail** (probe 0/1) | probe: the wide block is narrow (900) |");
+  }, 120_000);
+
+  it("scrolls to the end before the measure, so an island below the first screen starts and its content counts", async () => {
+    const result = await checkSite(options(["/island-below/"], { schemes: ["light"] }));
+    const at = (width: number) => result.views.find((view) => view.width === width)?.problems ?? [];
+    expect(at(360).join("\n")).toMatch(/wider than the screen|past the right edge/);
+    expect(at(360).join("\n")).not.toContain("an island did not start");
+    expect(at(1280)).toEqual([]);
+  }, 120_000);
+
+  it("fails an island that does not start in the time limit, and does not wait for a hidden island or an island of another media query", async () => {
+    const result = await checkSite(options(["/island-stuck/"], { widths: [360], schemes: ["light"], islandMs: 500 }));
+    expect(result.views[0]?.problems).toEqual(["an island did not start in 500 ms after a scroll to the end: load.js (client:load)"]);
   }, 120_000);
 });
