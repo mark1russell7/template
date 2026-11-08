@@ -347,7 +347,7 @@ jobs:
 | `lane` | `mutation.json` | The lane file. |
 | `concurrency` | `4` | The test processes of Stryker on each runner. |
 | `timeout-minutes` | `120` | The time limit of each selection. Divide a package into parts when one selection needs more. |
-| `stop-minutes` | `0` | The time after which Stryker stops. `0` gives `timeout-minutes` minus 10. |
+| `stop-minutes` | `0` | The time after which Stryker stops. `0` gives `stopMinutes` of the lane, at most `timeout-minutes` minus 10. |
 | `dry-run` | `false` | Start only the tests, with no mutant and no gate. |
 | `changed` | (empty) | The changed files, separated by commas or lines. Only their runs start. It takes an empty `selections`. |
 | `report-only` | `false` | Write the scores, but do not fail a score under the gate. |
