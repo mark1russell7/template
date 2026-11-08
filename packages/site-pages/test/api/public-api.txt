@@ -232,6 +232,20 @@ setMeasure: build/explorer/index.d.ts#setMeasure
 settle: build/explorer/index.d.ts#settle
 viewOf: build/explorer/index.d.ts#viewOf
 
+## ./config (build/config/site-config.d.ts): names
+
+SITE_CONFIG_KEYS: build/config/site-config.d.ts#SITE_CONFIG_KEYS
+SITE_CONFIG_PATH: build/config/site-config.d.ts#SITE_CONFIG_PATH
+SiteConfig: build/config/site-config.d.ts#SiteConfig
+SiteConfigInput: build/config/site-config.d.ts#SiteConfigInput
+SiteConfigKey: build/config/site-config.d.ts#SiteConfigKey
+SiteConfigKeySpec: build/config/site-config.d.ts#SiteConfigKeySpec
+SiteConfigKind: build/config/site-config.d.ts#SiteConfigKind
+SiteConfigResult: build/config/site-config.d.ts#SiteConfigResult
+fillRepository: build/config/site-config.d.ts#fillRepository
+inputsGiven: build/config/site-config.d.ts#inputsGiven
+resolveSiteConfig: build/config/site-config.d.ts#resolveSiteConfig
+
 ## ./vite (build/vite.d.ts): names
 
 type BuildInfo: build/chrome.d.ts#BuildInfo
@@ -652,6 +666,80 @@ declare function readKpi(text: string, now?: number): KpiFile;
 
 ### build/chunks/freshness.d.ts#writeKpi
 declare function writeKpi(out: string, input: KpiInput, now?: number): string;
+
+### build/config/site-config.d.ts#SITE_CONFIG_KEYS
+export declare const SITE_CONFIG_KEYS: { readonly [K in SiteConfigKey]: SiteConfigKeySpec<SiteConfig[K]>; };
+
+### build/config/site-config.d.ts#SITE_CONFIG_PATH
+export declare const SITE_CONFIG_PATH = ".github/site.json";
+
+### build/config/site-config.d.ts#SiteConfig
+export interface SiteConfig {
+  readonly build: string;
+  readonly out: string;
+  readonly env: Readonly<Record<string, string>>;
+  readonly "github-token": boolean;
+  readonly "node-version": string;
+  readonly "node-version-file": string;
+  readonly "site-pages": boolean;
+  readonly "site-pages-version": string;
+  readonly roadmap: string;
+  readonly base: string;
+  readonly packages: string;
+  readonly changesets: string;
+  readonly group: string;
+  readonly css: string;
+  readonly "site-name": string;
+  readonly "data-only": boolean;
+  readonly "data-stamps": string;
+  readonly "site-check": boolean;
+  readonly "site-check-pages": string;
+  readonly "site-check-widths": string;
+  readonly "site-check-probe": string;
+  readonly "site-check-playwright": string;
+  readonly "site-bar": boolean;
+  readonly "site-bar-pages": string;
+  readonly "site-bar-npm": string;
+  readonly "scroll-cue": boolean;
+  readonly "indexnow-key": string;
+}
+
+### build/config/site-config.d.ts#SiteConfigInput
+export interface SiteConfigInput {
+  readonly file: string | undefined;
+  readonly path: string;
+  readonly inputs: Readonly<Record<string, unknown>> | undefined;
+  readonly repository: string;
+}
+
+### build/config/site-config.d.ts#SiteConfigKey
+export type SiteConfigKey = keyof SiteConfig;
+
+### build/config/site-config.d.ts#SiteConfigKeySpec
+export interface SiteConfigKeySpec<T> {
+  readonly kind: SiteConfigKind;
+  readonly default: T;
+}
+
+### build/config/site-config.d.ts#SiteConfigKind
+export type SiteConfigKind = "string" | "boolean" | "env";
+
+### build/config/site-config.d.ts#SiteConfigResult
+export type SiteConfigResult = {
+  readonly config: SiteConfig;
+  readonly source: "file" | "inputs";
+} | {
+  readonly error: string;
+};
+
+### build/config/site-config.d.ts#fillRepository
+export declare function fillRepository(value: string, repository: string): string;
+
+### build/config/site-config.d.ts#inputsGiven
+export declare function inputsGiven(inputs: Readonly<Record<string, unknown>>): SiteConfigKey[];
+
+### build/config/site-config.d.ts#resolveSiteConfig
+export declare function resolveSiteConfig(input: SiteConfigInput): SiteConfigResult;
 
 ### build/explorer/index.d.ts#AxisSlot
 type AxisSlot = "x" | "y";

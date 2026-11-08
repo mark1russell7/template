@@ -612,6 +612,30 @@ describe("roadmap-parses", () => {
     expect(rule(only, "roadmap-parses").breaks).toHaveLength(1);
   });
 
+  it("reads the roadmap of .github/site.json for a call that gives no roadmap", () => {
+    const call = "jobs:\n  pages:\n    uses: o/t/.github/workflows/reusable-pages.yml@0123abc\n";
+    const site = (config: Record<string, unknown>): string => `{\n  "build": "b",\n  "out": "o",\n${Object.entries(config).map(([key, value]) => `  ${JSON.stringify(key)}: ${JSON.stringify(value)}`).join(",\n")}\n}\n`;
+    const good = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": call, ".github/site.json": site({ roadmap: "./docs/ROADMAP.md" }), "docs/ROADMAP.md": roadmap });
+    commitAll(good);
+    expect(rule(good, "roadmap-parses").breaks).toEqual([]);
+    // The rule parses the roadmap of the file, with the line of its key
+    const bad = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": call, ".github/site.json": site({ roadmap: "docs/GONE.md" }) });
+    commitAll(bad);
+    expect(rule(bad, "roadmap-parses").breaks.map((item) => `${item.file}:${String(item.line)}: ${item.message}`)).toEqual([
+      ".github/site.json:4: .github/site.json names the roadmap docs/GONE.md, and the file does not exist.",
+    ]);
+    const none = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": call, ".github/site.json": site({ "site-name": "x" }) });
+    commitAll(none);
+    expect(rule(none, "roadmap-parses").breaks.map((item) => item.message)).toEqual([".github/site.json gives no roadmap, so the Status page shows no roadmap item."]);
+    const noPages = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": call, ".github/site.json": site({ "site-pages": false }) });
+    commitAll(noPages);
+    expect(rule(noPages, "roadmap-parses").status).toBe("skipped");
+    // A file that is not a site config fails on the pull request, before the Pages run reads it
+    const typo = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": call, ".github/site.json": site({ roadmap: "docs/ROADMAP.md", "site-chek": true }), "docs/ROADMAP.md": roadmap });
+    commitAll(typo);
+    expect(rule(typo, "roadmap-parses").breaks.map((item) => item.message)).toEqual([expect.stringMatching(/"site-chek" is not a key of the site config/)]);
+  });
+
   it("reads the value of a roadmap key", () => {
     expect(["  roadmap: docs/R.md", "roadmap: './R.md' # x", "roadmap:", "roadmap: ${{ inputs.roadmap }}", "  roadmaps: x", "# roadmap: x"].map(roadmapOfLine)).toEqual(["docs/R.md", "R.md", undefined, undefined, undefined, undefined]);
   });

@@ -2,11 +2,12 @@ import { defineConfig } from "tsdown";
 
 // The build for npm: ES modules in build/. index.js is the library with its types, chrome.js is the
 // browser entry with no Node.js import, explorer/index.js is the response explorer for the browser,
+// config/site-config.js is the site config of a repository (for the rules of @mark1russell7/conventions),
 // vite.js is the entry for vite.config.ts, and cli.js is the bin with the shebang of the source. The
 // workspace imports the source (main is src/index.ts). A shared chunk has no hash in its name, so the
 // API report does not change when only the text of a chunk changes.
 export default defineConfig({
-  entry: ["src/index.ts", "src/chrome.ts", "src/explorer/index.ts", "src/vite.ts", "src/cli.ts"],
+  entry: ["src/index.ts", "src/chrome.ts", "src/explorer/index.ts", "src/config/site-config.ts", "src/vite.ts", "src/cli.ts"],
   outDir: "build",
   format: "esm",
   platform: "node",
