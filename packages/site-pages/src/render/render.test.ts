@@ -291,6 +291,34 @@ function board(github: Parameters<typeof buildStatusBoard>[0]["github"], roadmap
   });
 }
 
+describe("the targets on the status page", () => {
+  const base = board({ available: true, pullRequests: [PULL], issues: [], totals: { pullRequests: 9, issues: 0 } });
+  const kpi = {
+    format: "kpi/1" as const,
+    project: "widgets",
+    at: "2026-11-16T09:00:00Z",
+    commit: "c".repeat(40),
+    measures: [
+      { id: "operators", value: 130, targets: [{ value: 120, by: "2026-11-15" }, { value: 250, by: "2026-11-22" }] },
+      { id: "late", value: 3, targets: [{ value: 5, by: "2026-11-01" }] },
+      { id: "cases", value: 12, unit: "cases" },
+    ],
+  };
+  const html = renderStatusPage({ ...base, kpi }, PAGE);
+
+  it("shows the first target on or after the date of the data, else the last target", () => {
+    expect(html).toContain('<th scope="col">Next target</th>');
+    expect(html).toContain('<td>250 by <time datetime="2026-11-22">Nov 22, 2026</time></td>');
+    expect(html).toContain('<td>5 by <time datetime="2026-11-01">Nov 1, 2026</time></td>');
+    expect(html).toContain("<td>12 cases</td><td></td>");
+  });
+
+  it("has no target column when no measure has targets", () => {
+    const plain = renderStatusPage({ ...base, kpi: { ...kpi, measures: [{ id: "cases", value: 12 }] } }, PAGE);
+    expect(plain).not.toContain("Next target");
+  });
+});
+
 describe("the status page", () => {
   const data = board({ available: true, pullRequests: [PULL], issues: [], totals: { pullRequests: 9, issues: 0 } });
   const html = renderStatusPage(data, PAGE);
