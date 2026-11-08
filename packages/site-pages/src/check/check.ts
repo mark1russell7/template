@@ -134,6 +134,38 @@ export function cutProblems(cuts: readonly Cut[], width: number): string[] {
   });
 }
 
+/** A code block or a table that goes out of view on a phone with no scroll cue that shows. */
+export interface ScrollGap {
+  page: string;
+  /** The box that scrolls. */
+  box: string;
+  /** The code block or the table. */
+  element: string;
+  /** The smallest width of a view with the gap, in CSS pixels. */
+  width: number;
+  /** True when the box has the class `scroll-cue`, but the served CSS gives it no animation and no shade. */
+  deadCue: boolean;
+}
+
+/**
+ * This function gives each code block and each table of a check that goes out of view on a phone with no cue that shows.
+ * It gives each block one time, also when more views (widths and schemes) find it. The site audit fails on a gap.
+ */
+export function scrollGaps(result: Pick<CheckResult, "views">): ScrollGap[] {
+  const gaps = new Map<string, ScrollGap>();
+  for (const view of result.views) {
+    if (view.width >= PHONE_WIDTH) continue;
+    for (const cut of view.measure?.cut ?? []) {
+      if (cut.kind === "clip") continue;
+      const key = JSON.stringify([view.page, cut.box, cut.element]);
+      const seen = gaps.get(key);
+      if (seen === undefined) gaps.set(key, { page: view.page, box: cut.box, element: cut.element, width: view.width, deadCue: cut.deadCue === true });
+      else if (view.width < seen.width) seen.width = view.width;
+    }
+  }
+  return [...gaps.values()];
+}
+
 /** This function gives the file name part of a page: `/` is `home`, `/releases/` is `releases`. */
 export function pageSlug(page: string): string {
   const slug = page.replace(/^\/+|\/+$/g, "").replace(/[^A-Za-z0-9._-]+/g, "_");

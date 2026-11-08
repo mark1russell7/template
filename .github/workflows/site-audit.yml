@@ -5,6 +5,8 @@
 # pages that are hidden or far from home, the pages with no way back and the links that open a new tab.
 # Its artifact site-nav has the screenshots and report.json of each site, and nav.json for all sites.
 # A failed site does not fail the run: the audit is a report. A run that cannot check a site fails.
+# One problem is a gate, not a report: a code block or a table that goes out of view on a phone with no scroll cue.
+# After the shared Pages step gave each block the cue, the audit read 0 such blocks, so a new one fails the run.
 # Each pull request starts the workflow, so its check "Site audit OK" is always there. The job changes skips
 # the other jobs when the pull request changes no file of the crawl. Such a pull request starts only the job nav.
 name: Site audit
@@ -138,29 +140,43 @@ jobs:
             # Exit code 2 is a wrong command line: the audit itself is wrong, not the site.
             [ "$code" -ne 2 ] || broken=1
           done < "$RUNNER_TEMP/audit-sites.txt"
-          node - "$out" <<'EOF'
-          const { readFileSync, existsSync, writeFileSync, appendFileSync } = require("node:fs");
-          const { join } = require("node:path");
-          const out = process.argv[2];
+          node --input-type=module - "$out" "$PWD/packages/site-pages/src/check/check.ts" <<'EOF'
+          import { readFileSync, existsSync, writeFileSync, appendFileSync } from "node:fs";
+          import { join } from "node:path";
+          import { pathToFileURL } from "node:url";
+          const [out, check] = process.argv.slice(2);
+          const { scrollGaps } = await import(pathToFileURL(check).href);
           const rows = readFileSync(join(out, "codes.txt"), "utf8").trim().split("\n").filter(Boolean).map((line) => {
             const [repo, code, url] = line.split(" ");
             const file = join(out, repo, "report.json");
             const report = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : null;
             const views = report?.views ?? [];
             const problems = [...new Set(views.flatMap((view) => view.problems))];
-            return { repo, url, code: Number(code), ok: report?.ok ?? false, views: views.length, failed: views.filter((view) => !view.ok).length, problems };
+            const gaps = report === null ? [] : scrollGaps(report);
+            return { repo, url, code: Number(code), ok: report?.ok ?? false, views: views.length, failed: views.filter((view) => !view.ok).length, problems, gaps };
           });
           rows.sort((a, b) => b.failed - a.failed || b.problems.length - a.problems.length || a.repo.localeCompare(b.repo));
           writeFileSync(join(out, "audit.json"), JSON.stringify({ date: new Date().toISOString(), sites: rows }, null, 2) + "\n");
           const cell = (text) => String(text).replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\r?\n/g, " ");
+          const gaps = rows.flatMap((row) => row.gaps.map((gap) => ({ repo: row.repo, ...gap })));
           const lines = [
             `## Site audit: ${rows.filter((row) => row.ok).length} of ${rows.length} sites pass`, "",
-            "| Site | Views that fail | Problems |", "| --- | --- | --- |",
-            ...rows.map((row) => `| [${row.repo}](${row.url}) | ${row.failed} of ${row.views} | ${row.problems.slice(0, 4).map(cell).join("<br>") || "none"} |`),
+            `Code blocks and tables with no scroll cue on a phone: ${gaps.length}.`, "",
+            "| Site | Views that fail | Blocks with no cue | Problems |", "| --- | --- | --- | --- |",
+            ...rows.map((row) => `| [${row.repo}](${row.url}) | ${row.failed} of ${row.views} | ${row.gaps.length} | ${row.problems.slice(0, 4).map(cell).join("<br>") || "none"} |`),
           ];
           if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
           console.log(lines.join("\n"));
+          for (const gap of gaps) {
+            const why = gap.deadCue ? "has the class scroll-cue, but the served CSS shows no cue" : "has no scroll cue";
+            console.log(`::error title=Scroll cue::${gap.repo}${gap.page}: ${gap.element} in ${gap.box} goes out of view at ${gap.width} px and ${why}.`);
+          }
+          if (gaps.length > 0) writeFileSync(join(out, "scroll-gaps.txt"), `${gaps.length}\n`);
           EOF
+          # A failed summary script is a failed audit
+          [ "$?" -eq 0 ] || broken=1
+          # The gate: a block with no scroll cue on a phone fails the run (scroll-cue-gate, 2026-11-08)
+          [ ! -f "$out/scroll-gaps.txt" ] || broken=1
           exit "$broken"
       - name: Screenshots and reports of the audit
         if: always()
