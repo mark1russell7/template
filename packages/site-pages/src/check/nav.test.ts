@@ -98,7 +98,7 @@ describe("navProblems", () => {
 describe("navSummary", () => {
   it("lists the problems and the pages", () => {
     const text = navSummary({ ok: false, home: home.href, pages: [page("", 0, [])], sitemap: [], clicks: [], problems: ["a | b"] });
-    expect(text).toContain("1 pages opened, 0 in the sitemap, 1 problems.");
+    expect(text).toContain("1 page opened, 0 in the sitemap, 1 problem.");
     expect(text).toContain("- a \\| b");
     expect(text).toContain("| 0 | the home page | 200 | yes | no |");
   });

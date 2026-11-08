@@ -299,7 +299,7 @@ export async function crawlSite(options: NavOptions): Promise<NavResult> {
 
 /** This function gives the summary of a crawl as Markdown. */
 export function navSummary(result: NavResult): string {
-  const lines = [`### Navigation of ${result.home}`, "", `${result.pages.length} pages opened, ${result.sitemap.length} in the sitemap, ${result.problems.length} problems.`, ""];
+  const lines = [`### Navigation of ${result.home}`, "", `${result.pages.length} ${result.pages.length === 1 ? "page" : "pages"} opened, ${result.sitemap.length} in the sitemap, ${result.problems.length} ${result.problems.length === 1 ? "problem" : "problems"}.`, ""];
   for (const problem of result.problems) lines.push(`- ${cell(problem)}`);
   lines.push("", "| Clicks | Page | HTTP | Home link at 360 px | Site bar |", "|---|---|---|---|---|");
   for (const page of result.pages) lines.push(`| ${page.clicks} | ${named(page.path)} | ${page.status} | ${page.homeAtPhone ? "yes" : "no"} | ${page.bar ? "yes" : "no"} |`);
@@ -404,7 +404,7 @@ export async function runNavCli(argv: readonly string[], io: CheckIo): Promise<n
     log: (line) => io.stdout(`${line}\n`),
   });
   for (const problem of result.problems) io.stdout(`FAIL ${problem}\n`);
-  io.stdout(`site-pages nav: ${result.pages.length} pages, ${result.problems.length} problems.\n`);
+  io.stdout(`site-pages nav: ${result.pages.length} ${result.pages.length === 1 ? "page" : "pages"}, ${result.problems.length} ${result.problems.length === 1 ? "problem" : "problems"}.\n`);
   const step = io.env["GITHUB_STEP_SUMMARY"];
   if (step) appendFileSync(step, navSummary(result));
   return result.ok ? 0 : 1;

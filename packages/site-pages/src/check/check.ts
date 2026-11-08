@@ -12,7 +12,7 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { findBrowser, launch, type Page } from "./browser.ts";
+import { findBrowser, launch, type Browser, type Page } from "./browser.ts";
 import { MEASURE, probeExpression, type Cut, type Measure, type ProbeCheck } from "./measure.ts";
 import { probeScript, TYPESCRIPT_PROBE } from "./probe.ts";
 import { serve } from "./serve.ts";
@@ -167,13 +167,16 @@ export async function checkSite(options: CheckOptions): Promise<CheckResult> {
   if (executable === undefined) throw new Error("no Chromium browser was found: give --browser, set SITE_CHECK_BROWSER, or install the Chromium of Playwright");
   if (options.pages.length === 0) throw new Error("no page to check");
   const probes = pageProbes(options);
+  if (options.out === undefined && options.url === undefined) throw new Error("give out or url");
   const server = options.out !== undefined ? await serve(options.out, options.base ?? "/") : undefined;
-  const home = server?.url ?? options.url;
-  if (home === undefined) throw new Error("give out or url");
-  const homeUrl = new URL(home.endsWith("/") ? home : `${home}/`);
-  const browser = await launch(executable, options.timeoutMs);
   const views: ViewResult[] = [];
+  let homeUrl: URL;
+  let browser: Browser | undefined;
+  // The server stops also when the browser does not start. An open server keeps the process alive, and the check does not end.
   try {
+    const home = server?.url ?? options.url ?? "";
+    homeUrl = new URL(home.endsWith("/") ? home : `${home}/`);
+    browser = await launch(executable, options.timeoutMs);
     const { page } = browser;
     const events = watch(page, homeUrl.origin);
     await Promise.all([page.send("Page.enable"), page.send("Runtime.enable"), page.send("Network.enable")]);
@@ -191,7 +194,7 @@ export async function checkSite(options: CheckOptions): Promise<CheckResult> {
       }
     }
   } finally {
-    await browser.close();
+    await browser?.close();
     await server?.close();
   }
   const result: CheckResult = { ok: views.length > 0 && views.every((view) => view.ok), url: homeUrl.href, browser: executable, views };
