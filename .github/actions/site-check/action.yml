@@ -24,6 +24,14 @@ inputs:
   site-check-playwright:
     description: The version of playwright-core whose Chromium the check uses.
     default: "1.64.1"
+  visual:
+    description: "true: the check of the widths and the schemes (site-pages check). false: only the navigation crawl."
+    default: "true"
+  nav:
+    description: >-
+      true: also the navigation crawl (site-pages nav). It fails on a page more than 2 clicks from home, a page with no
+      way back to home, a link of the site that opens a new tab, a link to a missing page, and a page with no site bar.
+    default: "false"
 runs:
   using: composite
   steps:
@@ -42,6 +50,7 @@ runs:
     # The check starts from the source of the commit of this action (packages/site-pages/src/check imports only
     # Node.js and packages/site-pages/src/data), so it needs no npm release of site-pages.
     - name: Site check
+      if: inputs.visual == 'true'
       shell: bash
       env:
         OUT: ${{ inputs.out }}
@@ -69,6 +78,17 @@ runs:
               args+=(--probe "$item") ;;
           esac
         done
+        node "$GITHUB_ACTION_PATH/../../../packages/site-pages/src/check/main.ts" "${args[@]}"
+    # The crawl of the built site from its home. The pages of the bar must have the bar (--require-bar).
+    - name: Site navigation
+      if: inputs.nav == 'true'
+      shell: bash
+      env:
+        OUT: ${{ inputs.out }}
+        BASE: ${{ inputs.base }}
+      run: |
+        args=(nav --out "$OUT" --repo "$GITHUB_REPOSITORY" --require-bar --shots "$RUNNER_TEMP/site-check/nav")
+        [ -z "$BASE" ] || args+=(--base "$BASE")
         node "$GITHUB_ACTION_PATH/../../../packages/site-pages/src/check/main.ts" "${args[@]}"
     # The screenshots, report.json and summary.md, also of a failed check, for a review of the site.
     - name: Screenshots of the site check

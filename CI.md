@@ -421,6 +421,8 @@ jobs:
 - The audit does not fail for a bad site. Its artifact `site-audit` has the screenshots, `report.json` of each site and `audit.json`.
 - The job `nav` of the audit starts `site-pages nav` on each site. Its artifact `site-nav` has the screenshots, `report.json` of each site and `nav.json`.
 - A pull request that changes `site-audit.yml` or the crawl starts only the job `nav`.
+- `site-bar: true` writes the shared site bar into each built HTML page. `site-bar-pages` names the pages of the bar, for example `Demo=demo/,Docs=docs/`. `site-bar-npm` gives the npm link.
+- With `site-bar: true`, the crawl `site-pages nav` examines the built site. A page with no bar, a page more than 2 clicks from home or a page with no way back stops the deploy.
 - `deploy: false` builds and uploads the artifact, with no deploy.
 - `indexnow-key` sends the URLs of `sitemap.xml` to the IndexNow engines after each deploy that is not scheduled.
 - The site must serve `<key>.txt` with the key. The key is public. A failure of the job `indexnow` does not fail the deploy.

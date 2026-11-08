@@ -122,6 +122,18 @@ on:
         description: The version of playwright-core whose Chromium the check uses.
         type: string
         default: "1.64.1"
+      site-bar:
+        description: "true: write the shared site bar into each built HTML page (site-pages bar), and crawl the built site from its home (site-pages nav). A page with no bar, a page more than 2 clicks from home or a page with no way back stops the deploy."
+        type: boolean
+        default: false
+      site-bar-pages:
+        description: The pages of the site in the bar, after the home, as label=path pairs separated by commas, for example "Demo=demo/,Docs=docs/". With site-pages, the bar also links to Releases and Status.
+        type: string
+        default: ""
+      site-bar-npm:
+        description: The npm name of the package of the site, for the npm link of the bar. Empty gives no npm link.
+        type: string
+        default: ""
       deploy:
         description: "false: build and upload the artifact, but do not deploy it."
         type: boolean
@@ -227,10 +239,11 @@ jobs:
           if [ -n "$TOKEN" ]; then export GITHUB_TOKEN="$TOKEN"; fi
           unset TOKEN
           eval "$COMMAND"
-      # The site check and the freshness gate run from the source of the same template commit (packages/site-pages/src/check
-      # imports only Node.js and packages/site-pages/src/data), so they need no npm release of site-pages.
+      # The site check, the site bar and the freshness gate run from the source of the same template commit
+      # (packages/site-pages/src/check and src/bar import only Node.js, src/data and src/render/html.ts), so they need no
+      # npm release of site-pages.
       - name: Shared actions (site-pages and the site check)
-        if: inputs.site-pages || inputs.site-check || inputs.data-stamps != ''
+        if: inputs.site-pages || inputs.site-check || inputs.site-bar || inputs.data-stamps != ''
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
@@ -238,8 +251,10 @@ jobs:
           path: .shared-actions
           sparse-checkout: |
             .github/actions
+            packages/site-pages/src/bar
             packages/site-pages/src/check
             packages/site-pages/src/data
+            packages/site-pages/src/render
           persist-credentials: false
       - if: inputs.data-stamps != ''
         uses: ./.shared-actions/.github/actions/data-stamps
@@ -259,12 +274,33 @@ jobs:
           css: ${{ inputs.css }}
           site-name: ${{ inputs.site-name }}
           data-only: ${{ inputs.data-only }}
+      # One bar for each page of the site: the portfolio, the site, its pages, Releases, Status, GitHub and npm
+      - name: Site bar
+        if: inputs.site-bar
+        shell: bash
+        env:
+          OUT: ${{ inputs.out }}
+          BASE: ${{ inputs.base }}
+          SITE_NAME: ${{ inputs.site-name }}
+          PAGES: ${{ inputs.site-bar-pages }}
+          NPM: ${{ inputs.site-bar-npm }}
+          SITE_PAGES: ${{ inputs.site-pages && !inputs.data-only }}
+        run: |
+          args=(--out "$OUT" --repo "$GITHUB_REPOSITORY")
+          [ -z "$BASE" ] || args+=(--base "$BASE")
+          [ -z "$SITE_NAME" ] || args+=(--site-name "$SITE_NAME")
+          [ -z "$PAGES" ] || args+=(--pages "$PAGES")
+          [ -z "$NPM" ] || args+=(--npm "$NPM")
+          [ "$SITE_PAGES" != "true" ] || args+=(--site-pages)
+          node .shared-actions/packages/site-pages/src/bar/main.ts "${args[@]}"
       - name: Site check
-        if: inputs.site-check
+        if: inputs.site-check || inputs.site-bar
         uses: ./.shared-actions/.github/actions/site-check
         with:
           out: ${{ inputs.out }}
           base: ${{ inputs.base }}
+          visual: ${{ inputs.site-check }}
+          nav: ${{ inputs.site-bar }}
           site-check-pages: ${{ inputs.site-check-pages }}
           site-check-widths: ${{ inputs.site-check-widths }}
           site-check-probe: ${{ inputs.site-check-probe }}

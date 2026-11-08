@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { navProblems, navSummary, runNavCli, sitemapPaths, sitePath, type NavLink, type NavPage } from "./nav.ts";
+import { navProblems, navSummary, repositoryOfUrl, runNavCli, sitemapPaths, sitePath, type NavLink, type NavPage } from "./nav.ts";
 
 const home = new URL("https://owner.github.io/repo/");
 
@@ -32,6 +32,15 @@ describe("sitePath", () => {
     expect(sitePath("https://owner.github.io/other/", home)).toBeUndefined();
     expect(sitePath("/repo/data/bench.json", home)).toBeUndefined();
     expect(sitePath("http://[bad", home)).toBeUndefined();
+  });
+});
+
+describe("repositoryOfUrl", () => {
+  it("gives the repository of a site of GitHub Pages", () => {
+    expect(repositoryOfUrl("https://owner.github.io/packing/")).toBe("owner/packing");
+    expect(repositoryOfUrl("https://Owner.github.io/")).toBe("owner/owner.github.io");
+    expect(repositoryOfUrl("https://example.com/packing/")).toBeUndefined();
+    expect(repositoryOfUrl("not a url")).toBeUndefined();
   });
 });
 
@@ -118,7 +127,7 @@ describe("runNavCli", () => {
   });
 
   it("refuses a wrong command line with exit code 2", async () => {
-    for (const argv of [[], ["--out", "a", "--url", "b"], ["--url", "u", "--max-clicks", "0"], ["--url", "u", "--settle", "x"], ["--out", "a"], ["--url", "u", "--shot-pages", "C:/x"], ["--bad"]]) {
+    for (const argv of [[], ["--out", "a", "--url", "b"], ["--url", "u", "--max-clicks", "0"], ["--url", "u", "--settle", "x"], ["--out", "a"], ["--url", "u", "--shot-pages", "C:/x"], ["--url", "https://example.com/", "--preview-bar"], ["--url", "https://owner.github.io/r/", "--preview-bar", "--bar-pages", "Docs"], ["--bad"]]) {
       const run = io();
       expect(await runNavCli(argv, run.io), argv.join(" ")).toBe(2);
       expect(run.err.join("")).toContain("site-pages nav:");
