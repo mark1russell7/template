@@ -231,6 +231,33 @@ function measures(data: StatusBoardData): string {
   );
 }
 
+/**
+ * This function renders the reading of the changelogs. It shows the count of the version sections that break
+ * the rules, and the version that the gate starts from. A repository with no gate sees its count, so the gap stays in view.
+ */
+function changelog(data: StatusBoardData): string {
+  const { changelog: reading } = data;
+  if (reading === undefined) return "";
+  const count = reading.faults.length;
+  const scope = reading.from === null ? `of the ${plural(reading.sections, "version section")} of the changelogs` : `of the ${plural(reading.sections, "version section")} from ${escapeHtml(reading.from)}`;
+  const gate =
+    reading.from === null
+      ? "The build does not fail on a fault, because <code>package.json</code> has no field <code>sitePages.changelogFrom</code>."
+      : `The build fails on a fault in a section from ${escapeHtml(reading.from)}, the field <code>sitePages.changelogFrom</code> of <code>package.json</code>.`;
+  const shown = reading.faults.slice(0, 10);
+  const list =
+    shown.length === 0
+      ? ""
+      : `<ul>${shown.map((fault) => `<li><code>${escapeHtml(fault.file)}</code> ${escapeHtml(fault.version)}: ${escapeHtml(fault.kind)}</li>`).join("")}</ul>` +
+        (count > shown.length ? `<p class="sp-small sp-muted">The list shows the first ${shown.length}.</p>` : "");
+  return (
+    `<section class="sp-section" aria-labelledby="changelog"><h2 id="changelog">Changelog</h2>` +
+    `<p data-sp-changelog-faults="${count}">${count === 0 ? "No section" : plural(count, "section")} ${scope} ${count <= 1 ? "breaks" : "break"} the rules of a changelog section. ${gate}</p>` +
+    list +
+    "</section>"
+  );
+}
+
 function when(date: string): string {
   const text = escapeHtml(longDate(date));
   return `<time datetime="${escapeHtml(date)}" title="${text}" data-sp-rel>${text}</time>`;
@@ -399,6 +426,7 @@ export function renderStatusPage(data: StatusBoardData, options: PageOptions): s
     `<h1>Status</h1><p class="sp-lead">${escapeHtml(lead)}</p>` +
     '<p class="sp-small sp-muted">The build reads the roadmap file and GitHub again after each commit and on a schedule.</p>' +
     measures(data) +
+    changelog(data) +
     (data.source.roadmap ? openWork(data) : "") +
     pullRequests(data) +
     issues(data);

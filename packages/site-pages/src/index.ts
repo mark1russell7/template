@@ -6,7 +6,7 @@
 
 export type * from "./data/types.ts";
 export { compareVersions, kindOf, parseVersion, versionOfTag, type ParsedVersion, type TagVersion } from "./data/versions.ts";
-export { changelogFaults, changelogVersions, firstSentence, headingAnchor, parseChangelog, releaseBodyEntries, sectionMarksBreak, type ChangelogEntry, type ChangelogFault, type ChangelogFaultKind, type ChangelogFaultOptions, type ChangelogSection } from "./data/changelog.ts";
+export { changelogFaults, changelogGateProblem, changelogReading, changelogVersions, firstSentence, headingAnchor, parseChangelog, releaseBodyEntries, sectionMarksBreak, type ChangelogEntry, type ChangelogFault, type ChangelogFaultKind, type ChangelogFaultOptions, type ChangelogSection } from "./data/changelog.ts";
 export {
   checkStateOf,
   githubGreenRun,
@@ -28,6 +28,7 @@ export { globFiles } from "./data/glob.ts";
 export {
   DEFAULT_CHANGELOGS,
   mergeReleases,
+  readChangelogFrom,
   readChangelogs,
   readReleases,
   ReleaseDataError,
