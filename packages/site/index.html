@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>Template</title>
-<meta name="description" content="The template of the repositories of mark1russell7. See the files of a new package for each preset, and which jobs of the shared workflows run.">
+<meta name="description" content="The template of the repositories of mark1russell7. See the files of a new package for each preset, and which jobs and steps of the shared workflows and actions run.">
 <script>
   // The theme before the first paint: the choice of the visitor, else the theme of the system.
   try { const t = localStorage.getItem("theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}
@@ -67,10 +67,10 @@
 
   <section class="section" id="workflows" aria-labelledby="wf-title">
     <h2 id="wf-title">Which jobs and steps run?</h2>
-    <p class="lead small">The repositories call these shared CI workflows of the template. Pick a workflow, the event of the caller and the inputs. The page reads each <code>if</code> of the workflow file.</p>
+    <p class="lead small">The repositories call these shared CI workflows and composite actions of the template. Pick a workflow or an action, the event of the caller and the inputs. The page reads each <code>if</code> of the file.</p>
     <div class="card wf">
       <div class="wf-controls">
-        <label>Workflow <select id="wf-file"></select></label>
+        <label>Workflow or action <select id="wf-file"></select></label>
         <div class="events" role="radiogroup" aria-label="Event of the caller" id="wf-events"></div>
       </div>
       <p id="wf-summary" class="muted wf-about"></p>
@@ -106,7 +106,7 @@ mountExplorer(document.getElementById("chart")!, record);</pre></div>
       <a class="tile" href="https://github.com/mark1russell7/template/blob/main/RELEASING.md"><strong>RELEASING.md</strong><span>How a release to npm operates.</span></a>
     </div>
 
-    <h3>Shared workflows</h3>
+    <h3>Shared workflows and actions</h3>
     <ul id="wf-list" class="rows"></ul>
 
     <h3>Packages</h3>

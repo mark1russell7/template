@@ -342,15 +342,16 @@ function renderWorkflow(): void {
   );
 }
 
+// The file of a composite action is "actions/<name>/action.yml", and the file of a workflow is in .github/workflows.
+const sourceOf = (workflow: Workflow): string =>
+  `https://github.com/mark1russell7/template/blob/main/.github/${workflow.kind === "action" ? workflow.file : `workflows/${workflow.file}`}`;
+const sizeOf = (workflow: Workflow): string => {
+  if (workflow.kind !== "action") return `${workflow.inputs.length} inputs, ${workflow.jobs.length} ${workflow.jobs.length === 1 ? "job" : "jobs"}`;
+  const steps = workflow.jobs.reduce((sum, job) => sum + job.steps.length, 0);
+  return `composite action, ${workflow.inputs.length} inputs, ${steps} ${steps === 1 ? "step" : "steps"}`;
+};
 $("wf-list").replaceChildren(
-  ...data.workflows.map((workflow) =>
-    h(
-      "li",
-      {},
-      h("a", { href: `https://github.com/mark1russell7/template/blob/main/.github/workflows/${workflow.file}` }, h("code", {}, workflow.file)),
-      h("span", {}, `${workflow.inputs.length} inputs, ${workflow.jobs.length} ${workflow.jobs.length === 1 ? "job" : "jobs"}`),
-    ),
-  ),
+  ...data.workflows.map((workflow) => h("li", {}, h("a", { href: sourceOf(workflow) }, h("code", {}, workflow.file)), h("span", {}, sizeOf(workflow)))),
 );
 
 $("build-info").textContent = `Built from ${data.build.sha} on ${data.build.date}, with template-cli ${scaffold.cliVersion} of ${scaffold.cliSource}.`;

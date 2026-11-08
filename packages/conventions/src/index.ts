@@ -128,7 +128,7 @@ export { configsOfScript, scriptsOf } from "./rules/typed-files.ts";
 export { lockedVersions, minorOf, publishedMinorRule, reachOf, type Minor } from "./rules/published-minor.ts";
 export { NPM_REGISTRY, npmLookup, SHIPPED_FIELDS, UNSHIPPED_FILES, unreleasedChangeRule, type RegistryAnswer, type RegistryLookup } from "./rules/unreleased-change.ts";
 export { namedVersions, setVersions } from "./rules/version-title.ts";
-export { readWorkflow, type Workflow, type WorkflowInput, type WorkflowJob, type WorkflowStep } from "./workflow.ts";
+export { readAction, readWorkflow, type Workflow, type WorkflowInput, type WorkflowJob, type WorkflowStep } from "./workflow.ts";
 export { blockHash, githubFetch, HOME_TIMEOUT_MS, sharedDocsRule, type HomeAnswer, type HomeFetch } from "./rules/shared-docs.ts";
 export {
   annotations,
