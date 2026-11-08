@@ -1,7 +1,8 @@
 name: site-config
 description: >-
   Gives the site config of the repository as one JSON output: the values of .github/site.json, or the old inputs of
-  reusable-pages.yml when the repository has no file. config.ts tells the rules. The step runs no code of the repository.
+  reusable-pages.yml when the repository has no file. packages/site-pages/src/config/site-config.ts tells the rules.
+  The step runs no code of the repository. The checkout of the template needs packages/site-pages/src/config.
 inputs:
   path:
     description: The path of the site config in the repository.
@@ -14,7 +15,7 @@ inputs:
     default: ""
 outputs:
   config:
-    description: The site config as JSON. Each key of config.ts (SITE_KEYS) has a value.
+    description: The site config as JSON. Each key of SITE_CONFIG_KEYS of site-config.ts has a value.
     value: ${{ steps.config.outputs.config }}
   source:
     description: '"file" when the values come from the file, or "inputs" when they come from the inputs of the workflow.'
@@ -29,6 +30,7 @@ runs:
         CONFIG_PATH: ${{ inputs.path }}
         CONFIG_ROOT: ${{ inputs.root }}
         INPUTS: ${{ inputs.inputs }}
-        SCRIPT: ${{ github.action_path }}/config.ts
+        # The action is .github/actions/site-config of the checkout of the template, so the script is three folders up.
+        SCRIPT: ${{ github.action_path }}/../../../packages/site-pages/src/config/main.ts
       # Node 22.18 and later run TypeScript with no build. The ubuntu-latest image has such a Node.
       run: node "$SCRIPT"
