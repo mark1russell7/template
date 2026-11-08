@@ -1,0 +1,70 @@
+import { join, resolve } from "node:path";
+import { describe, expect, it } from "vitest";
+import { CONTENT_SECURITY_POLICY, PAGE_URL, allowsNavigation, answer, contentType, pageFile, windowOptions } from "./index.ts";
+
+const root = resolve("build", "page");
+
+describe("windowOptions", () => {
+  it("gives the page no Node.js, a sandbox and an isolated preload script", () => {
+    const { webPreferences } = windowOptions("preload.cjs");
+    expect(webPreferences).toMatchObject({
+      preload: "preload.cjs",
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      webviewTag: false,
+    });
+  });
+});
+
+describe("allowsNavigation", () => {
+  it("keeps the window at the origin of its page", () => {
+    expect(allowsNavigation(PAGE_URL, "app://page/settings.html")).toBe(true);
+    expect(allowsNavigation(PAGE_URL, "app://other/index.html")).toBe(false);
+    expect(allowsNavigation(PAGE_URL, "https://example.com/")).toBe(false);
+    expect(allowsNavigation("http://localhost:5173/", "http://localhost:5173/a")).toBe(true);
+    expect(allowsNavigation("http://localhost:5173/", "http://localhost:5174/")).toBe(false);
+    expect(allowsNavigation(PAGE_URL, "not an address")).toBe(false);
+  });
+});
+
+describe("pageFile", () => {
+  it("gives the file of the page, and index.html for the root", () => {
+    expect(pageFile(root, "app://page/page.js")).toBe(join(root, "page.js"));
+    expect(pageFile(root, "app://page/")).toBe(join(root, "index.html"));
+    expect(pageFile(root, "app://page/a%20b.css")).toBe(join(root, "a b.css"));
+  });
+
+  it("refuses a path out of the folder, another host and another scheme", () => {
+    expect(pageFile(root, "app://page/..%2F..%2Fsecret.txt")).toBeUndefined();
+    expect(pageFile(root, "app://page/..%5C..%5Csecret.txt")).toBeUndefined();
+    expect(pageFile(root, "app://page/%00.js")).toBeUndefined();
+    expect(pageFile(root, "app://page/%E0%A4%A")).toBeUndefined();
+    expect(pageFile(root, "app://other/index.html")).toBeUndefined();
+    expect(pageFile(root, "file:///etc/passwd")).toBeUndefined();
+  });
+});
+
+describe("contentType", () => {
+  it("gives a JavaScript type to a module script", () => {
+    expect(contentType("page.js")).toBe("text/javascript; charset=utf-8");
+    expect(contentType("INDEX.HTML")).toBe("text/html; charset=utf-8");
+    expect(contentType("data.bin")).toBe("application/octet-stream");
+  });
+});
+
+describe("the policy and the port", () => {
+  it("allows no inline script and no connection", () => {
+    expect(CONTENT_SECURITY_POLICY).toContain("default-src 'none'");
+    expect(CONTENT_SECURITY_POLICY).toContain("script-src 'self'");
+    expect(CONTENT_SECURITY_POLICY).not.toContain("unsafe");
+  });
+
+  it("answers ping, and nothing else", () => {
+    expect(answer({ type: "ping" })).toEqual({ type: "pong" });
+    expect(answer({ type: "other" })).toBeUndefined();
+    expect(answer(null)).toBeUndefined();
+  });
+});

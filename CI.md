@@ -44,6 +44,7 @@ The job starts all the scripts, also after a failure. Then it fails with the nam
 | `changeset-ignore` | (empty) | More globs of files that need no changeset. |
 | `coverage` | `false` | After the scripts, the first cell of the matrix starts the tests of each package with Vitest again, with coverage (refer to "Coverage"). |
 | `coverage-floor` | `0` | The lowest percent of each measure of each package. `0` is no floor. |
+| `coverage-on-main` | `true` | With `coverage: false`, a push to the default branch of a public repository still gives the coverage, not strict (refer to "Coverage"). |
 
 ### Coverage
 
@@ -54,6 +55,8 @@ With `coverage: true`, the action `coverage` starts `vitest run` with coverage i
 - A package with no summary fails the step. Its tests failed, or it does not have `@vitest/coverage-v8`.
 - A package whose tests fail also fails the step, after the summary. The thresholds of its Vitest config can cause this. The message names the package and the exit code.
 - With `coverage-floor`, a package with a measure under the floor fails the step. The message names the package and the measure.
+
+With `coverage: false` and `coverage-on-main: true` (the default), a push to the default branch of a public repository also starts the action, not strict (a private repository pays for its minutes, so it uses `coverage: true`). It skips a package with no `@vitest/coverage-v8`, and it gives a warning for a failure. It does not fail the job. So each repository has the artifact `coverage` on main, and a tool can read which exported functions no test starts.
 
 Each package with Vitest needs `@vitest/coverage-v8` in its `devDependencies`, with the version of its Vitest. The configuration of the coverage in `vitest.config.ts` (for example `include` and `exclude`) stays. The action sets only the reporters and the folder `coverage`.
 
@@ -435,6 +438,8 @@ jobs:
 - Each pull request starts `site-audit.yml`, so its check "Site audit OK" is always there. A pull request that changes `site-audit.yml` or the crawl starts only the job `nav`.
 - `site-bar: true` writes the shared site bar into each built HTML page. `site-bar-pages` names the pages of the bar, for example `Demo=demo/,Docs=docs/`. `site-bar-npm` gives the npm link.
 - With `site-bar: true`, the crawl `site-pages nav` examines the built site. A page with no bar, a page more than 2 clicks from home or a page with no way back stops the deploy.
+- `scroll-cue` (default `true`) gives each code block of each built HTML page the scroll cue of `site-pages cue`. A block wider than its box shows a fade at the edge with more content.
+- A code block with `data-overflow-ok` keeps no cue. `scroll-cue: false` stops the step.
 - `deploy: false` builds and uploads the artifact, with no deploy.
 - `indexnow-key` sends the URLs of `sitemap.xml` to the IndexNow engines after each deploy that is not scheduled.
 - The site must serve `<key>.txt` with the key. The key is public. A failure of the job `indexnow` does not fail the deploy.
