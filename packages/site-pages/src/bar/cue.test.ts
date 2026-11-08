@@ -114,7 +114,7 @@ describe.skipIf(executable === undefined)("the scroll cue of the step in a brows
       `new Promise((go) => requestAnimationFrame(() => requestAnimationFrame(() => go(Object.fromEntries(["wide", "narrow"].map((id) => { ` +
         `const box = document.getElementById(id); const style = getComputedStyle(box); ` +
         `return [id, { overflow: box.scrollWidth > box.clientWidth, animation: style.animationName, tab: box.tabIndex, ` +
-        `left: style.getPropertyValue("--scroll-cue-fade-left").trim(), right: style.getPropertyValue("--scroll-cue-fade-right").trim() }]; })))))))`,
+        `left: style.getPropertyValue("--scroll-cue-fade-left").trim(), right: style.getPropertyValue("--scroll-cue-fade-right").trim() }]; }))))))`,
     );
     expect(read["wide"]).toMatchObject({ overflow: true, animation: "scroll-cue-fades", left: "0px", tab: 0 });
     expect(read["wide"]?.right).not.toBe("0px");

@@ -162,7 +162,7 @@ In `reusable-pages.yml`, the input `site-bar: true` starts the command before th
 
 ## The scroll cue of the built pages
 
-The command `site-pages cue` gives each code block (`pre`) of each HTML page of a built site the class `scroll-cue` and a place in the tab order. It also writes the style `scroll-cue.css` into each changed page.
+The command `site-pages cue` changes each code block (`pre`) of each HTML page of a built site. Each block gets the class `scroll-cue` and a place in the tab order. It also writes the style `scroll-cue.css` into each changed page.
 
 ```sh
 site-pages cue --out dist

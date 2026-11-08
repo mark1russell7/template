@@ -1,8 +1,9 @@
 /**
- * The scroll cue of the built pages (`site-pages cue`). The Pages workflow gives each code block (`pre`) of each built
- * HTML page the class `scroll-cue` and a place in the tab order, and writes the style `scroll-cue.css` into the page.
- * Thus a code block that is wider than its box shows a fade at the edge with more content, also on a site that does not
- * use the rehype plugin of site-pages. A box with no overflow has no active scroll timeline, so it shows no cue.
+ * The scroll cue of the built pages (`site-pages cue`). The Pages workflow changes each code block (`pre`) of each
+ * built HTML page. Each block gets the class `scroll-cue` and a place in the tab order. The page gets the style
+ * `scroll-cue.css`. Thus a code block that is wider than its box shows a fade at the edge with more content. This
+ * occurs also on a site that does not use the rehype plugin of site-pages. A box with no overflow has no active scroll
+ * timeline, so it shows no cue.
  *
  * A block with `data-overflow-ok` or with the class `scroll-cue` stays as it is. The text of `script`, `style` and
  * `textarea` elements does not change.
@@ -27,10 +28,11 @@ export function cueCss(): string {
 
 /**
  * The script of a browser with no scroll timelines. In such a browser, the style gives the box the background color
- * `--scroll-cue-bg`. The script sets that variable to the color of the code block, or of its first ancestor with a color,
- * so the block keeps the color of its theme. A browser with scroll timelines does not need the script.
+ * `--scroll-cue-bg`. The script sets that variable to the color of the code block. When the block has no color, the
+ * script uses the color of its first ancestor with a color. Thus the block keeps the color of its theme. A browser with
+ * scroll timelines does not need the script.
  */
-export const CUE_SCRIPT =
+export const CUE_SCRIPT: string =
   '(() => { if (!window.CSS || CSS.supports("animation-timeline: scroll()")) return; ' +
   `for (const box of document.querySelectorAll("pre[${CUE_ATTRIBUTE}]")) { box.classList.remove("scroll-cue"); ` +
   'let node = box; let color = ""; ' +
@@ -40,8 +42,8 @@ export const CUE_SCRIPT =
 const CLASS_PATTERN = /\sclass\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/i;
 
 /**
- * This function gives the attributes of one `pre` start tag with the cue, or `undefined` when the tag keeps its
- * attributes: it has `data-overflow-ok`, or it already has the class `scroll-cue`.
+ * This function gives the attributes of one `pre` start tag with the cue. It gives `undefined` when the tag keeps its
+ * attributes: the tag has `data-overflow-ok`, or it already has the class `scroll-cue`.
  */
 export function cueAttributes(attributes: string): string | undefined {
   if (/\sdata-overflow-ok\b/i.test(attributes)) return undefined;
