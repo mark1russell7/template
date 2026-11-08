@@ -125,6 +125,12 @@ on:
         description: The version of playwright-core whose Chromium the check uses.
         type: string
         default: "1.64.1"
+      artifact-prefix:
+        description: >-
+          A prefix of the names of the artifacts github-pages and site-check, for example "test-". Two calls in one run
+          need two prefixes, because a download by name gets only the latest artifact of the name.
+        type: string
+        default: ""
       site-bar:
         description: "true: write the shared site bar into each built HTML page (site-pages bar), and crawl the built site from its home (site-pages nav). A page with no bar, a page more than 2 clicks from home or a page with no way back stops the deploy."
         type: boolean
@@ -153,14 +159,6 @@ on:
       page-url:
         description: The URL of the deployed site.
         value: ${{ jobs.deploy.outputs.page-url }}
-      # Two calls in one run upload two artifacts of each name. A job of the caller downloads the artifacts of its
-      # own call with actions/download-artifact and artifact-ids, not with the name.
-      pages-artifact-id:
-        description: The ID of the Pages artifact (github-pages) of this call.
-        value: ${{ jobs.build.outputs.pages-artifact-id }}
-      site-check-artifact-id:
-        description: The ID of the artifact site-check of this call. It is empty when the site check did not start.
-        value: ${{ jobs.build.outputs.site-check-artifact-id }}
 
 jobs:
   # Decides if the job build builds and if the job deploy deploys. The job build checks out the commit of the event
@@ -219,9 +217,6 @@ jobs:
     if: needs.ref.outputs.build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    outputs:
-      pages-artifact-id: ${{ steps.pages-artifact.outputs.artifact_id }}
-      site-check-artifact-id: ${{ steps.site-check.outputs.artifact-id }}
     permissions:
       contents: read
       # site-pages reads the Actions runs, the pull requests, the issues and their checks.
@@ -327,7 +322,6 @@ jobs:
           [ "$SITE_PAGES" != "true" ] || args+=(--site-pages)
           node .shared-actions/packages/site-pages/src/bar/main.ts "${args[@]}"
       - name: Site check
-        id: site-check
         if: inputs.site-check || inputs.site-bar
         uses: ./.shared-actions/.github/actions/site-check
         with:
@@ -339,9 +333,10 @@ jobs:
           site-check-widths: ${{ inputs.site-check-widths }}
           site-check-probe: ${{ inputs.site-check-probe }}
           site-check-playwright: ${{ inputs.site-check-playwright }}
-      - id: pages-artifact
-        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+          artifact-name: ${{ inputs.artifact-prefix }}site-check
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
+          name: ${{ inputs.artifact-prefix }}github-pages
           path: ${{ inputs.out }}
 
   deploy:
@@ -357,6 +352,8 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+        with:
+          artifact_name: ${{ inputs.artifact-prefix }}github-pages
 
   # Tell the search engines of IndexNow (Bing and others) about the pages of the new deploy. A failure here does not
   # fail the deploy. A scheduled deploy changes only the Status page, so it sends nothing.
