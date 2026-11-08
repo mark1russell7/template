@@ -43,7 +43,7 @@ jobs:
       # The runners are shared by all repositories of the account (the rule runner-budget)
       max-parallel: 3
       matrix:
-        preset: [node, node-cjs, ts, vite, react, service, site]
+        preset: [node, node-cjs, ts, vite, react, service, site, electron]
     env:
       PACKAGE: demo-${{ matrix.preset }}
       PRESET: ${{ matrix.preset }}
@@ -74,6 +74,14 @@ jobs:
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm --filter "@template/$PACKAGE" typecheck
       - run: pnpm --filter "@template/$PACKAGE" test
+      # A preset with the script smoke starts its app once: the electron app opens its window on a virtual display,
+      # and stops with 0 when its page answers on the port. Ubuntu 24.04 refuses the user namespaces of the sandbox
+      # of Chromium to a binary with no AppArmor profile, so the step allows them. The app keeps its sandbox.
+      - name: smoke (a preset with the script smoke)
+        run: |
+          if ! jq -e '.scripts.smoke' "packages/$PACKAGE/package.json" > /dev/null; then echo "No script smoke."; exit 0; fi
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          xvfb-run --auto-servernum pnpm --filter "@template/$PACKAGE" smoke
 
   # A new repository passes its install, conventions check, typecheck, tests, Pages build and site check with no hand edit.
   # Only the template has the stamp (scripts/stamp), so a repository from the stamp skips this job.
