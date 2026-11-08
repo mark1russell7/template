@@ -337,7 +337,8 @@ runs:
       env:
         SOURCE: ${{ steps.codeql_init.outcome == 'success' && 'the download of the action version' || 'the tool cache of the runner (the download failed)' }}
         VERSION: ${{ steps.codeql_init.outcome == 'success' && steps.codeql_init.outputs.codeql-version || steps.codeql_init-toolcache.outputs.codeql-version }}
-      run: echo "CodeQL bundle: ${VERSION:-unknown}, from $SOURCE" >> "$GITHUB_STEP_SUMMARY"
+      run: |
+        echo "CodeQL bundle: ${VERSION:-unknown}, from $SOURCE" >> "$GITHUB_STEP_SUMMARY"
 
     - name: Analyze
       id: codeql_analyze
