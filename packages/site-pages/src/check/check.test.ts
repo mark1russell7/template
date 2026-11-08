@@ -251,6 +251,18 @@ describe("runCheckCli", () => {
   });
 });
 
+describe("checkSite when the browser does not start", () => {
+  // Node is the browser here: it refuses the flags of Chromium and stops at once, so the launch throws.
+  it("stops the server of out, so the check ends", async () => {
+    const servers = (): number => process.getActiveResourcesInfo().filter((name) => name === "TCPServerWrap").length;
+    const before = servers();
+    const check = checkSite({ out: root, base: "/site/", pages: ["/"], widths: [360], schemes: ["light"], settleMs: 0, browser: process.execPath, timeoutMs: 10_000 });
+    await expect(check).rejects.toThrow(/the browser (stopped|did not start)/);
+    // The handle of a closed server goes some milliseconds after the close. A server that stays open does not go.
+    await expect.poll(servers, { timeout: 3000, interval: 50 }).toBe(before);
+  });
+});
+
 // In CI, a browser is necessary: a check with no browser must not pass in silence.
 const browser = findBrowser();
 if (browser === undefined && process.env["CI"]) throw new Error("CI has no Chromium browser for the tests of site-pages check");
