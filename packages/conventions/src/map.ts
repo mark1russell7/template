@@ -190,6 +190,16 @@ export const HOMES: readonly Home[] = [
     note: "Exact predicates go to algebra. @mark1russell7/vex-domains has 2D vectors for Vex formulas only.",
   },
   {
+    area: "strategy-space",
+    title: "Strategy spaces and grammars",
+    covers: "a strategy space as data (stages, options, typed params, constraints), config checks and config ids, counts, grids and seeded samples of a space, the operator format strategy-operators/1, combinators as terms (portfolio, sequence, fallback, product), the distinctness gate",
+    note: "The strategy catalog stays in layout-contract. Engines, records and probes stay in the contract and the engines.",
+    packages: ["@mark1russell7/strategy-space"],
+    repo: "mark1russell7/strategy-space",
+    state: "published",
+    words: ["strategy grammar", "strategy combinator", "operator format", "config id", "space enumeration", "distinctness gate", "racing", "seeded config sample"],
+  },
+  {
     area: "packing",
     title: "Rectangle packing",
     covers: "shelf, guillotine, skyline and max-rects strategies, push cascades, measures of a placement",
