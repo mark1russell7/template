@@ -34,6 +34,7 @@ The job starts all the scripts, also after a failure. Then it fails with the nam
 | `node-versions` | `["26"]` | The Node.js versions of the matrix, as JSON. |
 | `os` | `["ubuntu-latest"]` | The runners of the matrix, as JSON. |
 | `setup` | (empty) | A command after the install, before the scripts. |
+| `cue-version` | (empty) | The version of the cue CLI, for example `0.15.1`. The action `setup-cue` installs it before the install, with retries and a sha256 check. Do not download the CLI in `setup` (the rule `setup-cue`). |
 | `run` | (empty) | A command after the scripts. |
 | `env` | `{}` | The environment variables of the job, as a JSON object. |
 | `working-directory` | `.` | The folder of `package.json`. |

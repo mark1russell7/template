@@ -61,6 +61,7 @@ export {
   runnerBudget,
   securityOneJob,
   serviceRunMain,
+  setupCue,
   sharedCi,
   sourceMain,
   testsRequired,
