@@ -320,7 +320,6 @@ runs:
       with:
         languages: ${{ steps.codeql_languages.outputs.languages }}
         build-mode: ${{ inputs.codeql-build-mode }}
-        tools: https://github.com/mark1russell7/template/releases/download/none/no-codeql-bundle.tar.gz # PROOF ONLY: revert before merge
 
     - name: Initialize CodeQL from the tool cache
       id: codeql_init-toolcache
