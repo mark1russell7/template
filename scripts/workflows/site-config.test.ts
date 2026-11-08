@@ -56,16 +56,20 @@ describe("the site config and reusable-pages.yml", () => {
     }
   });
 
-  it("reads no site input in the job build, because the action site-config gives each value", () => {
+  it("reads no site input in a job, because the action site-config gives each value", () => {
     const job = jobText(pages, "build");
-    for (const key of Object.keys(SITE_CONFIG_KEYS)) assert.doesNotMatch(job, new RegExp(`inputs\\.${key}\\b(?!-)`), `the job build reads inputs.${key}`);
+    const jobs = pages.slice(pages.indexOf("\njobs:\n"));
+    for (const key of Object.keys(SITE_CONFIG_KEYS)) assert.doesNotMatch(jobs, new RegExp(`inputs\\.${key}\\b(?!-)`), `a job reads inputs.${key}`);
     assert.ok(job.includes("          inputs: ${{ toJSON(inputs) }}\n"), "site-config gets the inputs of the workflow");
   });
 });
 
 describe("the action pages-build", () => {
   it("reads each key of the site config, so a key cannot be in the file and do nothing", () => {
-    for (const key of Object.keys(SITE_CONFIG_KEYS)) {
+    // The job indexnow of the deploy reads its key from an output of the job build
+    assert.ok(jobText(pages, "build").includes("      indexnow-key: ${{ fromJSON(steps.config.outputs.config)['indexnow-key'] }}\n"));
+    assert.ok(jobText(pages, "indexnow").includes("          KEY: ${{ needs.build.outputs.indexnow-key }}\n"));
+    for (const key of Object.keys(SITE_CONFIG_KEYS).filter((each) => each !== "indexnow-key")) {
       const read = build.includes(`fromJSON(inputs.config).${key} `) || build.includes(`fromJSON(inputs.config).${key})`) || build.includes(`fromJSON(inputs.config)['${key}']`);
       assert.ok(read, `pages-build reads the key ${key}`);
     }

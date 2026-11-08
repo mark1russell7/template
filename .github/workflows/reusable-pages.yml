@@ -227,6 +227,9 @@ jobs:
     if: needs.ref.outputs.build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout-minutes }}
+    # The job indexnow reads the key of the site config, not the input.
+    outputs:
+      indexnow-key: ${{ fromJSON(steps.config.outputs.config)['indexnow-key'] }}
     permissions:
       contents: read
       # site-pages reads the Actions runs, the pull requests, the issues and their checks.
@@ -290,8 +293,8 @@ jobs:
   # Tell the search engines of IndexNow (Bing and others) about the pages of the new deploy. A failure here does not
   # fail the deploy. A scheduled deploy changes only the Status page, so it sends nothing.
   indexnow:
-    needs: deploy
-    if: inputs.deploy && inputs.indexnow-key != '' && github.event_name != 'schedule'
+    needs: [build, deploy]
+    if: inputs.deploy && needs.build.outputs.indexnow-key != '' && github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     continue-on-error: true
@@ -311,5 +314,5 @@ jobs:
       - name: IndexNow
         env:
           SITE: ${{ needs.deploy.outputs.page-url }}
-          KEY: ${{ inputs.indexnow-key }}
+          KEY: ${{ needs.build.outputs.indexnow-key }}
         run: node .shared-actions/packages/site-pages/src/indexnow/main.ts --site "${SITE%/}/" --key "$KEY"
