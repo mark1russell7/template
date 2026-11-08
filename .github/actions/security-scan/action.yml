@@ -331,112 +331,16 @@ runs:
       shell: bash
       env:
         SEVERITY: ${{ inputs.fail-on-severity }}
-        # The CodeQL security-severity of fail-on-severity. It is empty for an incorrect value.
-        MIN_SCORE: ${{ fromJSON('{"low":0.1,"moderate":4,"high":7,"critical":9}')[inputs.fail-on-severity] }}
         RESULTS: ${{ runner.temp }}/codeql-results
         DIFF: ${{ runner.temp }}/pull-request.diff
+        # The step reads the open alerts of the base branch: an alert that is already open there is not new (new-alerts.ts)
+        GH_TOKEN: ${{ github.token }}
+        BASE_REF: ${{ github.base_ref }}
+        NEW_ALERTS: ${{ github.action_path }}/new-alerts.ts
       run: |
         # The changes of the pull request: the merge commit compared with its first parent, the base
         git -c core.quotePath=false diff --unified=0 --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ HEAD^1 HEAD > "$DIFF"
-        node - <<'JS'
-        const fs = require("node:fs");
-        const path = require("node:path");
-        const min = Number(process.env.MIN_SCORE);
-        if (!(min > 0)) {
-          console.log(`::error::"${process.env.SEVERITY}" is not a severity. Use low, moderate, high or critical.`);
-          process.exit(1);
-        }
-        // The lines that the pull request adds or changes, for each file
-        const changed = new Map();
-        let file = null;
-        let header = false;
-        for (const line of fs.readFileSync(process.env.DIFF, "utf8").split("\n")) {
-          if (line.startsWith("diff --git ")) {
-            header = true;
-            file = null;
-            continue;
-          }
-          if (header && line.startsWith("+++ ")) {
-            // git adds a tab after a path with a space
-            file = line === "+++ /dev/null" ? null : line.slice("+++ b/".length).replace(/\t$/, "");
-            continue;
-          }
-          const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
-          if (hunk === null) continue;
-          header = false;
-          const start = Number(hunk[1]);
-          const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
-          if (file !== null && count > 0) {
-            if (!changed.has(file)) changed.set(file, []);
-            changed.get(file).push([start, start + count - 1]);
-          }
-        }
-        const touches = (loc) => (changed.get(loc.file) ?? []).some(([first, last]) => first <= loc.end && last >= loc.start);
-        const decode = (uri) => {
-          try {
-            return decodeURIComponent(uri);
-          } catch {
-            return uri;
-          }
-        };
-        const found = [];
-        let total = 0;
-        for (const name of fs.readdirSync(process.env.RESULTS).filter((entry) => entry.endsWith(".sarif"))) {
-          const sarif = JSON.parse(fs.readFileSync(path.join(process.env.RESULTS, name), "utf8"));
-          for (const run of sarif.runs ?? []) {
-            // The security-severity of each rule
-            const severity = new Map();
-            for (const component of [run.tool?.driver, ...(run.tool?.extensions ?? [])]) {
-              for (const rule of component?.rules ?? []) {
-                const score = Number.parseFloat(rule.properties?.["security-severity"]);
-                if (!Number.isNaN(score)) severity.set(rule.id, score);
-              }
-            }
-            for (const result of run.results ?? []) {
-              total += 1;
-              if ((result.suppressions ?? []).length > 0) continue;
-              const rule = result.ruleId ?? result.rule?.id;
-              const score = severity.get(rule);
-              if (score === undefined || score < min) continue;
-              // The alert location and each step of its data flow
-              const locations = [
-                ...(result.locations ?? []),
-                ...(result.codeFlows ?? []).flatMap((flow) =>
-                  (flow.threadFlows ?? []).flatMap((thread) => (thread.locations ?? []).map((step) => step.location)),
-                ),
-              ]
-                .map((loc) => loc?.physicalLocation)
-                .filter((loc) => loc?.artifactLocation?.uri)
-                .map((loc) => ({
-                  file: decode(loc.artifactLocation.uri),
-                  start: loc.region?.startLine ?? 1,
-                  end: loc.region?.endLine ?? loc.region?.startLine ?? 1,
-                }));
-              if (locations.length === 0 || !locations.some(touches)) continue;
-              const message = String(result.message?.text ?? "").replace(/\s+/g, " ");
-              found.push({ rule, score, file: locations[0].file, line: locations[0].start, message });
-            }
-          }
-        }
-        const property = (text) => String(text).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A").replace(/:/g, "%3A").replace(/,/g, "%2C");
-        const data = (text) => String(text).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
-        for (const alert of found) {
-          const title = `CodeQL: ${alert.rule} (security-severity ${alert.score.toFixed(1)})`;
-          console.log(`::error file=${property(alert.file)},line=${alert.line},title=${property(title)}::${data(alert.message)}`);
-        }
-        const summary = [`### CodeQL: new alerts of this pull request`, ""];
-        if (found.length === 0) {
-          summary.push(`CodeQL found ${total} results in the repository. None is at or above ${process.env.SEVERITY} on a line that the pull request changes.`);
-        } else {
-          summary.push("| Rule | Security-severity | File | Line |", "|---|---|---|---|");
-          for (const alert of found) summary.push(`| ${alert.rule} | ${alert.score.toFixed(1)} | \`${alert.file}\` | ${alert.line} |`);
-        }
-        fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary.join("\n") + "\n");
-        if (found.length > 0) {
-          console.log(`::error::The pull request adds ${found.length} CodeQL alerts at or above ${process.env.SEVERITY}.`);
-          process.exit(1);
-        }
-        JS
+        node "$NEW_ALERTS"
 
     # The verdict: each scan that the inputs and the event start must pass (verdict.ts)
     - name: Each scan passed
