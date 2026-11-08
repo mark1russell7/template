@@ -439,6 +439,8 @@ The action `security-scan` has three scans in one job. On a pull request, a scan
 | `osv-scanner` | The scan reads the lockfiles of the base and of the pull request. It fails for a vulnerability that only the pull request has. | The scan reads all the lockfiles and uploads the results. |
 | `codeql` | CodeQL analyzes the source with no build. The scan fails for a new alert on a line that the pull request adds or changes. | CodeQL analyzes the source and uploads the results. |
 
+CodeQL first downloads the bundle of the version of `codeql-action`. If that download fails (for example, GitHub gave HTTP 504 again and again on 2026-11-08), the action waits 60 seconds. Then it starts CodeQL again, with a second download of the same bundle. If the second start also fails, the scan fails. The step summary names the bundle and the start that passed. A start with no download is not possible, because `codeql-action` ignores `tools: toolcache` in a run of a push or a pull request.
+
 An alert of CodeQL that is already open on the base branch is not new. The step groups the alerts by rule, file and message. A group is new only when the pull request has more alerts of it than the base branch has open. Thus a second alert of a known group fails. The step reads the open alerts of the base branch from the code-scanning API, with `security-events: read`. If it cannot read them, the step fails.
 
 Each scan starts also when an earlier scan failed. The last step of the action fails when a scan fails, and its error names that scan. The summary of the run shows a table of the scans. If the inputs start a scan and no step of it starts, the last step also fails.
