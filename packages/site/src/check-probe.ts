@@ -67,7 +67,7 @@ if (siteCheckOn?.checked) click(siteCheckOn);
 check("site-check off: the step Site check does not run", await until(() => step("Site check").includes("skipped")), step("Site check"));
 
 click('[data-event="schedule"]');
-check("a scheduled build runs the step of green-main", await until(() => step("Shared actions (green-main)").includes("runs")), step("Shared actions (green-main)"));
+check("a scheduled build gets the shared actions for the commit to build", await until(() => step("Shared actions (the commit to build)").includes("runs")), step("Shared actions (the commit to build)"));
 
 // The response explorer says first what it is, before a reader meets a chart of another project.
 const responseWhat = $("#response-what")?.textContent ?? "";

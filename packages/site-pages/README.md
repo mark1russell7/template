@@ -143,6 +143,23 @@ The folder of `--shots` gets a screenshot of each view, `report.json` and `summa
 
 The check finds a browser in this order: `--browser`, `$SITE_CHECK_BROWSER`, the newest Chromium of Playwright, and then Chrome or Edge. The folder `src/check` imports only Node.js. Thus Node.js 22.18 or later can start `src/check/main.ts` with no install. The workflow `reusable-pages.yml` of the template uses it this way.
 
+## The site bar
+
+The command `site-pages bar` writes one shared bar into each HTML page of a built site. The bar comes first in the body of each page.
+
+```sh
+site-pages bar --out dist --repo owner/name --pages "Demo=demo/,Docs=docs/" --site-pages --npm @owner/name
+```
+
+- The bar has the portfolio of the owner and the name of the site. The name links to the home.
+- It has a link to the home, to each page of `--pages`, and to Releases and Status with `--site-pages`. The link of the current page has `aria-current="page"`.
+- It also links to the repository on GitHub, and to npm with `--npm`.
+- The bar takes the place of the header of the Releases page and the Status page.
+- Its CSS has its own class names, so the CSS of the site does not change the bar. It follows the light and the dark scheme. Its rows wrap at 360 px.
+- The command can start two times on one folder. The second start gives the same pages.
+
+In `reusable-pages.yml`, the input `site-bar: true` starts the command before the upload. Then `site-pages nav --require-bar` crawls the built site, and a failure stops the deploy.
+
 ## The navigation of a site
 
 The command `site-pages nav` opens the home page of a site in a headless Chromium. It follows the links that the page shows, page by page, and counts the clicks from home.
@@ -160,6 +177,8 @@ The command fails for each of these problems:
 - A link goes to a page that gives a status of 400 or more.
 - A click on a link to `releases/` or `status/` does not show the page of site-pages. A single-page application can catch the click and show its own page.
 - With `--require-bar`, a page has no shared site bar.
+
+The crawl opens at most `--max-pages` pages (default: 60). When it stops at this limit, the pages that it did not open are a "no read". A no-read is not a pass: the command fails, and `report.json` lists the pages in `unread`. The summary shows their count and their paths. In `site-audit.yml`, each no-read is a warning on the check of the pull request.
 
 The folder of `--shots` gets `report.json`, `summary.md` and screenshots of the home, the releases and the status pages, at 1280 px and 360 px.
 
