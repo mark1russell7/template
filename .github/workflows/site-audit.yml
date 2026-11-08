@@ -5,7 +5,8 @@
 # pages that are hidden or far from home, the pages with no way back and the links that open a new tab.
 # Its artifact site-nav has the screenshots and report.json of each site, and nav.json for all sites.
 # A failed site does not fail the run: the audit is a report. A run that cannot check a site fails.
-# A pull request that changes the crawl starts only the job nav, so it shows the effect of the change.
+# Each pull request starts the workflow, so its check "Site audit OK" is always there. The job changes skips
+# the other jobs when the pull request changes no file of the crawl. Such a pull request starts only the job nav.
 name: Site audit
 
 on:
@@ -27,9 +28,6 @@ on:
   schedule:
     - cron: "28 5 * * 1"
   pull_request:
-    paths:
-      - .github/workflows/site-audit.yml
-      - packages/site-pages/src/check/nav.ts
 
 permissions: {}
 
@@ -38,7 +36,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      match: ${{ steps.changes.outputs.match }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      - id: changes
+        uses: ./.github/actions/changes
+        with:
+          paths: |
+            .github/workflows/site-audit.yml
+            packages/site-pages/src/check/nav.ts
+
   sites:
+    needs: changes
+    if: needs.changes.outputs.match == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -68,8 +88,8 @@ jobs:
           echo "list=$(jq -Rnc '[inputs | select(length > 0)]' < "$RUNNER_TEMP/audit-sites.txt")" >> "$GITHUB_OUTPUT"
 
   audit:
-    needs: sites
-    if: github.event_name != 'pull_request'
+    needs: [changes, sites]
+    if: needs.changes.outputs.match == 'true' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
@@ -151,15 +171,15 @@ jobs:
           if-no-files-found: warn
 
   nav:
-    needs: sites
-    if: needs.sites.outputs.list != '[]'
+    needs: [changes, sites]
+    if: needs.changes.outputs.match == 'true' && needs.sites.outputs.list != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
     strategy:
       fail-fast: false
-      max-parallel: 12
+      max-parallel: 3
       matrix:
         repo: ${{ fromJSON(needs.sites.outputs.list) }}
     steps:
@@ -205,8 +225,8 @@ jobs:
           if-no-files-found: warn
 
   nav-report:
-    needs: nav
-    if: always() && needs.nav.result != 'skipped'
+    needs: [changes, nav]
+    if: always() && needs.changes.outputs.match == 'true' && needs.nav.result != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -246,3 +266,20 @@ jobs:
           name: site-nav
           path: ${{ runner.temp }}/site-nav
           if-no-files-found: warn
+
+  site-audit-ok:
+    name: Site audit OK
+    if: ${{ !cancelled() }}
+    needs: [changes, sites, audit, nav, nav-report]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      - uses: ./.github/actions/gate-summary
+        with:
+          needs: ${{ toJSON(needs) }}
+          allow-skip: audit
