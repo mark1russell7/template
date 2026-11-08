@@ -418,6 +418,7 @@ jobs:
 - The check runs from `packages/site-pages/src/check` of the template commit of the workflow. It needs Node.js 22.18 or later.
 - A site with its own Pages workflow uses the action `site-check` before the upload of the Pages artifact. The inputs have the same names, and `out` is the built site.
 - A site with its own Pages workflow uses the action `data-stamps` for the freshness gate. Its input `stamps` is the file of stamps in the built site.
+- A scheduled build or a build after a release can build an older green commit. When that commit does not have the file of stamps yet, the gate warns and skips. When the build is of the commit of the workflow, a missing file fails the gate.
 - The workflow `site-audit.yml` of the template checks the live home of each public site each Monday. Start it by hand from the Actions tab.
 - The audit does not fail for a bad site. Its artifact `site-audit` has the screenshots, `report.json` of each site and `audit.json`.
 - The job `nav` of the audit starts `site-pages nav` on each site. Its artifact `site-nav` has the screenshots, `report.json` of each site and `nav.json`.
@@ -439,6 +440,8 @@ The action `security-scan` has three scans in one job. On a pull request, a scan
 | `dependency-review` | GitHub compares the dependencies of the base and of the pull request. The scan fails for a new dependency with a known vulnerability. | The scan does not start. |
 | `osv-scanner` | The scan reads the lockfiles of the base and of the pull request. It fails for a vulnerability that only the pull request has. | The scan reads all the lockfiles and uploads the results. |
 | `codeql` | CodeQL analyzes the source with no build. The scan fails for a new alert on a line that the pull request adds or changes. | CodeQL analyzes the source and uploads the results. |
+
+CodeQL first downloads the bundle of the version of `codeql-action`. If that download fails (for example, GitHub gave HTTP 504 again and again on 2026-11-08), the action waits 60 seconds. Then it starts CodeQL again, with a second download of the same bundle. If the second start also fails, the scan fails. The step summary names the bundle and the start that passed. A start with no download is not possible, because `codeql-action` ignores `tools: toolcache` in a run of a push or a pull request.
 
 An alert of CodeQL that is already open on the base branch is not new. The step groups the alerts by rule, file and message. A group is new only when the pull request has more alerts of it than the base branch has open. Thus a second alert of a known group fails. The step reads the open alerts of the base branch from the code-scanning API, with `security-events: read`. If it cannot read them, the step fails.
 
