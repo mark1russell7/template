@@ -89,6 +89,13 @@ on:
         description: The lowest percent of each measure of the coverage of each package. 0 is no floor. Only with coverage.
         type: number
         default: 0
+      coverage-on-main:
+        description: >-
+          With coverage false, a push to the default branch of a public repository still starts the action coverage, not strict: it skips a
+          package with no @vitest/coverage-v8, and a failure is a warning. So each repository has the artifact coverage on
+          main. false turns it off.
+        type: boolean
+        default: true
     secrets:
       CONVENTIONS_PRIVATE_PATTERNS:
         description: >-
@@ -293,7 +300,7 @@ jobs:
         run: eval "$COMMAND"
       # The action comes from the commit of this workflow, as in the job changesets. The checkout is after the scripts,
       # so the scripts do not see the folder .shared-actions.
-      - if: inputs.coverage && matrix.os == fromJSON(inputs.os)[0] && matrix.node == fromJSON(inputs.node-versions)[0]
+      - if: (inputs.coverage || (inputs.coverage-on-main && github.event_name == 'push' && !github.event.repository.private && github.ref == format('refs/heads/{0}', github.event.repository.default_branch))) && matrix.os == fromJSON(inputs.os)[0] && matrix.node == fromJSON(inputs.node-versions)[0]
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
@@ -301,8 +308,9 @@ jobs:
           path: .shared-actions
           sparse-checkout: .github/actions
           persist-credentials: false
-      - if: inputs.coverage && matrix.os == fromJSON(inputs.os)[0] && matrix.node == fromJSON(inputs.node-versions)[0]
+      - if: (inputs.coverage || (inputs.coverage-on-main && github.event_name == 'push' && !github.event.repository.private && github.ref == format('refs/heads/{0}', github.event.repository.default_branch))) && matrix.os == fromJSON(inputs.os)[0] && matrix.node == fromJSON(inputs.node-versions)[0]
         uses: ./.shared-actions/.github/actions/coverage
         with:
           floor: ${{ inputs.coverage-floor }}
+          strict: ${{ inputs.coverage && 'true' || 'false' }}
           working-directory: ${{ inputs.working-directory }}

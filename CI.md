@@ -44,6 +44,7 @@ The job starts all the scripts, also after a failure. Then it fails with the nam
 | `changeset-ignore` | (empty) | More globs of files that need no changeset. |
 | `coverage` | `false` | After the scripts, the first cell of the matrix starts the tests of each package with Vitest again, with coverage (refer to "Coverage"). |
 | `coverage-floor` | `0` | The lowest percent of each measure of each package. `0` is no floor. |
+| `coverage-on-main` | `true` | With `coverage: false`, a push to the default branch of a public repository still gives the coverage, not strict (refer to "Coverage"). |
 
 ### Coverage
 
@@ -54,6 +55,8 @@ With `coverage: true`, the action `coverage` starts `vitest run` with coverage i
 - A package with no summary fails the step. Its tests failed, or it does not have `@vitest/coverage-v8`.
 - A package whose tests fail also fails the step, after the summary. The thresholds of its Vitest config can cause this. The message names the package and the exit code.
 - With `coverage-floor`, a package with a measure under the floor fails the step. The message names the package and the measure.
+
+With `coverage: false` and `coverage-on-main: true` (the default), a push to the default branch of a public repository also starts the action, not strict (a private repository pays for its minutes, so it uses `coverage: true`). It skips a package with no `@vitest/coverage-v8`, and it gives a warning for a failure. It does not fail the job. So each repository has the artifact `coverage` on main, and a tool can read which exported functions no test starts.
 
 Each package with Vitest needs `@vitest/coverage-v8` in its `devDependencies`, with the version of its Vitest. The configuration of the coverage in `vitest.config.ts` (for example `include` and `exclude`) stays. The action sets only the reporters and the folder `coverage`.
 
