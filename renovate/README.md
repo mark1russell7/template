@@ -24,7 +24,7 @@ These presets hold the shared Renovate settings of the repositories of mark1russ
   - The GitHub Actions (minor, patch, digest): one pull request. A major update gets a pull request of its own.
   - The shared workflows and actions of the template: one pull request, "template workflows and actions".
   - The Claude Code CLI of a workflow (`CLAUDE_CODE_VERSION`): one pull request, "Claude Code CLI", for a review.
-- Renovate does not change a range in `peerDependencies`. Change it by hand.
+- Renovate opens no pull request for a range in `peerDependencies`. It lists each new version on the Dependency Dashboard, and a person ticks it there or changes the range by hand. A range is a promise to the users.
 - Renovate does not change `.github/workflows/release.yml` or `scripts/release/`. These files change only from `~/git/template` (`RELEASING.md`).
 
 ## The pins of the template

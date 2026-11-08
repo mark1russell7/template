@@ -379,6 +379,7 @@ interface Rule {
 interface RuleConfig {
   readonly off?: string;
   readonly ignore: readonly string[];
+  readonly generated?: readonly string[];
   readonly reason?: string;
   readonly options: Options;
 }

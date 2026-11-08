@@ -114,6 +114,34 @@ describe("the configuration", () => {
     // With no change, `ignore` covers each file of its globs
     expect(runChecks({ root, only: ["typed-scripts"] }).rules[0]).toMatchObject({ status: "pass", ignored: 3 });
   });
+
+  it("ignores build output in `generated`, also a file that the change adds", () => {
+    const conventions = { rules: { "typed-scripts": { generated: ["dist/**"], reason: "tsc -b writes dist/ from src/" } } };
+    const root = fixture({ "package.json": { name: "root", private: true, conventions }, "dist/old.js": "export {};\n" });
+    const git = (...args: string[]): string =>
+      spawnSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", ...args], { cwd: root, encoding: "utf8" }).stdout.trim();
+    git("init", "-q");
+    git("add", ".");
+    git("commit", "-q", "-m", "base");
+    const base = git("rev-parse", "HEAD");
+    writeFileSync(join(root, "dist/new.js"), "export const added = 1;\n");
+    writeFileSync(join(root, "new.mjs"), "export const script = 1;\n");
+    git("add", ".");
+    git("commit", "-q", "-m", "change");
+    const rule = runChecks({ root, only: ["typed-scripts"], base }).rules[0];
+    expect(rule?.breaks.map((item) => item.file)).toEqual(["new.mjs"]);
+    expect(rule).toMatchObject({ status: "break", ignored: 2 });
+  });
+
+  it("reports an entry of `generated` that matches no break, and `generated` without a reason", () => {
+    const root = broken({ rules: { "tsconfig-test": { generated: ["packages/a/**", "build/**"], reason: "a build" } } });
+    const rule = runChecks({ root, only: ["tsconfig-test"] }).rules[0];
+    expect(rule).toMatchObject({ status: "break", ignored: 1 });
+    expect(rule?.breaks).toEqual([
+      { file: "package.json", message: "The entry `build/**` of `generated` matches no break of this rule. Remove it from the field `conventions`." },
+    ]);
+    expect(() => parseConfig({ rules: { "typed-scripts": { generated: ["dist/**"] } } }, RULES)).toThrow(/generated needs a reason/);
+  });
 });
 
 describe("the bin", () => {
