@@ -104,6 +104,18 @@ describe("security-scan: evaluate", () => {
     assert.deepEqual(evaluate({ steps, expected: { ...all, codeql: false } }).failed, []);
   });
 
+  it("passes CodeQL when the download of the bundle fails and the init from the tool cache passes (HTTP 504, 2026-11-08)", () => {
+    const verdict = evaluate({ steps: { ...pullRequest, codeql_init: soft, "codeql_init-toolcache": ok }, expected: all });
+    assert.deepEqual(verdict.failed, []);
+  });
+
+  it("red: fails CodeQL when the init from the tool cache also fails, and names that step", () => {
+    const steps = { ...pullRequest, codeql_init: soft, "codeql_init-toolcache": failed, codeql_analyze: skipped, "codeql_new-alerts": skipped };
+    const verdict = evaluate({ steps, expected: all });
+    assert.deepEqual(verdict.failed, ["codeql"]);
+    assert.match(verdict.rows.find((row) => row.name === "codeql")?.reason ?? "", /codeql_init-toolcache \(failure\)/);
+  });
+
   it("a push run: the dependency review is off, and the other scans pass", () => {
     const steps: Record<string, StepResult> = { checkout: ok, "dependency-review_scan": skipped, "osv-scanner_args": ok, "osv-scanner_scan": soft, "osv-scanner_check": ok, "osv-scanner_upload": ok, codeql_languages: ok, codeql_init: ok, codeql_analyze: ok, "codeql_new-alerts": skipped };
     const verdict = evaluate({ steps, expected: { ...all, "dependency-review": false } });
@@ -135,6 +147,21 @@ describe("security-scan: action.yml", () => {
     for (const name of ["STEPS", "DEPENDENCY_REVIEW", "OSV_SCANNER", "CODEQL"]) assert.match(last, new RegExp(`\\n        ${name}: `));
     assert.match(last, /if: \$\{\{ !cancelled\(\) \}\}/);
     assert.match(last, /run: node "\$VERDICT"/);
+  });
+
+  it("the first CodeQL init may fail, the second init uses the tool cache only then, and the analysis runs after either", () => {
+    /** This function gives the text of the step with the id, up to the next step. */
+    const block = (id: string): string => {
+      const start = action.indexOf(`\n      id: ${id}\n`);
+      assert.ok(start >= 0, `The action has no step ${id}.`);
+      return action.slice(start, action.indexOf("\n    - ", start));
+    };
+    assert.match(block("codeql_init"), /\n {6}continue-on-error: true\n/);
+    assert.doesNotMatch(block("codeql_init"), /tools:/);
+    assert.ok(block("codeql_init-toolcache").includes("if: ${{ !cancelled() && steps.codeql_init.outcome == 'failure' }}"));
+    assert.match(block("codeql_init-toolcache"), /\n {8}tools: toolcache\n/);
+    assert.doesNotMatch(block("codeql_init-toolcache"), /continue-on-error/);
+    assert.ok(block("codeql_analyze").includes("steps.codeql_init.outcome == 'success' || steps.codeql_init-toolcache.outcome == 'success'"));
   });
 
   it("STEPS has only the outcome and the conclusion of each step, so a large output does not go in the environment", () => {
