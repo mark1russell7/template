@@ -535,6 +535,9 @@ The workflows of the template call the shared workflows and actions by a local p
 - `ci.yml` tests `reusable-ci.yml`.
 - `security.yml` tests the action `security-scan`. The tests of `scripts/workflows/security-scan.test.ts` examine the last step of the action and the step that finds the new CodeQL alerts, with no scan.
 - `actions-test.yml` tests the actions, `reusable-pages.yml` and the release workflows, with `dry-run`. It publishes nothing. On a pull request, it sets the input `require-main` of the release build to `false`.
+- On each pull request, the job `site` of `actions-test.yml` calls `pages.yml`. It builds the site of the template and starts its probe, with no deploy.
+- "Actions OK" is a check of the ruleset of `main`, and it needs the job `site`. Thus `gh pr merge --auto` waits for the probe of the site.
+- `ci.yml` cannot call `pages.yml`, because `release.yml` calls `ci.yml` with only `contents: read`.
 - `ai-review.yml` tests `reusable-ai-review.yml`, and `codex-review.yml` tests `reusable-codex-review.yml`. Without its API key, a review stops at once with a note.
 - The tests of `scripts/ai-review/` examine the request, the redaction and the post of the second review, with no network.
 

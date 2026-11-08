@@ -5,6 +5,9 @@
 #   pages           reusable-pages.yml builds a test site with the Releases page and the Status page,
 #                   and uploads the Pages artifact, with no deploy.
 #   pages-check     The pages and their JSON are in the artifact.
+#   site            On each pull request, pages.yml builds the site of the template and starts its site check with
+#                   the probe of packages/site, with no deploy. The check "Actions OK" needs it, so gh pr merge --auto
+#                   waits for the probe. The job has no paths filter, because each shared workflow is in the explorer.
 #   release-build   reusable-release-build.yml packs the packages of this repository. Only a run on
 #                   main checks that the commit is on main (the input require-main). The input
 #                   after-pack tests the tarballs, writes an output, adds a title and the
@@ -289,6 +292,23 @@ jobs:
           done; done; done
           node -e 'const s = require(process.argv[1]); if (!s.github?.available) { console.error("::error::the GitHub part is not available:", s.github?.reason); process.exit(1); } if (!(s.items?.length > 0)) { console.error("::error::the Status page has no roadmap item"); process.exit(1); } console.log("github:", s.pullRequests.length, "open PRs,", s.issues.length, "open issues;", s.items.length, "roadmap items")' "$OUT/data/status.json"
 
+  # The site of the template on each pull request. pages.yml is the one home of its inputs. A push to main starts
+  # pages.yml by itself, so the job runs only on a pull request.
+  site:
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/pages.yml
+    # The permissions of the job pages of pages.yml. Only its deploy job uses pages and id-token, and that job does not
+    # run on a pull request. The environment github-pages also accepts a deploy only from main.
+    permissions:
+      contents: read
+      actions: read
+      issues: read
+      pull-requests: read
+      checks: read
+      statuses: read
+      pages: write
+      id-token: write
+
   release-build:
     needs: changes
     if: needs.changes.outputs.match == 'true'
@@ -354,7 +374,7 @@ jobs:
   actions-ok:
     name: Actions OK
     if: ${{ !cancelled() }}
-    needs: [changes, green-main, setup-cue, cue-ci, data-stamps, pages, pages-check, release-build, release-publish, release-tag]
+    needs: [changes, green-main, setup-cue, cue-ci, data-stamps, pages, pages-check, site, release-build, release-publish, release-tag]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}
@@ -366,3 +386,5 @@ jobs:
       - uses: ./.github/actions/gate-summary
         with:
           needs: ${{ toJSON(needs) }}
+          # A push to main and a run by hand skip the job site
+          allow-skip: site
