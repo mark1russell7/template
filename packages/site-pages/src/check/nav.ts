@@ -98,6 +98,21 @@ export interface NavResult {
   readonly sitemap: readonly string[];
   readonly clicks: readonly NavClick[];
   readonly problems: readonly string[];
+  /**
+   * The paths that the crawl did not open, because it stopped at the limit `maxPages`. A path of this list is a no-read: the
+   * crawl does not know its problems. A result with a no-read is not `ok`.
+   */
+  readonly unread: readonly string[];
+}
+
+/**
+ * This function gives the no-reads of a crawl: the paths left in its queue, and each path of the sitemap that it did not
+ * open. A crawl with an empty queue read each page that a link reaches, so it has no no-read.
+ */
+export function navUnread(queue: readonly string[], pages: readonly Pick<NavPage, "path">[], sitemap: readonly string[]): string[] {
+  if (queue.length === 0) return [];
+  const opened = new Set(pages.map((page) => page.path));
+  return [...new Set([...queue, ...sitemap.filter((path) => !opened.has(path))])];
 }
 
 /** The phone width of the check of the way back. */
@@ -133,11 +148,14 @@ export function sitemapPaths(xml: string, home: URL): string[] {
 const named = (path: string) => (path === "" ? "the home page" : `/${path}`);
 
 /** This function gives the problems of a crawl. It reads no file and opens no page. */
-export function navProblems(result: Pick<NavResult, "pages" | "sitemap" | "clicks">, home: URL, options: Pick<NavOptions, "maxClicks" | "requireBar">): string[] {
+export function navProblems(result: Pick<NavResult, "pages" | "sitemap" | "clicks"> & { readonly unread?: readonly string[] }, home: URL, options: Pick<NavOptions, "maxClicks" | "requireBar">): string[] {
   const problems: string[] = [];
   const byPath = new Map(result.pages.map((page) => [page.path, page]));
+  const unread = new Set(result.unread ?? []);
   for (const path of result.sitemap) {
     const page = byPath.get(path);
+    // A page that the crawl did not open is a no-read, not a problem (refer to `navUnread`)
+    if (page === undefined && unread.has(path)) continue;
     if (page === undefined) problems.push(`${named(path)} is in the sitemap, and no chain of links from home reaches it`);
     else if (page.clicks > options.maxClicks) problems.push(`${named(path)} is ${page.clicks} clicks from home, over the limit of ${options.maxClicks}`);
   }
@@ -290,6 +308,7 @@ export async function crawlSite(options: NavOptions): Promise<NavResult> {
   const pages: NavPage[] = [];
   const clicks: NavClick[] = [];
   let sitemap: string[] = [];
+  let left: string[] = [];
   try {
     const { page } = browser;
     await Promise.all([page.send("Page.enable"), page.send("Runtime.enable")]);
@@ -321,6 +340,7 @@ export async function crawlSite(options: NavOptions): Promise<NavResult> {
         queue.push({ path, clicks: next.clicks + 1, from: next.path });
       }
     }
+    left = queue.map((entry) => entry.path);
     // A click on each link to a page of site-pages, from each page that the crawl opened at most one click from home.
     for (const from of pages.filter((entry) => entry.clicks <= 1 && entry.status < 400)) {
       const targets = [...new Set(from.links.map((link) => sitePath(link.href, home)).filter((path): path is string => path === "releases/" || path === "status/"))];
@@ -350,8 +370,9 @@ export async function crawlSite(options: NavOptions): Promise<NavResult> {
     await browser.close();
     await server?.close();
   }
-  const problems = navProblems({ pages, sitemap, clicks }, home, options);
-  const result: NavResult = { ok: problems.length === 0, home: home.href, pages, sitemap, clicks, problems };
+  const unread = navUnread(left, pages, sitemap);
+  const problems = navProblems({ pages, sitemap, clicks, unread }, home, options);
+  const result: NavResult = { ok: problems.length === 0 && unread.length === 0, home: home.href, pages, sitemap, clicks, problems, unread };
   if (options.shots) {
     writeFileSync(join(options.shots, "report.json"), `${JSON.stringify(result, null, 2)}\n`);
     writeFileSync(join(options.shots, "summary.md"), navSummary(result));
@@ -359,9 +380,17 @@ export async function crawlSite(options: NavOptions): Promise<NavResult> {
   return result;
 }
 
+/** This function gives the text of the no-reads of a crawl, with their count and the first 10 paths. */
+export function navUnreadText(result: Pick<NavResult, "pages" | "unread">): string {
+  const first = result.unread.slice(0, 10).map(named).join(", ");
+  const more = result.unread.length > 10 ? `, and ${String(result.unread.length - 10)} more` : "";
+  return `the crawl stopped at the limit of ${String(result.pages.length)} pages, so it did not read ${String(result.unread.length)} pages: ${first}${more}.`;
+}
+
 /** This function gives the summary of a crawl as Markdown. */
 export function navSummary(result: NavResult): string {
   const lines = [`### Navigation of ${result.home}`, "", `${result.pages.length} pages opened, ${result.sitemap.length} in the sitemap, ${result.problems.length} problems.`, ""];
+  if (result.unread.length > 0) lines.push(`**No read:** ${navUnreadText(result)}`, "");
   for (const problem of result.problems) lines.push(`- ${cell(problem)}`);
   lines.push("", "| Clicks | Page | HTTP | Home link at 360 px | Site bar |", "|---|---|---|---|---|");
   for (const page of result.pages) lines.push(`| ${page.clicks} | ${named(page.path)} | ${page.status} | ${page.homeAtPhone ? "yes" : "no"} | ${page.bar ? "yes" : "no"} |`);
@@ -486,7 +515,8 @@ export async function runNavCli(argv: readonly string[], io: CheckIo): Promise<n
     log: (line) => io.stdout(`${line}\n`),
   });
   for (const problem of result.problems) io.stdout(`FAIL ${problem}\n`);
-  io.stdout(`site-pages nav: ${result.pages.length} pages, ${result.problems.length} problems.\n`);
+  if (result.unread.length > 0) io.stdout(`NO READ ${navUnreadText(result)}\n`);
+  io.stdout(`site-pages nav: ${result.pages.length} pages, ${result.problems.length} problems, ${result.unread.length} pages not read.\n`);
   const step = io.env["GITHUB_STEP_SUMMARY"];
   if (step) appendFileSync(step, navSummary(result));
   return result.ok ? 0 : 1;

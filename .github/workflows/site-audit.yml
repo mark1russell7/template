@@ -276,15 +276,23 @@ jobs:
             const report = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : null;
             const barFile = join(out, name, "bar", "report.json");
             const bar = existsSync(barFile) ? JSON.parse(readFileSync(barFile, "utf8")) : null;
-            return { repo: name, home: report?.home ?? "", ok: report?.ok ?? false, pages: report?.pages?.length ?? 0, problems: report?.problems ?? ["the crawl gave no report"], bar: bar === null ? null : { ok: bar.ok, problems: bar.problems } };
+            return { repo: name, home: report?.home ?? "", ok: report?.ok ?? false, pages: report?.pages?.length ?? 0, problems: report?.problems ?? ["the crawl gave no report"], unread: report?.unread ?? [], bar: bar === null ? null : { ok: bar.ok, problems: bar.problems, unread: bar.unread ?? [] } };
           });
+          // A no-read is never a pass: each one is a warning on the check of the pull request, with its count and its pages
+          for (const row of rows) {
+            for (const [label, unread] of [["the crawl", row.unread], ["the crawl with the site bar", row.bar?.unread ?? []]]) {
+              if (unread.length === 0) continue;
+              const first = unread.slice(0, 10).map((path) => "/" + path).join(", ");
+              console.log(`::warning title=Site navigation%3A no read of ${row.repo}::${label} stopped at its page limit and did not read ${unread.length} pages: ${first}${unread.length > 10 ? ", and more" : ""}`);
+            }
+          }
           rows.sort((a, b) => b.problems.length - a.problems.length || a.repo.localeCompare(b.repo));
           writeFileSync(join(out, "nav.json"), JSON.stringify({ date: new Date().toISOString(), sites: rows }, null, 2) + "\n");
           const cell = (text) => String(text).replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\r?\n/g, " ");
           const lines = [
-            `## Site navigation: ${rows.filter((row) => row.ok).length} of ${rows.length} sites pass`, "",
-            "| Site | Pages | Problems | With the site bar |", "| --- | ---: | --- | --- |",
-            ...rows.map((row) => `| [${row.repo}](${row.home}) | ${row.pages} | ${row.problems.length}: ${row.problems.slice(0, 5).map(cell).join("<br>") || "none"} | ${row.bar === null ? "not crawled" : `${row.bar.problems.length}: ${row.bar.problems.slice(0, 5).map(cell).join("<br>") || "none"}`} |`),
+            `## Site navigation: ${rows.filter((row) => row.ok).length} of ${rows.length} sites pass, ${rows.filter((row) => row.unread.length > 0).length} with no read`, "",
+            "| Site | Pages | Not read | Problems | With the site bar |", "| --- | ---: | ---: | --- | --- |",
+            ...rows.map((row) => `| [${row.repo}](${row.home}) | ${row.pages} | ${row.unread.length === 0 ? "0" : `**${row.unread.length}**`} | ${row.problems.length}: ${row.problems.slice(0, 5).map(cell).join("<br>") || "none"} | ${row.bar === null ? "not crawled" : `${row.bar.problems.length}: ${row.bar.problems.slice(0, 5).map(cell).join("<br>") || "none"}${row.bar.unread.length > 0 ? `<br>**${row.bar.unread.length} not read**` : ""}`} |`),
           ];
           if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
           console.log(lines.join("\n"));

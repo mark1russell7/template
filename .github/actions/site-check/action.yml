@@ -87,7 +87,9 @@ runs:
         OUT: ${{ inputs.out }}
         BASE: ${{ inputs.base }}
       run: |
-        args=(nav --out "$OUT" --repo "$GITHUB_REPOSITORY" --require-bar --shots "$RUNNER_TEMP/site-check/nav")
+        # The limit of the crawl is the number of built pages, at least 60, so the crawl can open each page and has no no-read
+        built=$(find "$OUT" -type f -name '*.html' | wc -l)
+        args=(nav --out "$OUT" --repo "$GITHUB_REPOSITORY" --require-bar --max-pages "$(( built > 60 ? built : 60 ))" --shots "$RUNNER_TEMP/site-check/nav")
         [ -z "$BASE" ] || args+=(--base "$BASE")
         node "$GITHUB_ACTION_PATH/../../../packages/site-pages/src/check/main.ts" "${args[@]}"
     # The screenshots, report.json and summary.md, also of a failed check, for a review of the site.

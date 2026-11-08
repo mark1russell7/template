@@ -175,6 +175,8 @@ The command fails for each of these problems:
 - A click on a link to `releases/` or `status/` does not show the page of site-pages. A single-page application can catch the click and show its own page.
 - With `--require-bar`, a page has no shared site bar.
 
+The crawl opens at most `--max-pages` pages (default: 60). When it stops at this limit, the pages that it did not open are a "no read". A no-read is not a pass: the command fails, and `report.json` lists the pages in `unread`. The summary shows their count and their paths. In `site-audit.yml`, each no-read is a warning on the check of the pull request.
+
 The folder of `--shots` gets `report.json`, `summary.md` and screenshots of the home, the releases and the status pages, at 1280 px and 360 px.
 
 ## The freshness of a measured page

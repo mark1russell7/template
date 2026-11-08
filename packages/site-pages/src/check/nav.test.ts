@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { navProblems, navSummary, repositoryOfUrl, runNavCli, sitemapPaths, sitePath, type NavLink, type NavPage } from "./nav.ts";
+import { navProblems, navSummary, navUnread, navUnreadText, repositoryOfUrl, runNavCli, sitemapPaths, sitePath, type NavLink, type NavPage } from "./nav.ts";
 
 const home = new URL("https://owner.github.io/repo/");
 
@@ -106,10 +106,39 @@ describe("navProblems", () => {
 
 describe("navSummary", () => {
   it("lists the problems and the pages", () => {
-    const text = navSummary({ ok: false, home: home.href, pages: [page("", 0, [])], sitemap: [], clicks: [], problems: ["a | b"] });
+    const text = navSummary({ ok: false, home: home.href, pages: [page("", 0, [])], sitemap: [], clicks: [], problems: ["a | b"], unread: [] });
     expect(text).toContain("1 pages opened, 0 in the sitemap, 1 problems.");
     expect(text).toContain("- a \\| b");
     expect(text).toContain("| 0 | the home page | 200 | yes | no |");
+    expect(text).not.toContain("No read");
+  });
+
+  it("shows a no-read with its count and its pages, also with no problem", () => {
+    const unread = Array.from({ length: 12 }, (_, index) => `p${String(index)}/`);
+    const text = navSummary({ ok: false, home: home.href, pages: [page("", 0, []), page("a/", 1, [])], sitemap: [], clicks: [], problems: [], unread });
+    expect(text).toContain("**No read:** the crawl stopped at the limit of 2 pages, so it did not read 12 pages: /p0/, /p1/,");
+    expect(text).toContain("/p9/, and 2 more.");
+  });
+});
+
+describe("navUnread", () => {
+  it("has no no-read when the crawl read its whole queue", () => {
+    expect(navUnread([], [page("", 0, [])], ["", "hidden/"])).toEqual([]);
+  });
+
+  it("gives the queue and each page of the sitemap that the crawl did not open, when the crawl stopped at its limit", () => {
+    expect(navUnread(["b/", "c/"], [page("", 0, []), page("a/", 1, [])], ["", "a/", "c/", "d/"])).toEqual(["b/", "c/", "d/"]);
+  });
+
+  it("makes a page of the sitemap past the limit a no-read, not a page that no link reaches", () => {
+    const pages = [page("", 0, [], { bar: true })];
+    const unread = navUnread(["a/"], pages, ["a/", "b/"]);
+    expect(navProblems({ pages, sitemap: ["a/", "b/"], clicks: [], unread }, home, rules)).toEqual([]);
+    expect(navProblems({ pages, sitemap: ["a/", "b/"], clicks: [] }, home, rules)).toEqual([
+      "/a/ is in the sitemap, and no chain of links from home reaches it",
+      "/b/ is in the sitemap, and no chain of links from home reaches it",
+    ]);
+    expect(navUnreadText({ pages, unread })).toBe("the crawl stopped at the limit of 1 pages, so it did not read 2 pages: /a/, /b/.");
   });
 });
 
