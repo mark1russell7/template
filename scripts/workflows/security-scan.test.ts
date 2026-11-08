@@ -95,6 +95,13 @@ describe("security-scan: evaluate", () => {
     assert.deepEqual(evaluate({ steps, expected: all }).failed, ["checkout", "dependency-review", "osv-scanner", "codeql"]);
   });
 
+  it("reads an empty result as a step that did not run, as the expression of a missing step gives", () => {
+    const empty: StepResult = { outcome: "", conclusion: "" };
+    const steps = Object.fromEntries(Object.entries(pullRequest).map(([id, each]) => [id, id.startsWith("codeql_") ? empty : each]));
+    assert.deepEqual(evaluate({ steps, expected: all }).failed, ["codeql"]);
+    assert.deepEqual(evaluate({ steps, expected: { ...all, codeql: false } }).failed, []);
+  });
+
   it("a push run: the dependency review is off, and the other scans pass", () => {
     const steps: Record<string, StepResult> = { checkout: ok, "dependency-review_scan": skipped, "osv-scanner_args": ok, "osv-scanner_scan": soft, "osv-scanner_check": ok, "osv-scanner_upload": ok, codeql_languages: ok, codeql_init: ok, codeql_analyze: ok, "codeql_new-alerts": skipped };
     const verdict = evaluate({ steps, expected: { ...all, "dependency-review": false } });
@@ -126,5 +133,20 @@ describe("security-scan: action.yml", () => {
     for (const name of ["STEPS", "DEPENDENCY_REVIEW", "OSV_SCANNER", "CODEQL"]) assert.match(last, new RegExp(`\\n        ${name}: `));
     assert.match(last, /if: \$\{\{ !cancelled\(\) \}\}/);
     assert.match(last, /run: node "\$VERDICT"/);
+  });
+
+  it("STEPS has only the outcome and the conclusion of each step, so a large output does not go in the environment", () => {
+    const last = action.slice(action.lastIndexOf("\n    - "));
+    assert.doesNotMatch(last, /\n {8}STEPS: \$\{\{/);
+    const block = /\n        STEPS: \|\n((?: {10}.*\n)+)/.exec(last)?.[1] ?? "";
+    const ids = steps.map((each) => each.id).filter((id): id is string => id !== undefined);
+    for (const id of ids) {
+      const row = `"${id}": { "outcome": "\${{ steps.${id}.outcome }}", "conclusion": "\${{ steps.${id}.conclusion }}" }`;
+      assert.ok(block.includes(row), `STEPS has no row for the step ${id}.`);
+    }
+    // The runner puts a value in each expression. The result must be the JSON that verdict.ts reads.
+    const parsed = JSON.parse(block.replace(/\$\{\{ steps\.[\w-]+\.(outcome|conclusion) \}\}/g, "success")) as Record<string, StepResult>;
+    assert.deepEqual(Object.keys(parsed), ids);
+    assert.equal(evaluate({ steps: parsed, expected: all }).failed.length, 0);
   });
 });

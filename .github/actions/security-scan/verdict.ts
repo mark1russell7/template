@@ -18,7 +18,7 @@ export interface StepResult {
 
 /** The input of evaluate(). */
 export interface VerdictInput {
-  /** The `steps` context of the action, as `toJSON(steps)`. */
+  /** The outcome and the conclusion of each step of the action, by its id. */
   readonly steps: Readonly<Record<string, StepResult>>;
   /** The scans that the inputs and the event start. Such a scan must run and pass. */
   readonly expected: Readonly<Record<Scan, boolean>>;
@@ -38,8 +38,11 @@ export interface Verdict {
   readonly failed: readonly string[];
 }
 
-/** The result of a step: its conclusion (after continue-on-error), or its outcome. A missing step did not run. */
-const resultOf = (step: StepResult | undefined): string => step?.conclusion ?? step?.outcome ?? "skipped";
+/**
+ * The result of a step: its conclusion (after continue-on-error), or its outcome. A missing step did not start.
+ * An empty value is also a step that did not start: the expression of such a step gives "".
+ */
+const resultOf = (step: StepResult | undefined): string => step?.conclusion || step?.outcome || "skipped";
 
 /** A result that fails the scan of the step. */
 const BAD: ReadonlySet<string> = new Set(["failure", "cancelled"]);
