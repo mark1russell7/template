@@ -38,9 +38,9 @@ declarationPathOf: build/index.d.ts#declarationPathOf
 diffLines: build/index.d.ts#diffLines
 entriesOf: build/index.d.ts#entriesOf
 formatResult: build/index.d.ts#formatResult
-globFolders: build/index.d.ts#globFolders
-globToRegExp: build/index.d.ts#globToRegExp
-packageFolders: build/index.d.ts#packageFolders
+globFolders: @mark1russell7/conventions/workspace#globFolders (external)
+globToRegExp: @mark1russell7/conventions/workspace#globToRegExp (external)
+packageFolders: @mark1russell7/conventions/workspace#packageFolders (external)
 packageReport: build/index.d.ts#packageReport
 pageFaults: build/index.d.ts#pageFaults
 parseDeclarations: build/index.d.ts#parseDeclarations
@@ -55,7 +55,7 @@ statementsOf: build/index.d.ts#statementsOf
 summaryMarkdown: build/index.d.ts#summaryMarkdown
 targetOf: build/index.d.ts#targetOf
 unifiedDiff: build/index.d.ts#unifiedDiff
-workspaceGlobs: build/index.d.ts#workspaceGlobs
+workspaceGlobs: @mark1russell7/conventions/workspace#workspaceGlobs (external)
 
 ## bin: 1 commands
 
@@ -256,15 +256,6 @@ export declare function entriesOf(manifest: Manifest, root: string): Entry[];
 ### build/index.d.ts#formatResult
 export declare function formatResult(result: RunResult, tool?: string): string;
 
-### build/index.d.ts#globFolders
-export declare function globFolders(root: string, glob: string): string[];
-
-### build/index.d.ts#globToRegExp
-export declare function globToRegExp(glob: string): RegExp;
-
-### build/index.d.ts#packageFolders
-export declare function packageFolders(root: string, globs?: readonly string[] | undefined): string[];
-
 ### build/index.d.ts#packageReport
 export declare function packageReport(dir: string, options?: PackageReportOptions): string;
 
@@ -306,6 +297,3 @@ export declare function targetOf(value: unknown): string | null | undefined;
 
 ### build/index.d.ts#unifiedDiff
 export declare function unifiedDiff(before: string, after: string, options?: UnifiedDiffOptions): string;
-
-### build/index.d.ts#workspaceGlobs
-export declare function workspaceGlobs(root: string): string[] | undefined;

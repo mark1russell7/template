@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
+import * as home from "@mark1russell7/conventions/workspace";
 import { globFolders, globToRegExp, packageFolders, readConfig, runCli, runReports, summaryMarkdown, workspaceGlobs, type CliIo } from "./index.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "api-report-run-"));
@@ -42,43 +43,12 @@ function cli(cwd: string, args: string[], env: Record<string, string> = {}): { c
   return { code, stdout, stderr };
 }
 
-describe("the globs", () => {
-  it("escapes the special characters, and knows *, ?, ** and braces", () => {
-    expect(globToRegExp("packages/*").test("packages/a")).toBe(true);
-    expect(globToRegExp("packages/*").test("packages/a/b")).toBe(false);
-    expect(globToRegExp("packages/**").test("packages/a/b")).toBe(true);
-    expect(globToRegExp("a/**/z").test("a/z")).toBe(true);
-    expect(globToRegExp("a/**/z").test("a/b/c/z")).toBe(true);
-    expect(globToRegExp("a.b/?").test("a.b/c")).toBe(true);
-    expect(globToRegExp("a.b/?").test("axb/c")).toBe(false);
-    expect(globToRegExp("{apps,libs}/*").test("libs/x")).toBe(true);
-    expect(globToRegExp("(x)+[y]$").test("(x)+[y]$")).toBe(true);
-    expect(() => globToRegExp("{a,b")).toThrow(/no "}"/);
-  });
-
-  it("finds the folders of a glob, without node_modules and dot folders", () => {
-    const root = fixture({ "apps/x/y/f": "", "apps/x/node_modules/m/f": "", "apps/.cache/f": "", "libs/z/f": "" });
-    expect(globFolders(root, "apps/*")).toEqual(["apps/x"]);
-    expect(globFolders(root, "apps/**")).toEqual(["apps", "apps/x", "apps/x/y"]);
-    expect(globFolders(root, "{apps,libs}/*")).toEqual(["apps/x", "libs/z"]);
-    expect(globFolders(root, "./libs/z/")).toEqual(["libs/z"]);
-    expect(globFolders(root, "none/*")).toEqual([]);
-  });
-
-  it("reads the globs of pnpm-workspace.yaml and of the workspaces field", () => {
-    expect(workspaceGlobs(workspace())).toEqual(["packages/*", "!packages/ignored"]);
-    expect(workspaceGlobs(fixture({ "pnpm-workspace.yaml": "packages: ['a/*', \"b\"]\n" }))).toEqual(["a/*", "b"]);
-    expect(workspaceGlobs(fixture({ "package.json": { workspaces: ["x/*"] } }))).toEqual(["x/*"]);
-    expect(workspaceGlobs(fixture({ "package.json": { workspaces: { packages: ["y/*"] } } }))).toEqual(["y/*"]);
-    expect(workspaceGlobs(fixture({ "package.json": {} }))).toBeUndefined();
-  });
-
-  it("finds the package folders, and a repository with no workspace is one package", () => {
-    const root = workspace();
-    expect(packageFolders(root)).toEqual(["a", "b", "hidden"].map((name) => join(root, "packages", name)));
-    expect(packageFolders(root, ["!packages/a", "packages/*"])).toEqual(["b", "hidden", "ignored"].map((name) => join(root, "packages", name)));
-    const single = fixture({ "package.json": { name: "solo" } });
-    expect(packageFolders(single)).toEqual([single]);
+describe("the functions of the workspace", () => {
+  it("are the functions of @mark1russell7/conventions/workspace, not a copy", () => {
+    expect(globFolders).toBe(home.globFolders);
+    expect(globToRegExp).toBe(home.globToRegExp);
+    expect(packageFolders).toBe(home.packageFolders);
+    expect(workspaceGlobs).toBe(home.workspaceGlobs);
   });
 });
 

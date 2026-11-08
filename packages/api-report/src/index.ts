@@ -44,4 +44,4 @@ export {
   type RunOptions,
   type RunResult,
 } from "./run.ts";
-export { globFolders, globToRegExp, packageFolders, workspaceGlobs } from "./workspace.ts";
+export { globFolders, globToRegExp, packageFolders, workspaceGlobs } from "@mark1russell7/conventions/workspace";
