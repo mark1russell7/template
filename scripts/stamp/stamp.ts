@@ -9,7 +9,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { writePackage } from "../../packages/cli/src/commands/package/add.ts";
+// writePackage pulls in packages/cli and the site pages. It is imported in stamp() only, so that --check runs in a bare clone with no install.
 
 /** The files that a new repository gets from the template: a path, or a folder with `/` at the end. */
 export const KEEP: readonly string[] = [
@@ -238,6 +238,7 @@ export async function stamp({ name, description, npm, template, out, ref, latest
   writeFileSync(join(out, "docs", "ROADMAP.md"), firstRoadmap(name));
 
   // The site needs the workflows above: the CLI reads the pin from them
+  const { writePackage } = await import("../../packages/cli/src/commands/package/add.ts");
   const written = await writePackage(out, "site", "site", undefined, { description, npm });
   if (written.skipped.length > 0) throw new Error(`The preset site did not write ${written.skipped.join(", ")}.`);
   const siteFile = join(written.dir, "package.json");
