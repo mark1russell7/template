@@ -162,7 +162,7 @@ A run from `workflow_dispatch` is the same as a run from a push to `main`, with 
 - The steps "Deepen to the merge base" and "Fetch the commit before the push" skip.
 - The action `changes` gives a match, as for each event other than a pull request.
 - The rules of `conventions` that read a range of commits skip, because a run of `workflow_dispatch` has no base.
-- `reusable-pages.yml` starts a deploy only after a CI run with the event `push`. Thus a run of `workflow_dispatch` does not deploy.
+- After a CI run of `workflow_dispatch` on `main`, a caller of `reusable-pages.yml` on `workflow_run` of CI deploys only the head of `main`.
 
 ### A gate with paths
 
@@ -354,7 +354,9 @@ The gates are in the lane file, not in an input. Thus a local run and CI use the
 
 ## Pages
 
-`reusable-pages.yml` has two jobs. The job `build` installs, builds the site, adds the pages of `site-pages` and uploads the Pages artifact. It gets only read permissions. The job `deploy` deploys the artifact. It starts no code of the repository.
+`reusable-pages.yml` has three jobs. The job `ref` decides if the commit of the event builds and deploys. It starts no code of the repository.
+
+The job `build` checks out the commit of the event, with no ref of its own. It installs, builds the site, adds the pages of `site-pages` and uploads the Pages artifact. It gets only read permissions. The job `deploy` deploys the artifact. It starts no code of the repository.
 
 ```yaml
 on:
@@ -397,9 +399,13 @@ jobs:
 ```
 
 - A repository that publishes a package also starts Pages after a release, with `workflow_run` of `Release`, and on each day. A release starts no Pages run by itself, so the Releases page is behind npm until the next build. The rule `pages-after-release` of `@mark1russell7/conventions` examines both triggers, and `conventions fix` writes them.
-- A build after a release takes the commit of `green-main`, not the commit of the release. This is the newest commit of `main`, or the newest green commit when CI failed on it. A release takes longer than a build, so a later push can already be on the site. A release that a person starts by hand also starts this build.
+- The job `ref` writes its decision and the reason to the step summary of the run.
+- A push to `main` deploys its commit. A pull request and a push to a different branch only build.
+- A schedule, a run by hand, a repository dispatch and a run after a release build the head of `main`. They deploy it when its CI passed, or while its CI runs and `pending` is `head`.
+- A red head of `main` deploys nothing. The site keeps its last deploy and does not go back to an older commit.
+- A run after CI deploys only when the commit of CI is the head of `main`. Else the CI run of the newer commit deploys it.
 - A caller on `workflow_run` after CI is also correct. A failed CI run, a CI run of a pull request and a CI run of a push to a different branch build nothing. The job `build` examines the branch, so the filter `branches: [main]` of the caller is not necessary.
-- A scheduled build uses the commit of `green-main`. The input `pending` goes to that action.
+- The input `pending` is `head` by default. With `pending: green`, a head whose CI runs deploys nothing.
 - The inputs of `site-pages` go to the action: `site-pages-version`, `roadmap`, `base`, `packages`, `changesets`, `group`, `css`, `site-name` and `data-only`.
 - `site-pages: false` builds the site without the Releases page and the Status page.
 - Without `roadmap`, the Status page shows only the open pull requests and issues. The rule `roadmap-parses` of `@mark1russell7/conventions` thus needs `roadmap` in each call, or `site-pages: false`.

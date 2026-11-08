@@ -107,6 +107,17 @@ jobs:
         run: |
           echo "green-main: $SHA (CI of the newest commit: $STATE)"
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]
+      # The job ref of reusable-pages.yml gives the commit of the event
+      - id: green-commit
+        uses: ./.github/actions/green-main
+        with:
+          commit: ${{ github.sha }}
+      - name: green-main gives the CI state of a commit
+        env:
+          STATE: ${{ steps.green-commit.outputs.state }}
+        run: |
+          echo "green-main: CI of ${GITHUB_SHA}: $STATE"
+          [[ "$STATE" =~ ^(green|running|none|red)$ ]]
 
   setup-cue:
     needs: changes

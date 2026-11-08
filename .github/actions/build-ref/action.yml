@@ -1,24 +1,38 @@
 name: build-ref
 description: >-
-  Gives the commit that the job build of reusable-pages.yml checks out. It fails closed, and it never gives the commit
-  of a fork. ref.ts tells the rules.
+  Decides if the job build of reusable-pages.yml builds the commit of the event, and if the job deploy deploys it.
+  It fails closed, and a run of a fork never deploys. ref.ts tells the rules.
 inputs:
-  green:
-    description: The commit of the step green-main, or empty when that step did not start.
+  state:
+    description: The CI state of the commit of the event from the step green-main, or empty when that step did not start.
     default: ""
+  pending:
+    description: What to do while CI of the commit has not finished, "head" (deploy) or "green" (wait for CI).
+    default: head
+  token:
+    description: A GitHub token that can read the repository, for its default branch.
+    default: ${{ github.token }}
 outputs:
-  sha:
-    description: The commit hash.
-    value: ${{ steps.ref.outputs.sha }}
+  build:
+    description: true when the job build builds the commit of the event.
+    value: ${{ steps.ref.outputs.build }}
+  deploy:
+    description: true when the job deploy deploys it.
+    value: ${{ steps.ref.outputs.deploy }}
 runs:
   using: composite
   steps:
     - id: ref
-      name: The commit to build
+      name: Build and deploy
       shell: bash
       env:
-        GREEN: ${{ inputs.green }}
+        GH_TOKEN: ${{ inputs.token }}
+        STATE: ${{ inputs.state }}
+        PENDING: ${{ inputs.pending }}
         REF: ${{ github.action_path }}/ref.ts
       # The script reads the event file itself, so no field of the event goes through an expression.
       # Node 22.18 and later run TypeScript with no build. The ubuntu-latest image has such a Node.
-      run: node "$REF"
+      run: |
+        DEFAULT_BRANCH=$(gh api "repos/$GITHUB_REPOSITORY" --jq .default_branch) || exit 1
+        export DEFAULT_BRANCH
+        node "$REF"
