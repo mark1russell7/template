@@ -19,6 +19,7 @@ import { noLocalPaths } from "./no-local-paths.ts";
 import { apiReportScript } from "./api-report-script.ts";
 import { pagesAfterRelease } from "./pages-after-release.ts";
 import { pagesSite } from "./pages-site.ts";
+import { siteCheckInCi } from "./site-check-in-ci.ts";
 import { pinnedGitDeps } from "./pinned-git-deps.ts";
 import { pipeFails } from "./pipe-fails.ts";
 import { pushMainOnly } from "./push-main-only.ts";
@@ -75,9 +76,10 @@ export const RULES: readonly Rule[] = [
   homePackage,
   licenseFile,
   pagesSite,
+  siteCheckInCi,
   pagesAfterRelease,
   sharedDocs,
 ];
 
 export { publishedMinor };
-export { apiReportScript, changelogVersion, cuePreset, gateAfterCancel, gateTrigger, securityOneJob, serviceRunMain, setupCue, sharedCi, homePackage, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, versionTitle, workflowParses, workspaceProtocol };
+export { apiReportScript, changelogVersion, cuePreset, gateAfterCancel, gateTrigger, securityOneJob, serviceRunMain, setupCue, sharedCi, homePackage, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, siteCheckInCi, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, versionTitle, workflowParses, workspaceProtocol };

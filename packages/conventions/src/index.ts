@@ -63,6 +63,7 @@ export {
   serviceRunMain,
   setupCue,
   sharedCi,
+  siteCheckInCi,
   sourceMain,
   testsRequired,
   trustPolicy,

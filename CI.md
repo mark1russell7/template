@@ -484,6 +484,8 @@ The file `.github/site.json` is the one home of the values of the site. The depl
 - GitHub counts the permissions of a called workflow against the grant of the caller job. A CI job of a pull request has no write permission.
 - Thus `reusable-pages-check.yml` gets only `contents: read`. On a public repository, each read of `site-pages` works with this token.
 - The rule `roadmap-parses` of `@mark1russell7/conventions` reads the file. It reports a bad file on the pull request, before the deploy reads it.
+- The rule `site-check-in-ci` of `@mark1russell7/conventions` holds this form. It needs the file and a job that checks the site, in the needs of "CI OK".
+- The rule also finds a site input in the call of the deploy. It finds a deploy that a pull request starts, directly or through a call.
 - The preset `site` of `template-cli` writes `.github/site.json`, and the stamp writes the job `site` into `ci.yml`.
 
 ## Security
