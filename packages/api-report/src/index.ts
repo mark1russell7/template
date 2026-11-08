@@ -32,6 +32,7 @@ export { apiReport, DEFAULT_TOOL, HEADER_LINES, packageReport, type PackageRepor
 export {
   formatResult,
   readConfig,
+  reportFolders,
   REPORT_FILE,
   runCli,
   runReports,
