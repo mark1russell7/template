@@ -177,10 +177,10 @@ importers:
         version: link:packages/conventions
       '@mark1russell7/cue':
         specifier: ^2.0.0
-        version: 2.1.1
+        version: 2.1.2
       '@mark1russell7/ste-lint':
-        specifier: ^0.1.1
-        version: 0.1.2
+        specifier: ^0.3.0
+        version: 0.3.0
       '@swc/core':
         specifier: ^1.15.0
         version: 1.16.20
@@ -208,7 +208,7 @@ importers:
     devDependencies:
       '@mark1russell7/cue':
         specifier: ^2.0.0
-        version: 2.1.1
+        version: 2.1.2
       '@types/node':
         specifier: ^26.6.4
         version: 26.6.6
@@ -220,13 +220,13 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^5.0.3
-        version: 5.0.5(@types/node@26.6.6)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.0.5(@types/node@26.6.6)(@vitest/coverage-v8@5.0.5)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/boundaries:
     devDependencies:
       '@mark1russell7/cue':
         specifier: ^2.0.0
-        version: 2.1.1
+        version: 2.1.2
       '@swc/core':
         specifier: ^1.15.0
         version: 1.16.20
@@ -244,7 +244,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^5.0.3
-        version: 5.0.5(@types/node@26.6.6)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.0.5(@types/node@26.6.6)(@vitest/coverage-v8@5.0.5)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/cli:
     dependencies:
@@ -254,10 +254,10 @@ importers:
     devDependencies:
       '@mark1russell7/cue':
         specifier: ^2.0.0
-        version: 2.1.1
+        version: 2.1.2
       '@mark1russell7/service':
-        specifier: ^0.6.0
-        version: 0.6.5(zod@4.6.7)
+        specifier: ^0.8.1
+        version: 0.8.1(zod@4.6.7)
       '@types/node':
         specifier: ^26.6.4
         version: 26.6.6
@@ -282,7 +282,7 @@ importers:
     devDependencies:
       '@mark1russell7/cue':
         specifier: ^2.0.0
-        version: 2.1.1
+        version: 2.1.2
       '@mark1russell7/site-pages':
         specifier: workspace:*
         version: link:../site-pages
@@ -297,7 +297,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^5.0.3
-        version: 5.0.5(@types/node@26.6.6)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.0.5(@types/node@26.6.6)(@vitest/coverage-v8@5.0.5)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/site:
     devDependencies:
@@ -306,16 +306,16 @@ importers:
         version: link:../conventions
       '@mark1russell7/cue':
         specifier: ^2.0.0
-        version: 2.1.1
+        version: 2.1.2
       '@mark1russell7/packing':
         specifier: 0.6.1
         version: 0.6.1
       '@mark1russell7/rigor-generators':
         specifier: ^0.1.3
-        version: 0.1.6
+        version: 0.1.8
       '@mark1russell7/rigor-statistics':
         specifier: ^0.1.9
-        version: 0.1.15
+        version: 0.1.25
       '@mark1russell7/site-pages':
         specifier: workspace:*
         version: link:../site-pages
@@ -333,17 +333,17 @@ importers:
         version: 8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
       vitest:
         specifier: ^5.0.3
-        version: 5.0.5(@types/node@26.6.6)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.0.5(@types/node@26.6.6)(@vitest/coverage-v8@5.0.5)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/site-pages:
     dependencies:
       '@mark1russell7/rigor-statistics':
         specifier: ^0.1.9
-        version: 0.1.15
+        version: 0.1.25
     devDependencies:
       '@mark1russell7/cue':
         specifier: ^2.0.0
-        version: 2.1.1
+        version: 2.1.2
       '@types/node':
         specifier: ^26.6.4
         version: 26.6.6
@@ -358,7 +358,7 @@ importers:
         version: 8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
       vitest:
         specifier: ^5.0.3
-        version: 5.0.5(@types/node@26.6.6)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.0.5(@types/node@26.6.6)(@vitest/coverage-v8@5.0.5)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
 packages:
 
@@ -570,8 +570,8 @@ packages:
   '@loaderkit/resolve@1.0.6':
     resolution: {integrity: sha512-G8FdIoF5CypfwmD9rl8BXod5HDn8JqB0CCNBXDTaRZ+yRYhARrrSToX1zg1zy9jX3zLqigsELwhT4gNtkdQAUg==}
 
-  '@mark1russell7/algebra@0.8.1':
-    resolution: {integrity: sha512-lpuX4jO56Ht7F6ugymJwPCoL1F6fMVX/HAfuWaxfxBUCTrZxpSwD8qVk6O9M0fqaiyj2XUE+D5fz1XQP6BQlRA==}
+  '@mark1russell7/algebra@0.8.3':
+    resolution: {integrity: sha512-Z0saYxCDcqZu1leABWqksrIa9y9dbeTjR5l36ZRBqsDW6XfUcM4mWoE90YgzSW86YFP+dcV8y+WCKu8446e/ng==}
     engines: {node: '>=22.19'}
     peerDependencies:
       zod: ^4.1.0
@@ -579,13 +579,21 @@ packages:
       zod:
         optional: true
 
-  '@mark1russell7/cue@2.1.1':
-    resolution: {integrity: sha512-0/L9nQwGqUTCLTnUPtYKJ/cvXTr/gJWFWASUzGUjKyj3LxNpYgAplLuTPNQe0g4kjcM+9JAb/D/IfYwBGvM/mA==}
+  '@mark1russell7/collections@0.9.11':
+    resolution: {integrity: sha512-3TG8Thm1dAa5yNfsSe3g2z/KI+tzEAuuiIaRTIQs7eH1EZqWCoAqZ5llWFhGUjRl9b6y7Z266qfllAguIJ9eew==}
+    engines: {node: '>=22.12'}
+
+  '@mark1russell7/cue@2.1.2':
+    resolution: {integrity: sha512-PjEWeyq353cz3gZyNmYkv/rUChybd3h9BWRW3UWP+fs0s7/CwGeVRzCpYLnvLR4gyHC367G/PS3kqWJO9GEAkg==}
     engines: {node: '>=22'}
     hasBin: true
 
   '@mark1russell7/layout-contract@0.3.7':
     resolution: {integrity: sha512-BitSjwuRHBpwLoUTCoF/JdIcAjMfxBw+/V8N7tcw7tNQ6uPYvAWdcQvJ48CSEkKFotgf41wn2EIdNfqUj+qo8Q==}
+    engines: {node: '>=22.12'}
+
+  '@mark1russell7/optional@1.2.0':
+    resolution: {integrity: sha512-vS5jF21WC/VApRv4p8afRZahcMl9cuNp03LxbVngY9nYkzq+S7Oit6ksySt2baML+tp46UF60sxnHxn1jlwtTg==}
     engines: {node: '>=22.12'}
 
   '@mark1russell7/packing@0.6.1':
@@ -601,27 +609,37 @@ packages:
       zod:
         optional: true
 
+  '@mark1russell7/quantity@0.3.2':
+    resolution: {integrity: sha512-Mm1OM9hu1/sU06IeZzm/IX8FipabzrhCWBcOeELwsIpHE0a0FbYYiZHRG+qeeScSkZ9bl9Flmeif0ZgAcz4Fuw==}
+    engines: {node: '>=22.19'}
+    peerDependencies:
+      zod: ^4.1.0
+    peerDependenciesMeta:
+      zod:
+        optional: true
+
   '@mark1russell7/rational@0.1.0':
     resolution: {integrity: sha512-kYUuKI9STA4mlCpJCx/FpUSe8sokryDJzSuyd/Abev9Len7lotztPEOPH4A8WoxLvEsKEwHA33kg7lbLVjGZWw==}
-    engines: {node: '>=22'}
-
-  '@mark1russell7/rigor-generators@0.1.1':
-    resolution: {integrity: sha512-N5o3II0AClHgsWCWtzuBzckQdReydJnLUS8Kdt9hWXVpTzb0dxucrN1bWdDN+75YompOR1rAmsIX8zuHqoQdqA==}
     engines: {node: '>=22'}
 
   '@mark1russell7/rigor-generators@0.1.6':
     resolution: {integrity: sha512-eSuVS6nNd2H63dMrfleop+ffBtNd8Ua0/JrcUWUMxf2jHWw432fSwJ+aSa4ecAYq1Pa2ReCfwpqFUP4MII5+GA==}
     engines: {node: '>=22'}
 
-  '@mark1russell7/rigor-statistics@0.1.15':
-    resolution: {integrity: sha512-dxr3UiAs64JXV3trXCaTRTesHqXEMUoVvDGIyrz0BWsAZERA/lrIQNUATFAuqnAWzdmbHUyi/5nzA4uPXTSTJw==}
+  '@mark1russell7/rigor-generators@0.1.8':
+    resolution: {integrity: sha512-6AC/YQdSrMKs/1NcHesjmmxVjKrqTDXjzKaElE8N8TgsqgiApCbsnk5xRoGJfvIJZUX7vJHFB9F+w48OSdRtHQ==}
     engines: {node: '>=22'}
 
-  '@mark1russell7/service@0.6.5':
-    resolution: {integrity: sha512-USBAaZX8lQ3nmBzaTycF+6xQJyIQ51ZTWIxw9rZnZ5bhaqZe5FydTgVPYr92/gb8VWcOG4jxWsPnLPBBEaxzSA==}
+  '@mark1russell7/rigor-statistics@0.1.25':
+    resolution: {integrity: sha512-bdDOlHTDAz02QM40XG9fA//8J/FcfUhfXyUnlW6Dwwlnxd3fGQjAkIy6kn1iPRbKtk29mf4XdDN1VSKzMvc7RQ==}
+    engines: {node: '>=22'}
+
+  '@mark1russell7/service@0.8.1':
+    resolution: {integrity: sha512-aQWIsfUm++PmUwMua5g+x9U23LSi0dJ5d19ocHrsHSZpy3s82lDaE9FfPQXreh+u+2GDP/UCbb+R5hxATtseHQ==}
     engines: {node: '>=22.19'}
     peerDependencies:
       '@grpc/grpc-js': ^1.14.6
+      '@opentelemetry/api': ^1.9.0
       amqplib: ^2.2.0
       ioredis: ^6.0.0
       mongodb: ^7.7.0
@@ -630,6 +648,8 @@ packages:
       zod: ^4.1.0
     peerDependenciesMeta:
       '@grpc/grpc-js':
+        optional: true
+      '@opentelemetry/api':
         optional: true
       amqplib:
         optional: true
@@ -644,8 +664,8 @@ packages:
       zod:
         optional: true
 
-  '@mark1russell7/ste-lint@0.1.2':
-    resolution: {integrity: sha512-Gq7XrLLBbuaGp+a6HbmikoPR2KmU06w/XZh8TFVmG9qbMsknMjOhh50lcZ1kEpYStI++uhlxrNv+sOkOqgnN5w==}
+  '@mark1russell7/ste-lint@0.3.0':
+    resolution: {integrity: sha512-Z5GuoAvFk9Vf4tnN/XTHiffbU2SjtZb0EtcQsLJlSAApkXovQZTPOtCFyvRbcU+qMINiXJMXppwolSsxya6s8A==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -1846,23 +1866,29 @@ snapshots:
       '@braidai/lang': 1.1.2
     optional: true
 
-  '@mark1russell7/algebra@0.8.1(zod@4.6.7)':
+  '@mark1russell7/algebra@0.8.3(zod@4.6.7)':
     dependencies:
       '@mark1russell7/quantity': 0.3.0(zod@4.6.7)
     optionalDependencies:
       zod: 4.6.7
 
-  '@mark1russell7/cue@2.1.1': {}
+  '@mark1russell7/collections@0.9.11':
+    dependencies:
+      '@mark1russell7/optional': 1.2.0
+
+  '@mark1russell7/cue@2.1.2': {}
 
   '@mark1russell7/layout-contract@0.3.7':
     dependencies:
-      '@mark1russell7/rigor-generators': 0.1.6
+      '@mark1russell7/rigor-generators': 0.1.8
       '@mark1russell7/typeset': 0.1.5
+
+  '@mark1russell7/optional@1.2.0': {}
 
   '@mark1russell7/packing@0.6.1':
     dependencies:
       '@mark1russell7/layout-contract': 0.3.7
-      '@mark1russell7/rigor-generators': 0.1.6
+      '@mark1russell7/rigor-generators': 0.1.8
 
   '@mark1russell7/quantity@0.3.0(zod@4.6.7)':
     dependencies:
@@ -1870,31 +1896,38 @@ snapshots:
     optionalDependencies:
       zod: 4.6.7
 
-  '@mark1russell7/rational@0.1.0': {}
-
-  '@mark1russell7/rigor-generators@0.1.1': {}
-
-  '@mark1russell7/rigor-generators@0.1.6': {}
-
-  '@mark1russell7/rigor-statistics@0.1.15':
+  '@mark1russell7/quantity@0.3.2(zod@4.6.7)':
     dependencies:
-      '@mark1russell7/rigor-generators': 0.1.6
-
-  '@mark1russell7/service@0.6.5(zod@4.6.7)':
-    dependencies:
-      '@mark1russell7/algebra': 0.8.1(zod@4.6.7)
-      '@mark1russell7/quantity': 0.3.0(zod@4.6.7)
-      '@mark1russell7/rigor-generators': 0.1.1
+      '@mark1russell7/rational': 0.1.0
     optionalDependencies:
       zod: 4.6.7
 
-  '@mark1russell7/ste-lint@0.1.2':
+  '@mark1russell7/rational@0.1.0': {}
+
+  '@mark1russell7/rigor-generators@0.1.6': {}
+
+  '@mark1russell7/rigor-generators@0.1.8': {}
+
+  '@mark1russell7/rigor-statistics@0.1.25':
+    dependencies:
+      '@mark1russell7/rigor-generators': 0.1.8
+
+  '@mark1russell7/service@0.8.1(zod@4.6.7)':
+    dependencies:
+      '@mark1russell7/algebra': 0.8.3(zod@4.6.7)
+      '@mark1russell7/collections': 0.9.11
+      '@mark1russell7/quantity': 0.3.2(zod@4.6.7)
+      '@mark1russell7/rigor-generators': 0.1.6
+    optionalDependencies:
+      zod: 4.6.7
+
+  '@mark1russell7/ste-lint@0.3.0':
     dependencies:
       typescript: 6.0.3
 
   '@mark1russell7/typeset@0.1.5':
     dependencies:
-      '@mark1russell7/rigor-generators': 0.1.6
+      '@mark1russell7/rigor-generators': 0.1.8
 
   '@oxc-project/types@0.155.0': {}
 
@@ -2646,27 +2679,6 @@ snapshots:
     optionalDependencies:
       '@types/node': 26.6.6
       '@vitest/coverage-v8': 5.0.5(vitest@5.0.5)
-    transitivePeerDependencies:
-      - msw
-
-  vitest@5.0.5(@types/node@26.6.6)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)):
-    dependencies:
-      '@types/chai': 5.2.3
-      '@vitest/mocker': 5.0.5(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
-      chai: 6.3.0
-      es-module-lexer: 2.3.2
-      expect-type: 1.4.0
-      magic-string: 1.4.3
-      obug: 3.0.0
-      picomatch: 4.0.7
-      std-env: 4.3.0
-      tinybench: 6.2.2
-      tinyexec: 1.3.1
-      tinyglobby: 0.2.17
-      vite: 8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
-      why-is-node-running: 3.2.1
-    optionalDependencies:
-      '@types/node': 26.6.6
     transitivePeerDependencies:
       - msw
 
