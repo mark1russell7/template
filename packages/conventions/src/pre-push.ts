@@ -329,8 +329,8 @@ function ownVersion(): string {
 }
 
 /**
- * A Node program for the hook: it exits 0 when the package.json of argument 1 has a version that is the same as or
- * later than argument 2, and 1 otherwise. A pre-release counts as its release. It has no single quote, so the shell
+ * A Node program for the hook. Argument 1 is a package.json, and argument 2 is a version. The program exits 0 when the
+ * version of the package.json is the same as or later than argument 2, and 1 otherwise. A pre-release counts as its release. It has no single quote, so the shell
  * gives it as one argument.
  */
 const AT_LEAST =
