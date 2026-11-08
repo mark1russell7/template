@@ -56,6 +56,18 @@ With `coverage: true`, the action `coverage` starts `vitest run` with coverage i
 
 Each package with Vitest needs `@vitest/coverage-v8` in its `devDependencies`, with the version of its Vitest. The configuration of the coverage in `vitest.config.ts` (for example `include` and `exclude`) stays. The action sets only the reporters and the folder `coverage`.
 
+The secret `CONVENTIONS_PRIVATE_PATTERNS` is optional. It has private regular expressions, one on each line. The rule `no-local-paths` of `check:conventions` finds each of them in the files and in the commit messages of the change. It also finds them in the title and the body of the pull request. A break of a private pattern shows only the line of the pattern in the secret, not the text. The job also masks each line of the secret in the log. A caller gives the secret by name, or with `secrets: inherit`:
+
+```yaml
+jobs:
+  ci:
+    uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<commit> # main
+    secrets:
+      CONVENTIONS_PRIVATE_PATTERNS: ${{ secrets.CONVENTIONS_PRIVATE_PATTERNS }}
+```
+
+A pull request from a fork gets no secret, so the private patterns are not examined there.
+
 ### The changeset check
 
 On a pull request, the job `changesets` examines the changesets (`.github/actions/changeset-check`). A repository with no `.changeset/config.json` passes. The job fails in these cases:

@@ -83,6 +83,13 @@ on:
         description: The lowest percent of each measure of the coverage of each package. 0 is no floor. Only with coverage.
         type: number
         default: 0
+    secrets:
+      CONVENTIONS_PRIVATE_PATTERNS:
+        description: >-
+          Private regular expressions, one on each line, of text that no file, commit message of the change or text of
+          its pull request has (the rule no-local-paths of check:conventions). The check shows no text of a match. A
+          caller gives it with secrets: inherit, or by name.
+        required: false
 
 jobs:
   changesets:
@@ -198,8 +205,19 @@ jobs:
         env:
           COMMAND: ${{ inputs.setup }}
         run: eval "$COMMAND"
+      # GitHub does not mask each line of a secret of more than one line, so this step masks each private pattern
+      - name: Mask the private patterns
+        env:
+          PATTERNS: ${{ secrets.CONVENTIONS_PRIVATE_PATTERNS }}
+        run: |
+          while IFS= read -r line; do
+            line="${line%$'\r'}"
+            [ -n "${line// /}" ] && echo "::add-mask::$line"
+          done <<< "$PATTERNS"
+          exit 0
       - name: Scripts
         env:
+          CONVENTIONS_PRIVATE_PATTERNS: ${{ secrets.CONVENTIONS_PRIVATE_PATTERNS }}
           SCRIPTS: ${{ inputs.scripts }}
           RECURSIVE: ${{ inputs.recursive-scripts }}
           CELL: ${{ matrix.os }}, node ${{ matrix.node }}
