@@ -30,6 +30,9 @@ const CHANGELOG = `# @acme/widgets
 - The first release.
 `;
 
+/** The warning of the fixture: its 0.3.0 raises the MINOR before 1.0.0, a break, and has no break mark. */
+const CHANGELOG_WARNING = "site-pages: 1 of 3 version sections of the changelogs break the rules of a changelog section. The build does not fail, because package.json has no field sitePages.changelogFrom.\n";
+
 const ROADMAP = `# Roadmap
 
 | ID | Item | Status | Where |
@@ -147,7 +150,7 @@ describe("site-pages build", () => {
       fetch,
       now: "2026-10-19T14:05:00Z",
     });
-    expect(errors.join("")).toBe("");
+    expect(errors.join("")).toBe(CHANGELOG_WARNING);
     expect(code).toBe(0);
     expect(out.join("")).toContain("site-pages: 3 releases, 2 roadmap items (1 open), 1 open pull request and 0 open issues.");
 
@@ -231,7 +234,7 @@ describe("site-pages build", () => {
       stderr: (text) => errors.push(text),
       fetch: fakeFetch().fetch,
     });
-    expect(errors.join("")).toBe("");
+    expect(errors.join("")).toBe(CHANGELOG_WARNING);
     expect(code).toBe(0);
     const status = JSON.parse(readFileSync(join(repo, "with-kpi", "data", "status.json"), "utf8")) as StatusBoardData;
     expect(status.kpi).toEqual(kpi);
@@ -279,6 +282,45 @@ describe("site-pages build", () => {
     expect(errors.join("")).toContain("kpi.json is not correct");
     expect(existsSync(join(repo, "bad-kpi", "status"))).toBe(false);
     expect(readFileSync(join(repo, "site", "dist", "status", "index.html"), "utf8")).not.toContain('id="measures"');
+  });
+
+  it("reports the faults of the changelogs on the Status page, and does not fail with no field sitePages.changelogFrom", async () => {
+    const errors: string[] = [];
+    const code = await runCli(["build", "--out", "cl-report", "--repo", "acme/widgets"], { cwd: repo, env: {}, stdout: () => {}, stderr: (text) => errors.push(text), fetch: fakeFetch().fetch });
+    expect(code).toBe(0);
+    const status = JSON.parse(readFileSync(join(repo, "cl-report", "data", "status.json"), "utf8")) as StatusBoardData;
+    expect(status.changelog?.from).toBeNull();
+    expect(status.changelog?.sections).toBe(3);
+    const count = status.changelog?.faults.length ?? 0;
+    expect(count).toBeGreaterThan(0);
+    expect(errors.join("")).toContain(`${count} of 3 version sections of the changelogs break the rules of a changelog section. The build does not fail`);
+    const page = readFileSync(join(repo, "cl-report", "status", "index.html"), "utf8");
+    expect(page).toContain(`data-sp-changelog-faults="${count}"`);
+    expect(page).toContain("has no field <code>sitePages.changelogFrom</code>");
+  });
+
+  it("stops with code 1 at a fault from the version of the field sitePages.changelogFrom, and passes from a newer version", async () => {
+    const manifest = join(repo, "package.json");
+    const run = async (from: unknown, out: string) => {
+      writeFileSync(manifest, JSON.stringify({ private: true, sitePages: { changelogFrom: from } }));
+      const errors: string[] = [];
+      const code = await runCli(["build", "--out", out, "--repo", "acme/widgets"], { cwd: repo, env: {}, stdout: () => {}, stderr: (text) => errors.push(text), fetch: fakeFetch().fetch });
+      return { code, errors: errors.join("") };
+    };
+    try {
+      const failed = await run("0.2.0", "cl-gate");
+      expect(failed.code).toBe(1);
+      expect(failed.errors).toMatch(/of 3 version sections from 0\.2\.0 break the rules of a changelog section:\n {2}packages\/widgets\/CHANGELOG\.md 0\.3\.0: /);
+      expect(existsSync(join(repo, "cl-gate", "status"))).toBe(false);
+      const passed = await run("0.3.1", "cl-pass");
+      expect(passed.code).toBe(0);
+      expect(readFileSync(join(repo, "cl-pass", "status", "index.html"), "utf8")).toContain("No section of the 0 version sections from 0.3.1 breaks the rules");
+      const wrong = await run(3, "cl-wrong");
+      expect(wrong.code).toBe(1);
+      expect(wrong.errors).toContain("the field sitePages.changelogFrom of package.json must be a version");
+    } finally {
+      rmSync(manifest, { force: true });
+    }
   });
 
   it("stops with code 1 at an incorrect roadmap", async () => {

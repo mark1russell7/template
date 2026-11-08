@@ -369,6 +369,31 @@ export function releaseReading(listed: readonly string[], sources: ReleaseListSo
 // The sources on disk
 // ---------------------------------------------------------------------------
 
+/**
+ * This function gives the oldest version that the changelog gate of a repository examines: the field
+ * `sitePages.changelogFrom` of its root `package.json`. It gives null when the file or the field is not there.
+ *
+ * @throws ReleaseDataError when the field is not a version
+ */
+export function readChangelogFrom(repoDir: string): string | null {
+  const path = join(repoDir, "package.json");
+  if (!existsSync(path)) return null;
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return null;
+  }
+  const settings = (manifest as { sitePages?: unknown }).sitePages;
+  if (settings === undefined || settings === null || typeof settings !== "object") return null;
+  const from = (settings as { changelogFrom?: unknown }).changelogFrom;
+  if (from === undefined) return null;
+  if (typeof from !== "string" || !/^v?\d+\.\d+\.\d+$/.test(from)) {
+    throw new ReleaseDataError(`the field sitePages.changelogFrom of package.json must be a version, for example "0.1.0", not ${JSON.stringify(from)}.`);
+  }
+  return from;
+}
+
 /** The default patterns of the changelog files: the first pattern that finds a file wins. */
 export const DEFAULT_CHANGELOGS: readonly string[] = ["packages/*/CHANGELOG.md", "CHANGELOG.md"];
 
