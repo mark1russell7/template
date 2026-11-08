@@ -203,7 +203,7 @@ importers:
   packages/api-report:
     dependencies:
       '@mark1russell7/conventions':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../conventions
     devDependencies:
       '@mark1russell7/cue':
