@@ -12,6 +12,8 @@ import {
   isAllowedHit,
   isCommonUse,
   lineNameHit,
+  lineNameHits,
+  nameMatches,
   NO_READ_LINE,
   parsePrivateNames,
   pathNameHit,
@@ -219,6 +221,21 @@ describe("the private name list", () => {
     // An entry with no name permits each name, and an entry owner/name matches only that owner
     expect(isAllowedHit(list.allow, "acme-labs/site", "docs/any.md", "acme-app")).toBe(true);
     expect(isAllowedHit(list.allow, "other-owner/site", "docs/any.md", "acme-app")).toBe(false);
+  });
+
+  it("gives each name of a line once, and a permitted hit does not hide another name", () => {
+    const line = `the ${PROBE} and the Acme team, and the acme-app repository`;
+    expect(nameMatches(line, list.names).map((hit) => hit.name)).toEqual([1, 2]);
+    expect(lineNameHits(list, line).map((hit) => [hit.name, hit.index])).toEqual([
+      [1, 52],
+      [2, 4],
+    ]);
+    expect(lineNameHits(list, "a clean line")).toEqual([]);
+    // The entry of docs/allowed.md permits the probe only: the name 1 stays a hit, and lineNameHit gives it
+    const place = { repo: "acme-labs/site", path: "docs/allowed.md" };
+    expect(lineNameHits(list, line, place).map((hit) => hit.name)).toEqual([1]);
+    expect(lineNameHit(list, `the ${PROBE} and the Acme team`, place)).toMatchObject({ name: 1 });
+    expect(lineNameHits(list, line, { repo: "acme-labs/site", path: "docs/any.md" })).toEqual([]);
   });
 
   it("finds a name in a path by the patterns only", () => {

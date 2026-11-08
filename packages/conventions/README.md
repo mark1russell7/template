@@ -255,5 +255,6 @@ The package also exports the functions of the tool:
 - `privateTextBreaks(name, text, privates, options)` gives the breaks of one text. The rule `no-local-paths` and the command `pre-push` use it. `privates` has the list (`names`) and the patterns (`patterns`).
 - `parsePrivateNames(text)` parses and checks a private name list. It throws a `PrivateNameListError` with a reason that shows no value of the list.
 - `lineNameHit(list, line, place)`, `pathNameHit(list, path)`, `firstNameMatch(line, names)`, `isCommonUse(line, index, rule)` and `isAllowedHit(allow, repo, path, id)` find the names of the list. They have no input or output.
+- `lineNameHits(list, line, place)` and `nameMatches(line, names)` give each name of a line, one hit for each name. A scan that counts the names uses them. The gate takes the first hit.
 - `privateNamesFile(env, git)`, `privatePatterns(env)` and `invalidPatternBreaks(patterns)` read the settings and the patterns.
 - `prePush(options, io)` is the command `pre-push`, and `installHook(options, io)` is the command `hook install`. `PRE_PUSH_HOOK` is the text of the hook.

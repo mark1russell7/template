@@ -93,6 +93,8 @@ export {
   isAllowedHit,
   isCommonUse,
   lineNameHit,
+  lineNameHits,
+  nameMatches,
   parsePrivateNames,
   pathNameHit,
   PRIVATE_NAME_LIST,

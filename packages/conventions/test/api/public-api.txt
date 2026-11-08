@@ -123,6 +123,7 @@ keyLine: build/index.d.ts#keyLine
 licenseFile: build/index.d.ts#licenseFile
 licenseFileOf: build/index.d.ts#licenseFileOf
 lineNameHit: build/index.d.ts#lineNameHit
+lineNameHits: build/index.d.ts#lineNameHits
 lineOf: build/index.d.ts#lineOf
 listRules: build/index.d.ts#listRules
 lockedVersions: build/index.d.ts#lockedVersions
@@ -134,6 +135,7 @@ mergeHomes: build/index.d.ts#mergeHomes
 messageOf: build/index.d.ts#messageOf
 minorOf: build/index.d.ts#minorOf
 mitText: build/index.d.ts#mitText
+nameMatches: build/index.d.ts#nameMatches
 namedVersions: build/index.d.ts#namedVersions
 noBuildOutput: build/index.d.ts#noBuildOutput
 noLocalPaths: build/index.d.ts#noLocalPaths
@@ -757,6 +759,9 @@ export declare function licenseFileOf(dir: string): string | undefined;
 ### build/index.d.ts#lineNameHit
 export declare function lineNameHit(list: PrivateNameList, line: string, place?: LinePlace): NameHit | undefined;
 
+### build/index.d.ts#lineNameHits
+export declare function lineNameHits(list: PrivateNameList, line: string, place?: LinePlace): NameHit[];
+
 ### build/index.d.ts#lineOf
 export declare function lineOf(text: string, needle: string, from?: number): number | undefined;
 
@@ -789,6 +794,9 @@ export declare function minorOf(version: string): Minor | undefined;
 
 ### build/index.d.ts#mitText
 export declare function mitText(year: number, holder: string): string;
+
+### build/index.d.ts#nameMatches
+export declare function nameMatches(line: string, names: readonly NameRule[]): NameHit[];
 
 ### build/index.d.ts#namedVersions
 export declare function namedVersions(title: string): string[];

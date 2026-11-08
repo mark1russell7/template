@@ -236,17 +236,37 @@ export function isCommonUse(line: string, index: number, rule: NameRule): boolea
  */
 export function firstNameMatch(line: string, names: readonly NameRule[]): NameHit | undefined {
   for (let at = 0; at < names.length; at++) {
-    const rule = names[at];
-    if (rule === undefined) continue;
-    const { patterns, word } = compiledOf(rule);
-    for (const pattern of patterns) {
-      const found = pattern.exec(line);
-      if (found !== null) return { name: at + 1, rule, index: found.index };
-    }
-    if (word === undefined) continue;
-    for (const found of line.matchAll(word)) {
-      if (!isCommonUse(line, found.index, rule)) return { name: at + 1, rule, index: found.index };
-    }
+    const hit = nameMatch(line, names, at);
+    if (hit !== undefined) return hit;
+  }
+  return undefined;
+}
+
+/**
+ * This function gives each name of `names` in `line`, in the sequence of the list. Each name gives one hit at most: its
+ * first pattern match, or else its first word match that is not a common use.
+ */
+export function nameMatches(line: string, names: readonly NameRule[]): NameHit[] {
+  const hits: NameHit[] = [];
+  for (let at = 0; at < names.length; at++) {
+    const hit = nameMatch(line, names, at);
+    if (hit !== undefined) hits.push(hit);
+  }
+  return hits;
+}
+
+/** This function gives the hit of the name at position `at` of `names` in `line`, or undefined. */
+function nameMatch(line: string, names: readonly NameRule[], at: number): NameHit | undefined {
+  const rule = names[at];
+  if (rule === undefined) return undefined;
+  const { patterns, word } = compiledOf(rule);
+  for (const pattern of patterns) {
+    const found = pattern.exec(line);
+    if (found !== null) return { name: at + 1, rule, index: found.index };
+  }
+  if (word === undefined) return undefined;
+  for (const found of line.matchAll(word)) {
+    if (!isCommonUse(line, found.index, rule)) return { name: at + 1, rule, index: found.index };
   }
   return undefined;
 }
@@ -268,15 +288,23 @@ export function isAllowedHit(allow: readonly AllowedHit[], repo: string, path: s
 }
 
 /**
- * This function gives the name of the list in one line of a file or of a message, or undefined. The line must have a
- * seed of the list. The first name of the line counts. A permitted hit at the place gives undefined.
+ * This function gives each name of the list in one line of a file or of a message, in the sequence of the list. The line
+ * must have a seed of the list. Each name gives one hit at most. A permitted hit at the place does not count.
+ */
+export function lineNameHits(list: PrivateNameList, line: string, place: LinePlace = {}): NameHit[] {
+  if (!list.names.some((rule) => rule.seeds.some((seed) => line.includes(seed)))) return [];
+  const { repo, path } = place;
+  const hits = nameMatches(line, list.names);
+  if (repo === undefined || path === undefined) return hits;
+  return hits.filter((hit) => !isAllowedHit(list.allow, repo, path, hit.rule.id));
+}
+
+/**
+ * This function gives the first name of the list in one line of a file or of a message, or undefined. It is the first
+ * hit of `lineNameHits`, so a permitted hit does not hide a hit of another name.
  */
 export function lineNameHit(list: PrivateNameList, line: string, place: LinePlace = {}): NameHit | undefined {
-  if (!list.names.some((rule) => rule.seeds.some((seed) => line.includes(seed)))) return undefined;
-  const hit = firstNameMatch(line, list.names);
-  if (hit === undefined) return undefined;
-  if (place.repo !== undefined && place.path !== undefined && isAllowedHit(list.allow, place.repo, place.path, hit.rule.id)) return undefined;
-  return hit;
+  return lineNameHits(list, line, place)[0];
 }
 
 /**
