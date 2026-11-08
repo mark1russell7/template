@@ -340,10 +340,27 @@ describe("no-local-paths", () => {
     commitAll(root);
     expect(rule(root, "no-local-paths").breaks.map((item) => `${item.file}: ${item.message}`)).toEqual(['notes.md: The text "secret-project" matches the pattern secret-project.']);
     const env = { CONVENTIONS_PRIVATE_PATTERNS: "\nthe secret\n" };
-    expect(rule(root, "no-local-paths", { env }).breaks.map((item) => item.message)).toEqual([
-      'The text "secret-project" matches the pattern secret-project.',
-      'The text "the secret" matches the pattern the secret.',
-    ]);
+    const messages = rule(root, "no-local-paths", { env }).breaks.map((item) => item.message);
+    expect(messages).toEqual(['The text "secret-project" matches the pattern secret-project.', "A text matches the private pattern on line 2 of CONVENTIONS_PRIVATE_PATTERNS."]);
+    // A break of a private pattern names neither the text nor the pattern
+    expect(messages.join("\n")).not.toContain("the secret");
+  });
+
+  it("reads the commit messages of the change, and the title and the body of the pull request", () => {
+    const root = fixture({ "package.json": { name: "one" }, "notes.md": "1\n" });
+    commitAll(root, `first, from ${linux}`);
+    git(root, "tag", "base");
+    writeFileSync(join(root, "notes.md"), "2\n");
+    git(root, "commit", "-q", "-am", "second\n\nthe hidden-name of a project");
+    const event = join(root, "..", `event-${String(fixtures++)}.json`);
+    writeFileSync(event, JSON.stringify({ pull_request: { title: "a hidden-name title", body: `line one\n${linux}\n` } }));
+    const env = { CONVENTIONS_PRIVATE_PATTERNS: "hidden-name", GITHUB_EVENT_PATH: event };
+    const breaks = rule(root, "no-local-paths", { env, base: "base" }).breaks;
+    const sha = git(root, "rev-parse", "HEAD").trim().slice(0, 12);
+    expect(breaks.map((item) => `${item.file}:${String(item.line)}`)).toEqual([`commit ${sha}:3`, "pull request title:1", "pull request body:2"]);
+    expect(breaks.map((item) => item.message).join("\n")).not.toContain("hidden-name");
+    // With no base and no pull request, the rule reads only the files: the first commit message is not a break
+    expect(rule(root, "no-local-paths", { env: { CONVENTIONS_PRIVATE_PATTERNS: "hidden-name" } }).breaks).toEqual([]);
   });
 });
 

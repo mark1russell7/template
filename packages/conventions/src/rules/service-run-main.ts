@@ -46,7 +46,12 @@ export const serviceRunMain: Rule = {
   reason:
     "run() of @mark1russell7/service owns the process: it starts the listeners, it reads the signals, and it ends the process. A module that starts it cannot be imported by a test or by a second entry without a second server. When only the entry starts it, each other module gives a service that a test can start, check and stop.",
   fix: "Move the call of run() to src/main.ts. Export the service (or a function that makes it) from the module, and start it in the entry.",
-  sources: [{ repo: "template", rule: "service-preset", doc: "CLAUDE.md: make a server package with --preset=service; only its entry src/main.ts uses run() of @mark1russell7/service" }],
+  sources: [
+    { repo: "template", rule: "service-preset", doc: "CLAUDE.md: make a server package with --preset=service; only its entry src/main.ts uses run() of @mark1russell7/service" },
+    { repo: "template", rule: "service-preset", doc: "packages/cli/src/commands/package/add.ts: the preset service writes src/main.ts and the script start" },
+    { repo: "systems", rule: "service-run-main", doc: "packages/reference/src/main.ts:3: only this file starts run()" },
+    { repo: "vex", rule: "service-run-main", doc: "packages/mcp/src/main.ts: the one call of run() of the package" },
+  ],
   options: {
     main: { type: "string", default: "src/main.ts", description: "The entry of a server package, the one file that starts the service." },
   },

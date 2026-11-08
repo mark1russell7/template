@@ -46,6 +46,9 @@ export const sharedCi: Rule = {
   fix: "Make ci.yml call mark1russell7/template/.github/workflows/reusable-ci.yml at a pinned commit, and give the differences as its inputs (CI.md). Remove the local copy of a shared workflow or action, and call the one of the template. A repository that cannot call the shared CI turns the rule off with its reason.",
   sources: [
     { repo: "template", rule: "shared-workflows", doc: "CLAUDE.md: the workflows use the shared workflows and actions of the template; a repository changes only the inputs of its callers" },
+    { repo: "template", rule: "ci", doc: "CI.md, CI: a caller of reusable-ci.yml needs no inputs, and gives each difference as an input" },
+    { repo: "highways", rule: "ci", doc: ".github/workflows/ci.yml:1: the job ci is the shared CI (reusable-ci.yml, CI.md)" },
+    { repo: "packing", rule: "ci", doc: ".github/workflows/ci.yml:1: the job ci is the shared CI (reusable-ci.yml, CI.md)" },
     { repo: "ste-lint", rule: "ci", doc: ".github/workflows/ci.yml (2026-11-07): its own steps, no call of reusable-ci.yml; the same in optional and lag" },
   ],
   options: {
