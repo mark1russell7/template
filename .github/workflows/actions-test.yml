@@ -111,7 +111,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.match == 'true'
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    # The download of 0.15.0 runs each time, and its tries take at most 11 minutes
+    timeout-minutes: 25
     permissions:
       contents: read
     strategy:

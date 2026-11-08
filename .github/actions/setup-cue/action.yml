@@ -65,8 +65,9 @@ runs:
         SHA256: ${{ inputs.sha256 }}
         TOKEN: ${{ inputs.token }}
       run: |
-        # A 504 of github.com comes and goes (2026-11-08), so each request has 8 more tries over approximately 2 minutes
-        retry=(--retry 8 --retry-all-errors --retry-delay 15 --connect-timeout 20)
+        # A 504 of github.com comes and goes (2026-11-08), so each request has 8 more tries, 15 s apart.
+        # A 504 can come after approximately 3.5 minutes, so each try stops after 60 s: at most 11 minutes in all.
+        retry=(--retry 8 --retry-all-errors --retry-delay 15 --connect-timeout 20 --max-time 60)
         expected=$(printf %s "$SHA256" | tr "[:upper:]" "[:lower:]")  # bash 3.2 of macOS has no ${var,,}
         if [ -z "$expected" ]; then
           release=$(curl -fsSL "${retry[@]}" -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" \
