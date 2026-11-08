@@ -18,11 +18,13 @@ function buildGuard(): string {
   return match[1] ?? "";
 }
 
-/** The expression of the commit that the job build takes, after the output of the step green. */
-function buildRef(): string {
-  const match = /ref: \$\{\{ steps\.green\.outputs\.sha \|\| (.+) \}\}\n/.exec(workflow);
-  assert.ok(match, "The checkout of the job build has a ref.");
-  return match[1] ?? "";
+/** The value of the key `ref` of each checkout of the repository in the job build: the checkouts with no `repository` key. */
+function buildRefs(): string[] {
+  const job = workflow.slice(workflow.indexOf("\n  build:\n"), workflow.indexOf("\n  deploy:\n"));
+  return job
+    .split("\n      - ")
+    .filter((step) => step.includes("uses: actions/checkout@") && !step.includes("repository:"))
+    .map((step) => /\n {10}ref: (.+)\n/.exec(step)?.[1] ?? "");
 }
 
 /** The expression of the "if" key of a step of the job build, from the line before that key. */
@@ -91,15 +93,13 @@ describe("the guard of the job build of reusable-pages.yml", () => {
 });
 
 describe("the commit of the job build of reusable-pages.yml", () => {
-  const ref = buildRef();
-  const run = (workflow_run: Record<string, unknown> | undefined): unknown => evaluate(ref, { sha: "newest", event: { workflow_run } });
-
-  it("takes the commit of the CI run after CI", () => {
-    assert.equal(run({ name: "CI", head_sha: "tested" }), "tested");
+  it("checks out only the commit of the step ref, so no field of the event reaches the checkout", () => {
+    assert.deepEqual(buildRefs(), ["${{ steps.ref.outputs.sha }}"]);
   });
 
-  it("takes the newest commit for an event that is not a workflow_run", () => {
-    assert.equal(run(undefined), "newest");
+  it("gives the commit of green-main to the step ref", () => {
+    const step = ["      - id: ref", "        uses: ./.shared-actions/.github/actions/build-ref", "        with:", "          green: ${{ steps.green.outputs.sha }}", ""];
+    assert.ok(workflow.includes(step.join("\n")), "The step ref gets the commit of green-main.");
   });
 });
 
@@ -107,8 +107,8 @@ describe("the step green of the job build of reusable-pages.yml", () => {
   const condition = stepCondition("      - id: green");
   const asks = (github: unknown): boolean => Boolean(evaluate(condition, github));
 
-  it("gets the shared actions on the same condition", () => {
-    assert.equal(stepCondition("      - name: Shared actions (green-main)"), condition);
+  it("gets the shared actions for each event, because the step ref needs them", () => {
+    assert.ok(workflow.includes("      - name: Shared actions (the commit to build)\n        uses: "), "The step has no if key.");
   });
 
   it("gives the commit on a schedule and after a release, so that the site does not go back and no red commit deploys", () => {

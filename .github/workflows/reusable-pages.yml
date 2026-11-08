@@ -179,10 +179,9 @@ jobs:
             echo "::error::job.workflow_repository or job.workflow_sha is not available."
             exit 1
           fi
-      # The actions of the template, at the commit of this file. The checkout of the repository below
-      # removes this folder, so the step before site-pages gets them again.
-      - name: Shared actions (green-main)
-        if: github.event_name == 'schedule' || github.event.workflow_run.name == 'Release'
+      # The actions of the template, at the commit of this file, for green-main and build-ref. The checkout of the
+      # repository below removes this folder, so the step before site-pages gets them again.
+      - name: Shared actions (the commit to build)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
@@ -197,10 +196,15 @@ jobs:
         with:
           workflow: ${{ inputs.ci-workflow }}
           pending: ${{ inputs.pending }}
+      # The commit to build: the commit of green-main, of the run that a workflow_run follows, or of the event. The step
+      # fails closed, and it never gives the commit of a fork (.github/actions/build-ref/ref.ts).
+      - id: ref
+        uses: ./.shared-actions/.github/actions/build-ref
+        with:
+          green: ${{ steps.green.outputs.sha }}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # The commit of green-main, else the commit that CI examined, else the commit of the event
-          ref: ${{ steps.green.outputs.sha || github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ steps.ref.outputs.sha }}
           fetch-depth: ${{ inputs.fetch-depth }}
           persist-credentials: false
       # The pnpm version comes from "packageManager" in package.json
