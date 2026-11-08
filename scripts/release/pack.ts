@@ -69,20 +69,14 @@ for (const { dir, manifest } of packages) {
     if (!response.ok) throw new Error(`The registry gave HTTP ${response.status} for ${tarball}.`);
     const differences = shippedDifferences(tarballFiles(Buffer.from(await response.arrayBuffer())), tarballFiles(readFileSync(join(out, file))));
     if (differences.length > 0) {
-      changed.push(`${manifest.name}@${manifest.version} is on npm, but these shipped files differ from it:
-    ${differences.slice(0, 20).join("
-    ")}${differences.length > 20 ? `
-    and ${differences.length - 20} more` : ""}`);
+      changed.push(`${manifest.name}@${manifest.version} is on npm, but these shipped files differ from it:\n    ${differences.slice(0, 20).join("\n    ")}${differences.length > 20 ? `\n    and ${differences.length - 20} more` : ""}`);
     }
   }
   process.stdout.write(`${manifest.name}@${manifest.version}: ${file}\n`);
 }
 if (changed.length > 0) {
   process.stderr.write(
-    `The release skips a version that is on npm, so these changes would not ship. Set a greater version (SemVer) in each package.json:
-  ${changed.join("
-  ")}
-`,
+    `The release skips a version that is on npm, so these changes would not ship. Set a greater version (SemVer) in each package.json:\n  ${changed.join("\n  ")}\n`,
   );
   process.exit(1);
 }
