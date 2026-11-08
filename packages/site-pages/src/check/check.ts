@@ -76,15 +76,16 @@ export interface CheckResult {
 
 /**
  * This function gives the problems of the cuts of a view with the given width. A box that clips text is a problem at each width.
- * A table in a box that scrolls is a problem only on a phone. A phone shows no scroll bar, but a desktop shows one.
+ * A table or a code block in a box that scrolls is a problem only on a phone. A phone shows no scroll bar, but a desktop shows one.
  * The summary and the log give the page of each problem.
  */
 export function cutProblems(cuts: readonly Cut[], width: number): string[] {
   const widths = (cut: Cut) => `${cut.element} in ${cut.box}: content of ${cut.scrollWidth} px in a box of ${cut.clientWidth} px, "${cut.text}"`;
   return cuts.flatMap((cut) => {
     if (cut.kind === "clip") return [`a box cuts text at ${width} px: ${widths(cut)}. Make the content fit, or add data-overflow-ok to the box.`];
-    if (cut.deadCue === true) return width < PHONE_WIDTH ? [`a table goes out of view at ${width} px: ${widths(cut)}. The box has the class scroll-cue, but its computed style has no animation and no shade. Read the served CSS.`] : [];
-    if (width < PHONE_WIDTH) return [`a table goes out of view at ${width} px: ${widths(cut)}. Make the table fit, give the box the class scroll-cue, or add data-overflow-ok to the box.`];
+    const what = cut.kind === "code" ? "a code block" : "a table";
+    if (cut.deadCue === true) return width < PHONE_WIDTH ? [`${what} goes out of view at ${width} px: ${widths(cut)}. The box has the class scroll-cue, but its computed style has no animation and no shade. Read the served CSS.`] : [];
+    if (width < PHONE_WIDTH) return [`${what} goes out of view at ${width} px: ${widths(cut)}. Make ${cut.kind === "code" ? "the lines" : "the table"} fit, give the box the class scroll-cue, or add data-overflow-ok to the box.`];
     return [];
   });
 }
