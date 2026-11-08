@@ -97,6 +97,110 @@ export interface StampOptions {
 
 const git = (cwd: string, ...args: string[]): Buffer => execFileSync("git", ["-C", cwd, ...args], { maxBuffer: 1 << 28, stdio: ["ignore", "pipe", "inherit"] });
 
+/** The root package.json, in the fields that the stamp sets. */
+export interface RootManifest {
+  name: string;
+  scripts: Record<string, string>;
+  devDependencies: Record<string, string>;
+  readonly [field: string]: unknown;
+}
+
+/** This function gives the npm name of each package of the template at a commit. */
+function templatePackages(template: string, sha: string, tracked: readonly string[]): Set<string> {
+  const names = new Set<string>();
+  for (const path of tracked.filter((file) => /^packages\/[^/]+\/package\.json$/.test(file))) {
+    names.add((JSON.parse(git(template, "show", `${sha}:${path}`).toString("utf8")) as { name: string }).name);
+  }
+  return names;
+}
+
+/**
+ * This function gives the root package.json of a repository from the one of the template. A package of the template
+ * gets the range of its newest npm version, because the repository does not have the workspace of the template.
+ */
+export function stampRoot(template: RootManifest, name: string, packages: ReadonlySet<string>, latest: (name: string) => string): RootManifest {
+  const dev = { ...template.devDependencies, "@mark1russell7/template-cli": "workspace:*" };
+  return {
+    ...template,
+    name: `${name}-monorepo`,
+    scripts: rootScripts(template.scripts),
+    devDependencies: Object.fromEntries(
+      Object.entries(dev)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([dep, range]) => [dep, packages.has(dep) && range === "workspace:*" ? `^${latest(dep)}` : range]),
+    ),
+  };
+}
+
+/** The state of one file of `KEEP` in a repository, as `checkStamp` gives it. */
+export interface StampFileCheck {
+  readonly path: string;
+  /** `missing`: the repository has no such file. `differs`: the stamp at the commit would change it. */
+  readonly state: "same" | "differs" | "missing";
+  /** For package.json: the fields that the stamp would add or change. */
+  readonly fields?: readonly string[];
+}
+
+/** A version range that the stamp gives from npm: a caret and a version. The check accepts each one. */
+const LATEST_RANGE = /^\^\d+\.\d+\.\d+(?:-[\w.]+)?$/;
+
+/**
+ * This function gives a workflow text with no part that changes from one repository to another: the commit of each pin
+ * and the minute of each schedule, which the fix runner-budget sets for each repository.
+ */
+export function workflowShape(text: string): string {
+  return pinWorkflow(text, "0".repeat(40)).replace(/(cron:[ \t]*["'])[\d,*/-]+([ \t])/g, "$1M$2");
+}
+
+/**
+ * This function gives the fields of a root package.json that the stamp would add or change. The name, scripts and
+ * devDependencies of the repository may have more entries than the stamp gives; a range from npm matches each caret
+ * range. Each other field of the template must be equal.
+ */
+export function rootFieldsBehind(expected: RootManifest, actual: Readonly<Record<string, unknown>>, packages: ReadonlySet<string>, templateDev: Readonly<Record<string, string>>): string[] {
+  const behind: string[] = [];
+  const scripts = (actual["scripts"] ?? {}) as Record<string, string>;
+  for (const [script, command] of Object.entries(expected.scripts)) if (scripts[script] !== command) behind.push(`scripts.${script}`);
+  const dev = (actual["devDependencies"] ?? {}) as Record<string, string>;
+  for (const [dep, range] of Object.entries(expected.devDependencies)) {
+    const fromNpm = packages.has(dep) && (templateDev[dep] ?? "workspace:*") === "workspace:*";
+    if (fromNpm ? !LATEST_RANGE.test(dev[dep] ?? "") : dev[dep] !== range) behind.push(`devDependencies.${dep}`);
+  }
+  for (const [field, value] of Object.entries(expected)) {
+    if (field === "name" || field === "scripts" || field === "devDependencies") continue;
+    if (JSON.stringify(actual[field]) !== JSON.stringify(value)) behind.push(field);
+  }
+  return behind;
+}
+
+/**
+ * This function tells, for each file of `KEEP`, whether the stamp at a commit of the template would change it in an
+ * existing repository. It writes nothing and uses no network. The site and docs/ROADMAP.md are made only at the first
+ * stamp, so it does not examine them.
+ */
+export function checkStamp({ repo, template, ref }: { readonly repo: string; readonly template: string; readonly ref: string }): { sha: string; files: StampFileCheck[] } {
+  const sha = git(template, "rev-parse", `${ref}^{commit}`).toString().trim();
+  const tracked = git(template, "ls-tree", "-r", "--name-only", sha).toString().split("\n").filter(Boolean);
+  const packages = templatePackages(template, sha, tracked);
+  const files = KEEP.map((path): StampFileCheck => {
+    const file = join(repo, path);
+    if (!existsSync(file)) return { path, state: "missing" };
+    const blob = git(template, "show", `${sha}:${path}`);
+    const actual = readFileSync(file);
+    if (path === "package.json") {
+      const source = JSON.parse(blob.toString("utf8")) as RootManifest;
+      const expected = stampRoot(source, "", packages, () => "0.0.0");
+      const fields = rootFieldsBehind(expected, JSON.parse(actual.toString("utf8")) as Record<string, unknown>, packages, source.devDependencies);
+      return fields.length > 0 ? { path, state: "differs", fields } : { path, state: "same" };
+    }
+    const same = path.startsWith(".github/workflows/")
+      ? workflowShape(actual.toString("utf8").replace(/\r\n/g, "\n")) === workflowShape(blob.toString("utf8").replace(/\r\n/g, "\n"))
+      : actual.toString("utf8").replace(/\r\n/g, "\n") === blob.toString("utf8").replace(/\r\n/g, "\n");
+    return { path, state: same ? "same" : "differs" };
+  });
+  return { sha, files };
+}
+
 /** This function gives each path of a package manifest under a folder. */
 function manifests(root: string, folder = ""): string[] {
   return readdirSync(join(root, folder), { withFileTypes: true }).flatMap((entry) => {
@@ -126,21 +230,8 @@ export async function stamp({ name, description, npm, template, out, ref, latest
     writeFileSync(target, path.startsWith(".github/workflows/") ? pinWorkflow(blob.toString("utf8"), sha) : blob);
   }
 
-  const inTemplate = new Map<string, string>();
-  for (const path of tracked.filter((file) => /^packages\/[^/]+\/package\.json$/.test(file))) {
-    const manifest = JSON.parse(git(template, "show", `${sha}:${path}`).toString("utf8")) as { name: string };
-    inTemplate.set(manifest.name, path);
-  }
   const rootFile = join(out, "package.json");
-  const root = JSON.parse(readFileSync(rootFile, "utf8")) as { name: string; scripts: Record<string, string>; devDependencies: Record<string, string> };
-  root.name = `${name}-monorepo`;
-  root.scripts = rootScripts(root.scripts);
-  const dev = { ...root.devDependencies, "@mark1russell7/template-cli": "workspace:*" };
-  root.devDependencies = Object.fromEntries(
-    Object.entries(dev)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([dep, range]) => [dep, inTemplate.has(dep) && range === "workspace:*" ? `^${latest(dep)}` : range]),
-  );
+  const root = stampRoot(JSON.parse(readFileSync(rootFile, "utf8")) as RootManifest, name, templatePackages(template, sha, tracked), latest);
   writeFileSync(rootFile, `${JSON.stringify(root, null, 2)}\n`);
 
   mkdirSync(join(out, "docs"), { recursive: true });
