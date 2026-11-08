@@ -70,10 +70,16 @@ describe("the site config of a repository", () => {
     expect(errorOf(resolve({ inputs: { build: "", out: "" } }))).toMatch(/the inputs of the workflow gives no "build"/);
   });
 
-  it("refuses a file and the input build together, because each value has one home", () => {
-    expect(errorOf(resolve({ file: JSON.stringify({ build: "b", out: "o" }), inputs: { build: "pnpm build" } }))).toMatch(/Give the site values only in/);
-    // The default of the input build is empty, so a caller that gives no input build is not refused.
-    expect(config(resolve({ file: JSON.stringify({ build: "b", out: "o" }), inputs: { build: "", deploy: true } })).build).toBe("b");
+  it("refuses a file and a site input together, because each value has one home", () => {
+    const file = JSON.stringify({ build: "b", out: "o" });
+    expect(errorOf(resolve({ file, inputs: { build: "pnpm build" } }))).toMatch(/gives the inputs build\. Give the site values only in/);
+    // The workflow uses only the file, so an input such as roadmap would drop with no word
+    expect(errorOf(resolve({ file, inputs: { roadmap: "docs/ROADMAP.md", "site-check": true } }))).toMatch(/gives the inputs roadmap, site-check\./);
+    expect(errorOf(resolve({ file, inputs: { env: '{"A": "1"}' } }))).toMatch(/gives the inputs env\./);
+    // toJSON(inputs) gives each input with its default, and the values of the run (deploy) are not site values
+    const defaults = { ...Object.fromEntries(Object.entries(SITE_CONFIG_KEYS).map(([key, spec]) => [key, spec.default])), env: "{}", deploy: true, pending: "head" };
+    expect(config(resolve({ file, inputs: defaults })).build).toBe("b");
+    expect(config(resolve({ file, inputs: { ...defaults, env: "" } })).build).toBe("b");
   });
 
   it("takes the old inputs when the repository has no file, with the env input as a JSON string", () => {

@@ -30,6 +30,7 @@
     ".": "./src/index.ts",
     "./chrome": "./src/chrome.ts",
     "./explorer": "./src/explorer/index.ts",
+    "./config": "./src/config/site-config.ts",
     "./vite": "./src/vite.ts",
     "./scroll-cue.css": "./styles/scroll-cue.css",
     "./shell.css": "./styles/shell.css",
@@ -59,6 +60,10 @@
       "./explorer": {
         "types": "./build/explorer/index.d.ts",
         "import": "./build/explorer/index.js"
+      },
+      "./config": {
+        "types": "./build/config/site-config.d.ts",
+        "import": "./build/config/site-config.js"
       },
       "./vite": {
         "types": "./build/vite.d.ts",

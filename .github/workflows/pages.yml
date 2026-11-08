@@ -4,8 +4,8 @@
 # and an explorer of the shared workflows. The site-pages action adds the Releases page and the Status page.
 # The Pages source of the repository is "GitHub Actions" (Settings > Pages).
 # A scheduled build takes the newest commit of main, or the newest green one if CI failed on it.
-# A pull request builds and checks the site in a browser, with no deploy. The job site of actions-test.yml calls this
-# workflow on each pull request, so the required check "Actions OK" waits for the probe of the site.
+# The values of the site are in .github/site.json. The job site of ci.yml checks the same site on each pull request
+# (reusable-pages-check.yml), so the required check "CI OK" waits for the probe of the site.
 name: Pages
 
 on:
@@ -20,16 +20,13 @@ on:
   schedule:
     - cron: "30 */3 * * *"
   workflow_dispatch:
-  # actions-test.yml calls this workflow on each pull request (the job site)
-  workflow_call:
 
 permissions: {}
 
 # One deployment at a time. A deployment in progress ends, and GitHub keeps only the newest deployment that waits.
-# Each pull request has its own group, and a newer push cancels its run.
 concurrency:
-  group: pages-${{ github.event_name == 'pull_request' && github.ref || 'deploy' }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: pages-deploy
+  cancel-in-progress: false
 
 jobs:
   pages:
@@ -47,22 +44,3 @@ jobs:
       statuses: read
       pages: write
       id-token: write
-    with:
-      # The build starts the CLI for each preset and reads the shared workflows (packages/site/vite.config.ts).
-      # site-pages adds releases/ and status/ next to the home page.
-      build: pnpm --filter @template/site run build
-      out: packages/site/dist
-      env: '{"SITE_BASE": "/${{ github.event.repository.name }}"}'
-      deploy: ${{ github.event_name != 'pull_request' }}
-      packages: "@mark1russell7/conventions,@mark1russell7/site-pages,@mark1russell7/api-report,@mark1russell7/boundaries,@mark1russell7/template-cli"
-      site-name: Template
-      # The open items for the Status page. check:conventions parses the file on each pull request (roadmap-parses).
-      roadmap: docs/ROADMAP.md
-      # The check opens each page in a browser at 360, 400 and 1280 pixels, in light and dark.
-      # The probe drives the package preview and the workflow explorer. The check reads the TypeScript source
-      # and removes its types.
-      site-check: true
-      site-check-pages: /,/releases/,/status/
-      site-check-probe: packages/site/src/check-probe.ts
-      # The home page shows one fixed study. The freshness gate reads its stamp (packages/site/src/data-stamps.ts).
-      data-stamps: packages/site/dist/data-stamps.json

@@ -1,0 +1,85 @@
+# The shared check of the site of a pull request (CI.md, "The site config"). ci.yml calls it, so the check "CI OK"
+# waits for the build of the site, its site check and its probe.
+#
+#   site    Checks out the commit of the event. The action site-config reads .github/site.json, the one home of the
+#           values of the site. The action pages-build builds the site, adds the Releases page and the Status page,
+#           checks the pages in a browser, and uploads the artifacts. reusable-pages.yml uses the same two actions,
+#           so the pull request checks the site that main deploys.
+#
+# The job has only "contents: read". GitHub counts the permissions of a called workflow against the grant of the
+# caller job, and a CI job of a pull request has no write permission. On a public repository, each read of site-pages
+# (GraphQL, the releases, the Actions runs and the checks) works with this token. The job deploys nothing.
+#
+# The job uses the actions of the same commit of the template as this file: a second checkout gets them
+# (job.workflow_repository and job.workflow_sha).
+name: Reusable Pages check
+
+on:
+  workflow_call:
+    inputs:
+      site-config:
+        description: The path of the site config in the repository. The check needs the file.
+        type: string
+        default: .github/site.json
+      fetch-depth:
+        description: The number of commits that the checkout gets. 0 (the default) gets the whole history, for the dates of the tags and of the pages.
+        type: number
+        default: 0
+      artifact-prefix:
+        description: A prefix of the names of the artifacts github-pages and site-check. Two calls in one run need two prefixes.
+        type: string
+        default: ""
+      timeout-minutes:
+        description: The time limit of the job.
+        type: number
+        default: 20
+
+jobs:
+  site:
+    name: Site check
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+    steps:
+      # Without these values, the checkout of the shared actions gets the caller repository, not the template.
+      - name: The commit of this workflow file
+        shell: bash
+        env:
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          echo "This workflow file is from $WORKFLOW_REPOSITORY at $WORKFLOW_SHA."
+          if [ -z "$WORKFLOW_REPOSITORY" ] || ! [[ "$WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::job.workflow_repository or job.workflow_sha is not available."
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: ${{ inputs.fetch-depth }}
+          persist-credentials: false
+      # The same sparse checkout as the job build of reusable-pages.yml
+      - name: Shared actions (the site config, site-pages and the site check)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .shared-actions
+          sparse-checkout: |
+            .github/actions
+            packages/site-pages/src/bar
+            packages/site-pages/src/check
+            packages/site-pages/src/config
+            packages/site-pages/src/data
+            packages/site-pages/src/render
+            packages/site-pages/styles
+          persist-credentials: false
+      # Only the file: a repository with no site config fails here, with the name of the file
+      - id: config
+        uses: ./.shared-actions/.github/actions/site-config
+        with:
+          path: ${{ inputs.site-config }}
+      - uses: ./.shared-actions/.github/actions/pages-build
+        with:
+          config: ${{ steps.config.outputs.config }}
+          artifact-prefix: ${{ inputs.artifact-prefix }}

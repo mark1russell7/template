@@ -1,9 +1,11 @@
 /**
- * The rule `roadmap-parses`: each roadmap that a workflow gives to the Status page parses, on the pull request.
+ * The rule `roadmap-parses`: each roadmap that a workflow or the site config gives to the Status page parses, on the
+ * pull request.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseRoadmap, RoadmapParseError } from "@mark1russell7/site-pages";
+import { resolveSiteConfig, SITE_CONFIG_PATH } from "@mark1russell7/site-pages/config";
 import { byCode } from "../workspace.ts";
 import { cleanPath, type Break, type Rule } from "../rule.ts";
 
@@ -41,6 +43,7 @@ function noStatusPage(line: string): boolean {
 /**
  * This function gives the line numbers of each call of the Pages workflow that gives no `roadmap` key. The key is in the
  * job of the call: the lines around it with the same indent or more. A job with `site-pages: false` has no Status page.
+ * A repository with a site config gives its site values there, so the rule reads the file in place of the call.
  */
 function callsWithoutRoadmap(lines: readonly string[]): number[] {
   const found: number[] = [];
@@ -56,6 +59,20 @@ function callsWithoutRoadmap(lines: readonly string[]): number[] {
     if (!job.some((text) => text.trimStart().startsWith("roadmap:") || noStatusPage(text))) found.push(index + 1);
   });
   return found;
+}
+
+/** The roadmap of the site config, or a break when the file is not a site config. Undefined when the repository has no file. */
+type ConfigRoadmap = { readonly roadmap: string | undefined; readonly line: number } | { readonly error: string };
+
+/** This function reads the site config of the repository, and gives its roadmap. An empty roadmap with `site-pages: false` is no roadmap. */
+function configRoadmap(root: string, files: readonly string[]): ConfigRoadmap | undefined {
+  if (!files.includes(SITE_CONFIG_PATH)) return undefined;
+  const text = readFileSync(join(root, SITE_CONFIG_PATH), "utf8");
+  const result = resolveSiteConfig({ file: text, path: SITE_CONFIG_PATH, inputs: undefined, repository: "" });
+  if ("error" in result) return { error: result.error };
+  const line = text.split(/\r?\n/).findIndex((each) => each.includes('"roadmap"')) + 1;
+  if (result.config.roadmap === "") return { roadmap: result.config["site-pages"] ? "" : undefined, line };
+  return { roadmap: cleanPath(result.config.roadmap), line };
 }
 
 /** This function gives the value of a `roadmap: <file>` line, or undefined for another line, an empty value or an expression. */
@@ -74,10 +91,10 @@ export function roadmapOfLine(line: string): string | undefined {
 
 export const roadmapParses: Rule = {
   id: "roadmap-parses",
-  title: "Each call of the Pages workflow gives a roadmap, and each roadmap that a workflow gives to the Status page (the input `roadmap`) parses as site-pages reads it.",
+  title: "Each call of the Pages workflow gives a roadmap, in the call or in `.github/site.json`, and each roadmap that a workflow or the site config gives to the Status page parses as site-pages reads it.",
   reason:
     "Only the Pages job on main reads the roadmap. A pull request with a bad table row passes each check, and then the build of the site stops and the site stays stale. On 2026-10-30, one repository had 3 red Pages runs in a row because of one row with 2 cells under a header with 4. A site with no roadmap is the same fault with no error: its Status page shows no item of the plan, and each check is green. On 2026-10-30, 2 repositories had a site with no roadmap.",
-  fix: 'Give the roadmap file to the Pages workflow (`roadmap: docs/ROADMAP.md`). Correct the row or the heading that the message names. Each table row has one cell for each column of its header, and the file has a table with an ID column and a Status column, or a heading "### `id`: Title".',
+  fix: 'Give the roadmap file in `.github/site.json` (`"roadmap": "docs/ROADMAP.md"`), or to the Pages workflow when the repository has no site config. Correct the row or the heading that the message names. Each table row has one cell for each column of its header, and the file has a table with an ID column and a Status column, or a heading "### `id`: Title".',
   sources: [{ repo: "private", rule: "fail-closed", doc: "docs/STRATEGY.md (2026-10-30, gates and probes fail closed)" }],
   options: {
     roadmaps: { type: "strings", default: [], description: "More roadmap files to check: a roadmap that no workflow names with a `roadmap:` key." },
@@ -87,6 +104,8 @@ export const roadmapParses: Rule = {
     if (files === undefined) return { skipped: "the root is not in a git repository" };
     const named: NamedRoadmap[] = [];
     const breaks: Break[] = [];
+    const config = configRoadmap(context.root, files);
+    let calls = 0;
     for (const file of files.filter((path) => WORKFLOW.test(path)).sort(byCode)) {
       const lines = readFileSync(join(context.root, file), "utf8").split(/\r?\n/);
       lines.forEach((line, index) => {
@@ -95,8 +114,18 @@ export const roadmapParses: Rule = {
       });
       // A site with no roadmap has a Status page with only the open pull requests and issues: the plan is not on it.
       for (const line of callsWithoutRoadmap(lines)) {
+        calls += 1;
+        if (config !== undefined) continue;
         breaks.push({ file, line, message: `${file} builds the site with the Pages workflow and gives no roadmap, so the Status page shows no roadmap item.` });
       }
+    }
+    // The calls with no roadmap key take the values of the site config
+    if (config !== undefined && "error" in config) {
+      breaks.push({ file: SITE_CONFIG_PATH, message: config.error });
+    } else if (config !== undefined && calls > 0 && config.roadmap === "") {
+      breaks.push({ file: SITE_CONFIG_PATH, message: `${SITE_CONFIG_PATH} gives no roadmap, so the Status page shows no roadmap item.` });
+    } else if (config?.roadmap !== undefined && config.roadmap !== "") {
+      named.push({ roadmap: config.roadmap, file: SITE_CONFIG_PATH, line: config.line });
     }
     for (const roadmap of options["roadmaps"] as readonly string[]) named.push({ roadmap: cleanPath(roadmap), file: "the option roadmaps", line: 0 });
     if (named.length === 0 && breaks.length === 0) return { skipped: "no workflow builds a site with the Pages workflow, and no workflow names a roadmap" };

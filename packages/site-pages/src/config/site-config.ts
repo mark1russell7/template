@@ -6,7 +6,7 @@
  * workflows build the same site, and each value has one home. The rules of `@mark1russell7/conventions` read it too.
  *
  * A repository with no file gives the old inputs of `reusable-pages.yml`, and the resolver takes them. Thus an old
- * caller keeps its site. A repository that has the file and also gives the input `build` gets an error.
+ * caller keeps its site. A repository that has the file and also gives a site input gets an error.
  *
  * In each string value, `{owner}` is the owner of the repository and `{repo}` is its name. This file imports nothing,
  * so the workflow starts it from the template commit with no install.
@@ -158,13 +158,31 @@ function check(key: SiteConfigKey, value: unknown, where: string, repository: st
   return { value: env };
 }
 
-/** This function gives the site config of a repository from its file, or from the old inputs when it has no file. */
+/**
+ * This function gives the keys of the site config that the inputs of a workflow give with a value other than the default.
+ * The input `env` of `reusable-pages.yml` is a JSON string, and `"{}"` or an empty string is its default.
+ */
+export function inputsGiven(inputs: Readonly<Record<string, unknown>>): SiteConfigKey[] {
+  return (Object.keys(SITE_CONFIG_KEYS) as SiteConfigKey[]).filter((key) => {
+    const value = inputs[key];
+    if (value === undefined) return false;
+    if (key === "env") return !(value === "" || (typeof value === "string" && value.replace(/\s/g, "") === "{}"));
+    return value !== SITE_CONFIG_KEYS[key].default;
+  });
+}
+
+/**
+ * This function gives the site config of a repository from its file, or from the old inputs when it has no file. A
+ * repository that has the file and also gives a site input with a value other than its default gets an error, because
+ * the workflow uses only the file.
+ */
 export function resolveSiteConfig(input: SiteConfigInput): SiteConfigResult {
   const config = Object.fromEntries(Object.entries(SITE_CONFIG_KEYS).map(([key, spec]) => [key, spec.default])) as Record<SiteConfigKey, unknown>;
   let source: "file" | "inputs";
   if (input.file !== undefined) {
-    if (typeof input.inputs?.["build"] === "string" && input.inputs["build"] !== "") {
-      return { error: `The repository has ${input.path} and the workflow also gives the input build. Give the site values only in ${input.path}.` };
+    const given = input.inputs === undefined ? [] : inputsGiven(input.inputs);
+    if (given.length > 0) {
+      return { error: `The repository has ${input.path} and the workflow also gives the inputs ${given.join(", ")}. Give the site values only in ${input.path}.` };
     }
     let data: unknown;
     try {

@@ -1,0 +1,11 @@
+{
+  "$comment": "The site config of {{scope}} (CI.md of the template, \"The site config\"). pages.yml deploys this site from main, and the job site of ci.yml checks it on each pull request. The check opens each page in a browser at 360, 400 and 1280 pixels, in light and dark. check:conventions parses the roadmap on each pull request (roadmap-parses).",
+  "build": "pnpm --filter {{package}} run build",
+  "out": "packages/{{name}}/dist",
+  "env": { "SITE_BASE": "/{repo}" },
+  "packages": "{{npm}}",
+  "site-name": "{{scope}}",
+  "roadmap": "docs/ROADMAP.md",
+  "site-check": true,
+  "site-check-pages": "/,/releases/,/status/"
+}
