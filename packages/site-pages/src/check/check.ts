@@ -49,7 +49,51 @@ export interface CheckOptions {
   settleMs: number;
   /** The time limit of a page load. */
   timeoutMs: number;
+  /** The time limit of the scroll and of the islands of a view, for `revealExpression`. The default is `ISLAND_LIMIT_MS`. */
+  islandMs?: number | undefined;
   log?: ((line: string) => void) | undefined;
+}
+
+/** The default time limit of the scroll and of the islands of a view, in milliseconds. */
+export const ISLAND_LIMIT_MS = 10_000;
+
+/**
+ * This function gives a page expression that scrolls the page to its end, one screen at a time, and then back to the top.
+ * Thus each part that starts when it comes into view starts before the measure. Examples are an Astro island with
+ * `client:visible` and an image with `loading="lazy"`. Then the expression waits until no Astro island waits to start.
+ * An island that the page does not show and an island of a media query that does not match do not count.
+ * The expression gives the islands that did not start in `limitMs`.
+ */
+export function revealExpression(limitMs: number): string {
+  return `(async () => {
+  const end = performance.now() + ${String(limitMs)};
+  const frame = () => new Promise((done) => requestAnimationFrame(() => setTimeout(done, 0)));
+  const root = document.scrollingElement ?? document.documentElement;
+  const step = Math.max(Math.round(innerHeight * 0.8), 100);
+  for (let top = 0; top < root.scrollHeight && performance.now() < end; top += step) {
+    scrollTo({ top, behavior: "instant" });
+    await frame();
+    await frame();
+  }
+  scrollTo({ top: root.scrollHeight, behavior: "instant" });
+  await frame();
+  const waiting = () => [...document.querySelectorAll("astro-island[ssr]")].filter((island) => {
+    const client = island.getAttribute("client") ?? "";
+    if (client === "media") {
+      try {
+        const query = JSON.parse(island.getAttribute("opts") ?? "{}").value;
+        if (typeof query === "string" && !matchMedia(query).matches) return false;
+      } catch {}
+    }
+    if (client === "visible" && ![...island.children].some((child) => child.getClientRects().length > 0)) return false;
+    return true;
+  });
+  while (waiting().length > 0 && performance.now() < end) await new Promise((done) => setTimeout(done, 50));
+  scrollTo({ top: 0, behavior: "instant" });
+  await frame();
+  await frame();
+  return waiting().map((island) => (island.getAttribute("component-url") ?? "").split("/").pop() + " (client:" + (island.getAttribute("client") ?? "") + ")");
+})()`;
 }
 
 /** The result of one page at one width and scheme. */
@@ -252,6 +296,9 @@ async function checkView(page: Page, events: Events, input: ViewInput): Promise<
     await loaded;
     await page.evaluate("document.fonts ? document.fonts.ready.then(() => true) : true");
     await new Promise((done) => setTimeout(done, options.settleMs));
+    const islandMs = options.islandMs ?? ISLAND_LIMIT_MS;
+    const stuck = await page.evaluate<string[]>(revealExpression(islandMs));
+    for (const island of stuck) view.problems.push(`an island did not start in ${String(islandMs)} ms after a scroll to the end: ${island}`);
     const pattern = await page.evaluate<string>(OTHER_PATHS);
     if (pattern !== "") other = new RegExp(pattern);
     const measure = await page.evaluate<Measure>(MEASURE);

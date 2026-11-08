@@ -59,6 +59,8 @@ site-pages check --out dist --repo owner/name --pages /,/releases/ --probe site-
 site-pages check --url https://owner.github.io/name/
 ```
 
+Before the measure, the check scrolls each view to its end, one screen at a time, and back to the top. Thus a part that starts when it comes into view starts first. An example is an Astro island with `client:visible` below the first screen. Then the check waits until no Astro island has the attribute `ssr`, for at most 10 seconds.
+
 A view fails for each of these problems:
 
 - The page is wider than the screen, or an element goes past the right edge. An element in a box that scrolls or clips does not count here.
@@ -70,6 +72,7 @@ A view fails for each of these problems:
 - A request to the site fails, or gets a status of 400 or more.
 - A script or a style sheet does not load, from any origin. An example is a module script that imports `node:perf_hooks`.
 - A check of the probe fails, or the probe makes no check.
+- An Astro island does not start in the time limit. A hidden island and an island of a media query that does not match do not count.
 
 The text of the problem has the element, the box, the two widths, the width of the view and the start of the text. For example:
 
@@ -257,6 +260,20 @@ For a monorepo with one version for all its packages, give `--group` and the nam
 - A mark on a release with no break.
 
 The option `from` leaves out older sections. The option `fixedGroup` passes a section with no change or with only PATCH changes, because its raise comes from another package of the group.
+
+### The changelog gate
+
+The command `build` reads each changelog with `changelogReading`. A repository puts the oldest version of its gate in its root `package.json`:
+
+```json
+{ "sitePages": { "changelogFrom": "0.1.0" } }
+```
+
+- With the field, a fault in a section of that version or newer stops the build with code 1. The error names each section and its fault.
+- Without the field, the build gives a warning with the count of the sections with a fault, and it does not fail.
+- In both cases, `status.json` holds the reading in the field `changelog`, and the Status page shows the count. A reader of all the sites can thus list each repository, also a repository with no gate.
+
+To join the gate, a repository adds the field with no change to its code. Older sections can follow older habits, so the repository picks the first version that has no fault.
 
 `sectionMarksBreak(section)` tells if the text of a section marks a break. The marks are the heading `### Breaking` and the words "has breaking changes". A page that counts breaks uses this function.
 
