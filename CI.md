@@ -417,6 +417,7 @@ jobs:
 - The check runs from `packages/site-pages/src/check` of the template commit of the workflow. It needs Node.js 22.18 or later.
 - A site with its own Pages workflow uses the action `site-check` before the upload of the Pages artifact. The inputs have the same names, and `out` is the built site.
 - A site with its own Pages workflow uses the action `data-stamps` for the freshness gate. Its input `stamps` is the file of stamps in the built site.
+- A scheduled build or a build after a release can build an older green commit. When that commit does not have the file of stamps yet, the gate warns and skips. When the build is of the commit of the workflow, a missing file fails the gate.
 - The workflow `site-audit.yml` of the template checks the live home of each public site each Monday. Start it by hand from the Actions tab.
 - The audit does not fail for a bad site. Its artifact `site-audit` has the screenshots, `report.json` of each site and `audit.json`.
 - The job `nav` of the audit starts `site-pages nav` on each site. Its artifact `site-nav` has the screenshots, `report.json` of each site and `nav.json`.

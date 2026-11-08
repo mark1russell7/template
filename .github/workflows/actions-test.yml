@@ -12,6 +12,8 @@
 #   release-publish The npm-publish action examines the tarballs with "dry-run": it publishes nothing.
 #                   The job has no "id-token: write", so npm cannot accept a publish. A step reads
 #                   the output of after-pack.
+#   data-stamps     A missing file of stamps skips the gate when the build is of an older commit, and fails it when
+#                   the build is of the commit of the workflow.
 #   release-tag     reusable-release-tag.yml examines the plan, the tarballs and the tags with "dry-run".
 #                   Its log shows the flags of each release: --latest for the entry with "latest",
 #                   and --latest=false for the others.
@@ -100,6 +102,41 @@ jobs:
         run: |
           echo "green-main: $SHA (CI of the newest commit: $STATE)"
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]
+
+  data-stamps:
+    needs: changes
+    if: needs.changes.outputs.match == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The gate is TypeScript: Node runs it with its type stripping
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+      # A build of an older commit (green-main) that does not have the file of the newer workflow
+      - id: older
+        uses: ./.github/actions/data-stamps
+        with:
+          stamps: no-such-stamps.json
+          config-sha: "0000000000000000000000000000000000000000"
+      # A build of the commit of the workflow: a missing file fails the gate
+      - id: same
+        continue-on-error: true
+        uses: ./.github/actions/data-stamps
+        with:
+          stamps: no-such-stamps.json
+      - name: The gate skips for an older commit and fails for the same commit
+        env:
+          OLDER: ${{ steps.older.outcome }}
+          SAME: ${{ steps.same.outcome }}
+        run: |
+          echo "older commit: $OLDER, same commit: $SAME"
+          [ "$OLDER" = success ] && [ "$SAME" = failure ]
 
   pages:
     needs: changes
@@ -235,7 +272,7 @@ jobs:
   actions-ok:
     name: Actions OK
     if: ${{ !cancelled() }}
-    needs: [changes, green-main, pages, pages-check, release-build, release-publish, release-tag]
+    needs: [changes, green-main, data-stamps, pages, pages-check, release-build, release-publish, release-tag]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}
