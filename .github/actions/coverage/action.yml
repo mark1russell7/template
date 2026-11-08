@@ -9,6 +9,11 @@ inputs:
   working-directory:
     description: The folder of the root package.json, relative to the root of the repository.
     default: "."
+  strict:
+    description: >-
+      "true": a package with no @vitest/coverage-v8, a failed run or a missing summary fails the step. "false": the step
+      skips a package with no @vitest/coverage-v8, and gives a warning for each other failure (the coverage on main).
+    default: "true"
 runs:
   using: composite
   steps:
@@ -18,12 +23,23 @@ runs:
       working-directory: ${{ inputs.working-directory }}
       env:
         FLOOR: ${{ inputs.floor }}
+        STRICT: ${{ inputs.strict }}
         SCRIPT: ${{ github.action_path }}/coverage.ts
       run: |
         mapfile -t dirs < <(pnpm ls -r --json --depth -1 | node "$SCRIPT" packages)
         if [ ${#dirs[@]} -eq 0 ]; then
           echo "::notice::No package has a test script that starts Vitest."
           exit 0
+        fi
+        # Not strict: measure only the packages that have the provider. pnpm links it in the package or in the root.
+        if [ "$STRICT" != "true" ]; then
+          kept=()
+          for dir in "${dirs[@]}"; do
+            if [ -d "$dir/node_modules/@vitest/coverage-v8" ] || [ -d node_modules/@vitest/coverage-v8 ]; then kept+=("$dir")
+            else echo "::notice::$dir has no @vitest/coverage-v8, so it has no coverage report."; fi
+          done
+          dirs=("${kept[@]}")
+          if [ ${#dirs[@]} -eq 0 ]; then exit 0; fi
         fi
         failed=()
         for dir in "${dirs[@]}"; do
@@ -36,11 +52,12 @@ runs:
           fi
           echo "::endgroup::"
         done
-        node "$SCRIPT" summary "$FLOOR" "${dirs[@]}" >> "$GITHUB_STEP_SUMMARY"
-        if [ ${#failed[@]} -gt 0 ]; then
-          for f in "${failed[@]}"; do echo "::error::The tests with coverage failed in $f."; done
-          exit 1
-        fi
+        level=error
+        if [ "$STRICT" != "true" ]; then level=warning; fi
+        summary=0
+        node "$SCRIPT" summary "$FLOOR" "${dirs[@]}" >> "$GITHUB_STEP_SUMMARY" 2> >(sed "s/^::error::/::$level::/" >&2) || summary=$?
+        for f in "${failed[@]}"; do echo "::$level::The tests with coverage failed in $f."; done
+        if [ "$STRICT" = "true" ] && { [ ${#failed[@]} -gt 0 ] || [ "$summary" -ne 0 ]; }; then exit 1; fi
     - name: Coverage reports
       if: always()
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

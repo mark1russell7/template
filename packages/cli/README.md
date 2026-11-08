@@ -20,7 +20,7 @@ Give the root `package.json` of the repository these scripts:
 ## Add a package
 
 ```sh
-pnpm package add <name> --preset=<node|node-cjs|ts|vite|react|service|site>
+pnpm package add <name> --preset=<node|node-cjs|ts|vite|react|service|site|electron>
 ```
 
 - The command makes `packages/<name>` with `package.json`, `tsconfig.json`, `tsconfig.test.json`, `src/index.ts` and `vitest.config.ts`.
@@ -53,6 +53,23 @@ The preset `service` makes an HTTP server on the one service runner, [`@mark1rus
 - The dependency `@mark1russell7/service` gets the range of the repository, or the range of the CLI.
 - `PORT` (8080), `PROBE_PORT` (9090) and `SERVICE_PROFILE` (`local` or `pod`) set the ports and the profile.
 - The profile `pod` is for Kubernetes with a grace of 30 s. Make its grace equal to the grace of the pod.
+### A desktop app
+
+The preset `electron` makes a desktop app on [Electron](https://www.electronjs.org/). It has three parts, and `tsdown` builds each part to `build/`.
+
+| File | What it does |
+| --- | --- |
+| `src/index.ts` | The rules of the app as pure functions: the options of the window, the navigation, the files of the page and the content security policy. |
+| `src/main.ts` | The main process. It serves `build/page/` under `app://page/`, refuses each permission, and keeps each window at the origin of its page. |
+| `src/preload.ts` | The preload script. It gives the page only a message port of the main process, and no Electron API. |
+| `src/page.ts`, `page/` | The first page. It sends `ping` on the port and shows the answer. Replace it with the interface of the app. |
+| `src/index.test.ts` | The tests of the rules. They need no Electron process. |
+
+- The page has no Node.js and operates in a sandbox. The preload script is isolated from it.
+- `pnpm start` builds the app and opens it. With `PAGE_URL`, the window shows a page server, for example Vite in development.
+- `pnpm smoke` opens the app and stops with 0 after the page sends its first message. The CI job `presets` starts it on a virtual display.
+- pnpm starts the install script of a package only when `allowBuilds` of `pnpm-workspace.yaml` names it. The script of `electron` downloads the Electron binary, so the CLI adds `electron` to `allowBuilds` before the install.
+
 - The files of each preset are in `src/presets/<preset>/`. The CLI replaces `{{name}}`, `{{scope}}` and `{{package}}` in them, and it removes the end `.tmpl` of a file name.
 - The job `presets` of the CI makes a package of each preset. The package must pass its typecheck and its tests.
 

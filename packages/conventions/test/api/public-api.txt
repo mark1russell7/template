@@ -161,6 +161,7 @@ publishedMinor: build/index.d.ts#publishedMinor
 publishedMinorRule: build/index.d.ts#publishedMinorRule
 pushMainOnly: build/index.d.ts#pushMainOnly
 reachOf: build/index.d.ts#reachOf
+readAction: build/index.d.ts#readAction
 readConfig: build/index.d.ts#readConfig
 readJsonc: build/index.d.ts#readJsonc
 readOverlay: build/index.d.ts#readOverlay
@@ -613,6 +614,7 @@ export declare const USAGE: string;
 ### build/index.d.ts#Workflow
 interface Workflow {
   readonly file: string;
+  readonly kind?: "action";
   readonly name: string;
   readonly summary: string;
   readonly inputs: readonly WorkflowInput[];
@@ -872,6 +874,9 @@ export declare const pushMainOnly: Rule;
 
 ### build/index.d.ts#reachOf
 export declare function reachOf(specifier: string): Minor | undefined;
+
+### build/index.d.ts#readAction
+export declare function readAction(file: string, text: string): Workflow;
 
 ### build/index.d.ts#readConfig
 export declare function readConfig(root: string, rules?: readonly Rule[]): ConventionsConfig;
