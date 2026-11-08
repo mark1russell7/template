@@ -211,6 +211,18 @@ describe("conventions pre-push", () => {
     expect(stderr).toContain(`commit ${head.slice(0, 12)} message:1`);
   });
 
+  it("does not read the history that a remote branch has, for a new branch", () => {
+    const { root } = repository();
+    // The remote has a commit with the pattern. The push does not change that commit, so the gate does not read it
+    const old = commit(root, { "old.md": `${PROBE}\n` }, `an old ${PROBE} commit`);
+    git(root, "update-ref", "refs/remotes/origin/main", old);
+    git(root, "checkout", "-q", "-b", "feature");
+    const head = commit(root, { "notes.md": "1\nfeature\n" }, "a clean feature");
+    const { code, stderr } = push(root, `refs/heads/feature ${head} refs/heads/feature ${ZEROS}\n`);
+    expect(code).toBe(0);
+    expect(stderr).toMatch(/^conventions pre-push: 1 commits, \d+ lines read, 0 breaks\.\n$/);
+  });
+
   it("skips a deleted ref", () => {
     const { root, base } = repository();
     const { code, stderr } = push(root, `(delete) ${ZEROS} refs/heads/old ${base}\n`);
@@ -239,7 +251,22 @@ describe("conventions pre-push", () => {
     const head = commit(root, { "notes.md": "2\n" }, "second");
     const { code, stderr } = push(root, `refs/heads/main ${head} refs/heads/main ${base}\n`, { CONVENTIONS_PRIVATE_PATTERNS_FILE: join(temp, "missing.txt") });
     expect(code).toBe(1);
-    expect(stderr).toMatch(/^conventions pre-push: Cannot read the private pattern file\./);
+    expect(stderr).toBe(
+      "conventions pre-push: Cannot read the private pattern file that CONVENTIONS_PRIVATE_PATTERNS_FILE names: the file does not exist. Correct the setting or the file. The push stops.\n",
+    );
+  });
+
+  it("stops the push when the file of the git configuration does not exist, or is a folder", () => {
+    const { root, base } = repository();
+    const head = commit(root, { "notes.md": "2\n" }, "second");
+    git(root, "config", "conventions.privatePatternsFile", join(temp, "missing-too.txt"));
+    const missing = push(root, `refs/heads/main ${head} refs/heads/main ${base}\n`, {});
+    expect(missing.code).toBe(1);
+    expect(missing.stderr).toContain("that the git config conventions.privatePatternsFile names: the file does not exist.");
+    git(root, "config", "conventions.privatePatternsFile", temp);
+    const folder = push(root, `refs/heads/main ${head} refs/heads/main ${base}\n`, {});
+    expect(folder.code).toBe(1);
+    expect(folder.stderr).toContain("names: the path is a folder.");
   });
 
   it("stops the push on a pattern that is not valid, and keeps the home folder exceptions of package.json", () => {

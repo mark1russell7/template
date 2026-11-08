@@ -208,6 +208,15 @@ function readCommit(sha: string, patterns: readonly PrivatePattern[], home: Home
   return { breaks, lines };
 }
 
+/** This function gives the reason of a read that failed, in words. */
+function readReason(error: unknown): string {
+  const code = typeof error === "object" && error !== null && "code" in error ? String((error as { code: unknown }).code) : "";
+  if (code === "ENOENT") return "the file does not exist";
+  if (code === "EISDIR") return "the path is a folder";
+  if (code === "EACCES" || code === "EPERM") return "the file has no read permission";
+  return error instanceof Error ? error.message : String(error);
+}
+
 /**
  * This function is the command `conventions pre-push`. It examines each new commit of the push: its message, the paths
  * that it adds or changes, and each line that it adds. It writes the breaks to `stderr`, and gives the exit code: 1 on a
@@ -225,9 +234,10 @@ export function prePush(options: PrePushOptions, io: Pick<CliIo, "stderr">): num
   if (file !== undefined) {
     try {
       fileText = readFile(resolve(options.root, file));
-    } catch {
-      // A file that the settings name and that git cannot read stops the push: the check fails closed
-      io.stderr(`conventions pre-push: Cannot read the private pattern file. Correct ${PRIVATE_PATTERNS_FILE_VARIABLE} or the git config ${PRIVATE_PATTERNS_FILE_CONFIG}. The push stops.\n`);
+    } catch (error) {
+      // A file that the settings name and that the gate cannot read stops the push: the check fails closed
+      const source = (options.env[PRIVATE_PATTERNS_FILE_VARIABLE]?.trim() ?? "") !== "" ? PRIVATE_PATTERNS_FILE_VARIABLE : `the git config ${PRIVATE_PATTERNS_FILE_CONFIG}`;
+      io.stderr(`conventions pre-push: Cannot read the private pattern file that ${source} names: ${readReason(error)}. Correct the setting or the file. The push stops.\n`);
       return 1;
     }
   }

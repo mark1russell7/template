@@ -23,8 +23,7 @@
     "lint:ste": "ste-lint",
     "check:boundaries": "depcruise --config .dependency-cruiser.ts packages",
     "check:api": "api-report check",
-    "check:conventions": "conventions check",
-    "prepare": "conventions hook install"
+    "check:conventions": "conventions check"
   },
   "devDependencies": {
     "@mark1russell7/api-report": "workspace:*",

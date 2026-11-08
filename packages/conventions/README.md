@@ -184,7 +184,7 @@ Install the hook:
 pnpm exec conventions hook install
 ```
 
-The script `prepare` of the root `package.json` starts this command, so `pnpm install` installs the hook. The command writes `pre-push` in the hooks folder of git. It uses the folder of `core.hooksPath`, and it also works in a worktree. It keeps a hook `pre-push` that it did not write, and it shows a warning. In CI, the command does nothing.
+A repository adds `"prepare": "conventions hook install"` to its root `package.json` in the change that raises `@mark1russell7/conventions` to `^0.37.1`. Then `pnpm install` installs the hook. The command writes `pre-push` in the hooks folder of git. It uses the folder of `core.hooksPath`, and it also works in a worktree. It keeps a hook `pre-push` that it did not write, and it shows a warning. In CI, the command does nothing.
 
 Before each push, the hook starts `conventions pre-push`. The command examines each new commit of the push. A commit is new when no branch of the remote has it. The command examines these texts of each new commit:
 
