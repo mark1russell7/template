@@ -206,7 +206,8 @@ function openWork(data: StatusBoardData): string {
  * This function renders the measures of `kpi.json`: their values, the date of the data and the engines that made it.
  * A measure with its own date shows that date in a column, so that the line above the table stays true.
  * A measure that names what it does not count shows that text under the table.
- * A measure with targets shows its next target: the first target on or after the date of its data, else its last target.
+ * A measure with targets shows its next target with its unit: the first target on or after the date of its data.
+ * Without such a target, the cell shows the last target with the word "(past)".
  */
 function measures(data: StatusBoardData): string {
   const { kpi } = data;
@@ -220,7 +221,9 @@ function measures(data: StatusBoardData): string {
     const next = targets.find((target) => target.by >= at.slice(0, 10)) ?? targets.at(-1);
     if (next === undefined) return "<td></td>";
     const day = `${shortDate(next.by)}, ${next.by.slice(0, 4)}`;
-    return `<td>${next.value} by <time datetime="${escapeHtml(next.by)}">${escapeHtml(day)}</time></td>`;
+    const unit = measure.unit === undefined ? "" : ` ${escapeHtml(measure.unit)}`;
+    const past = next.by < at.slice(0, 10) ? " (past)" : "";
+    return `<td>${next.value}${unit} by <time datetime="${escapeHtml(next.by)}">${escapeHtml(day)}</time>${past}</td>`;
   };
   const rows = kpi.measures
     .map((measure) => {
