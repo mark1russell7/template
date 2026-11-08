@@ -153,6 +153,14 @@ on:
       page-url:
         description: The URL of the deployed site.
         value: ${{ jobs.deploy.outputs.page-url }}
+      # Two calls in one run upload two artifacts of each name. A job of the caller downloads the artifacts of its
+      # own call with actions/download-artifact and artifact-ids, not with the name.
+      pages-artifact-id:
+        description: The ID of the Pages artifact (github-pages) of this call.
+        value: ${{ jobs.build.outputs.pages-artifact-id }}
+      site-check-artifact-id:
+        description: The ID of the artifact site-check of this call. It is empty when the site check did not start.
+        value: ${{ jobs.build.outputs.site-check-artifact-id }}
 
 jobs:
   # Decides if the job build builds and if the job deploy deploys. The job build checks out the commit of the event
@@ -211,6 +219,9 @@ jobs:
     if: needs.ref.outputs.build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout-minutes }}
+    outputs:
+      pages-artifact-id: ${{ steps.pages-artifact.outputs.artifact_id }}
+      site-check-artifact-id: ${{ steps.site-check.outputs.artifact-id }}
     permissions:
       contents: read
       # site-pages reads the Actions runs, the pull requests, the issues and their checks.
@@ -316,6 +327,7 @@ jobs:
           [ "$SITE_PAGES" != "true" ] || args+=(--site-pages)
           node .shared-actions/packages/site-pages/src/bar/main.ts "${args[@]}"
       - name: Site check
+        id: site-check
         if: inputs.site-check || inputs.site-bar
         uses: ./.shared-actions/.github/actions/site-check
         with:
@@ -327,7 +339,8 @@ jobs:
           site-check-widths: ${{ inputs.site-check-widths }}
           site-check-probe: ${{ inputs.site-check-probe }}
           site-check-playwright: ${{ inputs.site-check-playwright }}
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+      - id: pages-artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: ${{ inputs.out }}
 

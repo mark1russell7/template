@@ -32,6 +32,12 @@ inputs:
       true: also the navigation crawl (site-pages nav). It fails on a page more than 2 clicks from home, a page with no
       way back to home, a link of the site that opens a new tab, a link to a missing page, and a page with no site bar.
     default: "false"
+outputs:
+  artifact-id:
+    description: >-
+      The ID of the artifact site-check of this step. Two calls in one run upload two artifacts of the same name, so
+      a job downloads its own artifact with artifact-ids, not with the name.
+    value: ${{ steps.upload.outputs.artifact-id }}
 runs:
   using: composite
   steps:
@@ -94,6 +100,7 @@ runs:
         node "$GITHUB_ACTION_PATH/../../../packages/site-pages/src/check/main.ts" "${args[@]}"
     # The screenshots, report.json and summary.md, also of a failed check, for a review of the site.
     - name: Screenshots of the site check
+      id: upload
       if: always()
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
