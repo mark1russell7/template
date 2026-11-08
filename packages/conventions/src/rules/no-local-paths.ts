@@ -3,6 +3,9 @@
  * change and the title and the body of its pull request do not name one either. The same is true for each private
  * pattern of the environment variable `CONVENTIONS_PRIVATE_PATTERNS`. A break of a private pattern does not show the
  * text or the pattern, because a public log must not name them.
+ *
+ * The module also has the core that the command `conventions pre-push` uses: the private pattern file, its patterns,
+ * and the breaks of one text.
  */
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { extname, join } from "node:path";
@@ -33,11 +36,171 @@ export const HOME_PATTERNS: readonly RegExp[] = [
 /** The name of the environment variable of the private patterns. */
 export const PRIVATE_PATTERNS_VARIABLE = "CONVENTIONS_PRIVATE_PATTERNS";
 
-/** A pattern of text that no file has: from the option `patterns`, which is public, or from the environment, which is private. */
-interface ExtraPattern {
+/** The name of the environment variable of the path of the private pattern file. */
+export const PRIVATE_PATTERNS_FILE_VARIABLE = "CONVENTIONS_PRIVATE_PATTERNS_FILE";
+
+/** The key of the git configuration of the path of the private pattern file. */
+export const PRIVATE_PATTERNS_FILE_CONFIG = "conventions.privatePatternsFile";
+
+/** The name of the private pattern file in a break. A break does not show the path of the file. */
+export const PRIVATE_PATTERN_FILE = "the private pattern file";
+
+/** A private pattern: one line of the private pattern file or of the environment variable. */
+export interface PrivatePattern {
+  /** The regular expression, as text. The check uses it with the flag `g`, and case is significant. */
+  readonly source: string;
+  /** The line of the pattern in its source, from 1. */
+  readonly line: number;
+  /** The name of the source in a break: `the private pattern file` or `CONVENTIONS_PRIVATE_PATTERNS`. */
+  readonly label: string;
+}
+
+/** The options of `privateTextBreaks`. */
+export interface TextBreakOptions {
+  /** More user names that do not identify a person, after `DEFAULT_ALLOWED`. */
+  readonly allow?: readonly string[];
+  /** Public regular expressions, from the option `patterns`. A break of a public pattern shows the text. */
+  readonly patterns?: readonly string[];
+  /**
+   * The value `true` tells that the text is the root `package.json`. Then the reason of an exception can quote a home
+   * folder, and the line that names a public pattern is no break. A private pattern still counts there.
+   */
+  readonly rootPackage?: boolean;
+  /** The value `false` turns off the breaks of home folders. The default is `true`. */
+  readonly homes?: boolean;
+  /** The line of the first line of the text, from 1. The default is 1. */
+  readonly firstLine?: number;
+}
+
+/** A pattern of text that no file has: from the option `patterns`, which is public, or a private pattern. */
+interface Matcher {
   readonly regex: RegExp;
-  /** The line of the pattern in the environment variable (from 1), for a private pattern. */
-  readonly privateLine?: number;
+  /** The private pattern of the matcher. A public pattern has none. */
+  readonly secret?: PrivatePattern;
+}
+
+/** The compiled patterns of a check. */
+interface Matchers {
+  readonly extra: readonly Matcher[];
+  readonly allowed: ReadonlySet<string>;
+  readonly homes: boolean;
+}
+
+/** This function gives the regular expression of a pattern, or undefined when the pattern is not valid. */
+function compilePattern(source: string): RegExp | undefined {
+  try {
+    return new RegExp(source, "g");
+  } catch {
+    return undefined;
+  }
+}
+
+/** This function compiles the patterns of a check. A private pattern that is not valid has no matcher. */
+function compile(patterns: readonly PrivatePattern[], options: TextBreakOptions): Matchers {
+  const extra: Matcher[] = (options.patterns ?? []).map((source) => ({ regex: new RegExp(source, "g") }));
+  for (const pattern of patterns) {
+    const regex = compilePattern(pattern.source);
+    if (regex !== undefined) extra.push({ regex, secret: pattern });
+  }
+  return {
+    extra,
+    allowed: new Set([...DEFAULT_ALLOWED, ...(options.allow ?? [])].map((name) => name.toLowerCase())),
+    homes: options.homes !== false,
+  };
+}
+
+/** This function gives the breaks of one text with compiled patterns. */
+function textBreaks(name: string, text: string, matchers: Matchers, options: TextBreakOptions): Break[] {
+  const breaks: Break[] = [];
+  const first = options.firstLine ?? 1;
+  const lines = text.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index] ?? "";
+    const at = first + index;
+    // The reason of an exception in the root package.json tells why a text is no home folder, so it can quote one
+    const isReason = options.rootPackage === true && /^\s*"(?:reason|off)"\s*:/.test(line);
+    if (matchers.homes && !isReason) {
+      for (const pattern of HOME_PATTERNS) {
+        for (const match of line.matchAll(pattern)) {
+          const user = match.groups?.["user"] ?? "";
+          // A name of one character is a placeholder of a test, not a person
+          if (user.length < 2 || matchers.allowed.has(user.toLowerCase())) continue;
+          breaks.push({ file: name, line: at, message: `The text "${match[0]}" is the home folder of a user.` });
+        }
+      }
+    }
+    for (const matcher of matchers.extra) {
+      // The option patterns of the root package.json names the pattern itself
+      if (options.rootPackage === true && matcher.secret === undefined && line.trim().replace(/,$/, "") === JSON.stringify(matcher.regex.source)) continue;
+      for (const match of line.matchAll(matcher.regex)) {
+        breaks.push(
+          matcher.secret === undefined
+            ? { file: name, line: at, message: `The text "${match[0]}" matches the pattern ${matcher.regex.source}.`, fix: "Remove the text." }
+            : {
+                file: name,
+                line: at,
+                message: `A text matches the private pattern on line ${String(matcher.secret.line)} of ${matcher.secret.label}.`,
+                fix: "Remove the text. The check does not show the text, because the pattern is private.",
+              },
+        );
+      }
+    }
+  }
+  return breaks;
+}
+
+/** This function gives the patterns of the lines of `text`, with the line of each (from 1). It skips empty lines. */
+function patternLines(text: string, label: string): PrivatePattern[] {
+  return text
+    .split("\n")
+    .map((source, index) => ({ source: source.trim(), line: index + 1, label }))
+    .filter((pattern) => pattern.source !== "");
+}
+
+/** This function gives the private patterns of the environment variable, with the line of each (from 1). */
+export function privatePatterns(env: Readonly<Record<string, string | undefined>>): PrivatePattern[] {
+  return patternLines(env[PRIVATE_PATTERNS_VARIABLE] ?? "", PRIVATE_PATTERNS_VARIABLE);
+}
+
+/**
+ * This function gives the private patterns of the text of the private pattern file, then the patterns of the environment
+ * variable `CONVENTIONS_PRIVATE_PATTERNS`. Each line of a source that is not empty is one regular expression.
+ */
+export function readPrivatePatterns(fileText: string | undefined, env: Readonly<Record<string, string | undefined>> = {}): PrivatePattern[] {
+  return [...(fileText === undefined ? [] : patternLines(fileText, PRIVATE_PATTERN_FILE)), ...privatePatterns(env)];
+}
+
+/**
+ * This function gives the path of the private pattern file: the environment variable `CONVENTIONS_PRIVATE_PATTERNS_FILE`,
+ * else the git configuration `conventions.privatePatternsFile`. It gives undefined when neither has a value.
+ */
+export function privatePatternFile(env: Readonly<Record<string, string | undefined>>, git: (args: readonly string[]) => string | undefined): string | undefined {
+  const fromEnv = env[PRIVATE_PATTERNS_FILE_VARIABLE]?.trim() ?? "";
+  if (fromEnv !== "") return fromEnv;
+  // The type `path` expands `~` at the start of the value
+  const fromGit = git(["config", "--type=path", "--get", PRIVATE_PATTERNS_FILE_CONFIG])?.trim() ?? "";
+  return fromGit === "" ? undefined : fromGit;
+}
+
+/** This function gives a break for each private pattern that is not a valid regular expression. A break does not show the pattern. */
+export function invalidPatternBreaks(patterns: readonly PrivatePattern[]): Break[] {
+  return patterns
+    .filter((pattern) => compilePattern(pattern.source) === undefined)
+    .map((pattern) => ({
+      file: pattern.label,
+      line: pattern.line,
+      message: `Line ${String(pattern.line)} of ${pattern.label} is not a valid regular expression.`,
+      fix: "Correct the regular expression. The check does not show the pattern, because it is private.",
+    }));
+}
+
+/**
+ * This function gives the breaks of one text: a file, a commit message or the body of a pull request. Each break has the
+ * file `name`. A break of a private pattern does not show the text or the pattern. The breaks of home folders use
+ * `HOME_PATTERNS` and the permitted names. A private pattern that is not valid gives no break here: refer to `invalidPatternBreaks`.
+ */
+export function privateTextBreaks(name: string, text: string, patterns: readonly PrivatePattern[], options: TextBreakOptions = {}): Break[] {
+  return textBreaks(name, text, compile(patterns, options), options);
 }
 
 /** A text that the rule examines, other than a file: a commit message, or the title or the body of the pull request. */
@@ -45,14 +208,6 @@ export interface ChangeText {
   /** The name of the text in a break: `commit <sha>`, `pull request title` or `pull request body`. */
   readonly name: string;
   readonly text: string;
-}
-
-/** This function gives the private patterns of the environment variable, with the line of each (from 1). */
-export function privatePatterns(env: Readonly<Record<string, string | undefined>>): { readonly source: string; readonly line: number }[] {
-  return (env[PRIVATE_PATTERNS_VARIABLE] ?? "")
-    .split("\n")
-    .map((source, index) => ({ source: source.trim(), line: index + 1 }))
-    .filter((pattern) => pattern.source !== "");
 }
 
 /**
@@ -107,38 +262,18 @@ export const noLocalPaths: Rule = {
   check(context, options) {
     const files = context.gitFiles();
     if (files === undefined) return { skipped: "the root is not in a git repository" };
-    const allowed = new Set([...DEFAULT_ALLOWED, ...(Array.isArray(options["allow"]) ? options["allow"] : [])].map((name) => name.toLowerCase()));
-    // A repository keeps private names out of its public files with the environment variable, for example from a secret of CI
-    const extra: ExtraPattern[] = [
-      ...(Array.isArray(options["patterns"]) ? options["patterns"] : []).map((source) => ({ regex: new RegExp(source, "g") })),
-      ...privatePatterns(context.env).map((pattern) => ({ regex: new RegExp(pattern.source, "g"), privateLine: pattern.line })),
-    ];
-    const rootFile = context.rootPackage.file;
-    const breaks: Break[] = [];
-    /** This function adds the breaks of the extra patterns on one line. A break of a private pattern shows no text. */
-    const extraBreaks = (file: string, line: string, at: number, isRootFile: boolean): void => {
-      for (const pattern of extra) {
-        // The option patterns of the root package.json names the pattern itself
-        if (isRootFile && pattern.privateLine === undefined && line.trim().replace(/,$/, "") === JSON.stringify(pattern.regex.source)) continue;
-        for (const match of line.matchAll(pattern.regex)) {
-          breaks.push(
-            pattern.privateLine === undefined
-              ? { file, line: at, message: `The text "${match[0]}" matches the pattern ${pattern.regex.source}.`, fix: "Remove the text." }
-              : { file, line: at, message: `A text matches the private pattern on line ${String(pattern.privateLine)} of ${PRIVATE_PATTERNS_VARIABLE}.`, fix: "Remove the text. The check does not show the text, because the pattern is private." },
-          );
-        }
-      }
+    const settings: TextBreakOptions = {
+      allow: Array.isArray(options["allow"]) ? [...options["allow"]] : [],
+      patterns: Array.isArray(options["patterns"]) ? [...options["patterns"]] : [],
     };
-    /** This function adds the breaks of the home folders on one line. */
-    const homeBreaks = (file: string, line: string, at: number): void => {
-      for (const pattern of HOME_PATTERNS) {
-        for (const match of line.matchAll(pattern)) {
-          const user = match.groups?.["user"] ?? "";
-          // A name of one character is a placeholder of a test, not a person
-          if (user.length < 2 || allowed.has(user.toLowerCase())) continue;
-          breaks.push({ file, line: at, message: `The text "${match[0]}" is the home folder of a user.` });
-        }
-      }
+    // A repository keeps private names out of its public files with the environment variable, for example from a secret of CI
+    const privates = privatePatterns(context.env);
+    const matchers = compile(privates, settings);
+    const rootFile = context.rootPackage.file;
+    // A private pattern that is not valid is a break of its own, not an error of the rule: an error message shows the pattern
+    const breaks: Break[] = invalidPatternBreaks(privates);
+    const add = (items: readonly Break[]): void => {
+      for (const item of items) breaks.push(item);
     };
     for (const file of files) {
       if (BINARY.has(extname(file).toLowerCase())) continue;
@@ -152,23 +287,10 @@ export const noLocalPaths: Rule = {
         continue;
       }
       if (text.includes("\0")) continue;
-      const lines = text.split(/\r?\n/);
-      for (let index = 0; index < lines.length; index++) {
-        const line = lines[index] ?? "";
-        // The reason of an exception in the root package.json tells why a text is no home folder, so it can quote one. A private pattern still counts there
-        const isReason = file === rootFile && /^\s*"(?:reason|off)"\s*:/.test(line);
-        if (!isReason) homeBreaks(file, line, index + 1);
-        extraBreaks(file, line, index + 1, file === rootFile);
-      }
+      add(textBreaks(file, text, matchers, { rootPackage: file === rootFile }));
     }
     // A commit message and the text of a pull request are public too, and a merged commit message stays in the history
-    for (const change of changeTexts(context)) {
-      const lines = change.text.split(/\r?\n/);
-      for (let index = 0; index < lines.length; index++) {
-        homeBreaks(change.name, lines[index] ?? "", index + 1);
-        extraBreaks(change.name, lines[index] ?? "", index + 1, false);
-      }
-    }
+    for (const change of changeTexts(context)) add(textBreaks(change.name, change.text, matchers, {}));
     return breaks;
   },
 };

@@ -8,6 +8,8 @@
  * conventions check
  * conventions fix
  * conventions --list
+ * conventions pre-push origin
+ * conventions hook install
  * ```
  */
 export { defaultOptions, parseConfig, type ConventionsConfig, type RuleConfig } from "./config.ts";
@@ -72,7 +74,22 @@ export {
   workflowParses,
   workspaceProtocol,
 } from "./rules/index.ts";
-export { DEFAULT_ALLOWED, HOME_PATTERNS } from "./rules/no-local-paths.ts";
+export {
+  DEFAULT_ALLOWED,
+  HOME_PATTERNS,
+  invalidPatternBreaks,
+  PRIVATE_PATTERN_FILE,
+  PRIVATE_PATTERNS_FILE_CONFIG,
+  PRIVATE_PATTERNS_FILE_VARIABLE,
+  PRIVATE_PATTERNS_VARIABLE,
+  privatePatternFile,
+  privatePatterns,
+  privateTextBreaks,
+  readPrivatePatterns,
+  type PrivatePattern,
+  type TextBreakOptions,
+} from "./rules/no-local-paths.ts";
+export { HOOK_MARKER, installHook, NO_READ_LINE, PRE_PUSH_HOOK, prePush, type HookOptions, type PrePushOptions } from "./pre-push.ts";
 export { hasImportMetaMain, REAL_COMPARE } from "./rules/main-check.ts";
 export { roadmapOfLine } from "./rules/roadmap-parses.ts";
 export { repositoryOfRemote, scheduleMinute } from "./rules/runner-budget.ts";

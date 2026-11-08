@@ -50,7 +50,7 @@ The rules come from the invariants audit of 2026-10-26 (strategy item s38). The 
 | `cue-preset` | The `tsconfig.json` of each package extends a preset of `@mark1russell7/cue`. No config of a package turns off a strict option that its preset turns on. `erasableSyntaxOnly` is one of these options, because `node` cannot strip the other syntax. | client `cue-config`, `no-manual-tsconfig`. private `cue-preset-strict`, `strict-preset`, `new-package-via-cli`. coeval, crawler, headroom, Vex `package-scaffold`. |
 | `required-scripts` | The root `package.json` has the script `typecheck`. It also has `lint:ste` when the repository uses `ste-lint`: a dependency on `@mark1russell7/ste-lint`, or a `ste.config.json` at the root. The shared CI skips a missing script, so a removed script turns its check off with no sign. | client, coeval, crawler, private, headroom, Vex `ste-prose`. systems `lint-ste-in-ci`. coeval, crawler, headroom, Vex `tsconfig-test`. |
 | `no-build-output` | Git keeps no file in a folder named `dist` or `build`. | client `no-build-output`, `no-dist`, `no-dist-commit`. Only one repository of the audit tells this rule. The `.gitignore` of the template has it for each repository. |
-| `no-local-paths` | No tracked file has the home folder of a user: `C:\Users\<name>`, `/Users/<name>` or `/home/<name>`. A CI user (`runner`), a name of one character and a placeholder (`<you>`) are not a break. The commit messages of the change (a pull request, or `--base`) and the title and the body of the pull request do not have one either. The same is true for each pattern of the option `patterns` and of the environment variable `CONVENTIONS_PRIVATE_PATTERNS`. A break of a private pattern shows only the line of the pattern in the variable, not the text. | client `I12`. systems `no-identifying-names`, `no-private-identifiers`, `no-private-names`. coeval `no-private-names`. |
+| `no-local-paths` | No tracked file has the home folder of a user: `C:\Users\<name>`, `/Users/<name>` or `/home/<name>`. A CI user (`runner`), a name of one character and a placeholder (`<you>`) are not a break. The commit messages of the change (a pull request, or `--base`) and the title and the body of the pull request do not have one either. The same is true for each pattern of the option `patterns` and of the environment variable `CONVENTIONS_PRIVATE_PATTERNS`. A break of a private pattern shows only the line of the pattern in the variable, not the text. A line of the variable that is not a valid regular expression is a break of its own. | client `I12`. systems `no-identifying-names`, `no-private-identifiers`, `no-private-names`. coeval `no-private-names`. |
 | `release-files` | A pull request changes `.github/workflows/release.yml` or `scripts/release/` only with a line `Release-Edit: <reason>` in a commit message or in the body of the pull request. The commits of the release bot (the sync of the template) need no reason. | coeval `no-release-edit`, `no-release-edits`. crawler `no-release-edit`, `no-release-edits`. headroom `no-release-edits`, `release-files-frozen`. |
 | `unreleased-change` | A change does not set a version that npm has: the release skips such a version. The rule compares the version of the head of the change with the version of its merge base, so a version that only the base branch changed does not count. A repository where each pull request sets its version sets the option `versionEachChange`. Then a change of the shipped files also raises the version, when npm has that version already. The files that ship are the files of the folder of the package, without the tests, the fixtures, the Markdown files and the configs (the option `unshipped`). When git tracks each entry of the field `files`, only those entries ship. A change of `package.json` ships when a field of the option `fields` changes, for example `exports`, but not the dependencies. On a push to the default branch, a version that the push sets breaks only when npm had it before the push. The release of the same push can publish it. An error of the registry makes the rule show `skip`. A repository with `.changeset/config.json`, a private package and a version `0.0.0` or `0.0.0-<stage>` are not examined. | rigor #18 and #20 (2026-11-02): two pull requests set the same version, and the second change did not get to npm. crawler, coeval, template `release.yml`. |
 | `version-title` | A merge whose title names a version sets a version in a `package.json`. A title names a version in parentheses at its end, for example `(0.3.3)` before the `(#212)` of a squash, or after `Release` at its start. On a push to the default branch, the rule examines each commit of the first-parent line against its first parent. On a pull request, it reads the title of the event file and examines the merge commit against the base. A title with no version passes. A title that names an other version than the version that the merge sets also passes, because the change gets a release. | template #212 (`5933b34`) and #215 (`e077054`), 2026-11-06: both set `site-pages` 0.3.3, so the squash of #215 changed no `package.json`, and no release started. Template #162 and #164 (2026-11-04) did the same with 0.2.5. crawler, coeval `release.yml`. |
@@ -163,6 +163,42 @@ An unknown rule, an unknown option, or an exception or a changed option without 
 | `--base <ref>` | The base commit of the change, for the rules `release-files`, `home-package` and `unreleased-change`. Outside CI, the default is the default branch of origin, so a local check examines the same added lines as the check of the pull request. |
 | `--no-base` | Do not use that default. |
 | `--json` | Write the result as JSON. |
+| `pre-push <remote> [<url>]` | Examine the new commits of a push with the private pattern file. The git hook `pre-push` starts it. |
+| `hook install` | Write the git hook `pre-push`. In CI, or outside a git repository, the command does nothing. |
+
+## The private pattern file and the hook `pre-push`
+
+A private name must not get into a public repository. The private names are in a private pattern file, outside of the public repositories. The git hook `pre-push` examines each push with that file, on the computer of the push.
+
+Set the path of the file one time on each computer:
+
+```sh
+git config --global conventions.privatePatternsFile ~/private/patterns.txt
+```
+
+The environment variable `CONVENTIONS_PRIVATE_PATTERNS_FILE` has priority over the git configuration. Each line of the file that is not empty is one JavaScript regular expression. The check uses the flag `g`, and case is significant.
+
+Install the hook:
+
+```sh
+pnpm exec conventions hook install
+```
+
+The script `prepare` of the root `package.json` starts this command, so `pnpm install` installs the hook. The command writes `pre-push` in the hooks folder of git. It uses the folder of `core.hooksPath`, and it also works in a worktree. It keeps a hook `pre-push` that it did not write, and it shows a warning. In CI, the command does nothing.
+
+Before each push, the hook starts `conventions pre-push`. The command examines each new commit of the push. A commit is new when no branch of the remote has it. The command examines these texts of each new commit:
+
+- the commit message.
+- each path that the commit adds or changes.
+- each line that the commit adds.
+
+The command also examines the home folders of users, with the settings of the rule `no-local-paths` in `package.json`. A break stops the push with the exit code 1.
+
+A break shows the commit, the place and the line of the pattern in its source. An example is `commit 0123456789ab notes.md:2  A text matches the private pattern on line 1 of the private pattern file.` A break does not show the text or the pattern. A break of a path does not show the path. A line of the file that is not a valid regular expression is a break of its own.
+
+When no file is set, the command writes one line that starts with `conventions pre-push: No read`, and the push continues. A push with no read is not a pass. When the file is set and the command cannot read it, the push stops.
+
+The check of CI continues to read the environment variable `CONVENTIONS_PRIVATE_PATTERNS` in the rule `no-local-paths`.
 
 ## The map of homes
 
@@ -196,3 +232,5 @@ The package also exports the functions of the tool:
 - `HOMES` is the map of homes. `findHomes(query)` finds the homes of words, and `mapMarkdown(homes)` and `mapText(homes)` write them. `readOverlay(file)` and `mergeHomes(base, extra)` add more homes.
 - `tagName(name, version, packageCount)` gives the git tag of a version. `releaseNotes(name, version, changelog)` gives the text of its GitHub release, with `changelogSection`, `npmUrl` and `MAX_NOTES`. The script `scripts/release/tags.ts` keeps the same rule, and a test compares the two.
 - `RULES` and each rule, with the helpers `isGitSpecifier`, `isPinned`, `isSourcePath` and `parseJsonc`.
+- `privatePatternFile(env, git)`, `readPrivatePatterns(fileText, env)`, `privateTextBreaks(name, text, patterns, options)` and `invalidPatternBreaks(patterns)` are the core of the private patterns. The rule `no-local-paths` and the command `pre-push` use it.
+- `prePush(options, io)` is the command `pre-push`, and `installHook(options, io)` is the command `hook install`. `PRE_PUSH_HOOK` is the text of the hook.
