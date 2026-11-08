@@ -49,7 +49,9 @@ on:
       stop-minutes:
         description: >-
           The time after which Stryker stops, so that the job can still write the summary and upload the report. 0
-          gives timeout-minutes minus 10. A selection that Stryker stops has no score, and it fails.
+          gives stopMinutes of the lane (rigor-mutation minutes, 0.2.4 or later), at most timeout-minutes minus 10.
+          An older rigor-mutation gives timeout-minutes minus 10. A selection that Stryker stops has no score, and it
+          fails.
         type: number
         default: 0
       dry-run:
@@ -201,7 +203,18 @@ jobs:
           CHANGED: ${{ inputs.changed }}
         run: |
           stop=$STOP_MINUTES
-          if [ "$stop" -eq 0 ]; then stop=$((TIMEOUT_MINUTES - 10)); fi
+          if [ "$stop" -eq 0 ]; then
+            stop=$((TIMEOUT_MINUTES - 10))
+            # rigor-mutation 0.2.4 gives the stop of the lane, so plan-check and the job use one stop.
+            if minutes=$(pnpm exec rigor-mutation minutes --lane "$LANE" 2> /dev/null); then
+              lane_stop=$(sed -n 's/^stop=\([0-9][0-9]*\)$/\1/p' <<< "$minutes")
+              if [ -n "$lane_stop" ] && [ "$lane_stop" -le "$stop" ]; then
+                stop=$lane_stop
+              elif [ -n "$lane_stop" ]; then
+                echo "::notice::$SELECTION: the stop of the lane is $lane_stop minutes. The job stops Stryker after $stop minutes, 10 before timeout-minutes."
+              fi
+            fi
+          fi
           if [ "$stop" -le 0 ]; then
             echo "::error::stop-minutes is $stop. Give a positive stop-minutes, or a timeout-minutes above 10."
             exit 1
