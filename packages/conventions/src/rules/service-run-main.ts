@@ -26,7 +26,8 @@ export function runCalls(text: string): number[] {
   if (!SERVICE_IMPORT.test(text)) return [];
   const found: number[] = [];
   text.split(/\r?\n/).forEach((line, index) => {
-    const code = line.replace(/\/\/.*$/, "");
+    const comment = line.indexOf("//");
+    const code = comment < 0 ? line : line.slice(0, comment);
     const trimmed = code.trimStart();
     if (trimmed.startsWith("*") || trimmed.startsWith("/*")) return;
     if (RUN_CALL.test(code)) found.push(index + 1);
