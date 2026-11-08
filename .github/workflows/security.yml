@@ -42,7 +42,10 @@ jobs:
     steps:
       # The template runs the action of this commit, so it checks out the folder of the actions first. A
       # repository that pins the action to a commit needs no such step: the action checks out the repository.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The stamp copies this file, so the step runs only in the template. In a private repository, its partial
+      # clone makes the later checkout of the base fail: the fetch from the promisor remote has no credentials.
+      - if: github.repository == 'mark1russell7/template'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: .github/actions
           persist-credentials: false
