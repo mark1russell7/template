@@ -57,7 +57,19 @@ jobs:
           node-version: 26
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm package add "$PACKAGE" --preset="$PRESET"
+      # Just after a release of a package of the template, the registry can give 404 for its tarball for some minutes.
+      # Then the step resets the tree and tries again. Each other fault fails the step at once.
+      - name: pnpm package add (again after a registry lag)
+        run: |
+          set -o pipefail
+          for attempt in 1 2 3 4 5; do
+            if pnpm package add "$PACKAGE" --preset="$PRESET" 2>&1 | tee add.log; then rm add.log; exit 0; fi
+            if ! grep -qE 'ERR_PNPM_(TARBALL_HTTP_STATUS|FETCH_404|NO_MATCHING_VERSION)' add.log; then exit 1; fi
+            echo "::warning::Attempt $attempt: the registry does not serve a new version yet. The step tries again in 60 s."
+            git checkout -- . && git clean -fdq -e add.log
+            sleep 60
+          done
+          exit 1
       # The new package changes the lockfile
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm --filter "@template/$PACKAGE" typecheck
