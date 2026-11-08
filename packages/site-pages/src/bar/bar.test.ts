@@ -133,7 +133,8 @@ describe("runBarCli", () => {
     expect(runBarCli(["--out", root, "--repo", "owner/owner.github.io"], io().io)).toBe(0);
     const html = readFileSync(join(root, "index.html"), "utf8");
     expect(html).toContain('<a class="spb-site" href="/">owner.github.io</a>');
-    expect(html).not.toContain("spb-owner");
+    // The style of the bar has a rule for the class, so the test examines the link only
+    expect(html).not.toContain('class="spb-owner"');
   });
 
   it("refuses a wrong command line with exit code 2, and a folder with no page with exit code 1", () => {
