@@ -12,7 +12,8 @@
 #   release-publish The npm-publish action examines the tarballs with "dry-run": it publishes nothing.
 #                   The job has no "id-token: write", so npm cannot accept a publish. A step reads
 #                   the output of after-pack.
-#   setup-cue       The action installs the cue CLI on Linux, macOS and Windows. A wrong sha256 fails it.
+#   setup-cue       The action installs the cue CLI on Linux, macOS and Windows. A wrong sha256 fails it, also on a
+#                   cache hit.
 #   cue-ci          The input cue-version of reusable-ci.yml gives the scripts the cue CLI, and no folder .shared-actions.
 #   data-stamps     A missing file of stamps skips the gate when the build is of an older commit, and fails it when
 #                   the build is of the commit of the workflow.
@@ -111,8 +112,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.match == 'true'
     runs-on: ${{ matrix.os }}
-    # The download of 0.15.0 runs each time, and its tries take at most 11 minutes
-    timeout-minutes: 25
+    # A download on a cold cache takes at most 11 minutes
+    timeout-minutes: 15
     permissions:
       contents: read
     strategy:
@@ -141,18 +142,20 @@ jobs:
           cue version
           [ "$VERSION" = 0.15.1 ]
           cue version | head -1 | grep -q "v0.15.1"
-      # A version that no run saves in the cache, so the download and its check run each time
+      # The archive of 0.15.1 is in the cache after the first call, and a wrong sha256 fails it there.
+      # So a damaged cache entry fails the job, and this test needs no download after the first run.
       - id: wrong
         continue-on-error: true
         uses: ./.github/actions/setup-cue
         with:
-          version: 0.15.0
+          version: 0.15.1
           sha256: "0000000000000000000000000000000000000000000000000000000000000000"
-      - name: A wrong sha256 fails the action
+      - name: A wrong sha256 fails the action, also on a cache hit
         env:
           OUTCOME: ${{ steps.wrong.outcome }}
+          HIT: ${{ steps.wrong.outputs.cache-hit }}
         run: |
-          echo "the action with a wrong sha256: $OUTCOME"
+          echo "the action with a wrong sha256: $OUTCOME (cache hit: $HIT)"
           [ "$OUTCOME" = failure ]
 
   cue-ci:
