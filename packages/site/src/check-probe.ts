@@ -72,6 +72,17 @@ check("site-check off: the step Site check does not run", await until(() => step
 click('[data-event="schedule"]');
 check("a scheduled run reads the CI state of the head with green-main", await until(() => step(GREEN_MAIN).includes("runs")), step(GREEN_MAIN));
 
+// A composite action of the template: the explorer shows its steps, and the toggles of its inputs decide them.
+select.value = "actions/site-check/action.yml";
+select.dispatchEvent(new Event("change", { bubbles: true }));
+check("the explorer shows the steps of the composite action site-check", await until(() => step("Site check") !== "" && job("steps") !== ""), $$("#wf-jobs .step").map((li) => li.getAttribute("data-step")).join(", "));
+const visual = pick("visual");
+if (visual?.checked) click(visual);
+check("visual off: the step Site check of the action does not run", await until(() => step("Site check").includes("skipped")), step("Site check"));
+const visualOff = pick("visual");
+if (visualOff && !visualOff.checked) click(visualOff);
+check("visual on: the step Site check of the action runs", await until(() => step("Site check").includes("runs")), step("Site check"));
+
 // The response explorer says first what it is, before a reader meets a chart of another project.
 const responseWhat = $("#response-what")?.textContent ?? "";
 check("the explorer says first that it is the explorer of site-pages", responseWhat.startsWith("This is the explorer that @mark1russell7/site-pages gives any site."), responseWhat);
