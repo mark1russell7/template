@@ -19,7 +19,7 @@ describe("the reader of the shared workflows", () => {
     expect(pages?.jobs[1]).toMatchObject({ if: "inputs.deploy", needs: ["build"] });
     expect(pages?.jobs[2]).toMatchObject({ if: "inputs.deploy && inputs.indexnow-key != '' && github.event_name != 'schedule'", needs: ["deploy"] });
     const steps = pages?.jobs[0]?.steps ?? [];
-    expect(steps.find((s) => s.label === "Site check")?.if).toBe("inputs.site-check");
+    expect(steps.find((s) => s.label === "Site check")?.if).toBe("inputs.site-check || inputs.site-bar");
     expect(steps.find((s) => s.label === "actions/checkout")).toBeDefined();
     expect(pages?.summary).toMatch(/^The shared GitHub Pages deployment/);
   });
