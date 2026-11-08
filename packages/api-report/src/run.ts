@@ -9,7 +9,7 @@ import { byCode, relativePath, type Manifest } from "./entries.ts";
 import { pageFaults, type ApiPage, type FrontmatterValue } from "./page.ts";
 import { referencePage } from "./reference.ts";
 import { DEFAULT_TOOL, packageReport } from "./report.ts";
-import { globFolders, packageFolders, workspaceGlobs } from "./workspace.ts";
+import { globFolders, packageFolders, workspaceGlobs } from "@mark1russell7/conventions/workspace";
 
 /** The path of the report in a package folder, when the configuration gives no other path. */
 export const REPORT_FILE = "test/api/public-api.txt";

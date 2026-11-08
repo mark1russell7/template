@@ -201,6 +201,10 @@ importers:
         version: 7.0.2
 
   packages/api-report:
+    dependencies:
+      '@mark1russell7/conventions':
+        specifier: workspace:^
+        version: link:../conventions
     devDependencies:
       '@mark1russell7/cue':
         specifier: ^2.0.0

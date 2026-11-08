@@ -105,8 +105,8 @@ formatResult: build/index.d.ts#formatResult
 gateAfterCancel: build/index.d.ts#gateAfterCancel
 gateTrigger: build/index.d.ts#gateTrigger
 githubFetch: build/index.d.ts#githubFetch
-globFolders: build/index.d.ts#globFolders
-globToRegExp: build/index.d.ts#globToRegExp
+globFolders: build/workspace.chunk.d.ts#globFolders
+globToRegExp: build/workspace.chunk.d.ts#globToRegExp
 hasFile: build/index.d.ts#hasFile
 hasImportMetaMain: build/index.d.ts#hasImportMetaMain
 hasTests: build/index.d.ts#hasTests
@@ -141,7 +141,7 @@ noBuildOutput: build/index.d.ts#noBuildOutput
 noLocalPaths: build/index.d.ts#noLocalPaths
 npmLookup: build/index.d.ts#npmLookup
 npmUrl: build/index.d.ts#npmUrl
-packageFolders: build/index.d.ts#packageFolders
+packageFolders: build/workspace.chunk.d.ts#packageFolders
 pagesAfterRelease: build/index.d.ts#pagesAfterRelease
 pagesCalls: build/index.d.ts#pagesCalls
 pagesSite: build/index.d.ts#pagesSite
@@ -205,9 +205,17 @@ unreleasedChangeRule: build/index.d.ts#unreleasedChangeRule
 versionTitle: build/index.d.ts#versionTitle
 withOneJob: build/index.d.ts#withOneJob
 workflowParses: build/index.d.ts#workflowParses
-workspaceGlobs: build/index.d.ts#workspaceGlobs
+workspaceGlobs: build/workspace.chunk.d.ts#workspaceGlobs
 workspaceProtocol: build/index.d.ts#workspaceProtocol
 yamlFaults: build/index.d.ts#yamlFaults
+
+## ./workspace (build/workspace.d.ts): names
+
+globFolders: build/workspace.chunk.d.ts#globFolders
+globToRegExp: build/workspace.chunk.d.ts#globToRegExp
+packageFolders: build/workspace.chunk.d.ts#packageFolders
+reportFolders: build/workspace.chunk.d.ts#reportFolders
+workspaceGlobs: build/workspace.chunk.d.ts#workspaceGlobs
 
 ## bin: 1 commands
 
@@ -706,12 +714,6 @@ export declare const gateTrigger: Rule;
 ### build/index.d.ts#githubFetch
 export declare const githubFetch: HomeFetch;
 
-### build/index.d.ts#globFolders
-export declare function globFolders(root: string, glob: string): string[];
-
-### build/index.d.ts#globToRegExp
-export declare function globToRegExp(glob: string): RegExp;
-
 ### build/index.d.ts#hasFile
 export declare const hasFile: (dir: string, file: string) => boolean;
 
@@ -813,9 +815,6 @@ export declare const npmLookup: RegistryLookup;
 
 ### build/index.d.ts#npmUrl
 export declare function npmUrl(name: string, version: string): string;
-
-### build/index.d.ts#packageFolders
-export declare function packageFolders(root: string, globs?: readonly string[] | undefined): string[];
 
 ### build/index.d.ts#pagesAfterRelease
 export declare const pagesAfterRelease: Rule;
@@ -1010,11 +1009,23 @@ export declare function withOneJob(text: string, commit?: string): {
 ### build/index.d.ts#workflowParses
 export declare const workflowParses: Rule;
 
-### build/index.d.ts#workspaceGlobs
-export declare function workspaceGlobs(root: string): string[] | undefined;
-
 ### build/index.d.ts#workspaceProtocol
 export declare const workspaceProtocol: Rule;
 
 ### build/index.d.ts#yamlFaults
 export declare function yamlFaults(text: string): YamlFault[];
+
+### build/workspace.chunk.d.ts#globFolders
+declare function globFolders(root: string, glob: string): string[];
+
+### build/workspace.chunk.d.ts#globToRegExp
+declare function globToRegExp(glob: string): RegExp;
+
+### build/workspace.chunk.d.ts#packageFolders
+declare function packageFolders(root: string, globs?: readonly string[] | undefined): string[];
+
+### build/workspace.chunk.d.ts#reportFolders
+declare function reportFolders(root: string, globs?: readonly string[]): string[];
+
+### build/workspace.chunk.d.ts#workspaceGlobs
+declare function workspaceGlobs(root: string): string[] | undefined;
