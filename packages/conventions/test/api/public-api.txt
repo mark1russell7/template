@@ -186,6 +186,7 @@ securityCallers: build/index.d.ts#securityCallers
 securityOneJob: build/index.d.ts#securityOneJob
 serviceRunMain: build/index.d.ts#serviceRunMain
 setVersions: build/index.d.ts#setVersions
+setupCue: build/index.d.ts#setupCue
 sharedCi: build/index.d.ts#sharedCi
 sharedDocsRule: build/index.d.ts#sharedDocsRule
 signaturesOf: build/index.d.ts#signaturesOf
@@ -947,6 +948,9 @@ export declare const serviceRunMain: Rule;
 
 ### build/index.d.ts#setVersions
 export declare function setVersions(context: RuleContext, from: string, to: string): string[] | undefined;
+
+### build/index.d.ts#setupCue
+export declare const setupCue: Rule;
 
 ### build/index.d.ts#sharedCi
 export declare const sharedCi: Rule;

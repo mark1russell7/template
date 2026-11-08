@@ -12,6 +12,8 @@
 #   release-publish The npm-publish action examines the tarballs with "dry-run": it publishes nothing.
 #                   The job has no "id-token: write", so npm cannot accept a publish. A step reads
 #                   the output of after-pack.
+#   setup-cue       The action installs the cue CLI on Linux, macOS and Windows. A wrong sha256 fails it.
+#   cue-ci          The input cue-version of reusable-ci.yml gives the scripts the cue CLI, and no folder .shared-actions.
 #   release-tag     reusable-release-tag.yml examines the plan, the tarballs and the tags with "dry-run".
 #                   Its log shows the flags of each release: --latest for the entry with "latest",
 #                   and --latest=false for the others.
@@ -28,6 +30,7 @@ on:
       - ".github/workflows/actions-test.yml"
       - ".github/workflows/reusable-pages.yml"
       - ".github/workflows/reusable-release-*.yml"
+      - ".github/workflows/reusable-ci.yml"
       - "scripts/release/**"
       # The test site installs the workspace, so a change of a package file can break it
       - "package.json"
@@ -71,6 +74,7 @@ jobs:
             .github/workflows/actions-test.yml
             .github/workflows/reusable-pages.yml
             .github/workflows/reusable-release-*.yml
+            .github/workflows/reusable-ci.yml
             scripts/release/**
             package.json
             pnpm-lock.yaml
@@ -100,6 +104,69 @@ jobs:
         run: |
           echo "green-main: $SHA (CI of the newest commit: $STATE)"
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]
+
+  setup-cue:
+    needs: changes
+    if: needs.changes.outputs.match == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      # The runners are shared by all repositories of the account (the rule runner-budget)
+      max-parallel: 3
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      # The sha256 comes from the digest of the asset in the API of the release
+      - id: cue
+        uses: ./.github/actions/setup-cue
+        with:
+          version: v0.15.1
+      - name: The cue CLI is on the PATH
+        env:
+          VERSION: ${{ steps.cue.outputs.version }}
+        run: |
+          cue version
+          [ "$VERSION" = 0.15.1 ]
+          cue version | head -1 | grep -q "v0.15.1"
+      # A version that no run saves in the cache, so the download and its check run each time
+      - id: wrong
+        continue-on-error: true
+        uses: ./.github/actions/setup-cue
+        with:
+          version: 0.15.0
+          sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+      - name: A wrong sha256 fails the action
+        env:
+          OUTCOME: ${{ steps.wrong.outcome }}
+        run: |
+          echo "the action with a wrong sha256: $OUTCOME"
+          [ "$OUTCOME" = failure ]
+
+  cue-ci:
+    needs: changes
+    if: needs.changes.outputs.match == 'true'
+    uses: ./.github/workflows/reusable-ci.yml
+    permissions:
+      contents: read
+    with:
+      cue-version: "0.15.1"
+      # No script of package.json: only the install and the extra command
+      scripts: none
+      recursive-scripts: ""
+      changesets: false
+      run: |
+        cue version | head -1 | grep -q "v0.15.1"
+        test ! -e "$GITHUB_WORKSPACE/.shared-actions"
 
   pages:
     needs: changes
@@ -235,7 +302,7 @@ jobs:
   actions-ok:
     name: Actions OK
     if: ${{ !cancelled() }}
-    needs: [changes, green-main, pages, pages-check, release-build, release-publish, release-tag]
+    needs: [changes, green-main, setup-cue, cue-ci, pages, pages-check, release-build, release-publish, release-tag]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}

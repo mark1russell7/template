@@ -1,0 +1,104 @@
+name: setup-cue
+description: >-
+  Installs the cue CLI of one version from a cache, or from the release of cue-lang/cue with retries and a sha256
+  check, so that a failed download from GitHub does not fail the job.
+inputs:
+  version:
+    description: The version of the cue CLI, for example "0.15.1" or "v0.15.1".
+    required: true
+  sha256:
+    description: >-
+      The sha256 of the archive for this runner. Without it, the action reads the digest of the asset from the API of the
+      release, and the check finds a broken download.
+    default: ""
+  token:
+    description: The token for the API of the release.
+    default: ${{ github.token }}
+outputs:
+  version:
+    description: The version that `cue version` gives.
+    value: ${{ steps.check.outputs.version }}
+  cache-hit:
+    description: '"true" when the CLI came from the cache.'
+    value: ${{ steps.cache.outputs.cache-hit }}
+runs:
+  using: composite
+  steps:
+    - id: plan
+      name: The archive of the version
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+      run: |
+        version="${VERSION#v}"
+        [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::\"$VERSION\" is not a version of cue, for example 0.15.1."; exit 1; }
+        case "$RUNNER_OS" in
+          Linux) os=linux; ext=tar.gz ;;
+          macOS) os=darwin; ext=tar.gz ;;
+          Windows) os=windows; ext=zip ;;
+          *) echo "::error::setup-cue has no archive for the runner OS $RUNNER_OS."; exit 1 ;;
+        esac
+        case "$RUNNER_ARCH" in
+          X64) arch=amd64 ;;
+          ARM64) arch=arm64 ;;
+          *) echo "::error::setup-cue has no archive for the runner architecture $RUNNER_ARCH."; exit 1 ;;
+        esac
+        {
+          echo "version=$version"
+          echo "asset=cue_v${version}_${os}_${arch}.${ext}"
+          echo "dir=$RUNNER_TOOL_CACHE/setup-cue/$version/$arch"
+        } >> "$GITHUB_OUTPUT"
+    # A restore and a save in place of actions/cache, so that the action has no post step. A caller can then remove the
+    # folder of the action after this step (reusable-ci.yml does).
+    - id: cache
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.plan.outputs.dir }}
+        key: setup-cue-${{ runner.os }}-${{ steps.plan.outputs.asset }}
+    - name: Download and check the archive
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        VERSION: ${{ steps.plan.outputs.version }}
+        ASSET: ${{ steps.plan.outputs.asset }}
+        DIR: ${{ steps.plan.outputs.dir }}
+        SHA256: ${{ inputs.sha256 }}
+        TOKEN: ${{ inputs.token }}
+      run: |
+        # A 504 of github.com comes and goes (2026-11-08), so each request has 8 more tries over approximately 2 minutes
+        retry=(--retry 8 --retry-all-errors --retry-delay 15 --connect-timeout 20)
+        expected="${SHA256,,}"
+        if [ -z "$expected" ]; then
+          release=$(curl -fsSL "${retry[@]}" -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/cue-lang/cue/releases/tags/v$VERSION") || { echo "::error::The API of the release v$VERSION of cue did not answer."; exit 1; }
+          digest=$(jq -r --arg name "$ASSET" '.assets[] | select(.name == $name) | .digest // ""' <<< "$release")
+          [[ "$digest" == sha256:* ]] || { echo "::error::The release v$VERSION of cue has no sha256 digest for $ASSET. Give the input sha256."; exit 1; }
+          expected="${digest#sha256:}"
+        fi
+        archive="$RUNNER_TEMP/$ASSET"
+        curl -fsSL "${retry[@]}" -o "$archive" "https://github.com/cue-lang/cue/releases/download/v$VERSION/$ASSET" \
+          || { echo "::error::The download of $ASSET failed after 9 tries."; exit 1; }
+        if command -v sha256sum > /dev/null; then actual=$(sha256sum "$archive" | cut -d' ' -f1); else actual=$(shasum -a 256 "$archive" | cut -d' ' -f1); fi
+        [ "$actual" = "$expected" ] || { echo "::error::The sha256 of $ASSET is $actual, not $expected."; exit 1; }
+        mkdir -p "$DIR"
+        if [[ "$ASSET" == *.zip ]]; then unzip -q -o "$archive" cue.exe -d "$DIR"; else tar -xzf "$archive" -C "$DIR" cue; fi
+        rm -f "$archive"
+    - if: steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.plan.outputs.dir }}
+        key: setup-cue-${{ runner.os }}-${{ steps.plan.outputs.asset }}
+    - id: check
+      name: Add the CLI to the PATH
+      shell: bash
+      env:
+        VERSION: ${{ steps.plan.outputs.version }}
+        DIR: ${{ steps.plan.outputs.dir }}
+      run: |
+        echo "$DIR" >> "$GITHUB_PATH"
+        cli="$DIR/cue"
+        [ -x "$cli" ] || cli="$DIR/cue.exe"
+        line=$("$cli" version | head -1)
+        echo "$line"
+        [[ "$line" == *"v$VERSION"* ]] || { echo "::error::The CLI gives \"$line\", not the version v$VERSION."; exit 1; }
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
