@@ -62,11 +62,11 @@ export interface NavClick {
 /** The options of `crawlSite`. */
 export interface NavOptions {
   /** The built site folder. The crawl serves it at `base`. */
-  readonly out?: string;
+  readonly out?: string | undefined;
   /** The URL of a live site home, in place of `out`. */
-  readonly url?: string;
+  readonly url?: string | undefined;
   /** The path of the site home, for `out`. */
-  readonly base?: string;
+  readonly base?: string | undefined;
   /** The largest number of clicks from home to a page. */
   readonly maxClicks: number;
   /** The largest number of pages to open. */
@@ -74,13 +74,13 @@ export interface NavOptions {
   /** True: each page must have the shared site bar. */
   readonly requireBar: boolean;
   /** A folder for the screenshots, report.json and summary.md. */
-  readonly shots?: string;
+  readonly shots?: string | undefined;
   /** The paths of the pages to take screenshots of, from the site home. */
   readonly shotPages: readonly string[];
-  readonly browser?: string;
+  readonly browser?: string | undefined;
   readonly settleMs: number;
   readonly timeoutMs: number;
-  readonly log?: (line: string) => void;
+  readonly log?: ((line: string) => void) | undefined;
 }
 
 /** The result of `crawlSite`. */
