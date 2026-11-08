@@ -443,7 +443,27 @@ runs:
       if: ${{ !cancelled() }}
       shell: bash
       env:
-        STEPS: ${{ toJSON(steps) }}
+        # Only the outcome and the conclusion of each step. toJSON(steps) also has the outputs of the steps, and a large
+        # output (the dependency changes of a big lock change) makes the environment too large for the start of bash.
+        STEPS: |
+          {
+          "checkout": { "outcome": "${{ steps.checkout.outcome }}", "conclusion": "${{ steps.checkout.conclusion }}" },
+          "dependency-review_scan": { "outcome": "${{ steps.dependency-review_scan.outcome }}", "conclusion": "${{ steps.dependency-review_scan.conclusion }}" },
+          "osv-scanner_args": { "outcome": "${{ steps.osv-scanner_args.outcome }}", "conclusion": "${{ steps.osv-scanner_args.conclusion }}" },
+          "osv-scanner_base-checkout": { "outcome": "${{ steps.osv-scanner_base-checkout.outcome }}", "conclusion": "${{ steps.osv-scanner_base-checkout.conclusion }}" },
+          "osv-scanner_base": { "outcome": "${{ steps.osv-scanner_base.outcome }}", "conclusion": "${{ steps.osv-scanner_base.conclusion }}" },
+          "osv-scanner_head-checkout": { "outcome": "${{ steps.osv-scanner_head-checkout.outcome }}", "conclusion": "${{ steps.osv-scanner_head-checkout.conclusion }}" },
+          "osv-scanner_head": { "outcome": "${{ steps.osv-scanner_head.outcome }}", "conclusion": "${{ steps.osv-scanner_head.conclusion }}" },
+          "osv-scanner_compare": { "outcome": "${{ steps.osv-scanner_compare.outcome }}", "conclusion": "${{ steps.osv-scanner_compare.conclusion }}" },
+          "osv-scanner_scan": { "outcome": "${{ steps.osv-scanner_scan.outcome }}", "conclusion": "${{ steps.osv-scanner_scan.conclusion }}" },
+          "osv-scanner_check": { "outcome": "${{ steps.osv-scanner_check.outcome }}", "conclusion": "${{ steps.osv-scanner_check.conclusion }}" },
+          "osv-scanner_upload": { "outcome": "${{ steps.osv-scanner_upload.outcome }}", "conclusion": "${{ steps.osv-scanner_upload.conclusion }}" },
+          "osv-scanner_move": { "outcome": "${{ steps.osv-scanner_move.outcome }}", "conclusion": "${{ steps.osv-scanner_move.conclusion }}" },
+          "codeql_languages": { "outcome": "${{ steps.codeql_languages.outcome }}", "conclusion": "${{ steps.codeql_languages.conclusion }}" },
+          "codeql_init": { "outcome": "${{ steps.codeql_init.outcome }}", "conclusion": "${{ steps.codeql_init.conclusion }}" },
+          "codeql_analyze": { "outcome": "${{ steps.codeql_analyze.outcome }}", "conclusion": "${{ steps.codeql_analyze.conclusion }}" },
+          "codeql_new-alerts": { "outcome": "${{ steps.codeql_new-alerts.outcome }}", "conclusion": "${{ steps.codeql_new-alerts.conclusion }}" }
+          }
         DEPENDENCY_REVIEW: ${{ inputs.dependency-review == 'true' && github.event_name == 'pull_request' }}
         OSV_SCANNER: ${{ inputs.osv == 'true' }}
         CODEQL: ${{ inputs.codeql == 'true' }}
