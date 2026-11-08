@@ -315,17 +315,49 @@ export function prePush(options: PrePushOptions, io: Pick<CliIo, "stderr">): num
 /** The marker line of the hook that `conventions hook install` writes. The command rewrites only a hook with this line. */
 export const HOOK_MARKER = "# conventions hook: pre-push";
 
-/** The text of the hook `pre-push` that `conventions hook install` writes: a POSIX shell script. */
+/** The first version of the package with the command `conventions pre-push`. */
+export const FIRST_PRE_PUSH_VERSION = "0.37.1";
+
+/** This function gives the version of this package, from its package.json, or FIRST_PRE_PUSH_VERSION when it cannot read it. */
+function ownVersion(): string {
+  try {
+    const { version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version?: unknown };
+    return typeof version === "string" && /^\d+\.\d+\.\d+/.test(version) ? version : FIRST_PRE_PUSH_VERSION;
+  } catch {
+    return FIRST_PRE_PUSH_VERSION;
+  }
+}
+
+/**
+ * A Node program for the hook. Argument 1 is a package.json, and argument 2 is a version. The program exits 0 when the
+ * version of the package.json is the same as or later than argument 2, and 1 otherwise. A pre-release counts as its release. It has no single quote, so the shell
+ * gives it as one argument.
+ */
+const AT_LEAST =
+  'let v;try{v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).version}catch{process.exit(1)}' +
+  'const a=String(v).split("-")[0].split(".").map(Number),b=process.argv[2].split(".").map(Number);' +
+  "for(let i=0;i<3;i++)if(a[i]!==b[i])process.exit(a[i]>b[i]?0:1);process.exit(0)";
+
+/**
+ * The text of the hook `pre-push` that `conventions hook install` writes: a POSIX shell script.
+ *
+ * Git keeps one hooks folder for all worktrees of a repository, but each worktree has its own node_modules. A worktree
+ * of an older branch can have a conventions with no pre-push command (before 0.37.1). Then the hook starts the
+ * version that wrote it, with pnpm dlx. The hook stays closed: when no conventions can start, the push stops.
+ */
 export const PRE_PUSH_HOOK: string = `#!/bin/sh
 ${HOOK_MARKER}
 # The command "conventions hook install" wrote this file, and each install writes it again.
 # The hook examines the new commits of each push with the private name list.
+# All worktrees use this file. A worktree with a conventions older than ${FIRST_PRE_PUSH_VERSION} has no pre-push command,
+# so then the hook starts the version that wrote it.
 root="$(git rev-parse --show-toplevel)" || exit 1
 bin="$root/node_modules/.bin/conventions"
-if [ -x "$bin" ]; then
+pkg="$root/node_modules/@mark1russell7/conventions/package.json"
+if [ -x "$bin" ] && node -e '${AT_LEAST}' "$pkg" ${FIRST_PRE_PUSH_VERSION} 2>/dev/null; then
   exec "$bin" pre-push "$@"
 fi
-exec pnpm exec conventions pre-push "$@"
+exec pnpm dlx @mark1russell7/conventions@${ownVersion()} pre-push "$@"
 `;
 
 /** The options of `installHook`. */
