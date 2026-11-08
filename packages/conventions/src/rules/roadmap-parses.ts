@@ -61,7 +61,7 @@ function callsWithoutRoadmap(lines: readonly string[]): number[] {
   return found;
 }
 
-/** The roadmap of the site config, or a break when the file is not a site config. Undefined when the repository has no file. */
+/** The roadmap of the site config, or a break when the file is not a site config. The value `undefined` means that the repository has no file. */
 type ConfigRoadmap = { readonly roadmap: string | undefined; readonly line: number } | { readonly error: string };
 
 /** This function reads the site config of the repository, and gives its roadmap. An empty roadmap with `site-pages: false` is no roadmap. */

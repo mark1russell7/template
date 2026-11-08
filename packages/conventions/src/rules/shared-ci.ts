@@ -16,6 +16,7 @@ export const SHARED_WORKFLOWS: readonly string[] = [
   "reusable-ci.yml",
   "reusable-codex-review.yml",
   "reusable-mutation.yml",
+  "reusable-pages-check.yml",
   "reusable-pages.yml",
   "reusable-release-build.yml",
   "reusable-release-tag.yml",
@@ -23,7 +24,7 @@ export const SHARED_WORKFLOWS: readonly string[] = [
 ];
 
 /** The shared actions of the template, by folder name under `.github/actions`. */
-export const SHARED_ACTIONS: readonly string[] = ["build-ref", "changes", "changeset-check", "coverage", "data-stamps", "gate-summary", "green-main", "npm-publish", "security-scan", "setup-cue", "setup-playwright", "site-check", "site-pages"];
+export const SHARED_ACTIONS: readonly string[] = ["build-ref", "changes", "changeset-check", "coverage", "data-stamps", "gate-summary", "green-main", "npm-publish", "pages-build", "security-scan", "setup-cue", "setup-playwright", "site-check", "site-config", "site-pages"];
 
 /** The `uses` value of a job that calls the shared CI, with no pin. */
 export const SHARED_CI = "mark1russell7/template/.github/workflows/reusable-ci.yml";

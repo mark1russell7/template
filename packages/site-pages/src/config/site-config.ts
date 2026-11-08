@@ -172,9 +172,8 @@ export function inputsGiven(inputs: Readonly<Record<string, unknown>>): SiteConf
 }
 
 /**
- * This function gives the site config of a repository from its file, or from the old inputs when it has no file. A
- * repository that has the file and also gives a site input with a value other than its default gets an error, because
- * the workflow uses only the file.
+ * This function gives the site config of a repository from its file, or from the old inputs when it has no file. The
+ * workflow uses only the file. Thus a repository with the file gets an error for a site input that is not its default.
  */
 export function resolveSiteConfig(input: SiteConfigInput): SiteConfigResult {
   const config = Object.fromEntries(Object.entries(SITE_CONFIG_KEYS).map(([key, spec]) => [key, spec.default])) as Record<SiteConfigKey, unknown>;

@@ -62,15 +62,17 @@ check("a pull request reads no CI state", await until(() => step(GREEN_MAIN).inc
 const deploy = pick("deploy");
 if (deploy?.checked) click(deploy);
 check("deploy off: the job deploy does not run", await until(() => job("deploy").includes("skipped")), job("deploy"));
-const siteCheck = pick("site-check");
-if (siteCheck && !siteCheck.checked) click(siteCheck);
-check("site-check on: the run decides the step Site check", await until(() => step("Site check").includes("unknown")), step("Site check"));
-const siteCheckOn = pick("site-check");
-if (siteCheckOn?.checked) click(siteCheckOn);
-check("site-check off: the step Site check does not run", await until(() => step("Site check").includes("skipped")), step("Site check"));
+// The action pages-build builds the site from the site config of the repository, in the job build.
+const PAGES_BUILD = "./.shared-actions/.github/actions/pages-build";
+check("the job build builds the site with the action pages-build", await until(() => step(PAGES_BUILD) !== ""), $$("#wf-jobs .step").map((li) => li.getAttribute("data-step")).join(", "));
 
 click('[data-event="schedule"]');
 check("a scheduled run reads the CI state of the head with green-main", await until(() => step(GREEN_MAIN).includes("runs")), step(GREEN_MAIN));
+
+// The action pages-build: the site config is text that the run reads, so the run decides the step Site check.
+select.value = "actions/pages-build/action.yml";
+select.dispatchEvent(new Event("change", { bubbles: true }));
+check("the site config decides the step Site check of the action pages-build", await until(() => step("Site check").includes("unknown")), step("Site check"));
 
 // A composite action of the template: the explorer shows its steps, and the toggles of its inputs decide them.
 select.value = "actions/site-check/action.yml";
