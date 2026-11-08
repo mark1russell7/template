@@ -27,7 +27,7 @@ import {
   type CliIo,
   type NameRule,
 } from "./index.ts";
-import { addedRuns } from "./pre-push.ts";
+import { addedRuns, FIRST_PRE_PUSH_VERSION } from "./pre-push.ts";
 
 /** The private probe of each test. No real name is private here. */
 const PROBE = "zz-test-pattern-7316";
@@ -520,6 +520,42 @@ describe("conventions hook install", () => {
     expect(PRE_PUSH_HOOK).toContain('pre-push "$@"');
     if (process.platform !== "win32") expect(statSync(file).mode & 0o111).not.toBe(0);
     expect(install(root).stdout).toBe("conventions hook install: .git/hooks/pre-push is current.\n");
+  });
+
+  describe("the hook picks the conventions that has pre-push (one hook for all worktrees)", () => {
+    const sh = spawnSync("sh", ["-c", "exit 0"]).status === 0;
+    /** This function starts the hook in a repository with the conventions version of node_modules, and gives what it started. */
+    function startHook(version: string | undefined): string {
+      const { root } = repository();
+      const bin = join(temp, `bin-${String(Math.random()).slice(2)}`);
+      mkdirSync(bin, { recursive: true });
+      writeFileSync(join(bin, "pnpm"), '#!/bin/sh\necho "pnpm $*"\n', { mode: 0o755 });
+      if (version !== undefined) {
+        write(root, {
+          "node_modules/.bin/conventions": '#!/bin/sh\necho "local $*"\n',
+          "node_modules/@mark1russell7/conventions/package.json": JSON.stringify({ name: "@mark1russell7/conventions", version }),
+        });
+        spawnSync("chmod", ["+x", join(root, "node_modules/.bin/conventions")]);
+      }
+      const hook = join(root, "hook.sh");
+      writeFileSync(hook, PRE_PUSH_HOOK, { mode: 0o755 });
+      const sep = process.platform === "win32" ? ";" : ":";
+      const result = spawnSync("sh", [hook, "origin", HTTPS], { cwd: root, env: { ...gitEnv, PATH: `${bin}${sep}${process.env["PATH"] ?? ""}` }, encoding: "utf8" });
+      return result.stdout.trim();
+    }
+
+    it.runIf(sh)("starts the local conventions when it has pre-push", () => {
+      expect(startHook(FIRST_PRE_PUSH_VERSION)).toBe(`local pre-push origin ${HTTPS}`);
+      expect(startHook("0.38.0-rc.1")).toBe(`local pre-push origin ${HTTPS}`);
+      expect(startHook("1.0.0")).toBe(`local pre-push origin ${HTTPS}`);
+    });
+
+    it.runIf(sh)("red: starts the version that wrote the hook when the local conventions is older (0.35.0 has no pre-push)", () => {
+      const own = (JSON.parse(readFileSync(join(dirname(import.meta.dirname), "package.json"), "utf8")) as { version: string }).version;
+      expect(startHook("0.35.0")).toBe(`pnpm dlx @mark1russell7/conventions@${own} pre-push origin ${HTTPS}`);
+      expect(startHook("0.37.0")).toBe(`pnpm dlx @mark1russell7/conventions@${own} pre-push origin ${HTTPS}`);
+      expect(startHook(undefined)).toBe(`pnpm dlx @mark1russell7/conventions@${own} pre-push origin ${HTTPS}`);
+    });
   });
 
   it("honors core.hooksPath", () => {
