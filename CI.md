@@ -455,6 +455,17 @@ CodeQL first downloads the bundle of the version of `codeql-action`. If that dow
 
 An alert of CodeQL that is already open on the base branch is not new. The step groups the alerts by rule, file and message. A group is new only when the pull request has more alerts of it than the base branch has open. Thus a second alert of a known group fails. The step reads the open alerts of the base branch from the code-scanning API, with `security-events: read`. If it cannot read them, the step fails.
 
+### A private repository
+
+In a private repository, the dependency review and the code-scanning API need GitHub Advanced Security. A personal account cannot buy it. Thus the inputs `dependency-review`, `codeql` and `osv-upload` have the default `auto`:
+
+- In a public repository, `auto` starts the part.
+- In a private repository, `auto` skips the part. osv-scanner runs, and its pull request check stays the same.
+- `true` and `false` keep their meaning. A private repository with GitHub Advanced Security sets `true`.
+- The first step reads the visibility from the event. The event of a schedule has no repository, so then the step reads the API.
+
+A skip is not a pass. The last step gives a warning for each scan that `auto` skips, and the table of the summary shows `skip`. On a push, a schedule or a manual run, osv-scanner does not upload its results. Then a warning gives the count, and the summary of the run lists the vulnerable packages.
+
 Each scan starts also when an earlier scan failed. The last step of the action fails when a scan fails, and its error names that scan. The summary of the run shows a table of the scans. If the inputs start a scan and no step of it starts, the last step also fails.
 
 The job is the summary job `Security OK` ("The check of the ruleset"). One job asks for one runner. Before, the scans had three jobs and a summary job, and each job waited in the queue for its runner. The scans start one after the other, so a run takes approximately 15 seconds more.
@@ -492,11 +503,12 @@ jobs:
 | Input | Default | What it sets |
 |---|---|---|
 | `fail-on-severity` | `high` | A pull request fails for a new finding at or above this severity: `low`, `moderate`, `high` or `critical`. |
-| `dependency-review` | `true` | The scan `dependency-review`. |
+| `dependency-review` | `auto` | The scan `dependency-review`: `true`, `false` or `auto` ("A private repository"). |
 | `dependency-review-scopes` | `runtime, development, unknown` | The scopes of the dependencies that the dependency review examines. |
 | `osv` | `true` | The scan `osv-scanner`. |
+| `osv-upload` | `auto` | The upload of the results of osv-scanner to code scanning: `true`, `false` or `auto`. |
 | `osv-lockfile` | (empty) | The lockfiles of osv-scanner, separated by spaces. Empty scans each lockfile of the repository. |
-| `codeql` | `true` | The scan `codeql`. |
+| `codeql` | `auto` | The scan `codeql`: `true`, `false` or `auto`. |
 | `codeql-languages` | `javascript-typescript,actions` | The CodeQL languages. The scan skips a language with no files in the repository. |
 | `codeql-build-mode` | `none` | The CodeQL build mode. |
 
@@ -506,7 +518,6 @@ jobs:
 - The severity of a finding is its CVSS score or its CodeQL `security-severity`. `high` is 7.0 or more, and `critical` is 9.0 or more.
 - A file `osv-scanner.toml` next to a lockfile tells osv-scanner which vulnerabilities to ignore.
 - A repository with the default setup of code scanning sets `codeql: false`, because the default setup refuses the results of a CodeQL workflow.
-- CodeQL in a private repository needs GitHub Advanced Security. Thus only the public repositories use this action.
 - The last step starts `verdict.ts` with the Node of the runner. Node 22.18 or later runs TypeScript with no build, and the `ubuntu-latest` image has such a Node.
 
 ### The old workflow
@@ -533,7 +544,8 @@ uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<full commit SHA>
 The workflows of the template call the shared workflows and actions by a local path, for example `./.github/workflows/reusable-ci.yml`. Thus each pull request of the template tests them:
 
 - `ci.yml` tests `reusable-ci.yml`.
-- `security.yml` tests the action `security-scan`. The tests of `scripts/workflows/security-scan.test.ts` examine the last step of the action and the step that finds the new CodeQL alerts, with no scan.
+- `security.yml` tests the action `security-scan`. The tests of `scripts/workflows/security-scan.test.ts` start no scan. They examine the choice of the scans, the last step and the step that finds the new CodeQL alerts.
+- Before the action, `security.yml` checks out the folder `.github/actions` of the template. This step operates only in the template. In a private repository, its partial clone makes the checkout of the base fail.
 - `actions-test.yml` tests the actions, `reusable-pages.yml` and the release workflows, with `dry-run`. It publishes nothing. On a pull request, it sets the input `require-main` of the release build to `false`.
 - On each pull request, the job `site` of `actions-test.yml` calls `pages.yml`. It builds the site of the template and starts its probe, with no deploy.
 - "Actions OK" is a check of the ruleset of `main`, and it needs the job `site`. Thus `gh pr merge --auto` waits for the probe of the site.
