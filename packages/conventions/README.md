@@ -163,20 +163,40 @@ An unknown rule, an unknown option, or an exception or a changed option without 
 | `--base <ref>` | The base commit of the change, for the rules `release-files`, `home-package` and `unreleased-change`. Outside CI, the default is the default branch of origin, so a local check examines the same added lines as the check of the pull request. |
 | `--no-base` | Do not use that default. |
 | `--json` | Write the result as JSON. |
-| `pre-push <remote> [<url>]` | Examine the new commits of a push with the private pattern file. The git hook `pre-push` starts it. |
+| `pre-push <remote> [<url>]` | Examine the new commits of a push with the private name list. The git hook `pre-push` starts it. |
 | `hook install` | Write the git hook `pre-push`. In CI, or outside a git repository, the command does nothing. |
 
-## The private pattern file and the hook `pre-push`
+## The private name list and the hook `pre-push`
 
-A private name must not get into a public repository. The private names are in a private pattern file, outside of the public repositories. The git hook `pre-push` examines each push with that file, on the computer of the push.
+A private name must not get into a public repository. The private names are in a private name list, outside of the public repositories. The git hook `pre-push` examines each push with that list, on the computer of the push.
 
-Set the path of the file one time on each computer:
+Set the path of the list one time on each computer:
 
 ```sh
-git config --global conventions.privatePatternsFile ~/private/patterns.txt
+git config --global conventions.privateNamesFile ~/private/private-names.json
 ```
 
-The environment variable `CONVENTIONS_PRIVATE_PATTERNS_FILE` has priority over the git configuration. Each line of the file that is not empty is one JavaScript regular expression. The check uses the flag `g`, and case is significant.
+The environment variable `CONVENTIONS_PRIVATE_NAMES_FILE` has priority over the git configuration.
+
+The list is a JSON file. The schema [`schema/private-names.schema.json`](schema/private-names.schema.json) tells its fields, and the package has the schema. This example has made-up names:
+
+```json
+{
+  "$comment": "The names of private projects.",
+  "names": [
+    { "id": "acme-app", "project": "The Acme app", "seeds": ["acme-app", "Acme"], "patterns": ["\\bacme-app\\b"], "word": "Acme", "commonAfter": ["corp"] }
+  ],
+  "allow": [{ "repo": "site", "path": "docs/history.md", "name": "acme-app", "why": "The page tells the history of the name." }]
+}
+```
+
+- `seeds`: the fixed texts of a name, with case. A line with no seed of the list is no hit. Thus each text that a pattern or the word finds must contain a seed.
+- `patterns`: JavaScript regular expressions with no flags. A match in a line or in a path is a hit.
+- `word`: a word that is also a common word. A match of the whole word is a hit only in a sentence that names the project. The word in code, in a title, after an article or before a noun is no hit.
+- `commonAfter`: the words that make `word` a common word when they come next. In the example, `Acme corp` is no hit, but `the Acme team` is a hit.
+- `allow`: the hits that a person examined. An entry permits the name `name` (each name, with no `name`) in the file `path` of the repository `repo`. The command gets the repository from the URL of the remote.
+
+A line has one break or no break of the list: the first name of the line counts. A path of a file has a break only for a pattern.
 
 Install the hook:
 
@@ -192,11 +212,11 @@ Before each push, the hook starts `conventions pre-push`. The command examines e
 - each path that the commit adds or changes.
 - each line that the commit adds.
 
-The command also examines the home folders of users, with the settings of the rule `no-local-paths` in `package.json`. A break stops the push with the exit code 1.
+The command also examines the home folders of users, with the settings of the rule `no-local-paths` in `package.json`. The environment variable `CONVENTIONS_PRIVATE_PATTERNS` adds one regular expression on each line, as in the rule. A break stops the push with the exit code 1.
 
-A break shows the commit, the place and the line of the pattern in its source. An example is `commit 0123456789ab notes.md:2  A text matches the private pattern on line 1 of the private pattern file.` A break does not show the text or the pattern. A break of a path does not show the path. A line of the file that is not a valid regular expression is a break of its own.
+A break shows the commit, the place and the index of the name in the list. An example is `commit 0123456789ab notes.md:2  A text names name 1 of the private name list.` A break does not show the text, the id, the project or the pattern, because the id is the private name. A break of a path does not show the path.
 
-When no file is set, the command writes one line that starts with `conventions pre-push: No read`, and the push continues. A push with no read is not a pass. When the file is set and the command cannot read it, the push stops.
+When no list and no pattern is set, the command writes one line that starts with `conventions pre-push: No read`, and the push continues. A push with no read is not a pass. The push stops when the command cannot read the list that a setting names. It also stops when the list is not JSON, does not agree with the schema, or has a bad regular expression. The line of the stop gives the reason and the index of the entry, not its values.
 
 The check of CI continues to read the environment variable `CONVENTIONS_PRIVATE_PATTERNS` in the rule `no-local-paths`.
 
@@ -232,5 +252,8 @@ The package also exports the functions of the tool:
 - `HOMES` is the map of homes. `findHomes(query)` finds the homes of words, and `mapMarkdown(homes)` and `mapText(homes)` write them. `readOverlay(file)` and `mergeHomes(base, extra)` add more homes.
 - `tagName(name, version, packageCount)` gives the git tag of a version. `releaseNotes(name, version, changelog)` gives the text of its GitHub release, with `changelogSection`, `npmUrl` and `MAX_NOTES`. The script `scripts/release/tags.ts` keeps the same rule, and a test compares the two.
 - `RULES` and each rule, with the helpers `isGitSpecifier`, `isPinned`, `isSourcePath` and `parseJsonc`.
-- `privatePatternFile(env, git)`, `readPrivatePatterns(fileText, env)`, `privateTextBreaks(name, text, patterns, options)` and `invalidPatternBreaks(patterns)` are the core of the private patterns. The rule `no-local-paths` and the command `pre-push` use it.
+- `privateTextBreaks(name, text, privates, options)` gives the breaks of one text. The rule `no-local-paths` and the command `pre-push` use it. `privates` has the list (`names`) and the patterns (`patterns`).
+- `parsePrivateNames(text)` parses and checks a private name list. It throws a `PrivateNameListError` with a reason that shows no value of the list.
+- `lineNameHit(list, line, place)`, `pathNameHit(list, path)`, `firstNameMatch(line, names)`, `isCommonUse(line, index, rule)` and `isAllowedHit(allow, repo, path, id)` find the names of the list. They have no input or output.
+- `privateNamesFile(env, git)`, `privatePatterns(env)` and `invalidPatternBreaks(patterns)` read the settings and the patterns.
 - `prePush(options, io)` is the command `pre-push`, and `installHook(options, io)` is the command `hook install`. `PRE_PUSH_HOOK` is the text of the hook.

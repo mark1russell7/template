@@ -78,17 +78,31 @@ export {
   DEFAULT_ALLOWED,
   HOME_PATTERNS,
   invalidPatternBreaks,
-  PRIVATE_PATTERN_FILE,
-  PRIVATE_PATTERNS_FILE_CONFIG,
-  PRIVATE_PATTERNS_FILE_VARIABLE,
+  PRIVATE_NAMES_FILE_CONFIG,
+  PRIVATE_NAMES_FILE_VARIABLE,
   PRIVATE_PATTERNS_VARIABLE,
-  privatePatternFile,
+  privateNamesFile,
   privatePatterns,
   privateTextBreaks,
-  readPrivatePatterns,
   type PrivatePattern,
+  type PrivateSources,
   type TextBreakOptions,
 } from "./rules/no-local-paths.ts";
+export {
+  firstNameMatch,
+  isAllowedHit,
+  isCommonUse,
+  lineNameHit,
+  parsePrivateNames,
+  pathNameHit,
+  PRIVATE_NAME_LIST,
+  PrivateNameListError,
+  type AllowedHit,
+  type LinePlace,
+  type NameHit,
+  type NameRule,
+  type PrivateNameList,
+} from "./private-names.ts";
 export { HOOK_MARKER, installHook, NO_READ_LINE, PRE_PUSH_HOOK, prePush, type HookOptions, type PrePushOptions } from "./pre-push.ts";
 export { hasImportMetaMain, REAL_COMPARE } from "./rules/main-check.ts";
 export { roadmapOfLine } from "./rules/roadmap-parses.ts";

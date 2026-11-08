@@ -1,6 +1,6 @@
 /**
  * The commands `conventions pre-push` and `conventions hook install`. The hook `pre-push` of git starts the first
- * command before each push. It examines the new commits of the push with the private pattern file, which is outside
+ * command before each push. It examines the new commits of the push with the private name list, which is outside
  * of the public repositories. The second command writes that hook.
  */
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -8,29 +8,35 @@ import { join, resolve } from "node:path";
 import { parseConfig } from "./config.ts";
 import { matchesAny, type Break, type Manifest } from "./rule.ts";
 import { RULES } from "./rules/index.ts";
+import { repositoryOfRemote } from "./rules/runner-budget.ts";
+import { parsePrivateNames, PrivateNameListError, type PrivateNameList } from "./private-names.ts";
 import {
   invalidPatternBreaks,
-  PRIVATE_PATTERNS_FILE_CONFIG,
-  PRIVATE_PATTERNS_FILE_VARIABLE,
-  PRIVATE_PATTERNS_VARIABLE,
-  privatePatternFile,
+  PRIVATE_NAMES_FILE_CONFIG,
+  PRIVATE_NAMES_FILE_VARIABLE,
+  privateNamesFile,
+  privatePatterns,
   privateTextBreaks,
-  readPrivatePatterns,
-  type PrivatePattern,
+  type PrivateSources,
 } from "./rules/no-local-paths.ts";
 import type { CliIo } from "./run.ts";
 
-/** The line of `conventions pre-push` when no private pattern file and no environment variable has a pattern. */
-export const NO_READ_LINE: string = `conventions pre-push: No read: no private pattern file. Set ${PRIVATE_PATTERNS_FILE_VARIABLE} or the git config ${PRIVATE_PATTERNS_FILE_CONFIG}.`;
+/** The line of `conventions pre-push` when no setting names a private name list and no environment variable has a pattern. */
+export const NO_READ_LINE: string = `conventions pre-push: No read: no private name list. Set ${PRIVATE_NAMES_FILE_VARIABLE} or the git config ${PRIVATE_NAMES_FILE_CONFIG}.`;
 
 /** The options of `prePush`. */
 export interface PrePushOptions {
   /** The name of the remote: the first argument of the hook. */
   readonly remote: string;
+  /**
+   * The URL of the remote: the second argument of the hook. The list `allow` of the private name list uses its repository.
+   * With no URL, the command asks `git remote get-url`.
+   */
+  readonly url?: string;
   /** The standard input of the hook: a line `<local ref> <local sha> <remote ref> <remote sha>` for each ref of the push. */
   readonly input: string;
   readonly env: Readonly<Record<string, string | undefined>>;
-  /** The root of the working tree. A relative path of the pattern file starts at the root. */
+  /** The root of the working tree. A relative path of the private name list starts at the root. */
   readonly root: string;
   /** This function starts git in the root, and gives its output, or undefined when git fails. */
   readonly git: (args: readonly string[]) => string | undefined;
@@ -171,7 +177,7 @@ interface CommitRead {
 }
 
 /** This function examines one commit: its message, the paths that it adds or changes, and each line that it adds. */
-function readCommit(sha: string, patterns: readonly PrivatePattern[], home: HomeSettings, git: PrePushOptions["git"]): CommitRead | undefined {
+function readCommit(sha: string, privates: PrivateSources, home: HomeSettings, repo: string | undefined, git: PrePushOptions["git"]): CommitRead | undefined {
   const short = sha.slice(0, 12);
   const message = git(["show", "-s", "--format=%B", sha]);
   const names = git(["show", "--format=", "--name-only", "--diff-filter=AMRC", "-z", "--no-ext-diff", sha]);
@@ -182,7 +188,7 @@ function readCommit(sha: string, patterns: readonly PrivatePattern[], home: Home
     for (const item of items) breaks.push(item);
   };
   const text = message.replace(/\s+$/, "");
-  add(privateTextBreaks(`commit ${short} message`, text, patterns, { allow: home.allow, homes: home.on }));
+  add(privateTextBreaks(`commit ${short} message`, text, privates, { allow: home.allow, homes: home.on }));
   let lines = text === "" ? 0 : text.split(/\r?\n/).length;
   const runs = addedRuns(patch);
   // The empty format can put a line end before the first name
@@ -195,14 +201,15 @@ function readCommit(sha: string, patterns: readonly PrivatePattern[], home: Home
   const shown = new Map<string, string>();
   paths.forEach((path, index) => {
     const homes = home.on && !matchesAny(path, home.ignore);
-    const found = privateTextBreaks(`commit ${short} path ${String(index + 1)}`, path, patterns, { allow: home.allow, homes });
+    const found = privateTextBreaks(`commit ${short} path ${String(index + 1)}`, path, privates, { allow: home.allow, homes, isPath: true });
     lines += 1;
     shown.set(path, found.length > 0 ? `commit ${short} path ${String(index + 1)}` : `commit ${short} ${path}`);
-    for (const item of found) breaks.push({ file: item.file, message: item.message.replace(/^A text matches/, "The path matches"), ...(item.fix === undefined ? {} : { fix: item.fix }) });
+    for (const item of found) breaks.push({ file: item.file, message: item.message.replace(/^A text /, "The path "), ...(item.fix === undefined ? {} : { fix: item.fix }) });
   });
   for (const run of runs) {
     const homes = home.on && !matchesAny(run.file, home.ignore);
-    add(privateTextBreaks(shown.get(run.file) ?? `commit ${short} ${run.file}`, run.lines.join("\n"), patterns, { allow: home.allow, homes, firstLine: run.first, rootPackage: run.file === "package.json" }));
+    const place = { ...(repo === undefined ? {} : { repo }), path: run.file };
+    add(privateTextBreaks(shown.get(run.file) ?? `commit ${short} ${run.file}`, run.lines.join("\n"), privates, { allow: home.allow, homes, firstLine: run.first, rootPackage: run.file === "package.json", ...place }));
     lines += run.lines.length;
   }
   return { breaks, lines };
@@ -218,30 +225,49 @@ function readReason(error: unknown): string {
 }
 
 /**
+ * This function gives the repository `owner/name` of the push: from the URL of the hook, else from `git remote get-url`.
+ * It gives undefined when neither URL is a URL of a GitHub repository.
+ */
+function repoOfPush(options: PrePushOptions): string | undefined {
+  const fromHook = options.url === undefined ? undefined : repositoryOfRemote(options.url);
+  return fromHook ?? repositoryOfRemote(options.git(["remote", "get-url", options.remote]) ?? "");
+}
+
+/**
  * This function is the command `conventions pre-push`. It examines each new commit of the push: its message, the paths
  * that it adds or changes, and each line that it adds. It writes the breaks to `stderr`, and gives the exit code: 1 on a
- * break, 0 on a pass. With no private pattern, it writes the line `NO_READ_LINE` and gives 0.
+ * break, 0 on a pass. With no private name list and no private pattern, it writes the line `NO_READ_LINE` and gives 0.
  */
 export function prePush(options: PrePushOptions, io: Pick<CliIo, "stderr">): number {
   const readFile = options.readFile ?? ((path: string): string => readFileSync(path, "utf8"));
-  const file = privatePatternFile(options.env, options.git);
-  if (file === undefined && (options.env[PRIVATE_PATTERNS_VARIABLE] ?? "").trim() === "") {
+  const file = privateNamesFile(options.env, options.git);
+  const patterns = privatePatterns(options.env);
+  if (file === undefined && patterns.length === 0) {
     // A push with no read is not a pass, so the line tells it. It does not stop the push
     io.stderr(`${NO_READ_LINE}\n`);
     return 0;
   }
-  let fileText: string | undefined;
+  let names: PrivateNameList | undefined;
   if (file !== undefined) {
+    // A list that the settings name and that the gate cannot read or parse stops the push: the check fails closed
+    const source = (options.env[PRIVATE_NAMES_FILE_VARIABLE]?.trim() ?? "") !== "" ? PRIVATE_NAMES_FILE_VARIABLE : `the git config ${PRIVATE_NAMES_FILE_CONFIG}`;
+    let text: string;
     try {
-      fileText = readFile(resolve(options.root, file));
+      text = readFile(resolve(options.root, file));
     } catch (error) {
-      // A file that the settings name and that the gate cannot read stops the push: the check fails closed
-      const source = (options.env[PRIVATE_PATTERNS_FILE_VARIABLE]?.trim() ?? "") !== "" ? PRIVATE_PATTERNS_FILE_VARIABLE : `the git config ${PRIVATE_PATTERNS_FILE_CONFIG}`;
-      io.stderr(`conventions pre-push: Cannot read the private pattern file that ${source} names: ${readReason(error)}. Correct the setting or the file. The push stops.\n`);
+      io.stderr(`conventions pre-push: Cannot read the private name list that ${source} names: ${readReason(error)}. Correct the setting or the file. The push stops.\n`);
+      return 1;
+    }
+    try {
+      names = parsePrivateNames(text);
+    } catch (error) {
+      const reason = error instanceof PrivateNameListError ? error.reason : "the parse failed";
+      io.stderr(`conventions pre-push: The private name list that ${source} names is not valid: ${reason}. Correct the file. The push stops.\n`);
       return 1;
     }
   }
-  const patterns = readPrivatePatterns(fileText, options.env);
+  const privates: PrivateSources = { ...(names === undefined ? {} : { names }), patterns };
+  const repo = names === undefined || names.allow.length === 0 ? undefined : repoOfPush(options);
   const home = homeSettings(options.root, readFile);
   const breaks: Break[] = invalidPatternBreaks(patterns);
   const commits = new Set<string>();
@@ -264,7 +290,7 @@ export function prePush(options: PrePushOptions, io: Pick<CliIo, "stderr">): num
   }
   let lines = 0;
   for (const sha of commits) {
-    const read = readCommit(sha, patterns, home, options.git);
+    const read = readCommit(sha, privates, home, repo, options.git);
     if (read === undefined) {
       io.stderr(`conventions pre-push: git cannot show the commit ${sha.slice(0, 12)}. The push stops.\n`);
       return 1;
@@ -293,7 +319,7 @@ export const HOOK_MARKER = "# conventions hook: pre-push";
 export const PRE_PUSH_HOOK: string = `#!/bin/sh
 ${HOOK_MARKER}
 # The command "conventions hook install" wrote this file, and each install writes it again.
-# The hook examines the new commits of each push with the private pattern file.
+# The hook examines the new commits of each push with the private name list.
 root="$(git rev-parse --show-toplevel)" || exit 1
 bin="$root/node_modules/.bin/conventions"
 if [ -x "$bin" ]; then

@@ -30,7 +30,8 @@
     "conventions": "./src/cli.ts"
   },
   "files": [
-    "build"
+    "build",
+    "schema"
   ],
   "publishConfig": {
     "access": "public",

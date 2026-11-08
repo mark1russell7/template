@@ -303,9 +303,10 @@ export const USAGE: string = `Usage: conventions check [options]
   map                   Show the home package of each area of code, or of the areas that match the words.
                         --markdown writes the table with the rule, and --overlay adds the homes of a JSON file.
   pre-push              The git hook pre-push starts it. It reads the refs of the push on the standard input, and
-                        examines each new commit with the private pattern file: the message, the paths and the added
-                        lines. Exit code 1 on a break. The file is CONVENTIONS_PRIVATE_PATTERNS_FILE, else the git
-                        config conventions.privatePatternsFile. With no file, it writes a "No read" line and gives 0.
+                        examines each new commit with the private name list: the message, the paths and the added
+                        lines. Exit code 1 on a break. The list is the JSON file of CONVENTIONS_PRIVATE_NAMES_FILE, else
+                        of the git config conventions.privateNamesFile. CONVENTIONS_PRIVATE_PATTERNS adds one regular
+                        expression on each line. With neither, it writes a "No read" line and gives 0.
   hook install          Write the hook pre-push into the hooks folder of git. It keeps a hook that it did not write.
                         In CI, or outside a git repository, it does nothing.
 
@@ -463,7 +464,8 @@ function runPrePush(args: readonly string[], io: CliIo): number {
   }
   const top = runGit(io.cwd, ["rev-parse", "--show-toplevel"])?.trim() ?? "";
   const root = top === "" ? io.cwd : top;
-  return prePush({ remote, input: io.stdin ?? "", env: io.env, root, git: (gitArgs) => runGit(root, gitArgs) }, io);
+  const url = args[1];
+  return prePush({ remote, ...(url === undefined ? {} : { url }), input: io.stdin ?? "", env: io.env, root, git: (gitArgs) => runGit(root, gitArgs) }, io);
 }
 
 /** The command `hook install`: it writes the git hook pre-push. */

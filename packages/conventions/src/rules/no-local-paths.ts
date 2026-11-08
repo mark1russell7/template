@@ -4,12 +4,13 @@
  * pattern of the environment variable `CONVENTIONS_PRIVATE_PATTERNS`. A break of a private pattern does not show the
  * text or the pattern, because a public log must not name them.
  *
- * The module also has the core that the command `conventions pre-push` uses: the private pattern file, its patterns,
- * and the breaks of one text.
+ * The module also has the core of the command `conventions pre-push`. The core has the setting of the private name list,
+ * the private patterns and the breaks of one text.
  */
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { extname, join } from "node:path";
 import { rangeOf } from "../change.ts";
+import { lineNameHit, pathNameHit, PRIVATE_NAME_LIST, type PrivateNameList } from "../private-names.ts";
 import type { Break, Rule, RuleContext } from "../rule.ts";
 
 /** The extensions of files that are not text. The rule does not read them. */
@@ -36,23 +37,28 @@ export const HOME_PATTERNS: readonly RegExp[] = [
 /** The name of the environment variable of the private patterns. */
 export const PRIVATE_PATTERNS_VARIABLE = "CONVENTIONS_PRIVATE_PATTERNS";
 
-/** The name of the environment variable of the path of the private pattern file. */
-export const PRIVATE_PATTERNS_FILE_VARIABLE = "CONVENTIONS_PRIVATE_PATTERNS_FILE";
+/** The name of the environment variable of the path of the private name list. */
+export const PRIVATE_NAMES_FILE_VARIABLE = "CONVENTIONS_PRIVATE_NAMES_FILE";
 
-/** The key of the git configuration of the path of the private pattern file. */
-export const PRIVATE_PATTERNS_FILE_CONFIG = "conventions.privatePatternsFile";
+/** The key of the git configuration of the path of the private name list. */
+export const PRIVATE_NAMES_FILE_CONFIG = "conventions.privateNamesFile";
 
-/** The name of the private pattern file in a break. A break does not show the path of the file. */
-export const PRIVATE_PATTERN_FILE = "the private pattern file";
-
-/** A private pattern: one line of the private pattern file or of the environment variable. */
+/** A private pattern: one line of the environment variable `CONVENTIONS_PRIVATE_PATTERNS`. */
 export interface PrivatePattern {
   /** The regular expression, as text. The check uses it with the flag `g`, and case is significant. */
   readonly source: string;
   /** The line of the pattern in its source, from 1. */
   readonly line: number;
-  /** The name of the source in a break: `the private pattern file` or `CONVENTIONS_PRIVATE_PATTERNS`. */
+  /** The name of the source in a break: `CONVENTIONS_PRIVATE_PATTERNS`. */
   readonly label: string;
+}
+
+/** The private sources of a check. A break of a private source does not show the text or the source. */
+export interface PrivateSources {
+  /** The private name list, from `parsePrivateNames`. */
+  readonly names?: PrivateNameList;
+  /** The private patterns, from `privatePatterns`. */
+  readonly patterns?: readonly PrivatePattern[];
 }
 
 /** The options of `privateTextBreaks`. */
@@ -70,6 +76,12 @@ export interface TextBreakOptions {
   readonly homes?: boolean;
   /** The line of the first line of the text, from 1. The default is 1. */
   readonly firstLine?: number;
+  /** The repository of the text, `owner/name`. The list `allow` of the private name list uses it. */
+  readonly repo?: string;
+  /** The path of the file of the text, from the root of the repository. The list `allow` of the private name list uses it. */
+  readonly path?: string;
+  /** The value `true` tells that the text is a path of a file. Then only the patterns of the private name list apply. */
+  readonly isPath?: boolean;
 }
 
 /** A pattern of text that no file has: from the option `patterns`, which is public, or a private pattern. */
@@ -81,6 +93,7 @@ interface Matcher {
 
 /** The compiled patterns of a check. */
 interface Matchers {
+  readonly names?: PrivateNameList;
   readonly extra: readonly Matcher[];
   readonly allowed: ReadonlySet<string>;
   readonly homes: boolean;
@@ -96,13 +109,14 @@ function compilePattern(source: string): RegExp | undefined {
 }
 
 /** This function compiles the patterns of a check. A private pattern that is not valid has no matcher. */
-function compile(patterns: readonly PrivatePattern[], options: TextBreakOptions): Matchers {
+function compile(privates: PrivateSources, options: TextBreakOptions): Matchers {
   const extra: Matcher[] = (options.patterns ?? []).map((source) => ({ regex: new RegExp(source, "g") }));
-  for (const pattern of patterns) {
+  for (const pattern of privates.patterns ?? []) {
     const regex = compilePattern(pattern.source);
     if (regex !== undefined) extra.push({ regex, secret: pattern });
   }
   return {
+    ...(privates.names === undefined ? {} : { names: privates.names }),
     extra,
     allowed: new Set([...DEFAULT_ALLOWED, ...(options.allow ?? [])].map((name) => name.toLowerCase())),
     homes: options.homes !== false,
@@ -128,6 +142,17 @@ function textBreaks(name: string, text: string, matchers: Matchers, options: Tex
           breaks.push({ file: name, line: at, message: `The text "${match[0]}" is the home folder of a user.` });
         }
       }
+    }
+    if (matchers.names !== undefined) {
+      const place = { ...(options.repo === undefined ? {} : { repo: options.repo }), ...(options.path === undefined ? {} : { path: options.path }) };
+      const hit = options.isPath === true ? pathNameHit(matchers.names, line) : lineNameHit(matchers.names, line, place);
+      if (hit !== undefined)
+        breaks.push({
+          file: name,
+          line: at,
+          message: `A text names name ${String(hit.name)} of ${PRIVATE_NAME_LIST}.`,
+          fix: "Remove the text. The check does not show the text, because the name is private.",
+        });
     }
     for (const matcher of matchers.extra) {
       // The option patterns of the root package.json names the pattern itself
@@ -163,22 +188,14 @@ export function privatePatterns(env: Readonly<Record<string, string | undefined>
 }
 
 /**
- * This function gives the private patterns of the text of the private pattern file, then the patterns of the environment
- * variable `CONVENTIONS_PRIVATE_PATTERNS`. Each line of a source that is not empty is one regular expression.
+ * This function gives the path of the private name list: the environment variable `CONVENTIONS_PRIVATE_NAMES_FILE`,
+ * else the git configuration `conventions.privateNamesFile`. It gives undefined when neither has a value.
  */
-export function readPrivatePatterns(fileText: string | undefined, env: Readonly<Record<string, string | undefined>> = {}): PrivatePattern[] {
-  return [...(fileText === undefined ? [] : patternLines(fileText, PRIVATE_PATTERN_FILE)), ...privatePatterns(env)];
-}
-
-/**
- * This function gives the path of the private pattern file: the environment variable `CONVENTIONS_PRIVATE_PATTERNS_FILE`,
- * else the git configuration `conventions.privatePatternsFile`. It gives undefined when neither has a value.
- */
-export function privatePatternFile(env: Readonly<Record<string, string | undefined>>, git: (args: readonly string[]) => string | undefined): string | undefined {
-  const fromEnv = env[PRIVATE_PATTERNS_FILE_VARIABLE]?.trim() ?? "";
+export function privateNamesFile(env: Readonly<Record<string, string | undefined>>, git: (args: readonly string[]) => string | undefined): string | undefined {
+  const fromEnv = env[PRIVATE_NAMES_FILE_VARIABLE]?.trim() ?? "";
   if (fromEnv !== "") return fromEnv;
   // The type `path` expands `~` at the start of the value
-  const fromGit = git(["config", "--type=path", "--get", PRIVATE_PATTERNS_FILE_CONFIG])?.trim() ?? "";
+  const fromGit = git(["config", "--type=path", "--get", PRIVATE_NAMES_FILE_CONFIG])?.trim() ?? "";
   return fromGit === "" ? undefined : fromGit;
 }
 
@@ -196,11 +213,12 @@ export function invalidPatternBreaks(patterns: readonly PrivatePattern[]): Break
 
 /**
  * This function gives the breaks of one text: a file, a commit message or the body of a pull request. Each break has the
- * file `name`. A break of a private pattern does not show the text or the pattern. The breaks of home folders use
- * `HOME_PATTERNS` and the permitted names. A private pattern that is not valid gives no break here: refer to `invalidPatternBreaks`.
+ * file `name`. A break of a private source does not show the text, the name or the pattern. A line has one break or no
+ * break of the private name list. The breaks of home folders use `HOME_PATTERNS` and the permitted names. A private pattern
+ * that is not valid gives no break here: refer to `invalidPatternBreaks`.
  */
-export function privateTextBreaks(name: string, text: string, patterns: readonly PrivatePattern[], options: TextBreakOptions = {}): Break[] {
-  return textBreaks(name, text, compile(patterns, options), options);
+export function privateTextBreaks(name: string, text: string, privates: PrivateSources, options: TextBreakOptions = {}): Break[] {
+  return textBreaks(name, text, compile(privates, options), options);
 }
 
 /** A text that the rule examines, other than a file: a commit message, or the title or the body of the pull request. */
@@ -268,7 +286,7 @@ export const noLocalPaths: Rule = {
     };
     // A repository keeps private names out of its public files with the environment variable, for example from a secret of CI
     const privates = privatePatterns(context.env);
-    const matchers = compile(privates, settings);
+    const matchers = compile({ patterns: privates }, settings);
     const rootFile = context.rootPackage.file;
     // A private pattern that is not valid is a break of its own, not an error of the rule: an error message shows the pattern
     const breaks: Break[] = invalidPatternBreaks(privates);
