@@ -253,7 +253,8 @@ jobs:
 
   nav-report:
     needs: [changes, nav]
-    if: always() && needs.changes.outputs.match == 'true' && needs.nav.result != 'skipped'
+    # !cancelled(), not always(): after a cancel, a job with always() asks for a runner, and the next run of the group waits behind it
+    if: ${{ !cancelled() && needs.changes.outputs.match == 'true' && needs.nav.result != 'skipped' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
