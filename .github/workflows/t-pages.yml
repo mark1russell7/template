@@ -1,0 +1,24 @@
+# Scratch test (branch perm-b only): the shape of pages.yml in option B. The write permissions are at the top level,
+# and the job has no permissions key. A push to perm-b starts it directly (case 3). t-ci.yml calls it (case 1).
+name: T pages
+
+on:
+  push:
+    branches: [perm-b]
+  workflow_call:
+
+permissions:
+  contents: read
+  actions: read
+  issues: read
+  pull-requests: read
+  checks: read
+  statuses: read
+  pages: write
+  id-token: write
+
+jobs:
+  pages:
+    uses: ./.github/workflows/t-reusable.yml
+    with:
+      deploy: ${{ github.event_name != 'pull_request' }}

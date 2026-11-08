@@ -1,0 +1,25 @@
+# Scratch test (branch perm-b only): the shape of ci.yml in option B. On a pull request, the job site calls t-pages.yml
+# with contents: read (case 1). t-release.yml calls this workflow on a push, and the job site is skipped (case 2).
+name: T ci
+
+on:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  site:
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/t-pages.yml
+    permissions:
+      contents: read
+
+  other:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - run: echo "the other gate jobs of ci run on ${{ github.event_name }}"

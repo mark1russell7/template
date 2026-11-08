@@ -1,0 +1,14 @@
+# Scratch test (branch perm-b only): the shape of release.yml. It calls t-ci.yml with contents: read only (case 2).
+name: T release
+
+on:
+  push:
+    branches: [perm-b]
+
+permissions: {}
+
+jobs:
+  verify:
+    uses: ./.github/workflows/t-ci.yml
+    permissions:
+      contents: read

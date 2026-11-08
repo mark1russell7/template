@@ -1,0 +1,49 @@
+# Scratch test (branch perm-b only): the shape of reusable-pages.yml in option B.
+# ref and build ask for contents: read only. deploy has no permissions key, so it gets the permissions of the caller job.
+name: T reusable
+
+on:
+  workflow_call:
+    inputs:
+      deploy:
+        type: boolean
+        default: true
+
+jobs:
+  ref:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - run: echo "ref runs on ${{ github.event_name }}"
+
+  build:
+    needs: ref
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - name: The token of build can read the repository and not write it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "event ${{ github.event_name }}"
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H "authorization: bearer $GH_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/contents/README.md")
+          echo "read contents: $code"
+          echo "OIDC request URL set: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
+
+  deploy:
+    needs: build
+    if: inputs.deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: The token of deploy has id-token write (an OIDC token, no deploy)
+        run: |
+          echo "event ${{ github.event_name }}"
+          test -n "$ACTIONS_ID_TOKEN_REQUEST_URL" || { echo "::error::no id-token: write"; exit 1; }
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H "authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=test")
+          echo "OIDC token request: $code"
+          [ "$code" = 200 ]
