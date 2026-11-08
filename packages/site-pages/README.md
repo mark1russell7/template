@@ -140,6 +140,26 @@ The folder of `--shots` gets a screenshot of each view, `report.json` and `summa
 
 The check finds a browser in this order: `--browser`, `$SITE_CHECK_BROWSER`, the newest Chromium of Playwright, and then Chrome or Edge. The folder `src/check` imports only Node.js. Thus Node.js 22.18 or later can start `src/check/main.ts` with no install. The workflow `reusable-pages.yml` of the template uses it this way.
 
+## The navigation of a site
+
+The command `site-pages nav` opens the home page of a site in a headless Chromium. It follows the links that the page shows, page by page, and counts the clicks from home.
+
+```sh
+site-pages nav --url https://owner.github.io/name/ --shots nav
+site-pages nav --out dist --repo owner/name --max-clicks 2
+```
+
+The command fails for each of these problems:
+
+- A page of `sitemap.xml` is more than `--max-clicks` clicks from home, or no chain of links from home reaches it.
+- A page shows no link back to home at 1280 px or at 360 px. A hidden link does not count.
+- A link to a page of the site opens a new tab. Then the back button of the browser cannot go back.
+- A link goes to a page that gives a status of 400 or more.
+- A click on a link to `releases/` or `status/` does not show the page of site-pages. A single-page application can catch the click and show its own page.
+- With `--require-bar`, a page has no shared site bar.
+
+The folder of `--shots` gets `report.json`, `summary.md` and screenshots of the home, the releases and the status pages, at 1280 px and 360 px.
+
 ## The freshness of a measured page
 
 A measured page shows numbers from a run. The numbers become old when the run becomes old or when an engine has a new release. A site keeps one file of data stamps. Each stamp names the page, its runs, the date of each run and the engine versions of each run. The gate reads this file:
