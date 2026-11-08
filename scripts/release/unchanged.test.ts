@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { gzipSync } from "node:zlib";
-import { installedManifest, shippedDifferences, tarballFiles } from "./unchanged.ts";
+import { caretLine, installedManifest, shippedDifferences, tarballFiles } from "./unchanged.ts";
 
 // A small ustar writer, enough for the tests: regular files, folders and pax path records.
 function header(name: string, size: number, type: string, mtime: number): Buffer {
@@ -102,6 +102,29 @@ test("red: a change of dependencies, exports or an install script", () => {
   assert.deepEqual(differences(BASE, { ...BASE, "package.json": manifest({ dependencies: { a: "^2.0.0" }, devDependencies: { vitest: "^3.0.0" } }) }), ["package.json (changed)"]);
   assert.deepEqual(differences(BASE, { ...BASE, "package.json": manifest({ dependencies: { a: "^1.0.0" }, exports: { ".": "./build/index.js" } }) }), ["package.json (changed)"]);
   assert.deepEqual(differences(BASE, { ...BASE, "package.json": manifest({ dependencies: { a: "^1.0.0" }, scripts: { postinstall: "node x.js" } }) }), ["package.json (changed)"]);
+});
+
+test("a caret range counts by its line", () => {
+  assert.equal(caretLine("^0.38.4"), "^0.38");
+  assert.equal(caretLine("^1.2.3"), "^1");
+  assert.equal(caretLine("^0.0.5"), "^0.0.5");
+  assert.equal(caretLine("~1.2.3"), "~1.2.3");
+  assert.equal(caretLine(">=1 <2"), ">=1 <2");
+});
+
+const withDependencies = (dependencies: Record<string, string>): Record<string, string> => ({
+  ...BASE,
+  "package.json": manifest({ dependencies, devDependencies: { vitest: "^3.0.0" }, scripts: { build: "tsc" } }),
+});
+
+test("green: a sibling release raises the floor of a caret range (seen 11-08: api-report ^0.38.1 to ^0.38.4)", () => {
+  assert.deepEqual(differences(withDependencies({ a: "^0.38.1" }), withDependencies({ a: "^0.38.4" })), []);
+  assert.deepEqual(differences(BASE, withDependencies({ a: "^1.4.0" })), []);
+});
+
+test("red: a caret range on a new line, or a new dependency", () => {
+  assert.deepEqual(differences(withDependencies({ a: "^0.38.1" }), withDependencies({ a: "^0.39.0" })), ["package.json (changed)"]);
+  assert.deepEqual(differences(withDependencies({ a: "^0.38.1" }), withDependencies({ a: "^0.38.1", b: "^1.0.0" })), ["package.json (changed)"]);
 });
 
 test("the installed manifest keeps install scripts and drops the others", () => {

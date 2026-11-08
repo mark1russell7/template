@@ -10,11 +10,28 @@
 // metadata (times, order, compression) do not count. In package.json only the fields that change
 // what a user installs count: devDependencies, and the scripts other than the install scripts,
 // do not. So a pull request that only updates a development tool does not need a version.
+//
+// A caret range counts by its line only: ^0.38.1 and ^0.38.4 are the same, ^0.38.1 and ^0.39.0
+// are not. The release writes a workspace range (workspace:^) as a caret range of the version of
+// the sibling package at pack time, so each release of a sibling raises the floor of the range,
+// while the code of the package stays the same. A code change that needs the new sibling changes
+// a shipped file too, so the check still finds it.
 
 import { gunzipSync } from "node:zlib";
 
 const BLOCK = 512;
 const INSTALL_SCRIPTS = new Set(["preinstall", "install", "postinstall"]);
+const RANGE_FIELDS = ["dependencies", "peerDependencies", "optionalDependencies"];
+
+/** The line of a caret range: ^1.2.3 gives ^1, ^0.38.4 gives ^0.38, ^0.0.5 stays. Other ranges stay. */
+export function caretLine(range: string): string {
+  const match = /^\^(\d+)\.(\d+)\.(\d+)$/u.exec(range.trim());
+  if (!match) return range;
+  const [, major, minor, patch] = match;
+  if (major !== "0") return `^${major}`;
+  if (minor !== "0") return `^0.${minor}`;
+  return `^0.0.${patch}`;
+}
 
 function text(block: Buffer, start: number, length: number): string {
   const field = block.subarray(start, start + length);
@@ -66,6 +83,14 @@ export function tarballFiles(tgz: Buffer): Map<string, Buffer> {
 export function installedManifest(raw: Buffer): string {
   const manifest = JSON.parse(raw.toString("utf8")) as Record<string, unknown>;
   delete manifest["devDependencies"];
+  for (const field of RANGE_FIELDS) {
+    const ranges = manifest[field];
+    if (ranges && typeof ranges === "object") {
+      manifest[field] = Object.fromEntries(
+        Object.entries(ranges).map(([name, range]) => [name, typeof range === "string" ? caretLine(range) : range]),
+      );
+    }
+  }
   const scripts = manifest["scripts"];
   if (scripts && typeof scripts === "object") {
     const kept = Object.fromEntries(Object.entries(scripts).filter(([name]) => INSTALL_SCRIPTS.has(name)));
