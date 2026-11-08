@@ -30,7 +30,7 @@
     "@mark1russell7/boundaries": "workspace:*",
     "@mark1russell7/conventions": "workspace:*",
     "@mark1russell7/cue": "^2.0.0",
-    "@mark1russell7/ste-lint": "^0.1.1",
+    "@mark1russell7/ste-lint": "^0.3.0",
     "@swc/core": "^1.15.0",
     "@types/node": "^26.6.5",
     "dependency-cruiser": "^18.7.0",
