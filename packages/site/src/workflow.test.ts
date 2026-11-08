@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readWorkflows } from "./node/data.ts";
-import { readWorkflow } from "@mark1russell7/conventions";
+import { readAction, readWorkflow } from "@mark1russell7/conventions";
+import { explore } from "./model.ts";
 
 describe("the reader of the shared workflows", () => {
   const workflows = readWorkflows();
@@ -64,5 +65,65 @@ describe("the reader of the shared workflows", () => {
     expect(workflow.jobs[0]?.steps[0]?.label).toBe("echo one");
     expect(workflow.jobs[1]?.steps[0]).toEqual({ label: "Two", if: "inputs.flag", uses: "" });
     expect(workflow.jobs[2]?.steps[0]?.label).toBe("calls ./.github/workflows/other.yml");
+  });
+
+  it("reads each composite action of the repository after the workflows, as a workflow with one job steps", () => {
+    const files = workflows.map((w) => w.file);
+    expect(files.indexOf("actions/site-check/action.yml")).toBeGreaterThan(files.indexOf("reusable-pages.yml"));
+    const check = workflows.find((w) => w.file === "actions/site-check/action.yml");
+    expect(check).toMatchObject({ kind: "action", name: "site-check" });
+    expect(check?.inputs.find((i) => i.name === "visual")).toMatchObject({ type: "boolean", default: "true" });
+    expect(check?.jobs.map((j) => j.id)).toEqual(["steps"]);
+    expect(check?.jobs[0]?.steps.find((step) => step.label === "Site check")).toMatchObject({ if: "inputs.visual == 'true'" });
+  });
+
+  it("judges a step of a composite action with its input as a string, as the runner gives it", () => {
+    const check = workflows.find((w) => w.file === "actions/site-check/action.yml");
+    if (check === undefined) throw new Error("the reader gives no actions/site-check/action.yml");
+    const stateOf = (visual: boolean) => explore(check, "push", new Map([["visual", visual]]))[0]?.steps.find((step) => step.label === "Site check")?.state;
+    expect(stateOf(true)).toBe("runs");
+    expect(stateOf(false)).toBe("skipped");
+  });
+
+  it("reads a composite action: its inputs, its steps and its description", () => {
+    const text = [
+      "name: demo",
+      "description: >-",
+      "  Does one thing,",
+      "  in two lines.",
+      "inputs:",
+      "  flag:",
+      "    description: A flag.",
+      '    default: "false"',
+      "  path:",
+      "    required: true",
+      "runs:",
+      "  using: composite",
+      "  steps:",
+      "    - name: One",
+      "      if: inputs.flag == 'true' # a comment",
+      "      shell: bash",
+      "      run: echo one",
+      "    - uses: ./.shared-actions/.github/actions/other",
+    ].join("\n");
+    const action = readAction("actions/demo/action.yml", text);
+    expect(action).toMatchObject({ file: "actions/demo/action.yml", kind: "action", name: "demo", summary: "Does one thing, in two lines." });
+    expect(action.inputs).toEqual([
+      { name: "flag", type: "boolean", description: "A flag.", default: "false", required: false },
+      { name: "path", type: "string", description: "", default: "", required: true },
+    ]);
+    expect(action.jobs).toEqual([
+      {
+        id: "steps",
+        if: "",
+        needs: [],
+        steps: [
+          { label: "One", if: "inputs.flag == 'true'", uses: "" },
+          { label: "./.shared-actions/.github/actions/other", if: "", uses: "./.shared-actions/.github/actions/other" },
+        ],
+      },
+    ]);
+    // An action that is not composite has no steps to show.
+    expect(readAction("actions/js/action.yml", "name: js\nruns:\n  using: node24\n  main: index.js\n").jobs).toEqual([]);
   });
 });
