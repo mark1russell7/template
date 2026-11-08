@@ -117,7 +117,7 @@ jobs:
           STATE: ${{ steps.green-commit.outputs.state }}
         run: |
           echo "green-main: CI of ${GITHUB_SHA}: $STATE"
-          [[ "$STATE" =~ ^(green|running|none|red)$ ]]
+          [[ " green running none red " == *" $STATE "* ]]
 
   setup-cue:
     needs: changes
