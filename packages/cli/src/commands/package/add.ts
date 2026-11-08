@@ -24,9 +24,9 @@ const LOCKSTEP: Readonly<Record<string, string>> = { "@vitest/coverage-v8": "vit
  * This function gives the version range of each named dependency of a new package. The range comes
  * from the repository: the root `package.json`, then the packages in name order. Thus
  * `pnpm up -r --latest` in the repository also updates the ranges of its new packages. A dependency
- * that the repository does not have gets the range of this CLI. A dependency of `LOCKSTEP` that the
- * repository does not have gets the range of its partner instead, because the two release together: a
- * repository on Vitest 4 gets @vitest/coverage-v8 of Vitest 4, not the range of the CLI.
+ * that the repository does not have gets the range of this CLI. A dependency of `LOCKSTEP` gets the
+ * range of its partner instead, because the two release together. Thus a repository on Vitest 4 gets
+ * @vitest/coverage-v8 of Vitest 4, not the range of the CLI.
  *
  * @throws Error when neither the repository nor the CLI has a dependency
  */
