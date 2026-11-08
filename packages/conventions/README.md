@@ -103,7 +103,8 @@ The field `conventions` of the root `package.json` sets the rules. An exception 
 |---|---|
 | `rules.<id>.off` | The rule does not start. The text is the reason, and the output shows it. |
 | `rules.<id>.ignore` | The globs of the files whose breaks the rule does not report. It needs `reason`. On a pull request or with `--base`, a file that the change adds is not ignored: `ignore` keeps only the exceptions that exist. A renamed file is not added. An entry that matches no break of its rule is a break, so the list does not keep converted files. |
-| `rules.<id>.reason` | The reason of `ignore` or of a changed option. |
+| `rules.<id>.generated` | The globs of build output whose breaks the rule does not report, for example `dist/**` in a repository that keeps `dist/` in git. It needs `reason`. A build adds a file there for each new source file, so `generated` also covers a file that the change adds. An entry that matches no break of its rule is a break. |
+| `rules.<id>.reason` | The reason of `ignore`, of `generated` or of a changed option. |
 | `rules.<id>.<option>` | An option of the rule. It needs `reason`, because a changed option can make a rule weaker. `conventions --list` shows the options and their values. |
 | `packages` | The globs of the package folders. The default is the `packages` list of `pnpm-workspace.yaml`. |
 

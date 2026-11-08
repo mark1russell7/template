@@ -1,12 +1,23 @@
 // The rule shared-ci on fixture repositories: a ci.yml that calls the shared CI, one with its own steps, a missing
 // ci.yml, local copies of a shared workflow and of a shared action, and the template itself.
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { runChecks, type RuleResult } from "./index.ts";
-import { callsSharedCi } from "./rules/shared-ci.ts";
+import { SHARED_ACTIONS, SHARED_WORKFLOWS, callsSharedCi } from "./rules/shared-ci.ts";
+
+// The lists of the rule are the files of the template: a new shared workflow or action without a change here fails.
+describe("the shared lists", () => {
+  const github = join(import.meta.dirname, "..", "..", "..", ".github");
+  it("are the reusable workflows and the actions of the template", () => {
+    const workflows = readdirSync(join(github, "workflows")).filter((name) => /^reusable-.*\.yml$/.test(name));
+    expect([...SHARED_WORKFLOWS].sort()).toEqual(workflows.sort());
+    const actions = readdirSync(join(github, "actions"), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+    expect([...SHARED_ACTIONS].sort()).toEqual(actions.sort());
+  });
+});
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-shared-ci-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));

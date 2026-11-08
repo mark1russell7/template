@@ -115,9 +115,12 @@ export function runChecks(options: CheckOptions): CheckResult {
     }
     // `ignore` keeps the exceptions that exist. A file that the change adds is not one of them, so `ignore` does not
     // cover it: the glob scripts/*.mjs let new JavaScript files in with no check (client, 11-02).
+    // `generated` is build output: a build adds a file there for each new source file, so it covers added files too.
+    const generated = ruleConfig.generated ?? [];
     const added = ruleConfig.ignore.length > 0 ? addedFiles(context) : undefined;
     const breaks: Break[] = [];
     for (const item of outcome) {
+      if (matchesAny(item.file, generated)) continue;
       if (!matchesAny(item.file, ruleConfig.ignore)) breaks.push(item);
       else if (added?.has(item.file) === true) breaks.push({ ...item, message: `${item.message} The change adds this file, so \`ignore\` does not cover it.` });
     }
@@ -125,9 +128,11 @@ export function runChecks(options: CheckOptions): CheckResult {
     // An entry of `ignore` that matches no break is stale. A converted file stays on the list, and a new file with
     // the same name later passes with no check (found on 11-03).
     if (rule.changeScoped !== true) {
-      for (const glob of ruleConfig.ignore) {
-        if (outcome.some((item) => matchesAny(item.file, [glob]))) continue;
-        breaks.push({ file: "package.json", message: `The entry \`${glob}\` of \`ignore\` matches no break of this rule. Remove it from the field \`conventions\`.` });
+      for (const [field, globs] of [["ignore", ruleConfig.ignore], ["generated", generated]] as const) {
+        for (const glob of globs) {
+          if (outcome.some((item) => matchesAny(item.file, [glob]))) continue;
+          breaks.push({ file: "package.json", message: `The entry \`${glob}\` of \`${field}\` matches no break of this rule. Remove it from the field \`conventions\`.` });
+        }
       }
     }
     const note = ruleConfig.reason === undefined ? {} : { note: ruleConfig.reason };

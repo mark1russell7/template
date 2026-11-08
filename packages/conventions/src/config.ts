@@ -11,7 +11,12 @@ export interface RuleConfig {
   readonly off?: string;
   /** The globs of files that the rule does not report. */
   readonly ignore: readonly string[];
-  /** The reason of `ignore` or of the changed options. */
+  /**
+   * The globs of build output that the rule does not report, for example `dist/**`. A build makes these files
+   * from source that the rules examine, so a file that the change adds is also not reported.
+   */
+  readonly generated?: readonly string[];
+  /** The reason of `ignore`, of `generated` or of the changed options. */
   readonly reason?: string;
   /** The options of the rule, with the defaults. */
   readonly options: Options;
@@ -26,7 +31,7 @@ export interface ConventionsConfig {
 }
 
 /** The fields of the configuration of a rule that are not options. */
-const RULE_FIELDS = ["off", "ignore", "reason"];
+const RULE_FIELDS = ["off", "ignore", "generated", "reason"];
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -67,6 +72,9 @@ export function parseConfig(value: unknown, rules: readonly Rule[]): Conventions
     const reason = entry["reason"];
     if (reason !== undefined && (typeof reason !== "string" || reason.trim() === "")) throw new Error(`${where}.reason must be text.`);
     if (ignore.length > 0 && reason === undefined) throw new Error(`${where}.ignore needs a reason: add "reason": "<why these files are an exception>".`);
+    const generated = entry["generated"] ?? [];
+    if (!isStrings(generated)) throw new Error(`${where}.generated must be an array of globs.`);
+    if (generated.length > 0 && reason === undefined) throw new Error(`${where}.generated needs a reason: add "reason": "<which build makes these files>".`);
     const options: Record<string, OptionValue> = { ...defaultOptions(rule) };
     const changed: string[] = [];
     for (const [name, option] of Object.entries(entry)) {
@@ -88,6 +96,7 @@ export function parseConfig(value: unknown, rules: readonly Rule[]): Conventions
     result[id] = {
       ...(off === undefined ? {} : { off }),
       ignore,
+      ...(generated.length === 0 ? {} : { generated }),
       ...(reason === undefined ? {} : { reason }),
       options,
     };
