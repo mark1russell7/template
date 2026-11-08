@@ -476,6 +476,12 @@ The class sets `overflow-x: auto`. A browser with scroll timelines keeps the bac
 }
 ```
 
+The fades run on a scroll timeline (`animation-timeline: scroll(self inline)`). In Chromium, `document.getAnimations()` gives each fade as a running animation with one iteration, and the fade does not end. A test that waits for the end of each animation, for example before an axe check of the contrast, then stops at its time limit. Such a test must skip each animation whose timeline is not `document.timeline`:
+
+```ts
+const running = document.getAnimations().filter((a) => a.timeline === document.timeline && a.playState === "running");
+```
+
 Markdown has no way to set the class of a table or a code block. For a Markdown page, add the plugin `rehypeScrollCue` of the entry `@mark1russell7/site-pages/vite`. It gives the class and a tab stop to each table and each code block. A table also gets a label. A code block keeps a tab stop that it has:
 
 ```js
