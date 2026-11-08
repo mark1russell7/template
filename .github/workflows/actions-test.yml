@@ -259,6 +259,7 @@ jobs:
       site-check-pages: /,/releases/,/status/
       site-check-probe: test-site-probe.js, /releases/=test-releases-probe.js
       deploy: false
+      artifact-prefix: test-
 
   pages-check:
     needs: pages
@@ -266,13 +267,15 @@ jobs:
     timeout-minutes: 5
     permissions: {}
     steps:
+      # The job site of this workflow uploads the artifacts github-pages and site-check on a pull request. So the
+      # call pages gives its artifacts the prefix test-.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: github-pages
+          name: test-github-pages
           path: ${{ runner.temp }}/artifact
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: site-check
+          name: test-site-check
           path: ${{ runner.temp }}/site-check
       - name: The pages, the data and the screenshots of the site check exist
         env:
