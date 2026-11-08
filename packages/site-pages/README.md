@@ -59,6 +59,8 @@ site-pages check --out dist --repo owner/name --pages /,/releases/ --probe site-
 site-pages check --url https://owner.github.io/name/
 ```
 
+Before the measure, the check scrolls each view to its end, one screen at a time, and back to the top. Thus a part that starts when it comes into view starts first. An example is an Astro island with `client:visible` below the first screen. Then the check waits until no Astro island has the attribute `ssr`, for at most 10 seconds.
+
 A view fails for each of these problems:
 
 - The page is wider than the screen, or an element goes past the right edge. An element in a box that scrolls or clips does not count here.
@@ -70,6 +72,7 @@ A view fails for each of these problems:
 - A request to the site fails, or gets a status of 400 or more.
 - A script or a style sheet does not load, from any origin. An example is a module script that imports `node:perf_hooks`.
 - A check of the probe fails, or the probe makes no check.
+- An Astro island does not start in the time limit. A hidden island and an island of a media query that does not match do not count.
 
 The text of the problem has the element, the box, the two widths, the width of the view and the start of the text. For example:
 
