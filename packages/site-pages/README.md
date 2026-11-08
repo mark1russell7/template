@@ -157,6 +157,21 @@ site-pages bar --out dist --repo owner/name --pages "Demo=demo/,Docs=docs/" --si
 
 In `reusable-pages.yml`, the input `site-bar: true` starts the command before the upload. Then `site-pages nav --require-bar` crawls the built site, and a failure stops the deploy.
 
+## The scroll cue of the built pages
+
+The command `site-pages cue` gives each code block (`pre`) of each HTML page of a built site the class `scroll-cue` and a place in the tab order. It also writes the style `scroll-cue.css` into each changed page.
+
+```sh
+site-pages cue --out dist
+```
+
+- A code block that is wider than its box shows a fade at the edge with more content. A block that is not wider shows no cue.
+- A block with `data-overflow-ok` or with the class `scroll-cue` stays as it is. The text of `script`, `style` and `textarea` does not change.
+- In a browser with no scroll timelines, a small script gives `--scroll-cue-bg` the background color of the block. Thus the block keeps the color of its theme.
+- The command can start two times on one folder. The second start gives the same pages.
+
+In `reusable-pages.yml`, the input `scroll-cue` (default `true`) starts the command before the site check and the upload.
+
 ## The navigation of a site
 
 The command `site-pages nav` opens the home page of a site in a headless Chromium. It follows the links that the page shows, page by page, and counts the clicks from home.

@@ -134,6 +134,10 @@ on:
         description: The npm name of the package of the site, for the npm link of the bar. Empty gives no npm link.
         type: string
         default: ""
+      scroll-cue:
+        description: "true: give each code block (pre) of each built HTML page the scroll cue of site-pages (site-pages cue). A block that is wider than its box then shows a fade at the edge with more content. A block with data-overflow-ok stays as it is."
+        type: boolean
+        default: true
       deploy:
         description: "false: build and upload the artifact, but do not deploy it."
         type: boolean
@@ -239,11 +243,11 @@ jobs:
           if [ -n "$TOKEN" ]; then export GITHUB_TOKEN="$TOKEN"; fi
           unset TOKEN
           eval "$COMMAND"
-      # The site check, the site bar and the freshness gate run from the source of the same template commit
-      # (packages/site-pages/src/check and src/bar import only Node.js, src/data and src/render/html.ts), so they need no
-      # npm release of site-pages.
+      # The site check, the site bar, the scroll cue and the freshness gate run from the source of the same template
+      # commit (packages/site-pages/src/check and src/bar import only Node.js, src/data and src/render/html.ts, and the
+      # cue reads styles/scroll-cue.css), so they need no npm release of site-pages.
       - name: Shared actions (site-pages and the site check)
-        if: inputs.site-pages || inputs.site-check || inputs.site-bar || inputs.data-stamps != ''
+        if: inputs.site-pages || inputs.site-check || inputs.site-bar || inputs.scroll-cue || inputs.data-stamps != ''
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
@@ -255,6 +259,7 @@ jobs:
             packages/site-pages/src/check
             packages/site-pages/src/data
             packages/site-pages/src/render
+            packages/site-pages/styles
           persist-credentials: false
       - if: inputs.data-stamps != ''
         uses: ./.shared-actions/.github/actions/data-stamps
@@ -293,6 +298,13 @@ jobs:
           [ -z "$NPM" ] || args+=(--npm "$NPM")
           [ "$SITE_PAGES" != "true" ] || args+=(--site-pages)
           node .shared-actions/packages/site-pages/src/bar/main.ts "${args[@]}"
+      # A fade at the edge of each code block that is wider than its box, at each width of the screen
+      - name: Scroll cue
+        if: inputs.scroll-cue
+        shell: bash
+        env:
+          OUT: ${{ inputs.out }}
+        run: node .shared-actions/packages/site-pages/src/bar/cue-main.ts --out "$OUT"
       - name: Site check
         if: inputs.site-check || inputs.site-bar
         uses: ./.shared-actions/.github/actions/site-check

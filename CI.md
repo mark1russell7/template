@@ -423,6 +423,8 @@ jobs:
 - Each pull request starts `site-audit.yml`, so its check "Site audit OK" is always there. A pull request that changes `site-audit.yml` or the crawl starts only the job `nav`.
 - `site-bar: true` writes the shared site bar into each built HTML page. `site-bar-pages` names the pages of the bar, for example `Demo=demo/,Docs=docs/`. `site-bar-npm` gives the npm link.
 - With `site-bar: true`, the crawl `site-pages nav` examines the built site. A page with no bar, a page more than 2 clicks from home or a page with no way back stops the deploy.
+- `scroll-cue` (default `true`) gives each code block of each built HTML page the scroll cue of `site-pages cue`. A block wider than its box shows a fade at the edge with more content.
+- A code block with `data-overflow-ok` keeps no cue. `scroll-cue: false` stops the step.
 - `deploy: false` builds and uploads the artifact, with no deploy.
 - `indexnow-key` sends the URLs of `sitemap.xml` to the IndexNow engines after each deploy that is not scheduled.
 - The site must serve `<key>.txt` with the key. The key is public. A failure of the job `indexnow` does not fail the deploy.
