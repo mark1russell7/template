@@ -104,10 +104,12 @@ export interface WorkflowJob {
   readonly steps: readonly WorkflowStep[];
 }
 
-/** A shared workflow of the repository. */
+/** A shared workflow of the repository, or a composite action in the same form. */
 export interface Workflow {
   /** The file name, for example `reusable-pages.yml`. */
   readonly file: string;
+  /** The value `action` marks a composite action of {@link readAction}. A workflow has no value here. */
+  readonly kind?: "action";
   /** The value of `name`. */
   readonly name: string;
   /** The first lines of the comment at the top of the file. */
@@ -235,19 +237,52 @@ export function readWorkflow(file: string, text: string): Workflow {
     for (const [id, entry] of childrenOf(lines, jobsEntry.line)) {
       const keys = childrenOf(lines, entry.line);
       const stepsEntry = keys.get("steps");
-      const steps: WorkflowStep[] = [];
-      if (stepsEntry) {
-        const items = itemsOf(lines, stepsEntry.line);
-        const last = blockEnd(lines, stepsEntry.line);
-        items.forEach((start, n) => {
-          const step = entries(lines, start, items[n + 1] ?? last, indentOf(lines[start] ?? "") + 2);
-          steps.push({ label: stepLabel(step), if: step.get("if")?.value ?? "", uses: actionOf(step.get("uses")?.value ?? "") });
-        });
-      }
+      const steps: WorkflowStep[] = stepsEntry ? stepsOf(lines, stepsEntry.line) : [];
       const uses = keys.get("uses")?.value;
       if (steps.length === 0 && uses) steps.push({ label: `calls ${actionOf(uses)}`, if: "", uses: actionOf(uses) });
       jobs.push({ id, if: keys.get("if")?.value ?? "", needs: listOf(lines, keys.get("needs")), steps });
     }
   }
   return { file, name: top.get("name")?.value ?? file, summary: summaryOf(raw), inputs, jobs };
+}
+
+/** This function gives the steps of the list under the line `index`. */
+function stepsOf(lines: readonly string[], index: number): WorkflowStep[] {
+  const items = itemsOf(lines, index);
+  const last = blockEnd(lines, index);
+  return items.map((start, n) => {
+    const step = entries(lines, start, items[n + 1] ?? last, indentOf(lines[start] ?? "") + 2);
+    return { label: stepLabel(step), if: step.get("if")?.value ?? "", uses: actionOf(step.get("uses")?.value ?? "") };
+  });
+}
+
+/**
+ * This function reads a composite action (`action.yml`) in the form of a workflow. The steps of `runs` are the steps of
+ * one job `steps`. An input of a composite action has no type, so an input with the default `true` or `false` gets the
+ * type `boolean`. The value of such an input is still a string for the runner. The description of the action is the
+ * summary. An action that is not composite gives no job.
+ */
+export function readAction(file: string, text: string): Workflow {
+  const lines = workflowLines(text);
+  const top = entries(lines, 0, lines.length, 0);
+  const inputs: WorkflowInput[] = [];
+  const inputsEntry = top.get("inputs");
+  if (inputsEntry) {
+    for (const [name, entry] of childrenOf(lines, inputsEntry.line)) {
+      const keys = childrenOf(lines, entry.line);
+      const value = keys.get("default")?.value ?? "";
+      inputs.push({
+        name,
+        type: value === "true" || value === "false" ? "boolean" : "string",
+        description: keys.get("description")?.value ?? "",
+        default: value,
+        required: keys.get("required")?.value === "true",
+      });
+    }
+  }
+  const runs = top.get("runs");
+  const keys = runs ? childrenOf(lines, runs.line) : new Map<string, Entry>();
+  const stepsEntry = keys.get("using")?.value === "composite" ? keys.get("steps") : undefined;
+  const jobs: WorkflowJob[] = stepsEntry ? [{ id: "steps", if: "", needs: [], steps: stepsOf(lines, stepsEntry.line) }] : [];
+  return { file, kind: "action", name: top.get("name")?.value ?? file, summary: top.get("description")?.value ?? "", inputs, jobs };
 }
