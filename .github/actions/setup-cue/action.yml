@@ -67,7 +67,7 @@ runs:
       run: |
         # A 504 of github.com comes and goes (2026-11-08), so each request has 8 more tries over approximately 2 minutes
         retry=(--retry 8 --retry-all-errors --retry-delay 15 --connect-timeout 20)
-        expected="${SHA256,,}"
+        expected=$(printf %s "$SHA256" | tr "[:upper:]" "[:lower:]")  # bash 3.2 of macOS has no ${var,,}
         if [ -z "$expected" ]; then
           release=$(curl -fsSL "${retry[@]}" -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/cue-lang/cue/releases/tags/v$VERSION") || { echo "::error::The API of the release v$VERSION of cue did not answer."; exit 1; }
@@ -78,7 +78,8 @@ runs:
         archive="$RUNNER_TEMP/$ASSET"
         curl -fsSL "${retry[@]}" -o "$archive" "https://github.com/cue-lang/cue/releases/download/v$VERSION/$ASSET" \
           || { echo "::error::The download of $ASSET failed after 9 tries."; exit 1; }
-        if command -v sha256sum > /dev/null; then actual=$(sha256sum "$archive" | cut -d' ' -f1); else actual=$(shasum -a 256 "$archive" | cut -d' ' -f1); fi
+        # The hash reads stdin: for a path with a backslash (Windows), sha256sum puts a backslash before the hash
+        if command -v sha256sum > /dev/null; then actual=$(sha256sum < "$archive" | cut -d' ' -f1); else actual=$(shasum -a 256 < "$archive" | cut -d' ' -f1); fi
         [ "$actual" = "$expected" ] || { echo "::error::The sha256 of $ASSET is $actual, not $expected."; exit 1; }
         mkdir -p "$DIR"
         if [[ "$ASSET" == *.zip ]]; then unzip -q -o "$archive" cue.exe -d "$DIR"; else tar -xzf "$archive" -C "$DIR" cue; fi
