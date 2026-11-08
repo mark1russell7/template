@@ -127,6 +127,16 @@ export const HOMES: readonly Home[] = [
     words: ["rpc", "procedure", "mcp", "tool", "middleware", "api client"],
   },
   {
+    area: "files",
+    title: "Paths and files on Node.js",
+    covers: "paths, home folder expansion, a path inside a folder, finding a file up the folders, glob matching, file walks with excludes: plain functions on node: modules only, for each general package. @procedures/fs builds on them",
+    packages: [],
+    repo: "mark1russell7/files",
+    state: "planned",
+    words: ["path", "home folder", "expand home", "find up", "glob", "walk", "inside folder", "posix path"],
+    signatures: ["expandHome", "findUp", "isInside", "globToRegExp", "matchesGlob"],
+  },
+  {
     area: "system-io",
     title: "Files, commands, git, GitHub and npm",
     covers: "atomic file and JSON writes, globs, safe commands with argv and no shell, git, the GitHub CLI and API, npm registry lookups, HTTP requests, JSON, YAML and CSV, environment variables",
@@ -135,6 +145,7 @@ export const HOMES: readonly Home[] = [
     state: "published",
     words: ["file", "atomic", "write", "spawn", "exec", "shell", "command", "github", "registry", "fetch", "yaml", "csv", "env"],
     signatures: ["atomicWrite[A-Za-z0-9]*", "writeFileAtomic", "writeJsonAtomic", "writeAtomic"],
+    note: "The plain path, glob and walk functions go to the area files (mark1russell7/files). These packages wrap them as procedures.",
   },
   {
     area: "cli",
@@ -214,7 +225,17 @@ export const HOMES: readonly Home[] = [
     state: "planned",
     words: ["string", "unicode", "grapheme", "font", "width", "measure text", "line break", "wrap", "hyphen"],
     signatures: ["graphemes", "segmentGraphemes", "wrapText", "breakLines", "measureText", "textWidth", "stringWidth"],
-    note: "Plain string helpers (case, padding, templates) have no home yet: ask the strategist.",
+    note: "Plain string helpers (escaping, case, padding, templates, English word forms) go to the area plain-text (mark1russell7/text).",
+  },
+  {
+    area: "plain-text",
+    title: "Plain text helpers",
+    covers: "escaping for HTML, attributes, regular expressions and Markdown, case conversion, padding and truncation, templates, English word forms (plurals, lists). Escaping comes first",
+    packages: [],
+    repo: "mark1russell7/text",
+    state: "planned",
+    words: ["escape", "html escape", "case", "camel case", "kebab case", "pad", "truncate", "template", "plural", "slug"],
+    signatures: ["escapeHtml", "escapeAttribute", "escapeRegExp", "escapeMarkdown", "kebabCase", "camelCase", "pascalCase", "snakeCase", "pluralize"],
   },
   {
     area: "language-kernel",
