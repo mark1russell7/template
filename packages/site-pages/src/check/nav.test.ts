@@ -107,7 +107,7 @@ describe("navProblems", () => {
 describe("navSummary", () => {
   it("lists the problems and the pages", () => {
     const text = navSummary({ ok: false, home: home.href, pages: [page("", 0, [])], sitemap: [], clicks: [], problems: ["a | b"], unread: [] });
-    expect(text).toContain("1 pages opened, 0 in the sitemap, 1 problems.");
+    expect(text).toContain("1 page opened, 0 in the sitemap, 1 problem.");
     expect(text).toContain("- a \\| b");
     expect(text).toContain("| 0 | the home page | 200 | yes | no |");
     expect(text).not.toContain("No read");
@@ -138,7 +138,7 @@ describe("navUnread", () => {
       "/a/ is in the sitemap, and no chain of links from home reaches it",
       "/b/ is in the sitemap, and no chain of links from home reaches it",
     ]);
-    expect(navUnreadText({ pages, unread })).toBe("the crawl stopped at the limit of 1 pages, so it did not read 2 pages: /a/, /b/.");
+    expect(navUnreadText({ pages, unread })).toBe("the crawl stopped at the limit of 1 page, so it did not read 2 pages: /a/, /b/.");
   });
 });
 

@@ -8,6 +8,8 @@
  * conventions check
  * conventions fix
  * conventions --list
+ * conventions pre-push origin
+ * conventions hook install
  * ```
  */
 export { defaultOptions, parseConfig, type ConventionsConfig, type RuleConfig } from "./config.ts";
@@ -59,6 +61,7 @@ export {
   runnerBudget,
   securityOneJob,
   serviceRunMain,
+  setupCue,
   sharedCi,
   sourceMain,
   testsRequired,
@@ -72,7 +75,38 @@ export {
   workflowParses,
   workspaceProtocol,
 } from "./rules/index.ts";
-export { DEFAULT_ALLOWED, HOME_PATTERNS } from "./rules/no-local-paths.ts";
+export {
+  DEFAULT_ALLOWED,
+  HOME_PATTERNS,
+  invalidPatternBreaks,
+  PRIVATE_NAMES_FILE_CONFIG,
+  PRIVATE_NAMES_FILE_VARIABLE,
+  PRIVATE_PATTERNS_VARIABLE,
+  privateNamesFile,
+  privatePatterns,
+  privateTextBreaks,
+  type PrivatePattern,
+  type PrivateSources,
+  type TextBreakOptions,
+} from "./rules/no-local-paths.ts";
+export {
+  firstNameMatch,
+  isAllowedHit,
+  isCommonUse,
+  lineNameHit,
+  lineNameHits,
+  nameMatches,
+  parsePrivateNames,
+  pathNameHit,
+  PRIVATE_NAME_LIST,
+  PrivateNameListError,
+  type AllowedHit,
+  type LinePlace,
+  type NameHit,
+  type NameRule,
+  type PrivateNameList,
+} from "./private-names.ts";
+export { HOOK_MARKER, installHook, NO_READ_LINE, PRE_PUSH_HOOK, prePush, type HookOptions, type PrePushOptions } from "./pre-push.ts";
 export { hasImportMetaMain, REAL_COMPARE } from "./rules/main-check.ts";
 export { roadmapOfLine } from "./rules/roadmap-parses.ts";
 export { repositoryOfRemote, scheduleMinute } from "./rules/runner-budget.ts";

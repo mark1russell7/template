@@ -384,12 +384,12 @@ export async function crawlSite(options: NavOptions): Promise<NavResult> {
 export function navUnreadText(result: Pick<NavResult, "pages" | "unread">): string {
   const first = result.unread.slice(0, 10).map(named).join(", ");
   const more = result.unread.length > 10 ? `, and ${String(result.unread.length - 10)} more` : "";
-  return `the crawl stopped at the limit of ${String(result.pages.length)} pages, so it did not read ${String(result.unread.length)} pages: ${first}${more}.`;
+  return `the crawl stopped at the limit of ${result.pages.length} ${result.pages.length === 1 ? "page" : "pages"}, so it did not read ${result.unread.length} ${result.unread.length === 1 ? "page" : "pages"}: ${first}${more}.`;
 }
 
 /** This function gives the summary of a crawl as Markdown. */
 export function navSummary(result: NavResult): string {
-  const lines = [`### Navigation of ${result.home}`, "", `${result.pages.length} pages opened, ${result.sitemap.length} in the sitemap, ${result.problems.length} problems.`, ""];
+  const lines = [`### Navigation of ${result.home}`, "", `${result.pages.length} ${result.pages.length === 1 ? "page" : "pages"} opened, ${result.sitemap.length} in the sitemap, ${result.problems.length} ${result.problems.length === 1 ? "problem" : "problems"}.`, ""];
   if (result.unread.length > 0) lines.push(`**No read:** ${navUnreadText(result)}`, "");
   for (const problem of result.problems) lines.push(`- ${cell(problem)}`);
   lines.push("", "| Clicks | Page | HTTP | Home link at 360 px | Site bar |", "|---|---|---|---|---|");
@@ -516,7 +516,7 @@ export async function runNavCli(argv: readonly string[], io: CheckIo): Promise<n
   });
   for (const problem of result.problems) io.stdout(`FAIL ${problem}\n`);
   if (result.unread.length > 0) io.stdout(`NO READ ${navUnreadText(result)}\n`);
-  io.stdout(`site-pages nav: ${result.pages.length} pages, ${result.problems.length} problems, ${result.unread.length} pages not read.\n`);
+  io.stdout(`site-pages nav: ${result.pages.length} ${result.pages.length === 1 ? "page" : "pages"}, ${result.problems.length} ${result.problems.length === 1 ? "problem" : "problems"}, ${result.unread.length} ${result.unread.length === 1 ? "page" : "pages"} not read.\n`);
   const step = io.env["GITHUB_STEP_SUMMARY"];
   if (step) appendFileSync(step, navSummary(result));
   return result.ok ? 0 : 1;

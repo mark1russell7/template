@@ -1,22 +1,25 @@
 # The shared GitHub Pages deployment of the sites of mark1russell7 (CI.md).
 #
-#   build   Installs, builds the site, adds the Releases page and the Status page (the site-pages
-#           action), checks the pages in a browser (site-check: true), and uploads the Pages artifact.
-#           It runs the code of the repository, so it gets only read permissions. A failed check
+#   ref     Decides if the commit of the event builds and deploys (.github/actions/build-ref/ref.ts). It runs no
+#           code of the repository. Its step summary tells the decision and its reason.
+#   build   Checks out the commit of the event (github.sha) with no ref of its own. It installs, builds the site,
+#           adds the Releases page and the Status page (the site-pages action), checks the pages in a browser
+#           (site-check: true), and uploads the Pages artifact. It gets only read permissions. A failed check
 #           uploads nothing, so the job deploy does not start.
 #   deploy  Deploys the artifact to GitHub Pages. It runs no code of the repository. It has no
 #           "permissions" key: it gets "pages: write" and "id-token: write" from the caller job.
 #
-# The caller starts it on "push" (each push to main), on "workflow_run" (after a CI run of a push
-# to main passed, or after a release), on "schedule" and on "workflow_dispatch". A "workflow_run"
-# for a failed run, for a pull request or for a push to a different branch builds nothing.
-# A "workflow_run" of a release builds the commit of green-main, as a schedule does: a release takes
-# longer than a build, so its own commit can be older than the site that a later push deployed. The job build examines
-# the branch, so a caller without "branches: [main]" does not deploy a different branch. A scheduled build takes the commit of the green-main
-# action: the newest commit of main, or the newest commit that passed CI.
+# The rules of the job ref:
+#   - A push to the default branch deploys its commit. A pull request and a push to a different branch only build.
+#   - A schedule, a run by hand, a repository dispatch and a run after a release deploy the head of the default
+#     branch when its CI passed, or while its CI runs when the input pending is "head". A red head deploys nothing,
+#     so the site keeps its last deploy.
+#   - A run after CI deploys only when the commit of CI is the head of the default branch. Else the CI run of
+#     the newer commit deploys it.
+#   - A "workflow_run" for a failed run, for a pull request or for a push to a different branch starts nothing.
 #
-# The job uses the actions green-main and site-pages of the same commit of the template as this
-# file: a second checkout gets them (job.workflow_repository and job.workflow_sha).
+# The jobs use the actions of the same commit of the template as this file: a second checkout gets them
+# (job.workflow_repository and job.workflow_sha).
 name: Reusable Pages
 
 on:
@@ -55,7 +58,7 @@ on:
         type: string
         default: ci.yml
       pending:
-        description: What a scheduled build takes while CI of the newest commit runs, "head" or "green" (the input of green-main).
+        description: What a run on the head of the default branch does while its CI runs, "head" (deploy) or "green" (deploy nothing).
         type: string
         default: head
       site-pages:
@@ -156,22 +159,22 @@ on:
         value: ${{ jobs.deploy.outputs.page-url }}
 
 jobs:
-  build:
-    # A failed CI run, a CI run for a pull request and a CI run for a push to a different branch do not
-    # deploy (scripts/workflows/pages-guard.test.ts).
+  # Decides if the job build builds and if the job deploy deploys. The job build checks out the commit of the event
+  # (github.sha), with no ref of its own (.github/actions/build-ref/ref.ts tells the rules). A failed CI run, a CI run
+  # for a pull request and a CI run for a push to a different branch start nothing (scripts/workflows/pages-guard.test.ts).
+  ref:
     if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') && github.event.workflow_run.head_branch == github.event.repository.default_branch)
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ inputs.timeout-minutes }}
+    timeout-minutes: 5
     permissions:
       contents: read
-      # green-main reads the Actions runs. site-pages reads the pull requests, the issues and their checks.
+      # green-main reads the Actions runs.
       actions: read
-      issues: read
-      pull-requests: read
-      checks: read
-      statuses: read
+    outputs:
+      build: ${{ steps.ref.outputs.build }}
+      deploy: ${{ steps.ref.outputs.deploy }}
     steps:
-      # Without these values, the checkouts below get the caller repository, not the template.
+      # Without these values, the checkouts of the shared actions get the caller repository, not the template.
       - name: The commit of this workflow file
         shell: bash
         env:
@@ -183,10 +186,8 @@ jobs:
             echo "::error::job.workflow_repository or job.workflow_sha is not available."
             exit 1
           fi
-      # The actions of the template, at the commit of this file. The checkout of the repository below
-      # removes this folder, so the step before site-pages gets them again.
-      - name: Shared actions (green-main)
-        if: github.event_name == 'schedule' || github.event.workflow_run.name == 'Release'
+      # The actions of the template, at the commit of this file, for green-main and build-ref.
+      - name: Shared actions
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
@@ -194,17 +195,38 @@ jobs:
           path: .shared-actions
           sparse-checkout: .github/actions
           persist-credentials: false
-      # A scheduled build, and a build after a release, takes the newest commit of main, or the newest green one if CI failed on it
+      # The commit of these events is the head of the default branch. It deploys only when its CI state allows it.
       - id: green
-        if: github.event_name == 'schedule' || github.event.workflow_run.name == 'Release'
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch' || github.event.workflow_run.name == 'Release'
         uses: ./.shared-actions/.github/actions/green-main
         with:
           workflow: ${{ inputs.ci-workflow }}
+          commit: ${{ github.sha }}
           pending: ${{ inputs.pending }}
+      # The step writes its decision and the reason to the step summary.
+      - id: ref
+        uses: ./.shared-actions/.github/actions/build-ref
+        with:
+          state: ${{ steps.green.outputs.state }}
+          pending: ${{ inputs.pending }}
+
+  build:
+    needs: ref
+    if: needs.ref.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+      # site-pages reads the Actions runs, the pull requests, the issues and their checks.
+      actions: read
+      issues: read
+      pull-requests: read
+      checks: read
+      statuses: read
+    steps:
+      # The commit of the event, with no ref: the job ref decided that this commit builds.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # The commit of green-main, else the commit that CI examined, else the commit of the event
-          ref: ${{ steps.green.outputs.sha || github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: ${{ inputs.fetch-depth }}
           persist-credentials: false
       # The pnpm version comes from "packageManager" in package.json
@@ -322,8 +344,8 @@ jobs:
           path: ${{ inputs.out }}
 
   deploy:
-    needs: build
-    if: inputs.deploy
+    needs: [ref, build]
+    if: inputs.deploy && needs.ref.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:

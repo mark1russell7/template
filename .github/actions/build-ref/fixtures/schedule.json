@@ -1,0 +1,7 @@
+{
+  "repository": {
+    "full_name": "owner/site",
+    "default_branch": "main"
+  },
+  "schedule": "30 */3 * * *"
+}

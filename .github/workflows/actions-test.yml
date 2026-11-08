@@ -5,6 +5,9 @@
 #   pages           reusable-pages.yml builds a test site with the Releases page and the Status page,
 #                   and uploads the Pages artifact, with no deploy.
 #   pages-check     The pages and their JSON are in the artifact.
+#   site            On each pull request, pages.yml builds the site of the template and starts its site check with
+#                   the probe of packages/site, with no deploy. The check "Actions OK" needs it, so gh pr merge --auto
+#                   waits for the probe. The job has no paths filter, because each shared workflow is in the explorer.
 #   release-build   reusable-release-build.yml packs the packages of this repository. Only a run on
 #                   main checks that the commit is on main (the input require-main). The input
 #                   after-pack tests the tarballs, writes an output, adds a title and the
@@ -12,6 +15,11 @@
 #   release-publish The npm-publish action examines the tarballs with "dry-run": it publishes nothing.
 #                   The job has no "id-token: write", so npm cannot accept a publish. A step reads
 #                   the output of after-pack.
+#   setup-cue       The action installs the cue CLI on Linux, macOS and Windows. A wrong sha256 fails it, also on a
+#                   cache hit.
+#   cue-ci          The input cue-version of reusable-ci.yml gives the scripts the cue CLI, and no folder .shared-actions.
+#   data-stamps     A missing file of stamps skips the gate when the build is of an older commit, and fails it when
+#                   the build is of the commit of the workflow.
 #   release-tag     reusable-release-tag.yml examines the plan, the tarballs and the tags with "dry-run".
 #                   Its log shows the flags of each release: --latest for the entry with "latest",
 #                   and --latest=false for the others.
@@ -28,6 +36,7 @@ on:
       - ".github/workflows/actions-test.yml"
       - ".github/workflows/reusable-pages.yml"
       - ".github/workflows/reusable-release-*.yml"
+      - ".github/workflows/reusable-ci.yml"
       - "scripts/release/**"
       # The test site installs the workspace, so a change of a package file can break it
       - "package.json"
@@ -71,6 +80,7 @@ jobs:
             .github/workflows/actions-test.yml
             .github/workflows/reusable-pages.yml
             .github/workflows/reusable-release-*.yml
+            .github/workflows/reusable-ci.yml
             scripts/release/**
             package.json
             pnpm-lock.yaml
@@ -100,6 +110,118 @@ jobs:
         run: |
           echo "green-main: $SHA (CI of the newest commit: $STATE)"
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]
+      # The job ref of reusable-pages.yml gives the commit of the event
+      - id: green-commit
+        uses: ./.github/actions/green-main
+        with:
+          commit: ${{ github.sha }}
+      - name: green-main gives the CI state of a commit
+        env:
+          STATE: ${{ steps.green-commit.outputs.state }}
+        run: |
+          echo "green-main: CI of ${GITHUB_SHA}: $STATE"
+          [[ " green running none red " == *" $STATE "* ]]
+
+  setup-cue:
+    needs: changes
+    if: needs.changes.outputs.match == 'true'
+    runs-on: ${{ matrix.os }}
+    # A download on a cold cache takes at most 11 minutes
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      # The runners are shared by all repositories of the account (the rule runner-budget)
+      max-parallel: 3
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      # The sha256 comes from the digest of the asset in the API of the release
+      - id: cue
+        uses: ./.github/actions/setup-cue
+        with:
+          version: v0.15.1
+      - name: The cue CLI is on the PATH
+        env:
+          VERSION: ${{ steps.cue.outputs.version }}
+        run: |
+          cue version
+          [ "$VERSION" = 0.15.1 ]
+          cue version | head -1 | grep -q "v0.15.1"
+      # The archive of 0.15.1 is in the cache after the first call, and a wrong sha256 fails it there.
+      # So a damaged cache entry fails the job, and this test needs no download after the first run.
+      - id: wrong
+        continue-on-error: true
+        uses: ./.github/actions/setup-cue
+        with:
+          version: 0.15.1
+          sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+      - name: A wrong sha256 fails the action, also on a cache hit
+        env:
+          OUTCOME: ${{ steps.wrong.outcome }}
+          HIT: ${{ steps.wrong.outputs.cache-hit }}
+        run: |
+          echo "the action with a wrong sha256: $OUTCOME (cache hit: $HIT)"
+          [ "$OUTCOME" = failure ]
+
+  cue-ci:
+    needs: changes
+    if: needs.changes.outputs.match == 'true'
+    uses: ./.github/workflows/reusable-ci.yml
+    permissions:
+      contents: read
+    with:
+      cue-version: "0.15.1"
+      # No script of package.json: only the install and the extra command
+      scripts: none
+      recursive-scripts: ""
+      changesets: false
+      run: |
+        cue version | head -1 | grep -q "v0.15.1"
+        test ! -e "$GITHUB_WORKSPACE/.shared-actions"
+
+  data-stamps:
+    needs: changes
+    if: needs.changes.outputs.match == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The gate is TypeScript: Node runs it with its type stripping
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+      # A build of an older commit (green-main) that does not have the file of the newer workflow
+      - id: older
+        uses: ./.github/actions/data-stamps
+        with:
+          stamps: no-such-stamps.json
+          config-sha: "0000000000000000000000000000000000000000"
+      # A build of the commit of the workflow: a missing file fails the gate
+      - id: same
+        continue-on-error: true
+        uses: ./.github/actions/data-stamps
+        with:
+          stamps: no-such-stamps.json
+      - name: The gate skips for an older commit and fails for the same commit
+        env:
+          OLDER: ${{ steps.older.outcome }}
+          SAME: ${{ steps.same.outcome }}
+        run: |
+          echo "older commit: $OLDER, same commit: $SAME"
+          [ "$OLDER" = success ] && [ "$SAME" = failure ]
 
   pages:
     needs: changes
@@ -170,6 +292,23 @@ jobs:
           done; done; done
           node -e 'const s = require(process.argv[1]); if (!s.github?.available) { console.error("::error::the GitHub part is not available:", s.github?.reason); process.exit(1); } if (!(s.items?.length > 0)) { console.error("::error::the Status page has no roadmap item"); process.exit(1); } console.log("github:", s.pullRequests.length, "open PRs,", s.issues.length, "open issues;", s.items.length, "roadmap items")' "$OUT/data/status.json"
 
+  # The site of the template on each pull request. pages.yml is the one home of its inputs. A push to main starts
+  # pages.yml by itself, so the job runs only on a pull request.
+  site:
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/pages.yml
+    # The permissions of the job pages of pages.yml. Only its deploy job uses pages and id-token, and that job does not
+    # run on a pull request. The environment github-pages also accepts a deploy only from main.
+    permissions:
+      contents: read
+      actions: read
+      issues: read
+      pull-requests: read
+      checks: read
+      statuses: read
+      pages: write
+      id-token: write
+
   release-build:
     needs: changes
     if: needs.changes.outputs.match == 'true'
@@ -235,7 +374,7 @@ jobs:
   actions-ok:
     name: Actions OK
     if: ${{ !cancelled() }}
-    needs: [changes, green-main, pages, pages-check, release-build, release-publish, release-tag]
+    needs: [changes, green-main, setup-cue, cue-ci, data-stamps, pages, pages-check, site, release-build, release-publish, release-tag]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}
@@ -247,3 +386,5 @@ jobs:
       - uses: ./.github/actions/gate-summary
         with:
           needs: ${{ toJSON(needs) }}
+          # A push to main and a run by hand skip the job site
+          allow-skip: site

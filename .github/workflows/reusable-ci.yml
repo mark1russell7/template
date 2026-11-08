@@ -52,6 +52,12 @@ on:
         description: The folder of the package.json, relative to the root of the repository.
         type: string
         default: "."
+      cue-version:
+        description: >-
+          The version of the cue CLI for the scripts, for example "0.15.1". The action setup-cue installs it before the
+          install of the dependencies, with retries and a sha256 check. The default "" installs no cue CLI.
+        type: string
+        default: ""
       fetch-depth:
         description: >-
           The number of commits that the checkout gets. 0 gets the whole history. The default 2 gets the parents of the
@@ -199,6 +205,24 @@ jobs:
               console.log(`${name} is set.`);
             }
           '
+      # The cue CLI comes before the install, so that a "prepare" script can use it. The action comes from the commit of
+      # this workflow, as in the job changesets. It has no post step, so the next step removes its folder, and the
+      # scripts do not see it.
+      - if: inputs.cue-version != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .shared-actions
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      - if: inputs.cue-version != ''
+        uses: ./.shared-actions/.github/actions/setup-cue
+        with:
+          version: ${{ inputs.cue-version }}
+      - if: inputs.cue-version != ''
+        working-directory: .
+        run: rm -rf .shared-actions
       - run: pnpm install --frozen-lockfile
       - name: Setup command
         if: inputs.setup != ''
