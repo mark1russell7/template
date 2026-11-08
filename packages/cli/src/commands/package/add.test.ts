@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { CLI_NAME } from "../../paths.ts";
-import { PRESETS, writePackage } from "./add.ts";
+import { PRESETS, withAllowBuilds, writePackage } from "./add.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -60,6 +60,28 @@ describe("writePackage", () => {
     expect(existsSync(join(written.dir, "vitest.config.ts"))).toBe(true);
   });
 
+  it("writes the three processes of the preset electron, and allows the install script of electron", async () => {
+    const root = repo();
+    const written = await writePackage(root, "desktop", "electron", cli);
+    expect(written).toMatchObject({ name: "@demo/desktop", allowed: ["electron"] });
+    expect(written.install).toEqual(["pnpm add -D --filter=@demo/desktop electron tsdown"]);
+    const manifest = json(join(written.dir, "package.json"));
+    expect(manifest["main"]).toBe("./src/index.ts");
+    expect(manifest["scripts"]).toMatchObject({ build: "tsdown", smoke: "tsdown && electron build/main/main.js --smoke" });
+    const files = ["src/index.ts", "src/index.test.ts", "src/main.ts", "src/preload.ts", "src/page.ts", "page/index.html", "page/page.css", "tsdown.config.ts"];
+    for (const file of files) expect(readFileSync(join(written.dir, file), "utf8"), file).not.toContain("{{");
+    expect(readFileSync(join(written.dir, "page", "index.html"), "utf8")).toContain("<title>desktop</title>");
+    // The page gets no Electron API: only the preload script imports electron, and it gives the page a port
+    expect(readFileSync(join(written.dir, "src", "page.ts"), "utf8")).not.toContain("electron");
+    expect(readFileSync(join(written.dir, "src", "preload.ts"), "utf8")).not.toContain("contextBridge");
+    const workspace = readFileSync(join(root, "pnpm-workspace.yaml"), "utf8");
+    expect(workspace).toContain("allowBuilds:\n  # electron: its install script");
+    expect(workspace).toContain("  electron: true\n");
+    // A second package keeps the entry, and adds no second one
+    expect((await writePackage(root, "desktop-two", "electron", cli)).allowed).toEqual([]);
+    expect(readFileSync(join(root, "pnpm-workspace.yaml"), "utf8")).toBe(workspace);
+  });
+
   it("gives the pnpm add commands of a preset that installs its packages", async () => {
     const written = await writePackage(repo(), "web", "react", cli);
     expect(written.install).toEqual([
@@ -81,6 +103,40 @@ describe("writePackage", () => {
     await expect(writePackage(root, "api", "service", { ...cli, devDependencies: withoutService })).rejects.toThrow(/@mark1russell7\/service/);
     expect(existsSync(join(root, "packages", "api"))).toBe(false);
     await expect(writePackage(root, "api", "service", cli)).resolves.toMatchObject({ name: "@demo/api" });
+  });
+});
+
+describe("withAllowBuilds", () => {
+  const workspace = [
+    'packages:\n  - "packages/*"',
+    "",
+    "allowBuilds:",
+    '  "@mark1russell7/cue@git+https://github.com/mark1russell7/cue.git": true',
+    "  esbuild: true",
+    "  # A comment: the key in it is not an entry",
+    '  "@swc/core": false',
+    "",
+    "trustPolicy: no-downgrade",
+    "",
+  ].join("\n");
+
+  it("adds a package to the block, with its reason, and keeps the rest of the file", () => {
+    const { text, added } = withAllowBuilds(workspace, { electron: "electron: a reason." });
+    expect(added).toEqual(["electron"]);
+    expect(text).toBe(workspace.replace("allowBuilds:\n", "allowBuilds:\n  # electron: a reason.\n  electron: true\n"));
+  });
+
+  it("keeps an entry that exists, also an entry with false, and quotes a name with a scope", () => {
+    expect(withAllowBuilds(workspace, { esbuild: "x", "@swc/core": "y" })).toEqual({ text: workspace, added: [] });
+    const { text } = withAllowBuilds(workspace, { "@scope/tool": "z" });
+    expect(text).toContain('  "@scope/tool": true\n');
+  });
+
+  it("makes the block when the file has none, and reads a block at the end of the file", () => {
+    const { text } = withAllowBuilds('packages:\n  - "packages/*"', { electron: "r" });
+    expect(text).toBe('packages:\n  - "packages/*"\n\n# Packages allowed to run install scripts.\nallowBuilds:\n  # r\n  electron: true\n');
+    expect(withAllowBuilds(text, { electron: "r" }).added).toEqual([]);
+    expect(withAllowBuilds("allowBuilds:\r\n  electron: true\r\n", { electron: "r" }).added).toEqual([]);
   });
 });
 
