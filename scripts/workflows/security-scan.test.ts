@@ -104,16 +104,16 @@ describe("security-scan: evaluate", () => {
     assert.deepEqual(evaluate({ steps, expected: { ...all, codeql: false } }).failed, []);
   });
 
-  it("passes CodeQL when the download of the bundle fails and the init from the tool cache passes (HTTP 504, 2026-11-08)", () => {
-    const verdict = evaluate({ steps: { ...pullRequest, codeql_init: soft, "codeql_init-toolcache": ok }, expected: all });
+  it("passes CodeQL when the first download of the bundle fails and the second start passes (HTTP 504, 2026-11-08)", () => {
+    const verdict = evaluate({ steps: { ...pullRequest, codeql_init: soft, "codeql_init-retry": ok }, expected: all });
     assert.deepEqual(verdict.failed, []);
   });
 
-  it("red: fails CodeQL when the init from the tool cache also fails, and names that step", () => {
-    const steps = { ...pullRequest, codeql_init: soft, "codeql_init-toolcache": failed, codeql_analyze: skipped, "codeql_new-alerts": skipped };
+  it("red: fails CodeQL when the second start also fails, and names that step", () => {
+    const steps = { ...pullRequest, codeql_init: soft, "codeql_init-retry": failed, codeql_analyze: skipped, "codeql_new-alerts": skipped };
     const verdict = evaluate({ steps, expected: all });
     assert.deepEqual(verdict.failed, ["codeql"]);
-    assert.match(verdict.rows.find((row) => row.name === "codeql")?.reason ?? "", /codeql_init-toolcache \(failure\)/);
+    assert.match(verdict.rows.find((row) => row.name === "codeql")?.reason ?? "", /codeql_init-retry \(failure\)/);
   });
 
   it("a push run: the dependency review is off, and the other scans pass", () => {
@@ -149,7 +149,7 @@ describe("security-scan: action.yml", () => {
     assert.match(last, /run: node "\$VERDICT"/);
   });
 
-  it("the first CodeQL init may fail, the second init uses the tool cache only then, and the analysis runs after either", () => {
+  it("the first CodeQL init may fail, a second init starts only then after a wait, and the analysis runs after either", () => {
     /** This function gives the text of the step with the id, up to the next step. */
     const block = (id: string): string => {
       const start = action.indexOf(`\n      id: ${id}\n`);
@@ -158,10 +158,18 @@ describe("security-scan: action.yml", () => {
     };
     assert.match(block("codeql_init"), /\n {6}continue-on-error: true\n/);
     assert.doesNotMatch(block("codeql_init"), /tools:/);
-    assert.ok(block("codeql_init-toolcache").includes("if: ${{ !cancelled() && steps.codeql_init.outcome == 'failure' }}"));
-    assert.match(block("codeql_init-toolcache"), /\n {8}tools: toolcache\n/);
-    assert.doesNotMatch(block("codeql_init-toolcache"), /continue-on-error/);
-    assert.ok(block("codeql_analyze").includes("steps.codeql_init.outcome == 'success' || steps.codeql_init-toolcache.outcome == 'success'"));
+    assert.ok(block("codeql_init-retry").includes("if: ${{ !cancelled() && steps.codeql_init.outcome == 'failure' }}"));
+    // codeql-action ignores "tools: toolcache" in a push or pull request run (seen in run 42471713951)
+    assert.doesNotMatch(block("codeql_init-retry"), /tools:/);
+    const wait = action.indexOf("\n    - name: Wait before the second CodeQL start\n");
+    assert.ok(wait > action.indexOf("\n      id: codeql_init\n") && wait < action.indexOf("\n      id: codeql_init-retry\n"), "The wait is between the two starts.");
+    assert.ok(
+      action
+        .slice(wait, action.indexOf("\n    - ", wait + 1))
+        .includes("if: ${{ !cancelled() && steps.codeql_init.outcome == 'failure' }}\n      shell: bash\n      run: sleep 60"),
+    );
+    assert.doesNotMatch(block("codeql_init-retry"), /continue-on-error/);
+    assert.ok(block("codeql_analyze").includes("steps.codeql_init.outcome == 'success' || steps.codeql_init-retry.outcome == 'success'"));
   });
 
   it("STEPS has only the outcome and the conclusion of each step, so a large output does not go in the environment", () => {

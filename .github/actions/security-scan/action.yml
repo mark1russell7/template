@@ -307,11 +307,13 @@ runs:
         workflow=${GITHUB_WORKFLOW_REF#"$GITHUB_REPOSITORY/"}
         echo "category=${workflow%%@*}:codeql" >> "$GITHUB_OUTPUT"
 
-    # The first init downloads the CodeQL bundle of the action's version. GitHub can give HTTP 504 on that download for
-    # hours (2026-11-08). Then the second init uses the bundle that is already in the tool cache of the runner image,
-    # with no download. That bundle can be some weeks older. A failure of the first init is not a failure of the scan:
-    # its conclusion is "success" (continue-on-error), and the second init decides. If the second init also fails,
-    # the scan fails, as before. The step summary names the bundle that ran.
+    # The first init downloads the CodeQL bundle of the action's version. On 2026-11-08 GitHub gave HTTP 504 on that
+    # download again and again, but not on each try. Thus a failure of the first init is not a failure of the
+    # scan: its conclusion is "success" (continue-on-error). After a wait of 60 seconds, a second init downloads the
+    # same bundle again, and it decides. If the second init also fails, the scan fails, as before.
+    # There is no fallback with no download: codeql-action ignores "tools: toolcache" in a workflow of a push or a
+    # pull request ("not triggered dynamically"), and the first init can remove the older bundle of the runner image.
+    # The step summary tells which start passed.
     - name: Initialize CodeQL
       id: codeql_init
       if: ${{ !cancelled() && steps.codeql_languages.outcome == 'success' && steps.codeql_languages.outputs.languages != '' }}
@@ -321,27 +323,31 @@ runs:
         languages: ${{ steps.codeql_languages.outputs.languages }}
         build-mode: ${{ inputs.codeql-build-mode }}
 
-    - name: Initialize CodeQL from the tool cache
-      id: codeql_init-toolcache
+    - name: Wait before the second CodeQL start
+      if: ${{ !cancelled() && steps.codeql_init.outcome == 'failure' }}
+      shell: bash
+      run: sleep 60
+
+    - name: Initialize CodeQL, second start
+      id: codeql_init-retry
       if: ${{ !cancelled() && steps.codeql_init.outcome == 'failure' }}
       uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
       with:
         languages: ${{ steps.codeql_languages.outputs.languages }}
         build-mode: ${{ inputs.codeql-build-mode }}
-        tools: toolcache
 
     - name: Name the CodeQL bundle
-      if: ${{ !cancelled() && (steps.codeql_init.outcome == 'success' || steps.codeql_init-toolcache.outcome == 'success') }}
+      if: ${{ !cancelled() && (steps.codeql_init.outcome == 'success' || steps.codeql_init-retry.outcome == 'success') }}
       shell: bash
       env:
-        SOURCE: ${{ steps.codeql_init.outcome == 'success' && 'the download of the action version' || 'the tool cache of the runner (the download failed)' }}
-        VERSION: ${{ steps.codeql_init.outcome == 'success' && steps.codeql_init.outputs.codeql-version || steps.codeql_init-toolcache.outputs.codeql-version }}
+        SOURCE: ${{ steps.codeql_init.outcome == 'success' && 'the first start' || 'the second start (the first download failed)' }}
+        VERSION: ${{ steps.codeql_init.outcome == 'success' && steps.codeql_init.outputs.codeql-version || steps.codeql_init-retry.outputs.codeql-version }}
       run: |
         echo "CodeQL bundle: ${VERSION:-unknown}, from $SOURCE" >> "$GITHUB_STEP_SUMMARY"
 
     - name: Analyze
       id: codeql_analyze
-      if: ${{ !cancelled() && (steps.codeql_init.outcome == 'success' || steps.codeql_init-toolcache.outcome == 'success') }}
+      if: ${{ !cancelled() && (steps.codeql_init.outcome == 'success' || steps.codeql_init-retry.outcome == 'success') }}
       uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
       with:
         # A pull request uploads nothing. The step "Fail on new alerts" examines its results.
@@ -389,7 +395,7 @@ runs:
           "osv-scanner_move": { "outcome": "${{ steps.osv-scanner_move.outcome }}", "conclusion": "${{ steps.osv-scanner_move.conclusion }}" },
           "codeql_languages": { "outcome": "${{ steps.codeql_languages.outcome }}", "conclusion": "${{ steps.codeql_languages.conclusion }}" },
           "codeql_init": { "outcome": "${{ steps.codeql_init.outcome }}", "conclusion": "${{ steps.codeql_init.conclusion }}" },
-          "codeql_init-toolcache": { "outcome": "${{ steps.codeql_init-toolcache.outcome }}", "conclusion": "${{ steps.codeql_init-toolcache.conclusion }}" },
+          "codeql_init-retry": { "outcome": "${{ steps.codeql_init-retry.outcome }}", "conclusion": "${{ steps.codeql_init-retry.conclusion }}" },
           "codeql_analyze": { "outcome": "${{ steps.codeql_analyze.outcome }}", "conclusion": "${{ steps.codeql_analyze.conclusion }}" },
           "codeql_new-alerts": { "outcome": "${{ steps.codeql_new-alerts.outcome }}", "conclusion": "${{ steps.codeql_new-alerts.conclusion }}" }
           }
