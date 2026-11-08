@@ -65,6 +65,8 @@ runs:
         SHA256: ${{ inputs.sha256 }}
         TOKEN: ${{ inputs.token }}
       run: |
+        # The summary counts each download, also one that fails
+        echo "setup-cue: \`$ASSET\` is not in the cache, so it is downloaded." >> "$GITHUB_STEP_SUMMARY"
         # A 504 of github.com comes and goes (2026-11-08), so each request has 8 more tries, 15 s apart.
         # A 504 can come after approximately 3.5 minutes, so each try stops after 60 s: at most 11 minutes in all.
         retry=(--retry 8 --retry-all-errors --retry-delay 15 --connect-timeout 20 --max-time 60)
@@ -96,7 +98,10 @@ runs:
       env:
         VERSION: ${{ steps.plan.outputs.version }}
         DIR: ${{ steps.plan.outputs.dir }}
+        ASSET: ${{ steps.plan.outputs.asset }}
+        HIT: ${{ steps.cache.outputs.cache-hit }}
       run: |
+        [ "$HIT" != true ] || echo "setup-cue: \`$ASSET\` comes from the cache." >> "$GITHUB_STEP_SUMMARY"
         echo "$DIR" >> "$GITHUB_PATH"
         cli="$DIR/cue"
         [ -x "$cli" ] || cli="$DIR/cue.exe"
