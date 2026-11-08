@@ -3,11 +3,12 @@
  * unit. Another package imports it only through an entry of its package.json (`exports`, `main`,
  * `module`, `types`, `bin`). A relative path or a deep path into its folder is not an entry.
  *
- * A repository uses it from its `.dependency-cruiser.cjs`:
+ * A repository uses it from its `.dependency-cruiser.ts`:
  *
- * ```js
- * const { boundaries } = require("@mark1russell7/boundaries");
- * module.exports = boundaries(__dirname, { apps: "private" });
+ * ```ts
+ * import { boundaries, type Config } from "@mark1russell7/boundaries";
+ * const config: Config = boundaries(import.meta.dirname, { apps: "private" });
+ * export default config;
  * ```
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
