@@ -19,6 +19,11 @@ outputs:
   sha:
     description: The commit hash.
     value: ${{ steps.find.outputs.sha }}
+  ref:
+    description: >-
+      The same commit hash as sha, for the ref of a checkout. CodeQL reads an output with "sha", "head" or "commit"
+      in its name as the head of a pull request, and so a checkout of sha gives a false alert of cache poisoning.
+    value: ${{ steps.find.outputs.sha }}
   state:
     description: The CI state of the newest commit of the branch (green, running, none or red).
     value: ${{ steps.find.outputs.state }}

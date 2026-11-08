@@ -9,7 +9,7 @@
 #
 # The caller starts it on "push" (each push to main), on "workflow_run" (after a CI run of a push
 # to main passed, or after a release), on "schedule" and on "workflow_dispatch". A "workflow_run"
-# for a failed run, for a pull request or for a push to a different branch builds nothing.
+# for a failed run, for a pull request, for a push to a different branch or for a run of another repository builds nothing.
 # A "workflow_run" of a release builds the commit of green-main, as a schedule does: a release takes
 # longer than a build, so its own commit can be older than the site that a later push deployed. The job build examines
 # the branch, so a caller without "branches: [main]" does not deploy a different branch. A scheduled build takes the commit of the green-main
@@ -143,7 +143,7 @@ jobs:
   build:
     # A failed CI run, a CI run for a pull request and a CI run for a push to a different branch do not
     # deploy (scripts/workflows/pages-guard.test.ts).
-    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') && github.event.workflow_run.head_branch == github.event.repository.default_branch)
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') && github.event.workflow_run.head_branch == github.event.repository.default_branch && github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout-minutes }}
     permissions:
@@ -188,7 +188,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The commit of green-main, else the commit that CI examined, else the commit of the event
-          ref: ${{ steps.green.outputs.sha || github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ steps.green.outputs.ref || github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: ${{ inputs.fetch-depth }}
           persist-credentials: false
       # The pnpm version comes from "packageManager" in package.json
