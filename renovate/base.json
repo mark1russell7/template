@@ -46,9 +46,10 @@
       "groupSlug": "npm-zero-minor"
     },
     {
-      "description": "A peer dependency range is a promise to the users. Change it by hand.",
+      "description": "A peer dependency range is a promise to the users. Change it by hand. Renovate lists each new version on the Dependency Dashboard and opens no pull request until a person ticks it.",
       "matchDepTypes": ["peerDependencies"],
-      "enabled": false
+      "rangeStrategy": "widen",
+      "dependencyDashboardApproval": true
     },
     {
       "description": "The release train updates the npm packages of mark1russell7 (@mark1russell7 and @procedures), with no wait. Renovate updates only the third-party npm packages.",
