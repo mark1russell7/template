@@ -2,11 +2,11 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import * as home from "@mark1russell7/conventions/workspace";
-import { globFolders, globToRegExp, packageFolders, readConfig, runCli, runReports, summaryMarkdown, workspaceGlobs, type CliIo } from "./index.ts";
+import { globFolders, globToRegExp, packageFolders, readConfig, REPORT_FILE, reportFolders, runCli, runReports, summaryMarkdown, workspaceGlobs, type CliIo } from "./index.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "api-report-run-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -49,6 +49,47 @@ describe("the functions of the workspace", () => {
     expect(globToRegExp).toBe(home.globToRegExp);
     expect(packageFolders).toBe(home.packageFolders);
     expect(workspaceGlobs).toBe(home.workspaceGlobs);
+  });
+
+  it("adds a public root that the globs of the workspace leave out, once", () => {
+    const open = workspace({ private: false });
+    expect(reportFolders(open)).toEqual([open, ...["a", "b", "hidden"].map((name) => join(open, "packages", name))]);
+    // A private root, explicit globs and a repository of one package get no root of their own
+    const closed = workspace();
+    expect(reportFolders(closed)).toEqual(packageFolders(closed));
+    expect(reportFolders(open, ["packages/*"])).toEqual(packageFolders(open, ["packages/*"]));
+    const single = fixture({ "package.json": { name: "solo" } });
+    expect(reportFolders(single)).toEqual([single]);
+    // A root that a glob of the workspace names is read one time
+    const named = fixture({ "package.json": { name: "root" }, "pnpm-workspace.yaml": 'packages:\n  - "."\n  - "site"\n', "site/package.json": { name: "site", private: true } });
+    expect(reportFolders(named).filter((folder) => resolve(folder) === resolve(named))).toHaveLength(1);
+    expect(reportFolders(named)).toHaveLength(2);
+  });
+});
+
+describe("a public root with a private workspace", () => {
+  // Two repositories on 2026-11-08: the workspace names only a private site, and the root is the public package
+  const repository = (): string =>
+    fixture({
+      "package.json": { name: "lib", types: "./index.d.ts" },
+      "index.d.ts": "export declare const lib: 1;\n",
+      "pnpm-workspace.yaml": 'packages:\n  - "site"\n',
+      "site/package.json": { name: "site", private: true },
+    });
+
+  it("writes and checks the report of the root with no folder named", () => {
+    const root = repository();
+    const before = runReports({ mode: "check", root });
+    expect(before.failed).toBe(true);
+    expect(before.packages.find((item) => item.folder === ".")).toMatchObject({ status: "new" });
+    expect(runReports({ mode: "update", root }).packages.find((item) => item.folder === ".")).toMatchObject({ status: "new" });
+    expect(existsSync(join(root, REPORT_FILE))).toBe(true);
+    const after = runReports({ mode: "check", root });
+    expect(after.failed).toBe(false);
+    expect(after.packages.map((item) => [item.folder, item.status])).toEqual([
+      [".", "same"],
+      ["site", "private"],
+    ]);
   });
 });
 
