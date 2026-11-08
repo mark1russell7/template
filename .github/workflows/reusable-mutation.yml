@@ -113,6 +113,13 @@ jobs:
           cache: pnpm
           cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      # The jobs mutate and gate use scores --alone and --reports of rigor-mutation 0.1.8.
+      - name: Version
+        run: |
+          if ! pnpm exec rigor-mutation --help | grep -q -- "--reports <dir>"; then
+            echo "::error::This workflow needs @mark1russell7/rigor-mutation 0.1.8 or later (scores --reports and --alone)."
+            exit 1
+          fi
       # The check of the disables is fast, so it runs once here and not on each runner.
       - name: Disables
         env:
@@ -160,8 +167,8 @@ jobs:
     strategy:
       fail-fast: false
       # The runners are shared by all repositories of the account. The rule runner-budget reads only a number here,
-      # so this is not an input.
-      max-parallel: 2
+      # so this is not an input. 3 is the most that the rule accepts.
+      max-parallel: 3
       matrix:
         selection: ${{ fromJSON(needs.plan.outputs.selections) }}
     defaults:
@@ -228,7 +235,8 @@ jobs:
           REPORT_ONLY: ${{ inputs.report-only }}
           TEST_COUNTS: ${{ inputs.test-counts }}
         run: |
-          options=(--test-files)
+          # --alone: the gate of a package with "gateOver": "package" reads all its parts, in the job gate.
+          options=(--test-files --alone)
           if [ -n "$TEST_COUNTS" ]; then options+=(--last "$TEST_COUNTS"); fi
           if pnpm exec rigor-mutation scores "$SELECTION" --lane "$LANE" --summary "$GITHUB_STEP_SUMMARY" "${options[@]}"; then :
           elif [ "$REPORT_ONLY" = "true" ]; then echo "::warning::$SELECTION is under its gate. This run is report only."
@@ -290,13 +298,11 @@ jobs:
             if [ -f "$TEST_COUNTS" ]; then cp "$TEST_COUNTS" "$counts"; fi
             options+=(--last "$TEST_COUNTS" --write-last "$counts")
           fi
+          mapfile -t names < <(node -e 'for (const s of JSON.parse(process.argv[1])) console.log(s)' "$SELECTIONS")
+          # One command reads all the selections, so the gate of a package with "gateOver": "package" reads the sum of
+          # its parts. A selection with no report is a no read: "scores" names the missing file.
           status=0
-          for name in $(node -e 'for (const s of JSON.parse(process.argv[1])) console.log(s)' "$SELECTIONS"); do
-            # A selection with no report fails: "scores" names the missing file.
-            if out=$(pnpm exec rigor-mutation scores "$name" --lane "$LANE" --report "$REPORTS/mutation-$name/mutation.json" "${options[@]}"); then :; else status=1; fi
-            echo "$out"
-            echo "- $(head -n 1 <<< "$out")" >> "$GITHUB_STEP_SUMMARY"
-          done
+          pnpm exec rigor-mutation scores "${names[@]}" --lane "$LANE" --reports "$REPORTS" --summary "$GITHUB_STEP_SUMMARY" "${options[@]}" || status=1
           if [ "$REPORT_ONLY" = "true" ]; then exit 0; fi
           exit "$status"
       # The counts of the selections that passed. Commit the file as test-counts after a good run.
