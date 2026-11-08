@@ -35,15 +35,16 @@ allowBuilds:
 
 The option `--allow-build='!@swc/core'` of `pnpm add` writes the same setting.
 
-Write `.dependency-cruiser.mjs` at the root of the repository:
+Write `.dependency-cruiser.ts` at the root of the repository. The rule `typed-scripts` of the conventions check refuses a new JavaScript file, so the config is TypeScript. Node.js 22.18 or later loads it with no build step:
 
-```js
-import { boundaries } from "@mark1russell7/boundaries";
+```ts
+import { boundaries, type Config } from "@mark1russell7/boundaries";
 
-export default boundaries(import.meta.dirname);
+const config: Config = boundaries(import.meta.dirname);
+export default config;
 ```
 
-Add the script `"check:boundaries": "depcruise --config .dependency-cruiser.mjs packages"`. The shared CI of the template starts `check:boundaries` after `build` (`CI.md`).
+Add the script `"check:boundaries": "depcruise --config .dependency-cruiser.ts packages"`. The shared CI of the template starts `check:boundaries` after `build` (`CI.md`).
 
 ## Options
 
