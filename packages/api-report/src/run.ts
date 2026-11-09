@@ -7,7 +7,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { unifiedDiff } from "./diff.ts";
 import { byCode, relativePath, type Manifest } from "./entries.ts";
 import { pageFaults, type ApiPage, type FrontmatterValue } from "./page.ts";
-import { apiModel } from "./model.ts";
+import { apiModel, MODEL_FORMAT, packageModel, type ApiModel, type ApiModelFile } from "./model.ts";
 import { referencePage } from "./reference.ts";
 import { DEFAULT_TOOL, documentedPackageReport, type DocumentedReport } from "./report.ts";
 import { globFolders, packageFolders, workspaceGlobs } from "@mark1russell7/conventions/workspace";
@@ -325,6 +325,38 @@ export function runReports(options: RunOptions): RunResult {
   return { mode: options.mode, packages: results, failed };
 }
 
+/** The options of `writeModel`. */
+export interface ModelOptions extends Pick<ApiReportConfig, "packages" | "includePrivate" | "publishConfig"> {
+  /** The root of the repository. */
+  readonly root: string;
+  /** The file to write, relative to `root`. */
+  readonly out: string;
+  /** The package folders. Without folders, the function reads each public package of the globs. */
+  readonly folders?: readonly string[];
+}
+
+/**
+ * This function writes the model of each package into one JSON file, with the format tag `api-model/1`, and
+ * gives the file. A site build reads this file. A named folder gets a model, also when its package is private.
+ */
+export function writeModel(options: ModelOptions): ApiModelFile {
+  const root = resolve(options.root);
+  const named = options.folders !== undefined && options.folders.length > 0;
+  const folders = named ? (options.folders ?? []).map((folder) => resolve(root, folder)) : reportFolders(root, options.packages);
+  const packages: ApiModel[] = [];
+  for (const folder of folders) {
+    const manifest = JSON.parse(readFileSync(join(folder, "package.json"), "utf8")) as Manifest;
+    if (manifest.private === true && !named && options.includePrivate !== true) continue;
+    packages.push(packageModel(folder, options.publishConfig === undefined ? {} : { publishConfig: options.publishConfig }));
+  }
+  if (packages.length === 0) throw new Error("no package for the model. Name a package folder, or check the globs of the workspace.");
+  const file: ApiModelFile = { format: MODEL_FORMAT, packages };
+  const out = resolve(root, options.out);
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(out, `${JSON.stringify(file, null, 2)}\n`);
+  return file;
+}
+
 /** The most lines of the diff of one package in the output. */
 const MAX_DIFF_LINES = 400;
 
@@ -386,13 +418,16 @@ export interface CliIo {
 }
 
 /** The help text of the bin. */
-export const USAGE: string = `Usage: api-report <check | update> [options] [<package folder>...]
+export const USAGE: string = `Usage: api-report <check | update | model> [options] [<package folder>...]
 
   check                  Compare each report with the built .d.ts files. Exit code 1 when a report differs, is missing or has no
                          package that the command reads, or when the command finds no package.
   update                 Write each report again, and each page of the field reference. Remove each report of a package that the
                          command does not read.
+  model                  Write the model of each package, with its doc comments, into the JSON file of --out. A site build
+                         reads this file.
 
+  --out <file>           The file of the command model, relative to the current folder.
   --root <folder>        The root of the repository. The default is the current folder.
   --packages <glob>      A glob of package folders. Use it again for more globs. The default is the globs of the workspace and a public root package.
   --report <path>        The path of the report in each package folder. The default is ${REPORT_FILE}.
@@ -406,9 +441,45 @@ The field "apiReport" of the root package.json can set packages, report, include
 /** An error of the arguments: exit code 2 and the help text. */
 class UsageError extends Error {}
 
+/** This function writes the file of the command `model`, and gives the exit code of the bin. */
+function modelCli(
+  io: CliIo,
+  root: string,
+  out: string | undefined,
+  packages: readonly string[],
+  folders: readonly string[],
+  flags: { readonly includePrivate?: boolean; readonly publishConfig?: boolean },
+): number {
+  if (out === undefined) {
+    io.stderr(`api-report: the command model needs --out <file>.\n\n${USAGE}`);
+    return 2;
+  }
+  try {
+    const config = readConfig(root);
+    const includePrivate = flags.includePrivate ?? config.includePrivate;
+    const publishConfig = flags.publishConfig ?? config.publishConfig;
+    const listed = packages.length > 0 ? packages : config.packages;
+    const file = writeModel({
+      ...(listed === undefined ? {} : { packages: listed }),
+      ...(includePrivate === undefined ? {} : { includePrivate }),
+      ...(publishConfig === undefined ? {} : { publishConfig }),
+      root,
+      out,
+      folders: folders.map((folder) => resolve(io.cwd, folder)),
+    });
+    const names = file.packages.map((model) => model.packageName).join(", ");
+    io.stdout(`api-report: wrote the model of ${names} to ${relativePath(io.cwd, out) || out}.\n`);
+    return 0;
+  } catch (error) {
+    io.stderr(`api-report: ${error instanceof Error ? error.message : String(error)}\n`);
+    return 1;
+  }
+}
+
 /** This function starts the bin with the arguments `args`, and gives its exit code. */
 export function runCli(args: readonly string[], io: CliIo): number {
-  let mode: Mode | undefined;
+  let mode: Mode | "model" | undefined;
+  let out: string | undefined;
   let root = io.cwd;
   const packages: string[] = [];
   const folders: string[] = [];
@@ -423,6 +494,8 @@ export function runCli(args: readonly string[], io: CliIo): number {
     try {
       if (arg === "check" || arg === "--check") mode = "check";
       else if (arg === "update" || arg === "--update") mode = "update";
+      else if (arg === "model") mode = "model";
+      else if (arg === "--out") out = resolve(io.cwd, value());
       else if (arg === "--root") root = resolve(io.cwd, value());
       else if (arg === "--packages") packages.push(value());
       else if (arg === "--report") flags.report = value();
@@ -440,9 +513,10 @@ export function runCli(args: readonly string[], io: CliIo): number {
     }
   }
   if (mode === undefined) {
-    io.stderr(`api-report: give the command check or update.\n\n${USAGE}`);
+    io.stderr(`api-report: give the command check, update or model.\n\n${USAGE}`);
     return 2;
   }
+  if (mode === "model") return modelCli(io, root, out, packages, folders, flags);
   let result: RunResult;
   let tool: string;
   try {

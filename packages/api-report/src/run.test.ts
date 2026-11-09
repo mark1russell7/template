@@ -6,7 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import * as home from "@mark1russell7/conventions/workspace";
-import { globFolders, globToRegExp, packageFolders, readConfig, REPORT_FILE, reportFolders, runCli, runReports, summaryMarkdown, workspaceGlobs, type CliIo } from "./index.ts";
+import { globFolders, globToRegExp, MODEL_FORMAT, packageFolders, readConfig, REPORT_FILE, reportFolders, runCli, runReports, summaryMarkdown, workspaceGlobs, type ApiModelFile, type CliIo } from "./index.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "api-report-run-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -346,6 +346,34 @@ describe("check and update", () => {
     expect(read(true)).not.toThrow();
     expect(read("yes")).toThrow("docs must be a boolean");
     expect(() => readConfig(workspace({ apiReport: { pages: [{ package: "packages/a", pages: ["a.md"], docs: true }] } }))).toThrow("docs needs the field reference");
+  });
+
+  it("writes the model of each public package with the command model, with the doc comments", () => {
+    const root = workspace();
+    writeFileSync(join(root, "packages/a/index.d.ts"), "/** The value a. */\nexport declare const a: 1;\n");
+    const result = cli(root, ["model", "--out", "site/reference.json"]);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("api-report: wrote the model of a, b to site");
+    const file = JSON.parse(readFileSync(join(root, "site/reference.json"), "utf8")) as ApiModelFile;
+    expect(file.format).toBe(MODEL_FORMAT);
+    expect(file.packages.map((model) => model.packageName)).toEqual(["a", "b"]);
+    expect(file.packages[0]?.entries[0]?.names.map((name) => name.name)).toEqual(["a"]);
+    expect(Object.values(file.packages[0]?.declarations ?? {}).map((declaration) => declaration.doc)).toEqual(["The value a."]);
+    expect(file.packages[1]?.entries.map((entry) => entry.subpath)).toEqual(["./x.css"]);
+  });
+
+  it("writes the model of a named folder only, and fails without --out or without a package", () => {
+    const root = workspace();
+    expect(cli(root, ["model", "--out", "one.json", "packages/a"]).code).toBe(0);
+    expect((JSON.parse(readFileSync(join(root, "one.json"), "utf8")) as ApiModelFile).packages.map((model) => model.packageName)).toEqual(["a"]);
+    const missing = cli(root, ["model"]);
+    expect(missing.code).toBe(2);
+    expect(missing.stderr).toContain("the command model needs --out <file>");
+    const closed = fixture({ "package.json": { name: "root", private: true }, "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n', "packages/p/package.json": { name: "p", private: true } });
+    const none = cli(closed, ["model", "--out", "none.json"]);
+    expect(none.code).toBe(1);
+    expect(none.stderr).toContain("no package for the model");
+    expect(existsSync(join(closed, "none.json"))).toBe(false);
   });
 
   it("gives exit code 2 and the help for wrong arguments", () => {

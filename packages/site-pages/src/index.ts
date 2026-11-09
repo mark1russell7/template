@@ -59,6 +59,7 @@ export {
   type StatusBoardInput,
 } from "./data/status.ts";
 export { KPI_FILE, KPI_FORMAT, KpiError, kpiFile, kpiProblems, kpiText, readKpi, writeKpi, type KpiInput } from "./data/kpi.ts";
+export { readReference, REFERENCE_FILE, REFERENCE_FORMAT, ReferenceError, referenceProblems } from "./data/reference.ts";
 export { escapeHtml, inlineMarkdown, safeUrl } from "./render/html.ts";
 export { dayRange, longDate, shortDate, utcDay } from "./render/dates.ts";
 export { BASE_CSS, pageShell, type PageOptions, type PageParts } from "./render/theme.ts";
@@ -75,6 +76,7 @@ export {
   type TimelineOptions,
 } from "./render/timeline.ts";
 export { releasesLead, renderReleasesPage, RELEASES_SCRIPT } from "./render/releases.ts";
+export { declarationKind, referenceLead, renderDoc, renderReferencePage, REFERENCE_SCRIPT, type AnchorOf } from "./render/reference.ts";
 export { classCounts, openGroups, renderStatusPage, sectionsOf, slugOf, statusLead, STATUS_SCRIPT, type BoardSection, type ItemGroup } from "./render/status.ts";
 export { probeScript, TYPESCRIPT_PROBE } from "./check/probe.ts";
 export {

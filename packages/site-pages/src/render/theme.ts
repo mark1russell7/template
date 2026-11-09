@@ -20,6 +20,8 @@ export interface PageOptions {
   generatedAt: string;
   /** The commit of the build, or null. */
   commit: string | null;
+  /** True when the site has a reference page. The navigation then links it. */
+  reference?: boolean | undefined;
 }
 
 // The dark colors: for [data-theme="dark"], and for the dark system theme without [data-theme="light"]
@@ -166,6 +168,35 @@ table.sp-table{width:100%;border-collapse:collapse;font-size:.9rem}
 .sp-check-pending .sp-dot-state{background:var(--sp-warn)}
 .sp-check-none .sp-dot-state{background:transparent;border:1.5px solid var(--sp-neutral)}
 .sp-labels{display:inline-flex;flex-wrap:wrap;gap:4px}
+
+/* The reference page */
+.sp-ref-input{font:inherit;padding:.3rem .6rem;border:1px solid var(--sp-rule-strong);border-radius:var(--sp-radius);background:var(--sp-surface);color:var(--sp-fg);width:18rem;max-width:100%;min-width:0}
+.sp-ref-input:focus-visible{border-color:var(--sp-accent)}
+.sp-ref-package{margin-top:2rem;min-width:0}
+.sp-ref-package>h2{font-family:var(--sp-mono);overflow-wrap:anywhere}
+.sp-ref-entry{margin-top:1.5rem;min-width:0}
+.sp-ref-entry>h3{display:flex;flex-wrap:wrap;align-items:baseline;gap:.25rem .75rem;margin:0 0 .5rem;padding-bottom:.25rem;border-bottom:2px solid var(--sp-rule-strong)}
+.sp-ref-entry>h3 code{font-size:1rem;background:none;padding:0}
+.sp-ref-index{display:flex;flex-wrap:wrap;gap:.25rem .9rem;margin:0 0 .75rem;padding:0;list-style:none;font-family:var(--sp-mono);font-size:.875rem}
+.sp-ref-index a{overflow-wrap:anywhere}
+.sp-ref-item{background:var(--sp-surface);border:1px solid var(--sp-rule);border-radius:var(--sp-radius);padding:.75rem 16px;margin-top:.75rem;min-width:0;scroll-margin-top:1rem}
+.sp-ref-item:target{border-color:var(--sp-accent);box-shadow:0 0 0 1px var(--sp-accent)}
+.sp-ref-item h4{display:flex;flex-wrap:wrap;align-items:baseline;gap:.25rem .5rem;margin:0 0 .5rem;font-size:1.05rem}
+.sp-ref-item h4 a{font-family:var(--sp-mono);color:var(--sp-fg);text-decoration:none;overflow-wrap:anywhere}
+.sp-ref-item h4 a:hover{color:var(--sp-accent)}
+.sp-ref-doc{max-width:70ch;color:var(--sp-fg-2)}
+.sp-ref-doc p,.sp-ref-doc ul{margin:0 0 .5rem}
+.sp-ref-doc ul{padding-left:1.25rem}
+.sp-ref-tags{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:.35rem 1rem;margin:.5rem 0}
+.sp-ref-tags>div{display:contents}
+.sp-ref-tags dt{font-size:.8125rem;font-weight:600;color:var(--sp-muted);padding-top:.1rem}
+.sp-ref-tags dd{margin:0;min-width:0}
+.sp-ref-tags dd>:last-child{margin-bottom:0}
+.sp-ref-deprecated dt{color:var(--sp-bad-ink)}
+.sp-ref-code{margin:.5rem 0 0;padding:.6rem .75rem;background:var(--sp-sunken);border-radius:var(--sp-radius);overflow-x:auto;max-width:100%;font-family:var(--sp-mono);font-size:.8125rem;line-height:1.5;tab-size:2}
+.sp-ref-code code{background:none;padding:0;font-size:inherit;white-space:pre;overflow-wrap:normal}
+.sp-ref-also{color:var(--sp-muted);font-size:.875rem;margin:.75rem 0 0}
+@media (max-width:560px){.sp-ref-tags{grid-template-columns:minmax(0,1fr);gap:0}.sp-ref-tags dd{margin-bottom:.5rem}}
 @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 `;
 
@@ -179,7 +210,7 @@ export interface PageParts {
   title: string;
   description: string;
   /** The page of the navigation that is current. */
-  current: "releases" | "status";
+  current: "releases" | "status" | "reference";
   /** The HTML of the main content. */
   main: string;
   /** The ES module of the interactions. */
@@ -214,7 +245,7 @@ export function pageShell(parts: PageParts, options: PageOptions): string {
 </head>
 <body>
 <a class="sp-skip" href="#main">Skip to the content</a>
-<header class="sp-header"><nav aria-label="Site"><a class="sp-home" href="${escapeHtml(base)}">${escapeHtml(name)}</a>${nav("releases", "Releases")}${nav("status", "Status")}</nav></header>
+<header class="sp-header"><nav aria-label="Site"><a class="sp-home" href="${escapeHtml(base)}">${escapeHtml(name)}</a>${nav("releases", "Releases")}${nav("status", "Status")}${options.reference === true || parts.current === "reference" ? nav("reference", "Reference") : ""}</nav></header>
 <main id="main" class="sp-main">
 ${parts.main}
 </main>

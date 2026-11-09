@@ -95,6 +95,17 @@ export function apiModel(report: string, packageName: string, docs: ReadonlyMap<
   return { packageName, entries, declarations };
 }
 
+/** The format tag of the file of the command `api-report model`. A reader refuses a file with a different tag. */
+export const MODEL_FORMAT = "api-model/1";
+
+/** The file of the command `api-report model`: the format tag and the model of each package. */
+export interface ApiModelFile {
+  /** The format tag, `api-model/1`. */
+  readonly format: typeof MODEL_FORMAT;
+  /** The model of each package, in the order of the folders. */
+  readonly packages: readonly ApiModel[];
+}
+
 /** This function gives the model of the package in the folder `dir`, with the doc comments of its built `.d.ts` files. */
 export function packageModel(dir: string, options: PackageReportOptions = {}): ApiModel {
   const { packageName, text, docs } = documentedPackageReport(dir, options);

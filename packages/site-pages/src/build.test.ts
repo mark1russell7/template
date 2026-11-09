@@ -284,6 +284,39 @@ describe("site-pages build", () => {
     expect(readFileSync(join(repo, "site", "dist", "status", "index.html"), "utf8")).not.toContain('id="measures"');
   });
 
+  it("writes the reference page and its data from reference.json of the output folder, and links it from each page", async () => {
+    const reference = {
+      format: "api-model/1",
+      packages: [
+        {
+          packageName: "@acme/widgets",
+          entries: [{ subpath: ".", names: [{ name: "widget", key: "build/index.d.ts#widget", isType: false, kind: "declaration" }] }],
+          declarations: { "build/index.d.ts#widget": { text: "export declare function widget(): void;", doc: "The widget of the site." } },
+        },
+      ],
+    };
+    mkdirSync(join(repo, "with-ref"));
+    writeFileSync(join(repo, "with-ref", "reference.json"), JSON.stringify(reference));
+    const result = await runCli(["build", "--out", "with-ref", "--repo", "acme/widgets"], { cwd: repo, env: {}, stdout: () => {}, stderr: () => {}, fetch: fakeFetch().fetch });
+    expect(result).toBe(0);
+    expect(JSON.parse(readFileSync(join(repo, "with-ref", "data", "reference.json"), "utf8"))).toEqual(reference);
+    const html = readFileSync(join(repo, "with-ref", "reference", "index.html"), "utf8");
+    expect(html).toContain("<h1>Reference</h1>");
+    expect(html).toContain("The widget of the site.");
+    expect(readFileSync(join(repo, "with-ref", "status", "index.html"), "utf8")).toContain("/reference/\">Reference</a>");
+    expect(readFileSync(join(repo, "site", "dist", "status", "index.html"), "utf8")).not.toContain("Reference</a>");
+  });
+
+  it("stops with code 1 at an incorrect reference.json", async () => {
+    mkdirSync(join(repo, "bad-ref"));
+    writeFileSync(join(repo, "bad-ref", "reference.json"), '{ "format": "api-model/1" }');
+    const errors: string[] = [];
+    const result = await runCli(["build", "--out", "bad-ref", "--repo", "acme/widgets"], { cwd: repo, env: {}, stdout: () => {}, stderr: (text) => errors.push(text), fetch: fakeFetch().fetch });
+    expect(result).toBe(1);
+    expect(errors.join("")).toContain("reference.json is not correct");
+    expect(existsSync(join(repo, "bad-ref", "reference"))).toBe(false);
+  });
+
   it("reports the faults of the changelogs on the Status page, and does not fail with no field sitePages.changelogFrom", async () => {
     const errors: string[] = [];
     const code = await runCli(["build", "--out", "cl-report", "--repo", "acme/widgets"], { cwd: repo, env: {}, stdout: () => {}, stderr: (text) => errors.push(text), fetch: fakeFetch().fetch });
