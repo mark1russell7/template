@@ -118,7 +118,8 @@ jobs:
       # The jobs mutate and gate use scores --alone and --reports of rigor-mutation 0.1.8.
       - name: Version
         run: |
-          if ! pnpm exec rigor-mutation --help | grep -q -- "--reports <dir>"; then
+          help=$(pnpm exec rigor-mutation --help || true)
+          if ! grep -qF -- "--reports <dir>" <<< "$help"; then
             echo "::error::This workflow needs @mark1russell7/rigor-mutation 0.1.8 or later (scores --reports and --alone)."
             exit 1
           fi
