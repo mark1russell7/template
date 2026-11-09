@@ -942,6 +942,12 @@ describe("home-package", () => {
     expect(rule(changed("function medianOf(xs: number[]): number {\n  return xs[0] ?? 0;\n}\n", "mark1russell7/rigor"), "home-package", { base: "base", env: {} }).status).toBe("pass");
   });
 
+  it("passes in a repository of alsoIn, where the code of a home moves", () => {
+    const code = "function medianOf(xs: number[]): number {\n  return xs[0] ?? 0;\n}\nfunction mulberry32(seed: number): number {\n  return seed;\n}\n";
+    expect(rule(changed(code, "mark1russell7/algebra"), "home-package", { base: "base", env: {} }).status).toBe("pass");
+    expect(rule(changed(code, "mark1russell7/other"), "home-package", { base: "base", env: {} }).breaks.length).toBe(2);
+  });
+
   it("skips with no change, and examines each line with the option scope all", () => {
     const root = changed("// the end\n");
     expect(rule(root, "home-package", { env: {} }).status).toBe("skipped");
