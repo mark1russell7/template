@@ -24,10 +24,11 @@
       "automerge": false
     },
     {
-      "description": "Renovate merges the minor, patch and digest updates of the GitHub Actions when CI passes.",
+      "description": "The release train merges the minor, patch and digest updates of the GitHub Actions when CI passes and no release is open: a workflow change during a release makes GitHub refuse its tag.",
       "matchManagers": ["github-actions"],
       "matchUpdateTypes": ["minor", "patch", "digest", "pinDigest"],
-      "automerge": true
+      "automerge": false,
+      "addLabels": ["train-merge"]
     },
     {
       "description": "Renovate never merges an update of the Claude Code CLI: it changes the program that runs with the API key. A person reviews it.",
