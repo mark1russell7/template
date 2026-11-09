@@ -148,6 +148,17 @@ export const HOMES: readonly Home[] = [
     note: "The plain path, glob and walk functions go to the area files (mark1russell7/files). These packages wrap them as procedures.",
   },
   {
+    area: "headless-browser",
+    title: "Headless browser runs",
+    covers: "finding the browser of the system, a headless run with argv, a temporary profile, a time limit and a signal, and its output: PDF files, screenshots in PNG or JPEG, page text",
+    packages: [],
+    repo: "mark1russell7/client",
+    state: "planned",
+    words: ["browser", "chromium", "chrome", "headless", "screenshot", "pdf", "print", "png", "jpeg", "puppeteer", "playwright"],
+    signatures: ["findBrowser", "renderScreenshot"],
+    note: "The home is @procedures/browser (planned). Today findBrowser and renderPdf are in @procedures/pdf, which re-exports them from the new home when it ships.",
+  },
+  {
     area: "cli",
     title: "Command-line arguments",
     covers: "argument parsing and the help text of command-line tools, from a schema",
