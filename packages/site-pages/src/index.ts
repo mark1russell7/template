@@ -59,7 +59,7 @@ export {
   type StatusBoardInput,
 } from "./data/status.ts";
 export { KPI_FILE, KPI_FORMAT, KpiError, kpiFile, kpiProblems, kpiText, readKpi, writeKpi, type KpiInput } from "./data/kpi.ts";
-export { readReference, REFERENCE_FILE, REFERENCE_FORMAT, ReferenceError, referenceProblems } from "./data/reference.ts";
+export { readReference, REFERENCE_FILE, REFERENCE_FORMAT, ReferenceDataError, referenceProblems } from "./data/reference.ts";
 export { escapeHtml, inlineMarkdown, safeUrl } from "./render/html.ts";
 export { dayRange, longDate, shortDate, utcDay } from "./render/dates.ts";
 export { BASE_CSS, pageShell, type PageOptions, type PageParts } from "./render/theme.ts";

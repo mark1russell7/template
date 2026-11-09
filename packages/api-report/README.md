@@ -203,6 +203,7 @@ interface ApiModelFile {
 - It takes the options `--root`, `--packages`, `--include-private`, `--no-publish-config` and the package folders.
 - The exit code is 1 when the command finds no package, and 2 without `--out`.
 - `site-pages build` reads `reference.json` from the output folder of a site and writes the reference page.
+- The file `test/fixtures/api-model-1.json` is the output of the command on a fixture package. The tests of api-report and site-pages read it, so a change of the format fails a test of each.
 
 ## Library
 

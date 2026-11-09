@@ -76,9 +76,9 @@ REFERENCE_SCRIPT: build/index.d.ts#REFERENCE_SCRIPT
 RELEASES_SCRIPT: build/index.d.ts#RELEASES_SCRIPT
 type ReadReleasesOptions: build/index.d.ts#ReadReleasesOptions
 type ReadStatusBoardOptions: build/index.d.ts#ReadStatusBoardOptions
+ReferenceDataError: build/index.d.ts#ReferenceDataError
 type ReferenceDeclaration: build/index.d.ts#ReferenceDeclaration
 type ReferenceEntry: build/index.d.ts#ReferenceEntry
-ReferenceError: build/index.d.ts#ReferenceError
 type ReferenceFile: build/index.d.ts#ReferenceFile
 type ReferenceName: build/index.d.ts#ReferenceName
 type ReferencePackage: build/index.d.ts#ReferencePackage
@@ -1082,6 +1082,12 @@ interface ReadStatusBoardOptions {
   generatedAt?: string | undefined;
 }
 
+### build/index.d.ts#ReferenceDataError
+export declare class ReferenceDataError extends Error {
+  readonly problems: readonly string[];
+  constructor(problems: readonly string[]);
+}
+
 ### build/index.d.ts#ReferenceDeclaration
 interface ReferenceDeclaration {
   text: string;
@@ -1092,12 +1098,6 @@ interface ReferenceDeclaration {
 interface ReferenceEntry {
   subpath: string;
   names: ReferenceName[];
-}
-
-### build/index.d.ts#ReferenceError
-export declare class ReferenceError extends Error {
-  readonly problems: readonly string[];
-  constructor(problems: readonly string[]);
 }
 
 ### build/index.d.ts#ReferenceFile

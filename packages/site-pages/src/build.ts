@@ -8,7 +8,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { headCommit, originRepository } from "./data/git.ts";
 import { KPI_FILE, KpiError, readKpi } from "./data/kpi.ts";
-import { readReference, REFERENCE_FILE, ReferenceError } from "./data/reference.ts";
+import { readReference, REFERENCE_FILE, ReferenceDataError } from "./data/reference.ts";
 import { changelogGateProblem, changelogReading } from "./data/changelog.ts";
 import { readChangelogFrom, readChangelogs, readReleases, ReleaseDataError } from "./data/releases.ts";
 import { readStatusBoard, RoadmapParseError } from "./data/status.ts";
@@ -77,7 +77,7 @@ function write(file: string, content: string, files: string[]): void {
  * `kpi.json`, the status data and the status page show it. When the output folder has a `reference.json`,
  * the function also writes `data/reference.json` and `reference/index.html`, and each page links the reference.
  *
- * @throws ReleaseDataError, RoadmapParseError, KpiError or ReferenceError when a source on disk is not correct
+ * @throws ReleaseDataError, RoadmapParseError, KpiError or ReferenceDataError when a source on disk is not correct
  */
 export async function build(options: BuildOptions): Promise<BuildResult> {
   const { repoDir, repository, warn = () => {} } = options;
@@ -278,7 +278,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     );
     return 0;
   } catch (error) {
-    if (error instanceof ReleaseDataError || error instanceof RoadmapParseError || error instanceof KpiError || error instanceof ReferenceError || (error as NodeJS.ErrnoException)?.code === "ENOENT") {
+    if (error instanceof ReleaseDataError || error instanceof RoadmapParseError || error instanceof KpiError || error instanceof ReferenceDataError || (error as NodeJS.ErrnoException)?.code === "ENOENT") {
       io.stderr(`site-pages: ${(error as Error).message}\n`);
       return 1;
     }

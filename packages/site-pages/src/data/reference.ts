@@ -19,12 +19,12 @@ export const REFERENCE_FILE = "reference.json";
 const NAME_KINDS: ReadonlySet<string> = new Set(["declaration", "namespace", "external", "ambient"]);
 
 /** An error in the data of `reference.json`. The field `problems` has one line for each fault. */
-export class ReferenceError extends Error {
+export class ReferenceDataError extends Error {
   readonly problems: readonly string[];
 
   constructor(problems: readonly string[]) {
     super(`${REFERENCE_FILE} is not correct: ${problems.join(" ")}`);
-    this.name = "ReferenceError";
+    this.name = "ReferenceDataError";
     this.problems = problems;
   }
 }
@@ -94,16 +94,16 @@ function cleanPackage({ packageName, entries, declarations }: ReferencePackage):
 /**
  * This function reads the text of a `reference.json`, and gives the file with only its known fields.
  *
- * @throws ReferenceError when the text is not correct
+ * @throws ReferenceDataError when the text is not correct
  */
 export function readReference(text: string): ReferenceFile {
   let value: unknown;
   try {
     value = JSON.parse(text);
   } catch (error) {
-    throw new ReferenceError([`The file is not JSON: ${error instanceof Error ? error.message : String(error)}`]);
+    throw new ReferenceDataError([`The file is not JSON: ${error instanceof Error ? error.message : String(error)}`]);
   }
   const problems = referenceProblems(value);
-  if (problems.length > 0) throw new ReferenceError(problems);
+  if (problems.length > 0) throw new ReferenceDataError(problems);
   return { format: REFERENCE_FORMAT, packages: (value as ReferenceFile).packages.map(cleanPackage) };
 }

@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { readReference } from "../data/reference.ts";
 import type { ReferenceFile, ReferencePackage } from "../data/types.ts";
 import { declarationKind, referenceLead, renderDoc, renderReferencePage, REFERENCE_SCRIPT } from "./reference.ts";
 import type { PageOptions } from "./theme.ts";
@@ -51,6 +53,11 @@ describe("the HTML of a doc comment", () => {
     expect(html).toContain("<dt>Parameter <code>a</code></dt><dd><p>The value.</p></dd>");
     expect(html).toContain("<dt>Throws</dt><dd><p>Error</p></dd>");
     expect(html).not.toContain("internal");
+  });
+
+  it("does not show the tags for the authors of the code, also with text", () => {
+    const html = renderDoc("Text.\n@internal Only for the tests.\n@privateRemarks A note.\n@hidden");
+    expect(html).toBe("<p>Text.</p>");
   });
 
   it("reads an example without a fence as code, and a tag inside a fence as code", () => {
@@ -106,5 +113,33 @@ describe("the reference page", () => {
     const two = renderReferencePage({ ...FILE, packages: [LIB, { ...LIB, packageName: "@acme/two" }] }, PAGE);
     expect(two).toContain('id="-acme-lib--layout"');
     expect(two).toContain('id="-acme-two--layout"');
+  });
+});
+
+/**
+ * The file of the format `api-model/1` that two packages hold. The test of api-report compares the output of
+ * `api-report model` with it, so a change of the writer or of this reader fails a test.
+ */
+const SHARED = new URL("../../../api-report/test/fixtures/api-model-1.json", import.meta.url);
+
+describe("the shared file of the format api-model/1", () => {
+  const text = readFileSync(SHARED, "utf8");
+  const file = readReference(text);
+
+  it("reads each field of the output of api-report model", () => {
+    expect(file).toEqual(JSON.parse(text));
+  });
+
+  it("renders each name, its doc comment and its declaration", () => {
+    const html = renderReferencePage(file, PAGE);
+    for (const id of ["Options", "layout", "many", "ns", "ns.inner", "version", "toSvg", "Other"]) expect(html).toContain(`id="${id}"`);
+    expect(html).toContain('The options of <a href="#layout"><code>layout</code></a>.');
+    expect(html).toContain("<ul><li>It reads the options.</li><li>It gives nothing.</li></ul>");
+    expect(html).toContain("<dt>Parameter <code>options</code></dt><dd><p>The &lt;options&gt;.</p></dd>");
+    expect(html).toContain('<dt>Example</dt><dd><pre class="sp-ref-code"><code>layout({ gap: 2 });</code></pre></dd>');
+    expect(html).toContain('<div class="sp-ref-deprecated"><dt>Deprecated</dt>');
+    expect(html).toContain("The version of the package.");
+    expect(html).not.toContain("Only for the tests.");
+    expect(html).toContain("This entry has no declaration file.");
   });
 });

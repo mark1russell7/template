@@ -595,7 +595,8 @@ site-pages build --out dist
 - The build writes `data/reference.json` and `reference/index.html`. The navigation of each page then has a Reference link.
 - The page has a section for each entry point, with its import path, an index and an article for each name.
 - A name of two entries has its article in the first entry only.
-- The doc comments become HTML: paragraphs, lists, code fences, `{@link}` and the block tags. The page does not show `@internal`.
+- The lead counts each exported name. An external name or a namespace member counts, also without an article of its own.
+- The doc comments become HTML: paragraphs, lists, code fences, `{@link}` and the block tags. The page does not show `@internal`, `@privateRemarks` or `@hidden`.
 - A filter at the top shows only the names that contain its text. Without JavaScript, the page shows each name.
 - `readReference(text)` reads the file for a site with its own components. `renderReferencePage(file, options)` gives the HTML of the page.
 

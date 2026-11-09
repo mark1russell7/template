@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readReference, REFERENCE_FORMAT, ReferenceError, referenceProblems } from "./reference.ts";
+import { readReference, REFERENCE_FORMAT, ReferenceDataError, referenceProblems } from "./reference.ts";
 
 const FILE = {
   format: "api-model/1",
@@ -25,7 +25,7 @@ describe("the file reference.json", () => {
     expect(referenceProblems({ ...FILE, format: "api-model/2" })[0]).toContain("The format is not api-model/1.");
     expect(referenceProblems({ format: "api-model/1", packages: [] })).toEqual(["The file has no packages."]);
     expect(referenceProblems([])).toEqual(["The file is not an object."]);
-    expect(() => readReference("{")).toThrow(ReferenceError);
+    expect(() => readReference("{")).toThrow(ReferenceDataError);
     expect(() => readReference("{")).toThrow(/reference\.json is not correct: The file is not JSON/);
   });
 

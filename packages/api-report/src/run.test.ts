@@ -6,7 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import * as home from "@mark1russell7/conventions/workspace";
-import { globFolders, globToRegExp, MODEL_FORMAT, packageFolders, readConfig, REPORT_FILE, reportFolders, runCli, runReports, summaryMarkdown, workspaceGlobs, type ApiModelFile, type CliIo } from "./index.ts";
+import { globFolders, globToRegExp, MODEL_FORMAT, packageFolders, readConfig, REPORT_FILE, reportFolders, runCli, runReports, summaryMarkdown, workspaceGlobs, writeModel, type ApiModelFile, type CliIo } from "./index.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "api-report-run-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -391,5 +391,69 @@ describe("the bin", () => {
     const result = spawnSync(process.execPath, [bin, "update"], { cwd: root, encoding: "utf8" });
     expect(result.status, result.stdout + result.stderr).toBe(0);
     expect(spawnSync(process.execPath, [bin, "check"], { cwd: root, encoding: "utf8" }).status).toBe(0);
+  });
+});
+
+/**
+ * The file of the format `api-model/1` that two packages hold: api-report writes it, and site-pages reads it. A
+ * change of the writer fails this test, and a change of the reader fails the test of site-pages on the same file.
+ */
+const MODEL_FIXTURE = fileURLToPath(new URL("../test/fixtures/api-model-1.json", import.meta.url));
+
+/** The package of the shared file: an interface, overloads, a namespace, an external name and a second entry. */
+const MODEL_PACKAGE = {
+  "package.json": {
+    name: "@acme/lib",
+    version: "1.0.0",
+    exports: { ".": { types: "./build/index.d.ts" }, "./svg": { types: "./build/svg.d.ts" }, "./x.css": "./x.css" },
+    dependencies: { "other-pkg": "^1.0.0" },
+  },
+  "build/index.d.ts": [
+    "import * as ns from \"./ns.js\";",
+    "/** The options of {@link layout}. */",
+    "export interface Options {",
+    "  /** The gap between two boxes. */",
+    "  readonly gap?: number;",
+    "}",
+    "/**",
+    " * The layout of a tree.",
+    " *",
+    " * - It reads the options.",
+    " * - It gives nothing.",
+    " *",
+    " * @param options - The <options>.",
+    " * @returns Nothing.",
+    " * @example",
+    " * layout({ gap: 2 });",
+    " */",
+    "export declare function layout(options: Options): void;",
+    "/**",
+    " * The text of a value.",
+    " *",
+    " * @deprecated Use {@link layout}.",
+    " */",
+    "export declare function many(a: string): string;",
+    "export declare function many(a: number): number;",
+    "/**",
+    " * The version of the package.",
+    " *",
+    " * @internal Only for the tests.",
+    " */",
+    "export declare const version: string;",
+    "export { ns };",
+    "export type { Other } from \"other-pkg\";",
+    "",
+  ].join("\n"),
+  "build/ns.d.ts": "/** The inner value. */\nexport declare const inner: number;\n",
+  "build/svg.d.ts": "export { layout } from \"./index.js\";\nexport declare function toSvg(): string;\n",
+};
+
+describe("the shared file of the format api-model/1", () => {
+  it("is the output of the command model on the package of the file", () => {
+    const root = fixture(MODEL_PACKAGE);
+    writeModel({ root, out: "reference.json", folders: ["."] });
+    const text = readFileSync(join(root, "reference.json"), "utf8");
+    if (process.env["UPDATE_API_MODEL_FIXTURE"] === "1") writeFileSync(MODEL_FIXTURE, text);
+    expect(text, "Start the test with UPDATE_API_MODEL_FIXTURE=1 to write the file, and examine its diff.").toBe(readFileSync(MODEL_FIXTURE, "utf8"));
   });
 });

@@ -40,6 +40,9 @@ const TAG_LABELS: Readonly<Record<string, string>> = {
   deprecated: "Deprecated",
 };
 
+/** The tags for the authors of the code. The page does not show them, also when they have text. */
+const HIDDEN_TAGS: ReadonlySet<string> = new Set(["internal", "privateRemarks", "hidden"]);
+
 /** The tags with a name before their text. */
 const NAMED_TAGS: ReadonlySet<string> = new Set(["param", "typeParam", "template"]);
 
@@ -147,10 +150,10 @@ function docBlocks(doc: string): DocBlock[] {
   return blocks;
 }
 
-/** This function renders one block tag as a term and its description. A tag without text gives no HTML. */
+/** This function renders one block tag as a term and its description. A hidden tag or a tag without text gives no HTML. */
 function tagHtml(block: DocBlock, anchorOf: AnchorOf): string {
   const tag = block.tag ?? "";
-  if (block.lines.every((line) => line.trim() === "")) return "";
+  if (HIDDEN_TAGS.has(tag) || block.lines.every((line) => line.trim() === "")) return "";
   let label = escapeHtml(TAG_LABELS[tag] ?? `@${tag}`);
   let lines = block.lines;
   if (NAMED_TAGS.has(tag)) {
