@@ -62,8 +62,8 @@ function ruleMatches(rule: PackRule, path: string, folder: boolean): boolean {
 }
 
 /**
- * This function gives the rules that npm 11 (npm-packlist 10) makes from the field `files`, for the path and its
- * folders. npm examines each entry on the disk. At the time of the pack, the path is a file and each of its parents
+ * This function gives the rules that npm 11 (npm-packlist 10) makes from the field `files`. The rules are for the
+ * path and its folders. npm examines each entry on the disk. At the time of the pack, the path is a file and each of its parents
  * is a folder. This function takes each other entry as a pattern, and the rules of a pattern match the path in the
  * same way.
  */
@@ -78,11 +78,11 @@ function packRules(files: readonly unknown[], path: string): { readonly strict: 
     if (file.startsWith("./")) file = file.slice(1);
     if (file.endsWith("/*")) file += "*";
     const inverse = `!${file}`;
-    // The path that npm gives to lstat: without the `!` characters, normalized as path.join does
-    const target = posix
-      .normalize(file.replace(/^!+/, "") || ".")
-      .replace(/^\/+/, "")
-      .replace(/\/+$/, "");
+    // The path that npm gives to lstat: without the `!` characters, normalized as path.join does. After normalize,
+    // the path has no repeated `/`, so it has at most one `/` at the start and one at the end.
+    let target = posix.normalize(file.replace(/^!+/, "") || ".");
+    if (target.startsWith("/")) target = target.slice(1);
+    if (target.endsWith("/")) target = target.slice(0, -1);
     if (target === path) {
       // A file is strict: its rule goes before the strict rules of the earlier entries, so the first entry decides
       strict.unshift(packRule(inverse, index));
@@ -107,8 +107,8 @@ function lastMatch(rules: readonly PackRule[], path: string, folder: boolean): P
 
 /**
  * This function tells if npm 11 packs `path` (relative to the package, with `/`) by the field `files`. It follows
- * npm-packlist 10: the rule `*`, then a rule for each entry in its order, then the strict rules of the entries that
- * name the file. The last rule that matches a path decides, and npm does not go into a folder that it does not take.
+ * npm-packlist 10. First comes the rule `*`, then a rule for each entry in its order. Last come the strict rules of
+ * the entries that name the file. The last rule that matches a path decides. npm does not go into a folder that it does not take.
  * The function gives the index of the entry of the rule that takes the file, or -1 when npm does not pack it.
  */
 export function packedBy(files: readonly unknown[], path: string): number {
