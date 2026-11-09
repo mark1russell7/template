@@ -70,14 +70,23 @@ function withExportNames(code: string, items: readonly ApiName[]): string {
  * export when the source gave the declaration a different name. A name from a bundler does not show. A
  * comment also tells the package of an external name.
  *
- * The argument `report` is the text of a report, or a model. A model with doc comments puts the doc comment of
- * each declaration above the declaration. The text of a report has no doc comments.
+ * The first argument is a model, or the text of a report with the name of its package. A model with doc
+ * comments puts the doc comment of each declaration above the declaration. The text of a report has no doc
+ * comments.
  *
  * The fields of `frontmatter` go into the front matter, after the title and the description. A field `title` or
  * `description` replaces the default.
  */
-export function referencePage(report: string | ApiModel, packageName: string, frontmatter: Readonly<Record<string, FrontmatterValue>> = {}): string {
-  const { entries, declarations } = typeof report === "string" ? apiModel(report, packageName) : report;
+export function referencePage(model: ApiModel, frontmatter?: Readonly<Record<string, FrontmatterValue>>): string;
+export function referencePage(report: string, packageName: string, frontmatter?: Readonly<Record<string, FrontmatterValue>>): string;
+export function referencePage(
+  report: string | ApiModel,
+  second?: string | Readonly<Record<string, FrontmatterValue>>,
+  third: Readonly<Record<string, FrontmatterValue>> = {},
+): string {
+  const model = typeof report === "string" ? apiModel(report, typeof second === "string" ? second : "") : report;
+  const frontmatter = typeof report === "string" ? third : typeof second === "object" ? second : {};
+  const { packageName, entries, declarations } = model;
   const fields: Record<string, FrontmatterValue> = {
     title: `Each export of ${packageName}`,
     description: `Each entry point of ${packageName}, with its exports and their declarations.`,

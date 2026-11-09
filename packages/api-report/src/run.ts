@@ -177,8 +177,7 @@ function faultsOfPages(root: string, entry: ApiPage, report: DocumentedReport, p
 
 /** This function gives the page of each export of one package. With the field `docs`, the page also has the doc comments. */
 function referenceOf(entry: ApiPage, report: DocumentedReport, packageName: string): string {
-  const source = entry.docs === true ? apiModel(report.text, packageName, report.docs) : report.text;
-  return referencePage(source, packageName, entry.frontmatter);
+  return referencePage(apiModel(report.text, packageName, entry.docs === true ? report.docs : undefined), entry.frontmatter);
 }
 
 /** This function writes the page of each export of one package, and gives its path when the text changes. */

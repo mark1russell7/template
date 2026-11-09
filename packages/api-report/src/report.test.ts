@@ -517,9 +517,16 @@ describe("the doc comments", () => {
         " *   indented(1);",
         " */",
         "export declare function marked(): void;",
+        "/**",
+        "    Lines without a mark.",
+        "",
+        "      indented(2);",
+        "    */",
+        "export declare function bare(): void;",
       ].join("\n"),
     );
     expect(info.docs.get("marked")).toBe("*Bold* first.\n@example\n  indented(1);");
+    expect(info.docs.get("bare")).toBe("Lines without a mark.\n\n  indented(2);");
     expect(info.docs.get("add")).toBe("The sum of two numbers.\n\n@param a - The first number.");
     expect(info.docs.get("many")).toBe("The first overload wins.");
     expect(info.docs.has("plain")).toBe(false);

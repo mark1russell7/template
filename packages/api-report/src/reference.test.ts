@@ -164,7 +164,13 @@ describe("the page of each export", () => {
 
 describe("the page of each export from a model", () => {
   it("gives the same page as the report when the model has no doc comments", () => {
-    expect(referencePage(apiModel(REPORT, "lib"), "lib")).toBe(referencePage(REPORT, "lib"));
+    expect(referencePage(apiModel(REPORT, "lib"))).toBe(referencePage(REPORT, "lib"));
+  });
+
+  it("takes the name of the package and the front matter from the model", () => {
+    const fields = { order: 3 };
+    expect(referencePage(apiModel(REPORT, "lib"), fields)).toBe(referencePage(REPORT, "lib", fields));
+    expect(referencePage(apiModel(REPORT, "other"))).toContain('title: "Each export of other"');
   });
 
   it("puts the doc comment of each declaration above it, and keeps a comment end in the text inside the comment", () => {
@@ -172,7 +178,7 @@ describe("the page of each export from a model", () => {
       ["build/index.d.ts#layout", "The layout of a tree."],
       ["build/svg.d.ts#toSvg", "The text of a tick.\n\n@param tick - A tick. Its end mark */ stays inside."],
     ]);
-    const page = referencePage(apiModel(REPORT, "lib", docs), "lib");
+    const page = referencePage(apiModel(REPORT, "lib", docs));
     expect(page).toContain("/** The layout of a tree. */\nfunction layout(): void;");
     expect(page).toContain("/**\n * The text of a tick.\n *\n * @param tick - A tick. Its end mark *\/ stays inside.\n */\nfunction toSvg(tick: string): string;");
   });

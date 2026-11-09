@@ -321,7 +321,8 @@ export declare function publishedManifest(manifest: Manifest): Manifest;
 export declare function readConfig(root: string): ApiReportConfig;
 
 ### build/index.d.ts#referencePage
-export declare function referencePage(report: string | ApiModel, packageName: string, frontmatter?: Readonly<Record<string, FrontmatterValue>>): string;
+export declare function referencePage(model: ApiModel, frontmatter?: Readonly<Record<string, FrontmatterValue>>): string;
+export declare function referencePage(report: string, packageName: string, frontmatter?: Readonly<Record<string, FrontmatterValue>>): string;
 
 ### build/index.d.ts#reportEntries
 export declare function reportEntries(report: string): ReadonlyMap<string, ReadonlySet<string>>;

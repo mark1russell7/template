@@ -195,5 +195,5 @@ The package also exports the functions of the tool:
 - `packageFolders(root, globs)`, `globFolders(root, glob)`, `globToRegExp(glob)` and `workspaceGlobs(root)` find the packages. They come from `@mark1russell7/conventions/workspace`.
 - `diffLines(before, after)` and `unifiedDiff(before, after)` give a line diff.
 - `pageFaults(report, packageName, pages, except, complete)` and `reportEntries(report)` hold a hand-written page against a report.
-- `referencePage(report, packageName, frontmatter)` gives the Markdown of the page of each export. The argument `report` is the text of a report or a model. The argument `frontmatter` is optional.
+- `referencePage(model, frontmatter)` and `referencePage(report, packageName, frontmatter)` give the Markdown of the page of each export. The argument `frontmatter` is optional.
 - `packageModel(folder)` and `apiModel(report, packageName, docs)` give the model of the API.

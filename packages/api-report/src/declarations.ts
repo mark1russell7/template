@@ -58,12 +58,19 @@ interface DocumentedStatement {
 
 /**
  * This function gives the text of a doc comment: the lines without the `/**` and `*` marks and the
- * spaces at their ends. The first line and each line without a `*` mark also lose the spaces at their
- * start. The result keeps the tags, for example `@param`, and the indent after a `*` mark.
+ * spaces at their ends. The first line also loses the spaces at its start. The lines without a `*` mark
+ * lose only their common indent. The result keeps the tags, for example `@param`, and the indent after a
+ * `*` mark.
  */
 function docText(comment: string): string {
-  const inner = comment.replace(/^\/\*\*/, "").replace(/\*\/$/, "");
-  const lines = inner.split("\n").map((line, index) => (index > 0 && /^\s*\*/.test(line) ? line.replace(/^\s*\* ?/, "") : line.trimStart()).trimEnd());
+  const inner = comment.replace(/^\/\*\*/, "").replace(/\*\/$/, "").split("\n");
+  const marked = (line: string, index: number): boolean => index > 0 && /^\s*\*/.test(line);
+  const bare = inner.filter((line, index) => index > 0 && !marked(line, index) && line.trim() !== "");
+  const indent = bare.length === 0 ? 0 : Math.min(...bare.map((line) => line.length - line.trimStart().length));
+  const lines = inner.map((line, index) => {
+    if (index === 0) return line.trim();
+    return (marked(line, index) ? line.replace(/^\s*\* ?/, "") : line.slice(indent)).trimEnd();
+  });
   while (lines.length > 0 && lines[0]?.trim() === "") lines.shift();
   while (lines.length > 0 && lines.at(-1)?.trim() === "") lines.pop();
   return lines.join("\n");
