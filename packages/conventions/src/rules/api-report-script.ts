@@ -17,7 +17,7 @@ const COMMAND = "api-report check";
  * This function gives `text` with one more entry in the block `field` of a `package.json` file. The entry goes in the
  * order of the names when `sorted` is true, else at the end. It gives undefined when the block is not on separate lines.
  */
-function addEntry(text: string, field: string, name: string, value: string, sorted: boolean): string | undefined {
+export function addEntry(text: string, field: string, name: string, value: string, sorted: boolean): string | undefined {
   const eol = text.includes("\r\n") ? "\r\n" : "\n";
   const lines = text.split(/\r?\n/);
   const start = lines.findIndex((line) => line === `  "${field}": {`);
@@ -36,7 +36,7 @@ function addEntry(text: string, field: string, name: string, value: string, sort
 }
 
 /** This function adds a block with one entry after the last block of the root object. */
-function addBlock(text: string, field: string, name: string, value: string): string | undefined {
+export function addBlock(text: string, field: string, name: string, value: string): string | undefined {
   const eol = text.includes("\r\n") ? "\r\n" : "\n";
   const lines = text.split(/\r?\n/);
   const end = lines.lastIndexOf("}");

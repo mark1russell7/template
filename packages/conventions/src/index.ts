@@ -42,6 +42,7 @@ export {
 } from "./rule.ts";
 export {
   apiReportScript,
+  coverageProvider,
   cuePreset,
   gateTrigger,
   homePackage,

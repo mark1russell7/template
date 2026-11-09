@@ -96,6 +96,7 @@ cleanPath: build/index.d.ts#cleanPath
 codePackages: build/index.d.ts#codePackages
 configsOfScript: build/index.d.ts#configsOfScript
 convertGate: build/index.d.ts#convertGate
+coverageProvider: build/index.d.ts#coverageProvider
 createContext: build/index.d.ts#createContext
 cuePreset: build/index.d.ts#cuePreset
 declaredName: build/index.d.ts#declaredName
@@ -691,6 +692,9 @@ export declare function convertGate(text: string, file: string, commit?: string)
 } | {
   reason: string;
 };
+
+### build/index.d.ts#coverageProvider
+export declare const coverageProvider: Rule;
 
 ### build/index.d.ts#createContext
 export declare function createContext(root: string, config: ConventionsConfig, options?: Pick<CheckOptions, "base" | "env">): RuleContext;
