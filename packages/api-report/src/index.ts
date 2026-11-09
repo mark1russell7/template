@@ -33,7 +33,6 @@ export { apiReport, DEFAULT_TOOL, HEADER_LINES, packageReport, type PackageRepor
 export {
   formatResult,
   readConfig,
-  reportFolders,
   REPORT_FILE,
   runCli,
   runReports,
@@ -46,4 +45,4 @@ export {
   type RunOptions,
   type RunResult,
 } from "./run.ts";
-export { globFolders, globToRegExp, packageFolders, workspaceGlobs } from "@mark1russell7/conventions/workspace";
+export { globFolders, globToRegExp, packageFolders, reportFolders, workspaceGlobs } from "@mark1russell7/conventions/workspace";

@@ -25,6 +25,7 @@ export {
   parseJsonc,
   readJsonc,
   replaceLine,
+  RULE_WARN_DAYS,
   runGit,
   specifiersOf,
   type AuditSource,

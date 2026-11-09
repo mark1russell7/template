@@ -18,7 +18,7 @@ pnpm exec conventions fix
 pnpm exec conventions --list
 ```
 
-Each break shows the file, the line, the rule and the fix. In GitHub Actions, the check also writes an annotation on the line of each break. It also writes a table of the rules to the summary of the run (`GITHUB_STEP_SUMMARY`). The exit code is 1 when a rule has a break.
+Each break shows the file, the line, the rule and the fix. In GitHub Actions, the check also writes an annotation on the line of each break. It also writes a table of the rules to the summary of the run (`GITHUB_STEP_SUMMARY`). The exit code is 1 when a rule has a break. A break of a new rule before its day `failsFrom` is a warning. The check shows it with the status `warn` and a `::warning` annotation, and the exit code stays 0.
 
 `conventions fix` writes the fixes that the rules know, and checks again. It continues until no fix applies. Each fix is an exact change of a file, and the fix writes it only when the file did not change after the check. These breaks have a fix:
 
@@ -243,6 +243,8 @@ An overlay file has the shape `{ "homes": [...] }`. A home of the overlay takes 
 A rule is a module in `src/rules/` that exports a `Rule`. A `Rule` has an `id`, a `title`, a `reason`, a `fix` and its audit `sources`. It also has its `options` with defaults, and a function `check(context, options)`. The function gives a list of breaks, or `{ skipped: "<reason>" }`. 
 
 A break can have `edits`: each edit gives a file, its whole text `before` and its whole text `after`. Give an edit only when the fix is certain, and test it with `runFix`. Add the rule to `RULES` in `src/rules/index.ts`, with a test of a case that passes and a case that breaks. Add a rule only when 3 or more repositories tell it and a script examines it exactly.
+
+Give each new rule the field `failsFrom`: the first day (`YYYY-MM-DD`, UTC) on which a break fails the check. Use a day at least `RULE_WARN_DAYS` (14) days after the release. A new version of this package reaches each repository through an update pull request. Thus a new rule that fails at once blocks that pull request in each repository that breaks it. Until the day, each break is a warning, and the owners fix the breaks. A test fails for a new rule with no `failsFrom`.
 
 ## Library
 

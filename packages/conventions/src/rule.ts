@@ -97,6 +97,9 @@ export interface RuleContext {
 /** The result of a rule: a list of breaks (empty when the rule passes), or the reason why the rule did not start. */
 export type RuleOutcome = readonly Break[] | { readonly skipped: string };
 
+/** The days from the release of a new rule to its day `failsFrom`, at the least. In this time the owners fix the breaks. */
+export const RULE_WARN_DAYS = 14;
+
 /** One convention, as a machine check. */
 export interface Rule {
   /** A short id in kebab case. The configuration names the rule with this id. */
@@ -116,6 +119,13 @@ export interface Rule {
    * Then an entry of `ignore` that matches no break is not stale, because a later change can match it.
    */
   readonly changeScoped?: boolean;
+  /**
+   * The first day (`YYYY-MM-DD`, UTC) on which a break of the rule fails the check. Before that day, a break is a
+   * warning: the check shows it, and it passes. A new version of this package reaches each repository through an
+   * update pull request. A new rule that fails at once blocks that pull request in each repository that breaks it.
+   * Thus each new rule gives this field, a day at least 14 days after its release (`RULE_WARN_DAYS`).
+   */
+  readonly failsFrom?: string;
   check(context: RuleContext, options: Options): RuleOutcome;
 }
 
@@ -210,4 +220,23 @@ export const hasFile = (dir: string, file: string): boolean => existsSync(join(d
  */
 export function codePackages(context: Pick<RuleContext, "rootPackage" | "packages">): readonly PackageInfo[] {
   return context.packages.length > 0 ? context.packages : [context.rootPackage];
+}
+
+/**
+ * This function gives the root package and the code packages, each one time. The root counts also when the globs of the
+ * workspace leave it out. A repository can publish its root and keep a private site in its workspace.
+ */
+export function rootAndCodePackages(context: Pick<RuleContext, "rootPackage" | "packages">): readonly PackageInfo[] {
+  const all = [context.rootPackage, ...codePackages(context)];
+  return all.filter((pkg, index) => all.findIndex((other) => other.file === pkg.file) === index);
+}
+
+/**
+ * This function gives the packages with a release version. These are the packages of `rootAndCodePackages` that are not
+ * private and have a name and a version.
+ */
+export function versionedPackages(context: Pick<RuleContext, "rootPackage" | "packages">): readonly PackageInfo[] {
+  return rootAndCodePackages(context).filter(
+    (pkg) => pkg.manifest["private"] !== true && typeof pkg.manifest["name"] === "string" && typeof pkg.manifest["version"] === "string",
+  );
 }

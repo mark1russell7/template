@@ -25,6 +25,9 @@ const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 /** The form of a time in UTC, with or without seconds. */
 const UTC_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z$/;
 
+/** The form of the date of a target. */
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 /** The form of a full commit. */
 const COMMIT = /^[0-9a-f]{40}$/;
 
@@ -52,10 +55,39 @@ function timeProblems(at: unknown, name: string, now: number): string[] {
   return Date.parse(at) > now + CLOCK_MARGIN ? [`The time of the data ${at} is after the time of the check.`] : [];
 }
 
+/** This function tells if a text is a real calendar date in the form `YYYY-MM-DD`. */
+function isDate(value: unknown): value is string {
+  if (typeof value !== "string" || !DATE.test(value)) return false;
+  const time = Date.parse(`${value}T00:00:00Z`);
+  return !Number.isNaN(time) && new Date(time).toISOString().slice(0, 10) === value;
+}
+
+/** This function gives the faults of the targets of one measure. Each date comes after the date before it. */
+function targetProblems(value: unknown, index: number): string[] {
+  if (!Array.isArray(value) || value.length === 0) return [`Measure ${index} has a field targets that is not a list with a target.`];
+  const problems: string[] = [];
+  let last: string | undefined;
+  value.forEach((target: unknown, at) => {
+    const name = `Target ${at} of measure ${index}`;
+    if (!isRecord(target)) {
+      problems.push(`${name} is not an object.`);
+      return;
+    }
+    const { value: amount, by } = target;
+    if (typeof amount !== "number" || !Number.isFinite(amount) || amount < 0) problems.push(`${name} has no finite value of 0 or more.`);
+    if (!isDate(by)) problems.push(`${name} has no date of the form YYYY-MM-DD in its field by.`);
+    else {
+      if (last !== undefined && by <= last) problems.push(`${name} has the date ${by}, which is not after the date ${last} before it.`);
+      last = by;
+    }
+  });
+  return problems;
+}
+
 /** This function gives the faults of one measure. */
 function measureProblems(value: unknown, index: number, seen: Set<string>, now: number): string[] {
   if (!isRecord(value)) return [`Measure ${index} is not an object.`];
-  const { id, value: amount, unit, at, notCounted } = value;
+  const { id, value: amount, unit, at, notCounted, targets } = value;
   const problems: string[] = [];
   if (typeof id !== "string" || !SLUG.test(id)) problems.push(`Measure ${index} has no id of lowercase words with single hyphens.`);
   else if (seen.has(id)) problems.push(`The id ${id} occurs two times.`);
@@ -64,6 +96,7 @@ function measureProblems(value: unknown, index: number, seen: Set<string>, now: 
   if (unit !== undefined && !isText(unit)) problems.push(`Measure ${index} has a unit that is not a text.`);
   if (at !== undefined) problems.push(...timeProblems(at, `The field at of measure ${index}`, now));
   if (notCounted !== undefined && !isText(notCounted)) problems.push(`Measure ${index} has a field notCounted that is not a text.`);
+  if (targets !== undefined) problems.push(...targetProblems(targets, index));
   return problems;
 }
 
@@ -98,8 +131,15 @@ export function kpiProblems(value: unknown, now: number = Date.now()): string[] 
 }
 
 /** This function gives a copy of a measure with only its known fields. */
-function cleanMeasure({ id, value, unit, at, notCounted }: KpiMeasure): KpiMeasure {
-  return { id, value, ...(unit === undefined ? {} : { unit }), ...(at === undefined ? {} : { at }), ...(notCounted === undefined ? {} : { notCounted }) };
+function cleanMeasure({ id, value, unit, at, notCounted, targets }: KpiMeasure): KpiMeasure {
+  return {
+    id,
+    value,
+    ...(unit === undefined ? {} : { unit }),
+    ...(at === undefined ? {} : { at }),
+    ...(notCounted === undefined ? {} : { notCounted }),
+    ...(targets === undefined ? {} : { targets: targets.map(({ value: planned, by }) => ({ value: planned, by })) }),
+  };
 }
 
 /** This function gives a copy of an engine with only its known fields. */

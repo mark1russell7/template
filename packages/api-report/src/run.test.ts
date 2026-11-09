@@ -2,7 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import * as home from "@mark1russell7/conventions/workspace";
@@ -48,22 +48,8 @@ describe("the functions of the workspace", () => {
     expect(globFolders).toBe(home.globFolders);
     expect(globToRegExp).toBe(home.globToRegExp);
     expect(packageFolders).toBe(home.packageFolders);
+    expect(reportFolders).toBe(home.reportFolders);
     expect(workspaceGlobs).toBe(home.workspaceGlobs);
-  });
-
-  it("adds a public root that the globs of the workspace leave out, once", () => {
-    const open = workspace({ private: false });
-    expect(reportFolders(open)).toEqual([open, ...["a", "b", "hidden"].map((name) => join(open, "packages", name))]);
-    // A private root, explicit globs and a repository of one package get no root of their own
-    const closed = workspace();
-    expect(reportFolders(closed)).toEqual(packageFolders(closed));
-    expect(reportFolders(open, ["packages/*"])).toEqual(packageFolders(open, ["packages/*"]));
-    const single = fixture({ "package.json": { name: "solo" } });
-    expect(reportFolders(single)).toEqual([single]);
-    // A root that a glob of the workspace names is read one time
-    const named = fixture({ "package.json": { name: "root" }, "pnpm-workspace.yaml": 'packages:\n  - "."\n  - "site"\n', "site/package.json": { name: "site", private: true } });
-    expect(reportFolders(named).filter((folder) => resolve(folder) === resolve(named))).toHaveLength(1);
-    expect(reportFolders(named)).toHaveLength(2);
   });
 });
 
