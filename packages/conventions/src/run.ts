@@ -19,8 +19,11 @@ export interface RuleResult {
   readonly id: string;
   readonly title: string;
   readonly fix: string;
-  /** `pass`: no break. `break`: one or more breaks. `off`: the configuration turns the rule off. `skipped`: the rule did not start. `error`: the rule threw. */
-  readonly status: "pass" | "break" | "off" | "skipped" | "error";
+  /**
+   * `pass`: no break. `break`: one or more breaks. `warn`: one or more breaks before the day `failsFrom` of the rule, so the
+   * check passes. `off`: the configuration turns the rule off. `skipped`: the rule did not start. `error`: the rule threw.
+   */
+  readonly status: "pass" | "break" | "warn" | "off" | "skipped" | "error";
   readonly breaks: readonly Break[];
   /** The number of breaks in the files of `ignore`. */
   readonly ignored: number;
@@ -46,6 +49,8 @@ export interface CheckOptions {
   readonly env?: Readonly<Record<string, string | undefined>>;
   /** The rules. The default is `RULES`. */
   readonly rules?: readonly Rule[];
+  /** The day of the check (`YYYY-MM-DD`, UTC), for `failsFrom`. The default is the day of the clock. */
+  readonly today?: string;
 }
 
 /** This function reads a `package.json` file. */
@@ -96,6 +101,7 @@ export function runChecks(options: CheckOptions): CheckResult {
   if (unknown.length > 0) throw new Error(`Unknown rule: ${unknown.join(", ")}. The rules are: ${rules.map((rule) => rule.id).join(", ")}.`);
   const config = readConfig(root, rules);
   const context = createContext(root, config, options);
+  const today = options.today ?? new Date().toISOString().slice(0, 10);
   const results: RuleResult[] = [];
   for (const rule of rules) {
     if (options.only !== undefined && options.only.length > 0 && !options.only.includes(rule.id)) continue;
@@ -138,8 +144,11 @@ export function runChecks(options: CheckOptions): CheckResult {
         }
       }
     }
-    const note = ruleConfig.reason === undefined ? {} : { note: ruleConfig.reason };
-    results.push({ ...base, status: breaks.length > 0 ? "break" : "pass", breaks, ignored, ...note });
+    // A new rule warns until its day `failsFrom`. The owners fix the breaks in that time, and the update pull requests merge.
+    const warns = breaks.length > 0 && rule.failsFrom !== undefined && today < rule.failsFrom;
+    const reason = warns ? [ruleConfig.reason, `The rule fails from ${rule.failsFrom ?? ""}.`].filter((text) => text !== undefined).join(" ") : ruleConfig.reason;
+    const note = reason === undefined ? {} : { note: reason };
+    results.push({ ...base, status: breaks.length === 0 ? "pass" : warns ? "warn" : "break", breaks, ignored, ...note });
   }
   return { rules: results, failed: results.some((result) => result.status === "break" || result.status === "error") };
 }
@@ -205,12 +214,12 @@ const placeOf = (item: Break): string => (item.line === undefined ? item.file : 
 /** This function gives the text of a result for a terminal or a CI log. */
 export function formatResult(result: CheckResult): string {
   const count = (status: RuleResult["status"]): number => result.rules.filter((rule) => rule.status === status).length;
-  const breaks = result.rules.reduce((sum, rule) => sum + rule.breaks.length, 0);
+  const breaks = result.rules.filter((rule) => rule.status === "break").reduce((sum, rule) => sum + rule.breaks.length, 0);
   const out: string[] = [
-    `conventions: ${result.rules.length} rules: ${count("pass")} pass, ${count("break")} with ${breaks} break(s), ${count("off")} off, ${count("skipped")} skipped, ${count("error")} error(s).`,
+    `conventions: ${result.rules.length} rules: ${count("pass")} pass, ${count("break")} with ${breaks} break(s), ${count("warn")} warn, ${count("off")} off, ${count("skipped")} skipped, ${count("error")} error(s).`,
     "",
   ];
-  const label: Record<RuleResult["status"], string> = { pass: "pass ", break: "BREAK", off: "off  ", skipped: "skip ", error: "ERROR" };
+  const label: Record<RuleResult["status"], string> = { pass: "pass ", break: "BREAK", warn: "warn ", off: "off  ", skipped: "skip ", error: "ERROR" };
   for (const rule of result.rules) {
     const extra = rule.ignored > 0 ? ` (${rule.ignored} ignored: ${rule.note ?? ""})` : rule.note !== undefined && rule.status !== "pass" ? ` (${rule.note})` : "";
     out.push(`${label[rule.status]}  ${rule.id}${rule.breaks.length > 0 ? `: ${rule.breaks.length} break(s)` : ""}${extra}`);
@@ -232,7 +241,7 @@ const cell = (text: string): string => text.replace(/\\/g, "\\\\").replace(/\|/g
 export function summaryMarkdown(result: CheckResult): string {
   const out = ["### Conventions", "", "| Rule | Result | Note |", "|---|---|---|"];
   for (const rule of result.rules) {
-    const shown = rule.status === "break" ? `${rule.breaks.length} break(s)` : rule.status;
+    const shown = rule.status === "break" ? `${rule.breaks.length} break(s)` : rule.status === "warn" ? `warn: ${rule.breaks.length} break(s)` : rule.status;
     const note = rule.ignored > 0 ? `${rule.ignored} ignored: ${rule.note ?? ""}` : (rule.note ?? "");
     out.push(`| \`${rule.id}\` | ${shown} | ${cell(note)} |`);
   }
@@ -246,13 +255,16 @@ export function summaryMarkdown(result: CheckResult): string {
   return `${out.join("\n")}\n`;
 }
 
-/** This function gives an `::error` workflow command for each break, so that GitHub shows each break on its line in the pull request. */
+/**
+ * This function gives an `::error` workflow command for each break, so that GitHub shows each break on its line in the pull request.
+ * A break of a rule that only warns gives a `::warning` command.
+ */
 export function annotations(result: CheckResult): string {
   const out: string[] = [];
   for (const rule of result.rules) {
     for (const item of rule.breaks) {
       const line = item.line === undefined ? "" : `,line=${item.line}`;
-      out.push(`::error file=${escapeWorkflowProperty(item.file)}${line},title=${escapeWorkflowProperty(`conventions ${rule.id}`)}::${escapeWorkflowData(`${item.message} Fix: ${item.fix ?? rule.fix}`)}`);
+      out.push(`::${rule.status === "warn" ? "warning" : "error"} file=${escapeWorkflowProperty(item.file)}${line},title=${escapeWorkflowProperty(`conventions ${rule.id}`)}::${escapeWorkflowData(`${item.message} Fix: ${item.fix ?? rule.fix}`)}`);
     }
   }
   return out.length === 0 ? "" : `${out.join("\n")}\n`;

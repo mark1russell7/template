@@ -6,7 +6,7 @@ import { escapeAttribute } from "@mark1russell7/text";
 
 /** This function escapes a text for HTML content and for an attribute value in double quotes. The home of the escape is `@mark1russell7/text`. */
 export function escapeHtml(text: string): string {
-  return escapeAttribute(text);
+  return escapeAttribute(String(text));
 }
 
 /**
