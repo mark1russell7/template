@@ -79,6 +79,55 @@ const ifValue = (expression: string): string => {
   return value.includes(": ") || value.includes(" #") ? `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"` : value;
 };
 
+/** A job with its own `if` can be skipped when the gate runs, and so can each job that needs such a job. */
+export function skippableJobs(needsOf: ReadonlyMap<string, readonly string[]>, own: ReadonlySet<string>): Set<string> {
+  const skippable = new Set(own);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const [id, needs] of needsOf) {
+      if (skippable.has(id) || !needs.some((need) => skippable.has(need))) continue;
+      skippable.add(id);
+      grew = true;
+    }
+  }
+  return skippable;
+}
+
+/** The parts of a summary job: its indents, its id and name, the jobs that it needs and the jobs that can be skipped. */
+export interface SummaryJob {
+  readonly jobIndent: string;
+  readonly unit: string;
+  readonly id: string;
+  readonly name: string;
+  readonly needs: readonly string[];
+  readonly allow: readonly string[];
+  /** True when the workflow has its own `concurrency`, so the job needs no group of its own. */
+  readonly grouped: boolean;
+  readonly commit: string;
+}
+
+/** This function gives the lines of a summary job `<Name> OK` with the action gate-summary, after one empty line. */
+export function summaryJob(s: SummaryJob): string[] {
+  const job = s.jobIndent + s.unit;
+  const step = job + s.unit;
+  return [
+    "",
+    `${s.jobIndent}${s.id}:`,
+    `${job}name: ${s.name}`,
+    `${job}if: ${NOT_CANCELLED}`,
+    `${job}needs: [${s.needs.join(", ")}]`,
+    `${job}runs-on: ubuntu-latest`,
+    `${job}timeout-minutes: 2`,
+    ...(s.grouped ? [] : [`${job}concurrency:`, `${job}${s.unit}group: \${{ github.workflow }}-${s.id}-${OWN_GROUP}`, `${job}${s.unit}cancel-in-progress: ${PULL_REQUEST_ONLY}`]),
+    `${job}permissions: {}`,
+    `${job}steps:`,
+    `${step}- uses: mark1russell7/template/.github/actions/gate-summary@${s.commit} # main`,
+    `${step}  with:`,
+    `${step}  ${s.unit}needs: \${{ toJSON(needs) }}`,
+    ...(s.allow.length === 0 ? [] : [`${step}  ${s.unit}allow-skip: ${s.allow.join(" ")}`]),
+  ];
+}
+
 /**
  * This function converts a gate workflow with a path filter on its pull request trigger. The trigger loses the filter,
  * and a job `changes` gets the same patterns. Each other job needs it and runs only on a match. A summary job
@@ -162,16 +211,7 @@ export function convertGate(text: string, file: string, commit: string = ACTIONS
       splices.push({ at: ifAt, remove: 1, insert: [`${pad}if: ${ifValue(`needs.changes.outputs.match == 'true' && (${old})`)}`] });
     }
   }
-  // A job with its own if can be skipped when the gate runs, and so can each job that needs such a job
-  const skippable = new Set(own);
-  for (let grew = true; grew; ) {
-    grew = false;
-    for (const [id, needs] of needsOf) {
-      if (skippable.has(id) || !needs.some((need) => skippable.has(need))) continue;
-      skippable.add(id);
-      grew = true;
-    }
-  }
+  const skippable = skippableJobs(needsOf, own);
 
   const action = (step: string): string => `mark1russell7/template/.github/actions/${step}@${commit} # main`;
   const block = (indent: string, key: string, items: readonly string[]): string[] => [`${indent}${key}: |`, ...items.map((item) => `${indent}${unit}${item}`)];
@@ -197,23 +237,7 @@ export function convertGate(text: string, file: string, commit: string = ACTIONS
     ...(filters["paths-ignore"] === undefined ? [] : block(`${step}  ${unit}`, "paths-ignore", filters["paths-ignore"])),
     "",
   ];
-  const allow = ids.filter((id) => skippable.has(id));
-  const summary = [
-    "",
-    `${jobIndent}${summaryId}:`,
-    `${job}name: ${name}`,
-    `${job}if: ${NOT_CANCELLED}`,
-    `${job}needs: [${["changes", ...ids].join(", ")}]`,
-    `${job}runs-on: ubuntu-latest`,
-    `${job}timeout-minutes: 2`,
-    ...group(summaryId),
-    `${job}permissions: {}`,
-    `${job}steps:`,
-    `${step}- uses: ${action("gate-summary")}`,
-    `${step}  with:`,
-    `${step}  ${unit}needs: \${{ toJSON(needs) }}`,
-    ...(allow.length === 0 ? [] : [`${step}  ${unit}allow-skip: ${allow.join(" ")}`]),
-  ];
+  const summary = summaryJob({ jobIndent, unit, id: summaryId, name, needs: ["changes", ...ids], allow: ids.filter((id) => skippable.has(id)), grouped, commit });
   let last = blockEnd(lines, jobsAt);
   while (last > jobsAt + 1 && (lines[last - 1] ?? "").trim() === "") last -= 1;
   splices.push({ at: first, remove: 0, insert: changes }, { at: last, remove: 0, insert: summary });

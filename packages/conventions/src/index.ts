@@ -62,6 +62,7 @@ export {
   runnerBudget,
   securityOneJob,
   serviceRunMain,
+  summaryJobRule,
   setupCue,
   sharedCi,
   sourceMain,
@@ -116,7 +117,8 @@ export { HOME_EXPORTS } from "./home-exports.ts";
 export { authorOf, LICENSE_TEXTS, licenseFileOf, mitText, repositoryIsPublic } from "./rules/license-file.ts";
 export { GITHUB_YAML, yamlFaults, type YamlFault } from "./rules/workflow-parses.ts";
 export { PAGES_WORKFLOWS, pagesCalls, type PagesCall } from "./rules/pages-site.ts";
-export { ACTIONS_COMMIT, convertGate, prPathFilters, summaryName, type PathFilter } from "./rules/gate-trigger.ts";
+export { ACTIONS_COMMIT, convertGate, prPathFilters, skippableJobs, summaryJob, summaryName, type SummaryJob, type PathFilter } from "./rules/gate-trigger.ts";
+export { SUMMARY_GATES, addSummaryJob, hasSummaryJob, startsOnPullRequest } from "./rules/summary-job.ts";
 export { SECURITY_SCAN_COMMIT, SECURITY_SCAN_INPUTS, SECURITY_TIMEOUT_MINUTES, securityCallers, withOneJob, type SecurityCaller } from "./rules/security-one-job.ts";
 export { SERVICE_PACKAGE, runCalls } from "./rules/service-run-main.ts";
 export { SHARED_ACTIONS, SHARED_CI, SHARED_WORKFLOWS, callsSharedCi } from "./rules/shared-ci.ts";
