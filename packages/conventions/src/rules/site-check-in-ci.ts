@@ -57,7 +57,7 @@ export const siteCheckInCi: Rule = {
   reason:
     "The deploy and the check of a pull request build the same site only when the values have one home. A job of a pull request with the permission `pages: write` is a risk, so the check is in its own workflow with read permissions. A check that `CI OK` does not need does not stop a merge: on 2026-11-08 the probe of a site ran only in the Pages workflow, and the required check did not wait for it.",
   fix: 'Move the inputs of the call of `reusable-pages.yml` into `.github/site.json` (CI.md, "The site config"). Remove `pull_request` from the `on` of the Pages workflow, and call it from no workflow of a pull request. Add a job `site` to `ci.yml` that uses `reusable-pages-check.yml` with `permissions: contents: read`, and add `site` to the `needs` of `CI OK`.',
-  sources: [{ repo: "template", rule: "site-check-in-ci", doc: "CI.md (The site config)" }],
+  sources: [{ repo: "private", rule: "site-probe-in-ci", doc: "docs/STRATEGY.md (2026-11-08, the site check of each pull request in CI OK)" }],
   options: {
     workflows: { type: "strings", default: PAGES_WORKFLOWS, description: "The workflows that deploy a site, without the ref after `@`." },
     checks: { type: "strings", default: CHECK_WORKFLOWS, description: "The workflows that check a site on a pull request, without the ref after `@`." },
