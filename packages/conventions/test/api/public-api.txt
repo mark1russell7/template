@@ -173,6 +173,7 @@ releaseFiles: build/index.d.ts#releaseFiles
 releaseNotes: build/index.d.ts#releaseNotes
 replaceLine: build/index.d.ts#replaceLine
 repoOf: build/index.d.ts#repoOf
+reposOf: build/index.d.ts#reposOf
 repositoryIsPublic: build/index.d.ts#repositoryIsPublic
 repositoryOfRemote: build/index.d.ts#repositoryOfRemote
 requiredScripts: build/index.d.ts#requiredScripts
@@ -333,6 +334,7 @@ interface Home {
   readonly covers: string;
   readonly packages: readonly string[];
   readonly repo: string;
+  readonly alsoIn?: readonly string[];
   readonly state: HomeState;
   readonly words: readonly string[];
   readonly signatures?: readonly string[];
@@ -915,6 +917,9 @@ export declare function replaceLine(text: string, line: number, lines: readonly 
 
 ### build/index.d.ts#repoOf
 export declare function repoOf(context: RuleContext): string | undefined;
+
+### build/index.d.ts#reposOf
+export declare function reposOf(home: Home): readonly string[];
 
 ### build/index.d.ts#repositoryIsPublic
 export declare function repositoryIsPublic(context: RuleContext): boolean | undefined;
