@@ -2,10 +2,11 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
-import { globFolders, globToRegExp, packageFolders, readConfig, runCli, runReports, summaryMarkdown, workspaceGlobs, type CliIo } from "./index.ts";
+import * as home from "@mark1russell7/conventions/workspace";
+import { globFolders, globToRegExp, packageFolders, readConfig, REPORT_FILE, reportFolders, runCli, runReports, summaryMarkdown, workspaceGlobs, type CliIo } from "./index.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "api-report-run-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -42,43 +43,53 @@ function cli(cwd: string, args: string[], env: Record<string, string> = {}): { c
   return { code, stdout, stderr };
 }
 
-describe("the globs", () => {
-  it("escapes the special characters, and knows *, ?, ** and braces", () => {
-    expect(globToRegExp("packages/*").test("packages/a")).toBe(true);
-    expect(globToRegExp("packages/*").test("packages/a/b")).toBe(false);
-    expect(globToRegExp("packages/**").test("packages/a/b")).toBe(true);
-    expect(globToRegExp("a/**/z").test("a/z")).toBe(true);
-    expect(globToRegExp("a/**/z").test("a/b/c/z")).toBe(true);
-    expect(globToRegExp("a.b/?").test("a.b/c")).toBe(true);
-    expect(globToRegExp("a.b/?").test("axb/c")).toBe(false);
-    expect(globToRegExp("{apps,libs}/*").test("libs/x")).toBe(true);
-    expect(globToRegExp("(x)+[y]$").test("(x)+[y]$")).toBe(true);
-    expect(() => globToRegExp("{a,b")).toThrow(/no "}"/);
+describe("the functions of the workspace", () => {
+  it("are the functions of @mark1russell7/conventions/workspace, not a copy", () => {
+    expect(globFolders).toBe(home.globFolders);
+    expect(globToRegExp).toBe(home.globToRegExp);
+    expect(packageFolders).toBe(home.packageFolders);
+    expect(workspaceGlobs).toBe(home.workspaceGlobs);
   });
 
-  it("finds the folders of a glob, without node_modules and dot folders", () => {
-    const root = fixture({ "apps/x/y/f": "", "apps/x/node_modules/m/f": "", "apps/.cache/f": "", "libs/z/f": "" });
-    expect(globFolders(root, "apps/*")).toEqual(["apps/x"]);
-    expect(globFolders(root, "apps/**")).toEqual(["apps", "apps/x", "apps/x/y"]);
-    expect(globFolders(root, "{apps,libs}/*")).toEqual(["apps/x", "libs/z"]);
-    expect(globFolders(root, "./libs/z/")).toEqual(["libs/z"]);
-    expect(globFolders(root, "none/*")).toEqual([]);
-  });
-
-  it("reads the globs of pnpm-workspace.yaml and of the workspaces field", () => {
-    expect(workspaceGlobs(workspace())).toEqual(["packages/*", "!packages/ignored"]);
-    expect(workspaceGlobs(fixture({ "pnpm-workspace.yaml": "packages: ['a/*', \"b\"]\n" }))).toEqual(["a/*", "b"]);
-    expect(workspaceGlobs(fixture({ "package.json": { workspaces: ["x/*"] } }))).toEqual(["x/*"]);
-    expect(workspaceGlobs(fixture({ "package.json": { workspaces: { packages: ["y/*"] } } }))).toEqual(["y/*"]);
-    expect(workspaceGlobs(fixture({ "package.json": {} }))).toBeUndefined();
-  });
-
-  it("finds the package folders, and a repository with no workspace is one package", () => {
-    const root = workspace();
-    expect(packageFolders(root)).toEqual(["a", "b", "hidden"].map((name) => join(root, "packages", name)));
-    expect(packageFolders(root, ["!packages/a", "packages/*"])).toEqual(["b", "hidden", "ignored"].map((name) => join(root, "packages", name)));
+  it("adds a public root that the globs of the workspace leave out, once", () => {
+    const open = workspace({ private: false });
+    expect(reportFolders(open)).toEqual([open, ...["a", "b", "hidden"].map((name) => join(open, "packages", name))]);
+    // A private root, explicit globs and a repository of one package get no root of their own
+    const closed = workspace();
+    expect(reportFolders(closed)).toEqual(packageFolders(closed));
+    expect(reportFolders(open, ["packages/*"])).toEqual(packageFolders(open, ["packages/*"]));
     const single = fixture({ "package.json": { name: "solo" } });
-    expect(packageFolders(single)).toEqual([single]);
+    expect(reportFolders(single)).toEqual([single]);
+    // A root that a glob of the workspace names is read one time
+    const named = fixture({ "package.json": { name: "root" }, "pnpm-workspace.yaml": 'packages:\n  - "."\n  - "site"\n', "site/package.json": { name: "site", private: true } });
+    expect(reportFolders(named).filter((folder) => resolve(folder) === resolve(named))).toHaveLength(1);
+    expect(reportFolders(named)).toHaveLength(2);
+  });
+});
+
+describe("a public root with a private workspace", () => {
+  // Two repositories on 2026-11-08: the workspace names only a private site, and the root is the public package
+  const repository = (): string =>
+    fixture({
+      "package.json": { name: "lib", types: "./index.d.ts" },
+      "index.d.ts": "export declare const lib: 1;\n",
+      "pnpm-workspace.yaml": 'packages:\n  - "site"\n',
+      "site/package.json": { name: "site", private: true },
+    });
+
+  it("writes and checks the report of the root with no folder named", () => {
+    const root = repository();
+    const before = runReports({ mode: "check", root });
+    expect(before.failed).toBe(true);
+    expect(before.packages.find((item) => item.folder === ".")).toMatchObject({ status: "new" });
+    expect(runReports({ mode: "update", root }).packages.find((item) => item.folder === ".")).toMatchObject({ status: "new" });
+    expect(existsSync(join(root, REPORT_FILE))).toBe(true);
+    const after = runReports({ mode: "check", root });
+    expect(after.failed).toBe(false);
+    expect(after.packages.map((item) => [item.folder, item.status])).toEqual([
+      [".", "same"],
+      ["site", "private"],
+    ]);
   });
 });
 

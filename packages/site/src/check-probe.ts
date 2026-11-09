@@ -54,20 +54,34 @@ const select = field("#wf-file") as HTMLSelectElement;
 select.value = "reusable-pages.yml";
 select.dispatchEvent(new Event("change", { bubbles: true }));
 click('[data-event="pull_request"]');
-check("the explorer shows the jobs build and deploy of the Pages workflow", await until(() => job("build") !== "" && job("deploy") !== ""), $$("#wf-jobs [data-job]").map((j) => j.getAttribute("data-job")).join(", "));
+check("the explorer shows the jobs ref, build and deploy of the Pages workflow", await until(() => job("ref") !== "" && job("build") !== "" && job("deploy") !== ""), $$("#wf-jobs [data-job]").map((j) => j.getAttribute("data-job")).join(", "));
+// The job ref decides at run time if the commit builds, so the steps of the job build show "the run decides".
+const GREEN_MAIN = "./.shared-actions/.github/actions/green-main";
+check("a pull request reads no CI state", await until(() => step(GREEN_MAIN).includes("skipped")), step(GREEN_MAIN));
 
 const deploy = pick("deploy");
 if (deploy?.checked) click(deploy);
 check("deploy off: the job deploy does not run", await until(() => job("deploy").includes("skipped")), job("deploy"));
 const siteCheck = pick("site-check");
 if (siteCheck && !siteCheck.checked) click(siteCheck);
-check("site-check on: the step Site check runs", await until(() => step("Site check").includes("runs")), step("Site check"));
+check("site-check on: the run decides the step Site check", await until(() => step("Site check").includes("unknown")), step("Site check"));
 const siteCheckOn = pick("site-check");
 if (siteCheckOn?.checked) click(siteCheckOn);
 check("site-check off: the step Site check does not run", await until(() => step("Site check").includes("skipped")), step("Site check"));
 
 click('[data-event="schedule"]');
-check("a scheduled build runs the step of green-main", await until(() => step("Shared actions (green-main)").includes("runs")), step("Shared actions (green-main)"));
+check("a scheduled run reads the CI state of the head with green-main", await until(() => step(GREEN_MAIN).includes("runs")), step(GREEN_MAIN));
+
+// A composite action of the template: the explorer shows its steps, and the toggles of its inputs decide them.
+select.value = "actions/site-check/action.yml";
+select.dispatchEvent(new Event("change", { bubbles: true }));
+check("the explorer shows the steps of the composite action site-check", await until(() => step("Site check") !== "" && job("steps") !== ""), $$("#wf-jobs .step").map((li) => li.getAttribute("data-step")).join(", "));
+const visual = pick("visual");
+if (visual?.checked) click(visual);
+check("visual off: the step Site check of the action does not run", await until(() => step("Site check").includes("skipped")), step("Site check"));
+const visualOff = pick("visual");
+if (visualOff && !visualOff.checked) click(visualOff);
+check("visual on: the step Site check of the action runs", await until(() => step("Site check").includes("runs")), step("Site check"));
 
 // The response explorer says first what it is, before a reader meets a chart of another project.
 const responseWhat = $("#response-what")?.textContent ?? "";
@@ -100,9 +114,13 @@ rxChoose("facet", "");
 const rxMaxrects = rxChip("maxrects");
 if (rxMaxrects !== null) click(rxMaxrects);
 check("the strategy maxrects opens its rule", await until(() => rxChip("cp")?.disabled === false), rxChip("cp")?.disabled);
+// A held value that does not apply goes in one closed fold, after the values that change the view.
+const rxFold = (): HTMLDetailsElement | null => (rxChip("cp")?.closest("details.rx-idle") ?? null) as HTMLDetailsElement | null;
+check("the rule of maxrects is outside the fold at maxrects", rxFold() === null, rxFold()?.outerHTML.slice(0, 120));
 const rxSkyline = rxChip("skyline");
 if (rxSkyline !== null) click(rxSkyline);
 check("the strategy skyline closes the rule of maxrects", await until(() => rxChip("cp")?.disabled === true), rxChip("cp")?.disabled);
+check("the rule of maxrects is in the closed fold at skyline", rxFold()?.open === false && /^Held values that do not apply \(\d+\)$/.test(rxFold()?.querySelector("summary")?.textContent ?? ""), rxFold()?.querySelector("summary")?.textContent);
 
 const before = document.documentElement.dataset["theme"] ?? "";
 click("#theme");

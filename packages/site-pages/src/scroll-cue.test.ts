@@ -31,6 +31,13 @@ describe("the scroll cue style", () => {
     expect(css).not.toMatch(/animation-duration:/);
   });
 
+  it("sets a background only in a browser with no scroll timelines, so a code block keeps the color of its theme", () => {
+    const base = /\.scroll-cue\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(base).toContain("overflow-x: auto");
+    expect(base).not.toMatch(/background/);
+    expect(css).toMatch(/@supports not \(animation-timeline: scroll\(\)\)\s*\{\s*\.scroll-cue\s*\{\s*background-color: var\(--scroll-cue-bg\)/);
+  });
+
   it("has no radial shade, which goes out toward the top and the bottom of a tall box", () => {
     expect(css).not.toContain("radial-gradient");
   });

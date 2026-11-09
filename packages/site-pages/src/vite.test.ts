@@ -244,6 +244,15 @@ describe("rehypeScrollCue", () => {
     expect(tree.children?.[0]?.properties).toEqual({});
   });
 
+  it("gives the cue and a tab stop to each code block, with no label, and keeps its own tab stop and class", () => {
+    const pre = (properties?: Record<string, unknown>): RehypeNode => ({ type: "element", tagName: "pre", ...(properties === undefined ? {} : { properties }), children: [] });
+    const plain = pre();
+    const themed = pre({ className: ["shiki", "scroll-cue"], tabIndex: -1, style: "background-color:#fff" });
+    rehypeScrollCue()({ type: "root", children: [plain, themed] });
+    expect(plain.properties).toEqual({ className: ["scroll-cue"], tabIndex: 0 });
+    expect(themed.properties).toEqual({ className: ["shiki", "scroll-cue"], tabIndex: -1, style: "background-color:#fff" });
+  });
+
   it("keeps the classes of the table", () => {
     const list = table({ className: ["a", "b"] });
     const one = table({ className: "c" });

@@ -40,6 +40,17 @@ describe("the search", () => {
     expect(findHomes("math")[0]?.area).toBe("exact-math");
     expect(findHomes("line break")[0]?.area).toBe("text");
     expect(findHomes("atomic write")[0]?.area).toBe("system-io");
+    expect(findHomes("expand home")[0]?.area).toBe("files");
+    expect(findHomes("html escape")[0]?.area).toBe("plain-text");
+    expect(findHomes("camel case")[0]?.area).toBe("plain-text");
+    expect(findHomes("event emitter")[0]?.area).toBe("data-structures");
+    expect(findHomes("worker pool")[0]?.area).toBe("service");
+    expect(findHomes("channel")[0]?.area).toBe("service");
+    expect(findHomes("baggage")[0]?.area).toBe("browser-monitoring");
+    expect(findHomes("strategy grammar")[0]?.area).toBe("strategy-space");
+    expect(findHomes("strategy combinator")[0]?.area).toBe("strategy-space");
+    expect(findHomes("context manager")[0]?.area).toBe("browser-monitoring");
+    expect(findHomes("tracing")[0]?.area).toBe("browser-monitoring");
     expect(findHomes("nothing-like-this")).toEqual([]);
     expect(findHomes("")).toBe(HOMES);
   });

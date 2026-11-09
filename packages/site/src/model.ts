@@ -159,7 +159,9 @@ function judge(condition: string, lookup: (path: string) => Value): { state: Run
 
 /** This function gives the state of each job and step of a workflow for an event of the caller and values of the inputs. */
 export function explore(workflow: Workflow, event: EventName, values: ReadonlyMap<string, Value>): JobView[] {
-  const inputs = new Map<string, Value>(workflow.inputs.map((input) => [input.name, values.has(input.name) ? (values.get(input.name) as Value) : inputDefault(input)]));
+  // Each input of a composite action is a string for the runner, so a condition compares it with 'true' or 'false'.
+  const asRun = (value: Value): Value => (workflow.kind === "action" && typeof value === "boolean" ? String(value) : value);
+  const inputs = new Map<string, Value>(workflow.inputs.map((input) => [input.name, asRun(values.has(input.name) ? (values.get(input.name) as Value) : inputDefault(input))]));
   const lookup = (path: string): Value => contextValue(path, event, inputs);
   const states = new Map<string, RunState>();
   const views: JobView[] = [];

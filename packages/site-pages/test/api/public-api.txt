@@ -17,6 +17,8 @@ type ChangelogEntry: build/index.d.ts#ChangelogEntry
 type ChangelogFault: build/index.d.ts#ChangelogFault
 type ChangelogFaultKind: build/index.d.ts#ChangelogFaultKind
 type ChangelogFaultOptions: build/index.d.ts#ChangelogFaultOptions
+type ChangelogFileFault: build/chunks/freshness.d.ts#ChangelogFileFault
+type ChangelogReading: build/chunks/freshness.d.ts#ChangelogReading
 type ChangelogSection: build/index.d.ts#ChangelogSection
 type ChangelogSource: build/index.d.ts#ChangelogSource
 type CheckState: build/chunks/freshness.d.ts#CheckState
@@ -104,6 +106,8 @@ type WorkflowRunEnd: build/chunks/freshness.d.ts#WorkflowRunEnd
 build: build/index.d.ts#build
 buildStatusBoard: build/index.d.ts#buildStatusBoard
 changelogFaults: build/index.d.ts#changelogFaults
+changelogGateProblem: build/index.d.ts#changelogGateProblem
+changelogReading: build/index.d.ts#changelogReading
 changelogVersions: build/index.d.ts#changelogVersions
 checkFreshness: build/chunks/freshness.d.ts#checkFreshness
 checkStateOf: build/chunks/freshness.d.ts#checkStateOf
@@ -150,6 +154,7 @@ parseRoadmap: build/index.d.ts#parseRoadmap
 parseVersion: build/index.d.ts#parseVersion
 plainText: build/index.d.ts#plainText
 probeScript: build/index.d.ts#probeScript
+readChangelogFrom: build/index.d.ts#readChangelogFrom
 readChangelogs: build/index.d.ts#readChangelogs
 readKpi: build/chunks/freshness.d.ts#readKpi
 readReleases: build/index.d.ts#readReleases
@@ -370,6 +375,21 @@ interface BoardPullRequest {
   updatedAt: string;
   labels: string[];
   checks: CheckState;
+}
+
+### build/chunks/freshness.d.ts#ChangelogFileFault
+interface ChangelogFileFault {
+  file: string;
+  version: string;
+  kind: "no-statement" | "version-kind-only" | "break-unmarked" | "mark-without-break";
+  statement: string;
+}
+
+### build/chunks/freshness.d.ts#ChangelogReading
+interface ChangelogReading {
+  from: string | null;
+  sections: number;
+  faults: ChangelogFileFault[];
 }
 
 ### build/chunks/freshness.d.ts#CheckState
@@ -668,6 +688,7 @@ interface StatusBoardData {
     totals?: OpenWorkTotals;
   };
   kpi?: KpiFile;
+  changelog?: ChangelogReading;
 }
 
 ### build/chunks/freshness.d.ts#StatusClass
@@ -1279,6 +1300,15 @@ export declare function buildStatusBoard(input: StatusBoardInput): StatusBoardDa
 ### build/index.d.ts#changelogFaults
 export declare function changelogFaults(markdown: string, options?: ChangelogFaultOptions): ChangelogFault[];
 
+### build/index.d.ts#changelogGateProblem
+export declare function changelogGateProblem(reading: ChangelogReading, limit?: number): string | null;
+
+### build/index.d.ts#changelogReading
+export declare function changelogReading(changelogs: readonly {
+  file: string;
+  markdown: string;
+}[], from: string | null): ChangelogReading;
+
 ### build/index.d.ts#changelogVersions
 export declare function changelogVersions(markdown: string): string[];
 
@@ -1371,6 +1401,9 @@ export declare function plainText(markdown: string | null | undefined): string;
 
 ### build/index.d.ts#probeScript
 export declare function probeScript(source: string): string;
+
+### build/index.d.ts#readChangelogFrom
+export declare function readChangelogFrom(repoDir: string): string | null;
 
 ### build/index.d.ts#readChangelogs
 export declare function readChangelogs(repoDir: string, pattern?: string): ChangelogSource[];

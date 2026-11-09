@@ -418,7 +418,7 @@ describe("runFreshnessCli", () => {
 
   it("exits with 0 on correct stamps, and reads npm", async () => {
     const { code, out } = await start(["--stamps", file("good.json", stamps([run()])), "--now", NOW]);
-    expect(out).toContain("The data stamps of 1 pages pass.");
+    expect(out).toContain("The data stamps of 1 page pass.");
     expect(out).toContain("Failing case at 2026-11-14T12:00:00.000Z: index.html: the run 7");
     expect(out).not.toContain("Not run");
     expect(code).toBe(0);

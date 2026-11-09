@@ -6,6 +6,10 @@ import { changelogVersion } from "./changelog-version.ts";
 import { cuePreset } from "./cue-preset.ts";
 import { gateAfterCancel } from "./gate-after-cancel.ts";
 import { gateTrigger } from "./gate-trigger.ts";
+import { securityOneJob } from "./security-one-job.ts";
+import { setupCue } from "./setup-cue.ts";
+import { sharedCi } from "./shared-ci.ts";
+import { serviceRunMain } from "./service-run-main.ts";
 import { homePackage } from "./home-package.ts";
 import { licenseFile } from "./license-file.ts";
 import { mainCheck } from "./main-check.ts";
@@ -31,6 +35,8 @@ import { typedFiles } from "./typed-files.ts";
 import { typedScripts } from "./typed-scripts.ts";
 import { trustPolicy } from "./trust-policy.ts";
 import { unreleasedChange } from "./unreleased-change.ts";
+import { versionTitle } from "./version-title.ts";
+import { workflowParses } from "./workflow-parses.ts";
 import { workspaceProtocol } from "./workspace-protocol.ts";
 
 /** Each rule of the check. */
@@ -39,6 +45,7 @@ export const RULES: readonly Rule[] = [
   workspaceProtocol,
   trustPolicy,
   sourceMain,
+  serviceRunMain,
   tsconfigTest,
   cuePreset,
   requiredScripts,
@@ -47,6 +54,7 @@ export const RULES: readonly Rule[] = [
   apiReportScript,
   releaseFiles,
   unreleasedChange,
+  versionTitle,
   publishedMinor,
   changelogVersion,
   typedScripts,
@@ -54,12 +62,16 @@ export const RULES: readonly Rule[] = [
   mainCheck,
   testsRequired,
   roadmapParses,
+  workflowParses,
   runnerBudget,
   mainRunsFinish,
   pushMainOnly,
   pipeFails,
   gateAfterCancel,
   gateTrigger,
+  securityOneJob,
+  sharedCi,
+  setupCue,
   homePackage,
   licenseFile,
   pagesSite,
@@ -68,4 +80,4 @@ export const RULES: readonly Rule[] = [
 ];
 
 export { publishedMinor };
-export { apiReportScript, changelogVersion, cuePreset, gateAfterCancel, gateTrigger, homePackage, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, workspaceProtocol };
+export { apiReportScript, changelogVersion, cuePreset, gateAfterCancel, gateTrigger, securityOneJob, serviceRunMain, setupCue, sharedCi, homePackage, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, versionTitle, workflowParses, workspaceProtocol };

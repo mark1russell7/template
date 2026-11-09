@@ -43,7 +43,7 @@ jobs:
       # The runners are shared by all repositories of the account (the rule runner-budget)
       max-parallel: 3
       matrix:
-        preset: [node, node-cjs, ts, vite, react, service, site]
+        preset: [node, node-cjs, ts, vite, react, service, site, electron]
     env:
       PACKAGE: demo-${{ matrix.preset }}
       PRESET: ${{ matrix.preset }}
@@ -57,11 +57,31 @@ jobs:
           node-version: 26
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm package add "$PACKAGE" --preset="$PRESET"
+      # Just after a release of a package of the template, the registry can give 404 for its tarball for some minutes.
+      # Then the step resets the tree and tries again. Each other fault fails the step at once.
+      - name: pnpm package add (again after a registry lag)
+        run: |
+          set -o pipefail
+          for attempt in 1 2 3 4 5; do
+            if pnpm package add "$PACKAGE" --preset="$PRESET" 2>&1 | tee add.log; then rm add.log; exit 0; fi
+            if ! grep -qE 'ERR_PNPM_(TARBALL_HTTP_STATUS|FETCH_404|NO_MATCHING_VERSION)' add.log; then exit 1; fi
+            echo "::warning::Attempt $attempt: the registry does not serve a new version yet. The step tries again in 60 s."
+            git checkout -- . && git clean -fdq -e add.log
+            sleep 60
+          done
+          exit 1
       # The new package changes the lockfile
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm --filter "@template/$PACKAGE" typecheck
       - run: pnpm --filter "@template/$PACKAGE" test
+      # A preset with the script smoke starts its app once: the electron app opens its window on a virtual display,
+      # and stops with 0 when its page answers on the port. Ubuntu 24.04 refuses the user namespaces of the sandbox
+      # of Chromium to a binary with no AppArmor profile, so the step allows them. The app keeps its sandbox.
+      - name: smoke (a preset with the script smoke)
+        run: |
+          if ! jq -e '.scripts.smoke' "packages/$PACKAGE/package.json" > /dev/null; then echo "No script smoke."; exit 0; fi
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          xvfb-run --auto-servernum pnpm --filter "@template/$PACKAGE" smoke
 
   # A new repository passes its install, conventions check, typecheck, tests, Pages build and site check with no hand edit.
   # Only the template has the stamp (scripts/stamp), so a repository from the stamp skips this job.

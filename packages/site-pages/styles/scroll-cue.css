@@ -8,7 +8,8 @@
  * Use: give the class scroll-cue to the box, and set --scroll-cue-bg to the background color of the box.
  *   <pre class="scroll-cue">...</pre>
  *   .my-code { --scroll-cue-bg: #f6f6f8; }
- * The box gets overflow-x: auto. Its background color is --scroll-cue-bg.
+ * The box gets overflow-x: auto. A browser with scroll timelines keeps the background of the box, so a code block keeps
+ * the color of its theme. In a browser with no scroll timelines, the background color of the box is --scroll-cue-bg.
  */
 .scroll-cue {
   --scroll-cue-bg: Canvas;
@@ -16,20 +17,25 @@
   --scroll-cue-size: 1.25rem;
   overflow-x: auto;
   overscroll-behavior-x: contain;
-  background-color: var(--scroll-cue-bg);
-  background-image:
-    linear-gradient(to right, var(--scroll-cue-bg) 40%, transparent),
-    linear-gradient(to left, var(--scroll-cue-bg) 40%, transparent),
-    linear-gradient(to right, var(--scroll-cue-shade), transparent),
-    linear-gradient(to left, var(--scroll-cue-shade), transparent);
-  background-position: left center, right center, left center, right center;
-  background-size:
-    calc(var(--scroll-cue-size) * 2) 100%,
-    calc(var(--scroll-cue-size) * 2) 100%,
-    var(--scroll-cue-size) 100%,
-    var(--scroll-cue-size) 100%;
-  background-repeat: no-repeat;
-  background-attachment: local, local, scroll, scroll;
+}
+
+@supports not (animation-timeline: scroll()) {
+  .scroll-cue {
+    background-color: var(--scroll-cue-bg);
+    background-image:
+      linear-gradient(to right, var(--scroll-cue-bg) 40%, transparent),
+      linear-gradient(to left, var(--scroll-cue-bg) 40%, transparent),
+      linear-gradient(to right, var(--scroll-cue-shade), transparent),
+      linear-gradient(to left, var(--scroll-cue-shade), transparent);
+    background-position: left center, right center, left center, right center;
+    background-size:
+      calc(var(--scroll-cue-size) * 2) 100%,
+      calc(var(--scroll-cue-size) * 2) 100%,
+      var(--scroll-cue-size) 100%,
+      var(--scroll-cue-size) 100%;
+    background-repeat: no-repeat;
+    background-attachment: local, local, scroll, scroll;
+  }
 }
 
 @property --scroll-cue-fade-left {
@@ -68,7 +74,6 @@
  */
 @supports (animation-timeline: scroll()) {
   .scroll-cue {
-    background-image: none;
     -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--scroll-cue-fade-left), #000 calc(100% - var(--scroll-cue-fade-right)), transparent);
     mask-image: linear-gradient(to right, transparent, #000 var(--scroll-cue-fade-left), #000 calc(100% - var(--scroll-cue-fade-right)), transparent);
     animation-name: scroll-cue-fades;

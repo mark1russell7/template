@@ -59,6 +59,8 @@ site-pages check --out dist --repo owner/name --pages /,/releases/ --probe site-
 site-pages check --url https://owner.github.io/name/
 ```
 
+Before the measure, the check scrolls each view to its end, one screen at a time, and back to the top. Thus a part that starts when it comes into view starts first. An example is an Astro island with `client:visible` below the first screen. Then the check waits until no Astro island has the attribute `ssr`, for at most 10 seconds.
+
 A view fails for each of these problems:
 
 - The page is wider than the screen, or an element goes past the right edge. An element in a box that scrolls or clips does not count here.
@@ -70,6 +72,7 @@ A view fails for each of these problems:
 - A request to the site fails, or gets a status of 400 or more.
 - A script or a style sheet does not load, from any origin. An example is a module script that imports `node:perf_hooks`.
 - A check of the probe fails, or the probe makes no check.
+- An Astro island does not start in the time limit. A hidden island and an island of a media query that does not match do not count.
 
 The text of the problem has the element, the box, the two widths, the width of the view and the start of the text. For example:
 
@@ -77,11 +80,13 @@ The text of the problem has the element, the box, the two widths, the width of t
 a table goes out of view at 360 px: table.api-table in div.table-scroll: content of 736 px in a box of 344 px, "Note". Make the table fit, give the box the class scroll-cue, or add data-overflow-ok to the box.
 ```
 
-The rule for a box that scrolls examines only tables, for these reasons:
+A code block gets the same problem, with the words "a code block" and "Make the lines fit".
 
-- A code block, a hex view, a row of tabs and a carousel are meant to scroll, and a visitor sees that they scroll.
-- A table in a box that scrolls looks complete on a phone, with no scroll bar. The visitor does not see the last columns.
-- The class `scroll-cue` shows a fade at the edge of the box, so a table in such a box does not count. The check reads the computed style of the box. A box with the class, with no animation and no background image, counts.
+The rule for a box that scrolls examines only tables and code blocks (`pre`), for these reasons:
+
+- A table or a code block in a box that scrolls looks complete on a phone, with no scroll bar. The visitor does not see the end of the lines.
+- A hex view, a row of tabs and a carousel are meant to scroll, and a visitor sees that they scroll.
+- The class `scroll-cue` shows a fade at the edge of the box. So a table or a code block in such a box does not count. The check reads the computed style of the box. A box with the class, with no animation and no background image, counts.
 - A false alarm costs more than a miss, because each false alarm needs an exception in the site.
 
 A table is `table`, `role="table"` or `role="grid"`. A desktop view has a scroll bar, so a table in a box that scrolls is not a problem there. `report.json` still shows the table in `measure.cut`.
@@ -137,6 +142,60 @@ To probe other pages, give `--page-probe <page>=<file>` one time for each page, 
 The folder of `--shots` gets a screenshot of each view, `report.json` and `summary.md`. The exit code is 0 when each view passes, 1 when a view fails, and 2 for an incorrect command line.
 
 The check finds a browser in this order: `--browser`, `$SITE_CHECK_BROWSER`, the newest Chromium of Playwright, and then Chrome or Edge. The folder `src/check` imports only Node.js. Thus Node.js 22.18 or later can start `src/check/main.ts` with no install. The workflow `reusable-pages.yml` of the template uses it this way.
+
+## The site bar
+
+The command `site-pages bar` writes one shared bar into each HTML page of a built site. The bar comes first in the body of each page.
+
+```sh
+site-pages bar --out dist --repo owner/name --pages "Demo=demo/,Docs=docs/" --site-pages --npm @owner/name
+```
+
+- The bar has the portfolio of the owner and the name of the site. The name links to the home.
+- It has a link to the home, to each page of `--pages`, and to Releases and Status with `--site-pages`. The link of the current page has `aria-current="page"`.
+- It also links to the repository on GitHub, and to npm with `--npm`.
+- The bar takes the place of the header of the Releases page and the Status page.
+- Its CSS has its own class names, so the CSS of the site does not change the bar. It follows the light and the dark scheme. Its rows wrap at 360 px.
+- The command can start two times on one folder. The second start gives the same pages.
+
+In `reusable-pages.yml`, the input `site-bar: true` starts the command before the upload. Then `site-pages nav --require-bar` crawls the built site, and a failure stops the deploy.
+
+## The scroll cue of the built pages
+
+The command `site-pages cue` changes each code block (`pre`) of each HTML page of a built site. Each block gets the class `scroll-cue` and a place in the tab order. It also writes the style `scroll-cue.css` into each changed page.
+
+```sh
+site-pages cue --out dist
+```
+
+- A code block that is wider than its box shows a fade at the edge with more content. A block that is not wider shows no cue.
+- A block with `data-overflow-ok` or with the class `scroll-cue` stays as it is. The text of `script`, `style` and `textarea` does not change.
+- In a browser with no scroll timelines, a small script gives `--scroll-cue-bg` the background color of the block. Thus the block keeps the color of its theme.
+- The command can start two times on one folder. The second start gives the same pages.
+
+In `reusable-pages.yml`, the input `scroll-cue` (default `true`) starts the command before the site check and the upload.
+
+## The navigation of a site
+
+The command `site-pages nav` opens the home page of a site in a headless Chromium. It follows the links that the page shows, page by page, and counts the clicks from home.
+
+```sh
+site-pages nav --url https://owner.github.io/name/ --shots nav
+site-pages nav --out dist --repo owner/name --max-clicks 2
+```
+
+The command fails for each of these problems:
+
+- A page of `sitemap.xml` is more than `--max-clicks` clicks from home, or no chain of links from home reaches it.
+- A page shows no link back to home at 1280 px or at 360 px. A hidden link does not count.
+- A link to a page of the site opens a new tab. Then the back button of the browser cannot go back.
+- A link goes to a page that gives a status of 400 or more.
+- A click on a link to `releases/` or `status/` does not show the page of site-pages. A single-page application can catch the click and show its own page.
+- With `--require-bar`, a page has no shared site bar.
+
+The crawl opens at most `--max-pages` pages (default: 60). When it stops at this limit, the pages that it did not open are a "no read". A no-read is not a pass: the command fails, and `report.json` lists the pages in `unread`. The summary shows their count and their paths. In `site-audit.yml`, each no-read is a warning on the check of the pull request.
+
+The folder of `--shots` gets `report.json`, `summary.md` and screenshots of the home, the releases and the status pages, at 1280 px and 360 px.
 
 ## The freshness of a measured page
 
@@ -217,6 +276,20 @@ For a monorepo with one version for all its packages, give `--group` and the nam
 - A mark on a release with no break.
 
 The option `from` leaves out older sections. The option `fixedGroup` passes a section with no change or with only PATCH changes, because its raise comes from another package of the group.
+
+### The changelog gate
+
+The command `build` reads each changelog with `changelogReading`. A repository puts the oldest version of its gate in its root `package.json`:
+
+```json
+{ "sitePages": { "changelogFrom": "0.1.0" } }
+```
+
+- With the field, a fault in a section of that version or newer stops the build with code 1. The error names each section and its fault.
+- Without the field, the build gives a warning with the count of the sections with a fault, and it does not fail.
+- In both cases, `status.json` holds the reading in the field `changelog`, and the Status page shows the count. A reader of all the sites can thus list each repository, also a repository with no gate.
+
+To join the gate, a repository adds the field with no change to its code. Older sections can follow older habits, so the repository picks the first version that has no fault.
 
 `sectionMarksBreak(section)` tells if the text of a section marks a break. The marks are the heading `### Breaking` and the words "has breaking changes". A page that counts breaks uses this function.
 
@@ -411,7 +484,7 @@ import "@mark1russell7/site-pages/scroll-cue.css";
 <pre class="scroll-cue">pnpm add @mark1russell7/site-pages</pre>
 ```
 
-The class sets `overflow-x: auto` and the background color of the box. Set `--scroll-cue-bg` to the background color of the box. In a browser with no scroll timelines, `--scroll-cue-shade` is the color of the shade:
+The class sets `overflow-x: auto`. A browser with scroll timelines keeps the background of the box, so a code block keeps the color of its theme. A browser with no scroll timelines gets the background color `--scroll-cue-bg` and a shade of the color `--scroll-cue-shade`. Set `--scroll-cue-bg` to the background color of the box:
 
 ```css
 .code {
@@ -419,7 +492,13 @@ The class sets `overflow-x: auto` and the background color of the box. Set `--sc
 }
 ```
 
-Markdown has no way to set the class of a table. For a Markdown page, add the plugin `rehypeScrollCue` of the entry `@mark1russell7/site-pages/vite`. It gives the class, a tab stop and a label to each table:
+The fades run on a scroll timeline (`animation-timeline: scroll(self inline)`). In Chromium, `document.getAnimations()` gives each fade as a running animation with one iteration, and the fade does not end. A test that waits for the end of each animation, for example before an axe check of the contrast, then stops at its time limit. Such a test must skip each animation whose timeline is not `document.timeline`:
+
+```ts
+const running = document.getAnimations().filter((a) => a.timeline === document.timeline && a.playState === "running");
+```
+
+Markdown has no way to set the class of a table or a code block. For a Markdown page, add the plugin `rehypeScrollCue` of the entry `@mark1russell7/site-pages/vite`. It gives the class and a tab stop to each table and each code block. A table also gets a label. A code block keeps a tab stop that it has:
 
 ```js
 import { rehypeScrollCue } from "@mark1russell7/site-pages/vite";
@@ -575,6 +654,7 @@ The explorer obeys these rules:
 
 - **A bad record.** The explorer reads a record only through `parseResponseRecord`. It shows each fault with its path, and it does not throw.
 - **Conditions.** A dimension with `when` has its parent at a level inside `when`. The controls disable a choice that a view refuses, and they tell why.
+- **Held values that do not apply.** A held dimension whose parent is at an other level goes in one closed fold, after the held values that change the view. The fold tells their count, and it stays open or closed when the view changes.
 - **The band.** The band shows `low` to `high`. It fades with the distance from the nearest measured point.
 - **The time of a surface.** The field `nearest` reads each point at each place. So `planSteps` bounds the grid from the point count before the call. After a surface that passes the budget, `nextStepsCap` makes the next grid smaller.
 - **A table model.** A table model has no smooth surface, so the view shows cells.

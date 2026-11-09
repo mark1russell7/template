@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { minuteField, scheduleMinute } from "../../packages/conventions/src/rules/runner-budget.ts";
 import { parseRoadmap } from "../../packages/site-pages/src/index.ts";
-import { firstRoadmap, pinWorkflow, rootScripts, stamp } from "./stamp.ts";
+import { checkStamp, firstRoadmap, pinWorkflow, type RootManifest, rootScripts, stamp, workflowShape } from "./stamp.ts";
 
 const template = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -83,6 +83,18 @@ describe("the stamp", () => {
     );
   });
 
+  it("gives a security workflow that also passes in a private repository: the pinned action, and no checkout of the template", async () => {
+    const { out, sha } = await stamped();
+    const security = read(out, ".github/workflows/security.yml");
+    assert.ok(security.includes(`uses: mark1russell7/template/.github/actions/security-scan@${sha} # main`));
+    // A sparse checkout before the action leaves a partial clone, and in a private repository the checkout of the base then fails
+    for (const each of security.split(/\n {6}- /).filter((text) => text.includes("sparse-checkout:"))) {
+      assert.match(each, /^if: github\.repository == 'mark1russell7\/template'\n/);
+    }
+    // The action chooses the scans: "auto" skips the parts that need GitHub Advanced Security in a private repository
+    assert.doesNotMatch(security, /\b(dependency-review|codeql|osv-upload): /);
+  });
+
   it("stops when the folder exists", async () => {
     const { out } = await stamped();
     await assert.rejects(stamp({ name: "demo-repo", description: "x", template, out, ref: "HEAD", latest: () => "1.0.0" }), /The folder exists/);
@@ -113,6 +125,51 @@ describe("pinWorkflow", () => {
       pinWorkflow(text, sha),
       `      - uses: mark1russell7/template/.github/actions/setup@${sha} # main\n    uses: mark1russell7/template/.github/workflows/reusable-ci.yml@${sha} # main\n    # uses: ./.github/actions/not-this\n`,
     );
+  });
+});
+
+describe("checkStamp", () => {
+  const states = (out: string): Record<string, string> =>
+    Object.fromEntries(checkStamp({ repo: out, template, ref: "HEAD" }).files.filter((file) => file.state !== "same").map((file) => [file.path, file.state]));
+
+  it("finds no change in a repository that the stamp made at the same commit", async () => {
+    const { out } = await stamped();
+    assert.deepEqual(states(out), {});
+  });
+
+  it("does not count the parts that the stamp sets for each repository, or what the repository adds", async () => {
+    const { out } = await stamped();
+    const ci = join(out, ".github/workflows/ci.yml");
+    writeFileSync(ci, read(out, ".github/workflows/ci.yml").replace(/@[0-9a-f]{40} # main/g, `@${"c".repeat(40)} # main`).replace(/\n/g, "\r\n"));
+    const root = JSON.parse(read(out, "package.json")) as RootManifest;
+    root.name = "other-monorepo";
+    root.scripts["own"] = "node own.ts";
+    root.devDependencies["playwright"] = "^1.56.1";
+    for (const dep of Object.keys(root.devDependencies)) if (root.devDependencies[dep] === "^9.8.7") root.devDependencies[dep] = "^0.1.0";
+    writeFileSync(join(out, "package.json"), `${JSON.stringify(root, null, 2)}\n`);
+    assert.deepEqual(states(out), {});
+  });
+
+  it("finds a changed text, a missing file and a package.json field that the stamp would change", async () => {
+    const { out } = await stamped();
+    writeFileSync(join(out, "CLAUDE.md"), `${read(out, "CLAUDE.md")}\nOne more line.\n`);
+    rmSync(join(out, "LICENSE"));
+    const root = JSON.parse(read(out, "package.json")) as RootManifest;
+    delete root.scripts["typecheck"];
+    root.devDependencies["@mark1russell7/conventions"] = "workspace:*";
+    writeFileSync(join(out, "package.json"), `${JSON.stringify(root, null, 2)}\n`);
+    assert.deepEqual(states(out), { "CLAUDE.md": "differs", LICENSE: "missing", "package.json": "differs" });
+    const manifest = checkStamp({ repo: out, template, ref: "HEAD" }).files.find((file) => file.path === "package.json");
+    assert.deepEqual(manifest?.fields, ["scripts.typecheck", "devDependencies.@mark1russell7/conventions"]);
+  });
+});
+
+describe("workflowShape", () => {
+  it("removes the commit of each pin and the minute of each schedule", () => {
+    const a = `on:\n  schedule:\n    - cron: "17 6 * * 1"\njobs:\n  ci:\n    uses: ./.github/workflows/reusable-ci.yml\n`;
+    const b = `on:\n  schedule:\n    - cron: "42 6 * * 1"\njobs:\n  ci:\n    uses: mark1russell7/template/.github/workflows/reusable-ci.yml@${"d".repeat(40)} # main\n`;
+    assert.equal(workflowShape(a), workflowShape(b));
+    assert.notEqual(workflowShape(a), workflowShape(b.replace("6 * * 1", "7 * * 1")));
   });
 });
 

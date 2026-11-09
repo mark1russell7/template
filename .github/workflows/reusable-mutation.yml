@@ -1,0 +1,329 @@
+# The shared mutation tests of the repositories of mark1russell7 (CI.md), with Stryker and
+# @mark1russell7/rigor-mutation. The lane file of the repository (mutation.json) names the packages, their
+# parts and their gates. The job plan gives the selections, and the job mutate starts Stryker for each selection
+# on its own runner. Each selection fails when its score is under the gate of its package. The job gate then reads
+# the report of each selection, so a selection with no report also fails by name.
+#
+# A score is a read of the tests only when the run loaded and read all of them. Thus the plan fails a relative path
+# that leaves a package (load-check), and a selection fails when the report does not read a test file on the disk
+# (--test-files). With the input test-counts, a selection also fails when its count of tests fell (--last).
+#
+# The repository has @mark1russell7/rigor-mutation (0.1.3 or later), @stryker-mutator/core and
+# @stryker-mutator/vitest-runner (10.1.0 or later) in its devDependencies. A repository calls it from its own scheduled workflow, and states the
+# size of the run (CI.md):
+#
+#   on:
+#     schedule:
+#       - cron: "<minute> 4 * * 1"
+#     workflow_dispatch:
+#   env:
+#     STATED_JOBS: 3
+#     STATED_JOB_MINUTES: 90
+#     STATED_REASON: one runner for each part of collections
+#   jobs:
+#     mutation:
+#       uses: mark1russell7/template/.github/workflows/reusable-mutation.yml@<commit> # main
+name: Reusable mutation
+
+on:
+  workflow_call:
+    inputs:
+      selections:
+        description: >-
+          The packages or parts to mutate (for example "collections.impl collections.core"), separated by spaces or
+          commas. Empty gives each part of each package with parts, and each other package (rigor-mutation list --runs).
+        type: string
+        default: ""
+      lane:
+        description: The lane file, relative to the working directory.
+        type: string
+        default: mutation.json
+      concurrency:
+        description: The number of test processes of Stryker on each runner.
+        type: number
+        default: 4
+      timeout-minutes:
+        description: The time limit of each selection.
+        type: number
+        default: 120
+      stop-minutes:
+        description: >-
+          The time after which Stryker stops, so that the job can still write the summary and upload the report. 0
+          gives stopMinutes of the lane (rigor-mutation minutes, 0.2.4 or later), at most timeout-minutes minus 10.
+          An older rigor-mutation gives timeout-minutes minus 10. A selection that Stryker stops has no score, and it
+          fails.
+        type: number
+        default: 0
+      dry-run:
+        description: >-
+          Start only the tests of each selection under Stryker, with no mutant. Use it on a pull request that changes
+          the lane files. A dry run has no score, so the gate does not run.
+        type: boolean
+        default: false
+      changed:
+        description: >-
+          The changed files, separated by commas or lines, from the folder of the lane file (for example the output of
+          git diff --name-only). Only the runs with a changed file start, and each mutates only its changed files.
+          Empty mutates all files. It takes an empty selections.
+        type: string
+        default: ""
+      report-only:
+        description: >-
+          Write the scores, but do not fail a selection under its gate. A run that mutates only the changed files is
+          a sample, so it is usually report only.
+        type: boolean
+        default: false
+      test-counts:
+        description: >-
+          A file with the last good count of the tests of each selection, relative to the working directory. A fall of
+          more than maxTestFall percent of the lane (default 20) fails the selection. The job gate uploads the new
+          counts as the artifact mutation-test-counts. Commit it after a good run. Empty compares no count.
+        type: string
+        default: ""
+      node-version:
+        description: The Node.js version.
+        type: string
+        default: "26"
+      working-directory:
+        description: The folder of the root package.json, relative to the root of the repository.
+        type: string
+        default: "."
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+    outputs:
+      selections: ${{ steps.plan.outputs.selections }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: ${{ inputs.working-directory }}/package.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: pnpm
+          cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      # The jobs mutate and gate use scores --alone and --reports of rigor-mutation 0.1.8.
+      - name: Version
+        run: |
+          if ! pnpm exec rigor-mutation --help | grep -q -- "--reports <dir>"; then
+            echo "::error::This workflow needs @mark1russell7/rigor-mutation 0.1.8 or later (scores --reports and --alone)."
+            exit 1
+          fi
+      # The check of the disables is fast, so it runs once here and not on each runner.
+      - name: Disables
+        env:
+          LANE: ${{ inputs.lane }}
+        run: pnpm exec rigor-mutation disables --lane "$LANE"
+      # Stryker copies the folder of each package. A relative path that leaves it finds no file in the copy, and a test
+      # file that does not load fails no test. So the plan fails before any runner starts.
+      - name: Load check
+        env:
+          LANE: ${{ inputs.lane }}
+        run: pnpm exec rigor-mutation load-check --lane "$LANE"
+      - name: Plan
+        id: plan
+        env:
+          LANE: ${{ inputs.lane }}
+          SELECTIONS: ${{ inputs.selections }}
+          CHANGED: ${{ inputs.changed }}
+        run: |
+          if [ -n "${CHANGED//[[:space:],]/}" ]; then
+            if [ -n "${SELECTIONS//[ ,]/}" ]; then
+              echo "::error::changed takes an empty selections. The runs come from the changed files."
+              exit 1
+            fi
+            tr ',' '\n' <<< "$CHANGED" > "$RUNNER_TEMP/changed.txt"
+            names=$(pnpm exec rigor-mutation list --runs --changed "$RUNNER_TEMP/changed.txt" --lane "$LANE")
+            if [ -z "$names" ]; then echo "No selection has a changed file. No mutate job starts." >> "$GITHUB_STEP_SUMMARY"; fi
+          elif [ -z "${SELECTIONS//[ ,]/}" ]; then
+            names=$(pnpm exec rigor-mutation list --runs --lane "$LANE")
+          else
+            names=$(tr ', ' '\n\n' <<< "$SELECTIONS" | grep -v '^$')
+            # Each name must be a selection of the lane: "dir" fails with the names of the lane.
+            for name in $names; do pnpm exec rigor-mutation dir "$name" --lane "$LANE" > /dev/null; done
+          fi
+          json=$(node -e 'console.log(JSON.stringify(process.argv.slice(1)))' $names)
+          echo "Selections: $json"
+          echo "selections=$json" >> "$GITHUB_OUTPUT"
+
+  mutate:
+    needs: plan
+    # A matrix with no value is an error, so a plan with no selection starts no job.
+    if: ${{ needs.plan.outputs.selections != '[]' }}
+    name: mutate (${{ matrix.selection }})
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    strategy:
+      fail-fast: false
+      # The runners are shared by all repositories of the account. The rule runner-budget reads only a number here,
+      # so this is not an input. 3 is the most that the rule accepts.
+      max-parallel: 3
+      matrix:
+        selection: ${{ fromJSON(needs.plan.outputs.selections) }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+    env:
+      LANE: ${{ inputs.lane }}
+      SELECTION: ${{ matrix.selection }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: ${{ inputs.working-directory }}/package.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: pnpm
+          cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Stryker
+        id: stryker
+        env:
+          CONCURRENCY: ${{ inputs.concurrency }}
+          STOP_MINUTES: ${{ inputs.stop-minutes }}
+          TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+          DRY_RUN: ${{ inputs.dry-run }}
+          CHANGED: ${{ inputs.changed }}
+        run: |
+          stop=$STOP_MINUTES
+          if [ "$stop" -eq 0 ]; then
+            stop=$((TIMEOUT_MINUTES - 10))
+            # rigor-mutation 0.2.4 gives the stop of the lane, so plan-check and the job use one stop.
+            if minutes=$(pnpm exec rigor-mutation minutes --lane "$LANE" 2> /dev/null); then
+              lane_stop=$(sed -n 's/^stop=\([0-9][0-9]*\)$/\1/p' <<< "$minutes")
+              if [ -n "$lane_stop" ] && [ "$lane_stop" -le "$stop" ]; then
+                stop=$lane_stop
+              elif [ -n "$lane_stop" ]; then
+                echo "::notice::$SELECTION: the stop of the lane is $lane_stop minutes. The job stops Stryker after $stop minutes, 10 before timeout-minutes."
+              fi
+            fi
+          fi
+          if [ "$stop" -le 0 ]; then
+            echo "::error::stop-minutes is $stop. Give a positive stop-minutes, or a timeout-minutes above 10."
+            exit 1
+          fi
+          dir=$(pnpm exec rigor-mutation dir "$SELECTION" --lane "$LANE")
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+          options=()
+          if [ "$DRY_RUN" = "true" ]; then options+=(--dry-run); fi
+          if [ -n "${CHANGED//[[:space:],]/}" ]; then
+            tr ',' '\n' <<< "$CHANGED" > "$RUNNER_TEMP/changed.txt"
+            options+=(--changed "$RUNNER_TEMP/changed.txt")
+          fi
+          pnpm exec rigor-mutation config "$SELECTION" --lane "$LANE" --concurrency "$CONCURRENCY" "${options[@]}" --out "$RUNNER_TEMP/stryker.config.json"
+          # Stryker starts in the folder of the package. The bins of the root are also on the path.
+          root_bin=$(pwd)/node_modules/.bin
+          cd "$dir"
+          # timeout stops Stryker before the time limit of the job, so the next steps still start. It sends TERM to the
+          # group of processes, and KILL one minute later.
+          set +e
+          PATH="$root_bin:$PATH" timeout --kill-after=1m "${stop}m" pnpm exec stryker run "$RUNNER_TEMP/stryker.config.json"
+          code=$?
+          set -e
+          if [ "$code" -eq 124 ] || [ "$code" -eq 137 ]; then
+            echo "::error::$SELECTION: Stryker stopped after $stop minutes, no score."
+            echo "- $SELECTION: Stryker stopped after $stop minutes, no score." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$code"
+      - name: Score
+        if: ${{ !inputs.dry-run }}
+        env:
+          REPORT_ONLY: ${{ inputs.report-only }}
+          TEST_COUNTS: ${{ inputs.test-counts }}
+        run: |
+          # --alone: the gate of a package with "gateOver": "package" reads all its parts, in the job gate.
+          options=(--test-files --alone)
+          if [ -n "$TEST_COUNTS" ]; then options+=(--last "$TEST_COUNTS"); fi
+          if pnpm exec rigor-mutation scores "$SELECTION" --lane "$LANE" --summary "$GITHUB_STEP_SUMMARY" "${options[@]}"; then :
+          elif [ "$REPORT_ONLY" = "true" ]; then echo "::warning::$SELECTION is under its gate. This run is report only."
+          else exit 1
+          fi
+      - name: Mutation report
+        if: always() && !inputs.dry-run && steps.stryker.outputs.dir != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-${{ matrix.selection }}
+          path: ${{ inputs.working-directory }}/${{ steps.stryker.outputs.dir }}/reports/mutation/
+          if-no-files-found: warn
+          retention-days: 30
+
+  # The gate reads the report of each selection again. A runner that stopped, failed to start or uploaded no report
+  # has no score, and the gate names it. Thus one check tells if each selection has a score at its gate.
+  gate:
+    needs: [plan, mutate]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.selections != '[]' && !inputs.dry-run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: ${{ inputs.working-directory }}/package.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: pnpm
+          cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      # Each artifact goes into its own folder: <path>/mutation-<selection>/.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: mutation-*
+          path: ${{ runner.temp }}/mutation
+      - name: Gate
+        env:
+          LANE: ${{ inputs.lane }}
+          SELECTIONS: ${{ needs.plan.outputs.selections }}
+          REPORTS: ${{ runner.temp }}/mutation
+          REPORT_ONLY: ${{ inputs.report-only }}
+          TEST_COUNTS: ${{ inputs.test-counts }}
+        run: |
+          if [ "$REPORT_ONLY" = "true" ]; then title="Mutation gate (report only)"; else title="Mutation gate"; fi
+          { echo "### $title"; echo; } >> "$GITHUB_STEP_SUMMARY"
+          options=(--test-files)
+          if [ -n "$TEST_COUNTS" ]; then
+            # The new file starts as a copy of the old one, so a selection that did not run keeps its count.
+            counts="$RUNNER_TEMP/counts/$(basename "$TEST_COUNTS")"
+            mkdir -p "$RUNNER_TEMP/counts"
+            if [ -f "$TEST_COUNTS" ]; then cp "$TEST_COUNTS" "$counts"; fi
+            options+=(--last "$TEST_COUNTS" --write-last "$counts")
+          fi
+          mapfile -t names < <(node -e 'for (const s of JSON.parse(process.argv[1])) console.log(s)' "$SELECTIONS")
+          # One command reads all the selections, so the gate of a package with "gateOver": "package" reads the sum of
+          # its parts. A selection with no report is a no read: "scores" names the missing file.
+          status=0
+          pnpm exec rigor-mutation scores "${names[@]}" --lane "$LANE" --reports "$REPORTS" --summary "$GITHUB_STEP_SUMMARY" "${options[@]}" || status=1
+          if [ "$REPORT_ONLY" = "true" ]; then exit 0; fi
+          exit "$status"
+      # The counts of the selections that passed. Commit the file as test-counts after a good run.
+      - name: Test counts
+        if: ${{ !cancelled() && inputs.test-counts != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-test-counts
+          path: ${{ runner.temp }}/counts/
+          if-no-files-found: warn
+          retention-days: 30

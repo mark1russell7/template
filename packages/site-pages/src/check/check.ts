@@ -12,7 +12,7 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { findBrowser, launch, type Page } from "./browser.ts";
+import { findBrowser, launch, type Browser, type Page } from "./browser.ts";
 import { MEASURE, probeExpression, type Cut, type Measure, type ProbeCheck } from "./measure.ts";
 import { probeScript, TYPESCRIPT_PROBE } from "./probe.ts";
 import { serve } from "./serve.ts";
@@ -49,7 +49,51 @@ export interface CheckOptions {
   settleMs: number;
   /** The time limit of a page load. */
   timeoutMs: number;
+  /** The time limit of the scroll and of the islands of a view, for `revealExpression`. The default is `ISLAND_LIMIT_MS`. */
+  islandMs?: number | undefined;
   log?: ((line: string) => void) | undefined;
+}
+
+/** The default time limit of the scroll and of the islands of a view, in milliseconds. */
+export const ISLAND_LIMIT_MS = 10_000;
+
+/**
+ * This function gives a page expression that scrolls the page to its end, one screen at a time, and then back to the top.
+ * Thus each part that starts when it comes into view starts before the measure. Examples are an Astro island with
+ * `client:visible` and an image with `loading="lazy"`. Then the expression waits until no Astro island waits to start.
+ * An island that the page does not show and an island of a media query that does not match do not count.
+ * The expression gives the islands that did not start in `limitMs`.
+ */
+export function revealExpression(limitMs: number): string {
+  return `(async () => {
+  const end = performance.now() + ${String(limitMs)};
+  const frame = () => new Promise((done) => requestAnimationFrame(() => setTimeout(done, 0)));
+  const root = document.scrollingElement ?? document.documentElement;
+  const step = Math.max(Math.round(innerHeight * 0.8), 100);
+  for (let top = 0; top < root.scrollHeight && performance.now() < end; top += step) {
+    scrollTo({ top, behavior: "instant" });
+    await frame();
+    await frame();
+  }
+  scrollTo({ top: root.scrollHeight, behavior: "instant" });
+  await frame();
+  const waiting = () => [...document.querySelectorAll("astro-island[ssr]")].filter((island) => {
+    const client = island.getAttribute("client") ?? "";
+    if (client === "media") {
+      try {
+        const query = JSON.parse(island.getAttribute("opts") ?? "{}").value;
+        if (typeof query === "string" && !matchMedia(query).matches) return false;
+      } catch {}
+    }
+    if (client === "visible" && ![...island.children].some((child) => child.getClientRects().length > 0)) return false;
+    return true;
+  });
+  while (waiting().length > 0 && performance.now() < end) await new Promise((done) => setTimeout(done, 50));
+  scrollTo({ top: 0, behavior: "instant" });
+  await frame();
+  await frame();
+  return waiting().map((island) => (island.getAttribute("component-url") ?? "").split("/").pop() + " (client:" + (island.getAttribute("client") ?? "") + ")");
+})()`;
 }
 
 /** The result of one page at one width and scheme. */
@@ -76,15 +120,16 @@ export interface CheckResult {
 
 /**
  * This function gives the problems of the cuts of a view with the given width. A box that clips text is a problem at each width.
- * A table in a box that scrolls is a problem only on a phone. A phone shows no scroll bar, but a desktop shows one.
+ * A table or a code block in a box that scrolls is a problem only on a phone. A phone shows no scroll bar, but a desktop shows one.
  * The summary and the log give the page of each problem.
  */
 export function cutProblems(cuts: readonly Cut[], width: number): string[] {
   const widths = (cut: Cut) => `${cut.element} in ${cut.box}: content of ${cut.scrollWidth} px in a box of ${cut.clientWidth} px, "${cut.text}"`;
   return cuts.flatMap((cut) => {
     if (cut.kind === "clip") return [`a box cuts text at ${width} px: ${widths(cut)}. Make the content fit, or add data-overflow-ok to the box.`];
-    if (cut.deadCue === true) return width < PHONE_WIDTH ? [`a table goes out of view at ${width} px: ${widths(cut)}. The box has the class scroll-cue, but its computed style has no animation and no shade. Read the served CSS.`] : [];
-    if (width < PHONE_WIDTH) return [`a table goes out of view at ${width} px: ${widths(cut)}. Make the table fit, give the box the class scroll-cue, or add data-overflow-ok to the box.`];
+    const what = cut.kind === "code" ? "a code block" : "a table";
+    if (cut.deadCue === true) return width < PHONE_WIDTH ? [`${what} goes out of view at ${width} px: ${widths(cut)}. The box has the class scroll-cue, but its computed style has no animation and no shade. Read the served CSS.`] : [];
+    if (width < PHONE_WIDTH) return [`${what} goes out of view at ${width} px: ${widths(cut)}. Make ${cut.kind === "code" ? "the lines" : "the table"} fit, give the box the class scroll-cue, or add data-overflow-ok to the box.`];
     return [];
   });
 }
@@ -122,13 +167,16 @@ export async function checkSite(options: CheckOptions): Promise<CheckResult> {
   if (executable === undefined) throw new Error("no Chromium browser was found: give --browser, set SITE_CHECK_BROWSER, or install the Chromium of Playwright");
   if (options.pages.length === 0) throw new Error("no page to check");
   const probes = pageProbes(options);
+  if (options.out === undefined && options.url === undefined) throw new Error("give out or url");
   const server = options.out !== undefined ? await serve(options.out, options.base ?? "/") : undefined;
-  const home = server?.url ?? options.url;
-  if (home === undefined) throw new Error("give out or url");
-  const homeUrl = new URL(home.endsWith("/") ? home : `${home}/`);
-  const browser = await launch(executable, options.timeoutMs);
   const views: ViewResult[] = [];
+  let homeUrl: URL;
+  let browser: Browser | undefined;
+  // The server stops also when the browser does not start. An open server keeps the process alive, and the check does not end.
   try {
+    const home = server?.url ?? options.url ?? "";
+    homeUrl = new URL(home.endsWith("/") ? home : `${home}/`);
+    browser = await launch(executable, options.timeoutMs);
     const { page } = browser;
     const events = watch(page, homeUrl.origin);
     await Promise.all([page.send("Page.enable"), page.send("Runtime.enable"), page.send("Network.enable")]);
@@ -146,7 +194,7 @@ export async function checkSite(options: CheckOptions): Promise<CheckResult> {
       }
     }
   } finally {
-    await browser.close();
+    await browser?.close();
     await server?.close();
   }
   const result: CheckResult = { ok: views.length > 0 && views.every((view) => view.ok), url: homeUrl.href, browser: executable, views };
@@ -251,6 +299,9 @@ async function checkView(page: Page, events: Events, input: ViewInput): Promise<
     await loaded;
     await page.evaluate("document.fonts ? document.fonts.ready.then(() => true) : true");
     await new Promise((done) => setTimeout(done, options.settleMs));
+    const islandMs = options.islandMs ?? ISLAND_LIMIT_MS;
+    const stuck = await page.evaluate<string[]>(revealExpression(islandMs));
+    for (const island of stuck) view.problems.push(`an island did not start in ${String(islandMs)} ms after a scroll to the end: ${island}`);
     const pattern = await page.evaluate<string>(OTHER_PATHS);
     if (pattern !== "") other = new RegExp(pattern);
     const measure = await page.evaluate<Measure>(MEASURE);

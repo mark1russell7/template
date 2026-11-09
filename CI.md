@@ -8,6 +8,7 @@ The template holds the CI, the release and the Pages workflows of the repositori
 | `.github/workflows/reusable-release-build.yml` | Workflow | Builds and packs the published packages, and writes the plan of the tags. |
 | `.github/actions/npm-publish` | Action | Publishes the tarballs to npm with trusted publishing (OIDC) and provenance. |
 | `.github/workflows/reusable-release-tag.yml` | Workflow | Makes a git tag and a GitHub release for each published version. |
+| `.github/workflows/reusable-mutation.yml` | Workflow | Starts the mutation tests of each package with Stryker, with a gate for each package. |
 | `.github/workflows/reusable-pages.yml` | Workflow | Builds a site, adds the Releases page and the Status page, and deploys it to GitHub Pages. |
 | `.github/actions/security-scan` | Action | Scans the dependencies and the code with the dependency review, osv-scanner and CodeQL, in one job. |
 | `.github/workflows/reusable-security.yml` | Workflow | Deprecated. The same scans in three jobs ("Security", "The old workflow"). |
@@ -33,6 +34,7 @@ The job starts all the scripts, also after a failure. Then it fails with the nam
 | `node-versions` | `["26"]` | The Node.js versions of the matrix, as JSON. |
 | `os` | `["ubuntu-latest"]` | The runners of the matrix, as JSON. |
 | `setup` | (empty) | A command after the install, before the scripts. |
+| `cue-version` | (empty) | The version of the cue CLI, for example `0.15.1`. The action `setup-cue` installs it before the install, with retries and a sha256 check. Do not download the CLI in `setup` (the rule `setup-cue`). |
 | `run` | (empty) | A command after the scripts. |
 | `env` | `{}` | The environment variables of the job, as a JSON object. |
 | `working-directory` | `.` | The folder of `package.json`. |
@@ -40,6 +42,35 @@ The job starts all the scripts, also after a failure. Then it fails with the nam
 | `timeout-minutes` | `15` | The time limit of each job of the matrix. |
 | `changesets` | `true` | The changeset check on a pull request (refer to the next section). |
 | `changeset-ignore` | (empty) | More globs of files that need no changeset. |
+| `coverage` | `false` | After the scripts, the first cell of the matrix starts the tests of each package with Vitest again, with coverage (refer to "Coverage"). |
+| `coverage-floor` | `0` | The lowest percent of each measure of each package. `0` is no floor. |
+| `coverage-on-main` | `true` | With `coverage: false`, a push to the default branch of a public repository still gives the coverage, not strict (refer to "Coverage"). |
+
+### Coverage
+
+With `coverage: true`, the action `coverage` starts `vitest run` with coverage in each package whose `test` script starts Vitest. Only the first cell of the matrix does it.
+
+- The summary of the job gets a table: the statements, branches, functions and lines of each package.
+- The artifact `coverage` has `coverage-summary.json` and `coverage-final.json` of each package.
+- A package with no summary fails the step. Its tests failed, or it does not have `@vitest/coverage-v8`.
+- A package whose tests fail also fails the step, after the summary. The thresholds of its Vitest config can cause this. The message names the package and the exit code.
+- With `coverage-floor`, a package with a measure under the floor fails the step. The message names the package and the measure.
+
+With `coverage: false` and `coverage-on-main: true` (the default), a push to the default branch of a public repository also starts the action, not strict (a private repository pays for its minutes, so it uses `coverage: true`). It skips a package with no `@vitest/coverage-v8`, and it gives a warning for a failure. It does not fail the job. So each repository has the artifact `coverage` on main, and a tool can read which exported functions no test starts.
+
+Each package with Vitest needs `@vitest/coverage-v8` in its `devDependencies`, with the version of its Vitest. The configuration of the coverage in `vitest.config.ts` (for example `include` and `exclude`) stays. The action sets only the reporters and the folder `coverage`.
+
+The secret `CONVENTIONS_PRIVATE_PATTERNS` is optional. It has private regular expressions, one on each line. The rule `no-local-paths` of `check:conventions` finds each of them in the files and in the commit messages of the change. It also finds them in the title and the body of the pull request. A break of a private pattern shows only the line of the pattern in the secret, not the text. The job also masks each line of the secret in the log. A caller gives the secret by name, or with `secrets: inherit`:
+
+```yaml
+jobs:
+  ci:
+    uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<commit> # main
+    secrets:
+      CONVENTIONS_PRIVATE_PATTERNS: ${{ secrets.CONVENTIONS_PRIVATE_PATTERNS }}
+```
+
+A pull request from a fork gets no secret, so the private patterns are not examined there.
 
 ### The changeset check
 
@@ -134,7 +165,7 @@ A run from `workflow_dispatch` is the same as a run from a push to `main`, with 
 - The steps "Deepen to the merge base" and "Fetch the commit before the push" skip.
 - The action `changes` gives a match, as for each event other than a pull request.
 - The rules of `conventions` that read a range of commits skip, because a run of `workflow_dispatch` has no base.
-- `reusable-pages.yml` starts a deploy only after a CI run with the event `push`. Thus a run of `workflow_dispatch` does not deploy.
+- After a CI run of `workflow_dispatch` on `main`, a caller of `reusable-pages.yml` on `workflow_run` of CI deploys only the head of `main`.
 
 ### A gate with paths
 
@@ -270,9 +301,67 @@ A step that needs `id-token: write` stays in `release.yml`, for example a publis
 - The job does no checkout and no install. It reads its files from the artifact `release`.
 - The output `published` of the job `publish` and the output `after-pack` of the job `build` tell the job when to operate.
 
+## Mutation
+
+The workflow `reusable-mutation.yml` starts the mutation tests of a repository with [Stryker](https://stryker-mutator.io) and `@mark1russell7/rigor-mutation`. A mutation test changes the source a little (a mutant) and starts the tests. The score is the percent of the mutants that the tests detect.
+
+The lane file `mutation.json` of the repository names the packages, their globs, their parts and their gates. The README of `@mark1russell7/rigor-mutation` tells its format. The repository has these `devDependencies`: `@mark1russell7/rigor-mutation`, `@stryker-mutator/core` and `@stryker-mutator/vitest-runner`, 10.1.0 or later. Stryker 10.0 started no test on each mutant with Vitest 5. The workflow needs `@mark1russell7/rigor-mutation` 0.1.8 or later. The job `plan` fails with an older version.
+
+The job `plan` checks the disabled mutants (`rigor-mutation disables`) and the relative paths of each package (`rigor-mutation load-check`). Then it gives the selections. Stryker copies the folder of each package, so a relative path that leaves the folder finds no file in the copy. A test file that does not load fails no test, so the plan fails before any runner starts. The job `mutate` starts Stryker for each selection on its own runner. Then it applies the gate of the package. A selection under its gate fails, and the message names it. The artifact `mutation-<selection>` has the HTML and JSON reports.
+
+Stryker stops after `stop-minutes`, before the time limit of the job. Then the job writes "no score" to the summary, uploads the report and fails. The job `gate` starts after each `mutate` job, also after a failure. It reads the reports of all the selections in one `scores` command (`--reports`) and applies the gate again. A selection with no report fails, and the gate names it.
+
+The gate of a package with parts applies to each part. With `"gateOver": "package"` in the lane, the job `gate` applies it to the sum of the mutants of all the parts. A part that has no report makes the package a no read. The job `mutate` of a part then applies no gate (`--alone`).
+
+A score is a read of the tests only when the run read all of them. Thus `Score` and the job `gate` also fail a selection when its report does not read a test file on the disk (`--test-files`). The field `notRead` of the package in the lane names each exception, with its reason.
+
+Four inputs change a run.
+
+- `test-counts` names a file with the last good count of the tests of each selection. A count that fell by more than `maxTestFall` percent of the lane fails the selection. The default is 20. The job `gate` uploads the new counts as the artifact `mutation-test-counts`. Commit the file after a good run.
+
+- `dry-run` starts only the tests of each selection under Stryker, with no mutant. Start it on a pull request that changes the lane files or the test config. A selection whose tests fail under Stryker then fails before the long run. A dry run has no score, so `Score` and the job `gate` do not run.
+- `changed` names the changed files, from the folder of the lane file. Only the runs with a changed file start, and each run mutates only its changed files. A plan with no run starts no job `mutate`.
+- `report-only` writes the scores, but a score under the gate fails nothing. A run of the changed files of a night is a sample of the package, so it is report only. The weekly run of all files keeps the gate.
+
+A mutation run is long. Thus a repository starts it from a scheduled workflow, not from each pull request. The workflow states its size in its `env`. A check compares the real run with these values:
+
+```yaml
+on:
+  schedule:
+    - cron: "<minute> 4 * * 1"
+  workflow_dispatch:
+env:
+  STATED_JOBS: 3
+  STATED_JOB_MINUTES: 90
+  STATED_REASON: one runner for each part of the package
+jobs:
+  mutation:
+    uses: mark1russell7/template/.github/workflows/reusable-mutation.yml@<commit> # main
+```
+
+`STATED_JOBS` is the number of jobs, with the job `plan`. `STATED_JOB_MINUTES` is the sum of the minutes of the jobs.
+
+| Input | Default | What it sets |
+|---|---|---|
+| `selections` | (empty) | The packages or parts to mutate, separated by spaces or commas. Empty gives each part of each package with parts, and each other package. |
+| `lane` | `mutation.json` | The lane file. |
+| `concurrency` | `4` | The test processes of Stryker on each runner. |
+| `timeout-minutes` | `120` | The time limit of each selection. Divide a package into parts when one selection needs more. |
+| `stop-minutes` | `0` | The time after which Stryker stops. `0` gives `stopMinutes` of the lane, at most `timeout-minutes` minus 10. |
+| `dry-run` | `false` | Start only the tests, with no mutant and no gate. |
+| `changed` | (empty) | The changed files, separated by commas or lines. Only their runs start. It takes an empty `selections`. |
+| `report-only` | `false` | Write the scores, but do not fail a score under the gate. |
+| `test-counts` | (empty) | The file of the last good test counts. A fall of a count fails the selection. Empty compares no count. |
+| `node-version` | `26` | The Node.js version. |
+| `working-directory` | `.` | The folder of the root `package.json`. |
+
+The gates are in the lane file, not in an input. Thus a local run and CI use the same gate.
+
 ## Pages
 
-`reusable-pages.yml` has two jobs. The job `build` installs, builds the site, adds the pages of `site-pages` and uploads the Pages artifact. It gets only read permissions. The job `deploy` deploys the artifact. It starts no code of the repository.
+`reusable-pages.yml` has three jobs. The job `ref` decides if the commit of the event builds and deploys. It starts no code of the repository.
+
+The job `build` checks out the commit of the event, with no ref of its own. It installs, builds the site, adds the pages of `site-pages` and uploads the Pages artifact. It gets only read permissions. The job `deploy` deploys the artifact. It starts no code of the repository.
 
 ```yaml
 on:
@@ -315,9 +404,13 @@ jobs:
 ```
 
 - A repository that publishes a package also starts Pages after a release, with `workflow_run` of `Release`, and on each day. A release starts no Pages run by itself, so the Releases page is behind npm until the next build. The rule `pages-after-release` of `@mark1russell7/conventions` examines both triggers, and `conventions fix` writes them.
-- A build after a release takes the commit of `green-main`, not the commit of the release. This is the newest commit of `main`, or the newest green commit when CI failed on it. A release takes longer than a build, so a later push can already be on the site. A release that a person starts by hand also starts this build.
+- The job `ref` writes its decision and the reason to the step summary of the run.
+- A push to `main` deploys its commit. A pull request and a push to a different branch only build.
+- A schedule, a run by hand, a repository dispatch and a run after a release build the head of `main`. They deploy it when its CI passed, or while its CI runs and `pending` is `head`.
+- A red head of `main` deploys nothing. The site keeps its last deploy and does not go back to an older commit.
+- A run after CI deploys only when the commit of CI is the head of `main`. Else the CI run of the newer commit deploys it.
 - A caller on `workflow_run` after CI is also correct. A failed CI run, a CI run of a pull request and a CI run of a push to a different branch build nothing. The job `build` examines the branch, so the filter `branches: [main]` of the caller is not necessary.
-- A scheduled build uses the commit of `green-main`. The input `pending` goes to that action.
+- The input `pending` is `head` by default. With `pending: green`, a head whose CI runs deploys nothing.
 - The inputs of `site-pages` go to the action: `site-pages-version`, `roadmap`, `base`, `packages`, `changesets`, `group`, `css`, `site-name` and `data-only`.
 - `site-pages: false` builds the site without the Releases page and the Status page.
 - Without `roadmap`, the Status page shows only the open pull requests and issues. The rule `roadmap-parses` of `@mark1russell7/conventions` thus needs `roadmap` in each call, or `site-pages: false`.
@@ -333,11 +426,20 @@ jobs:
 - `site-check-probe` is a JavaScript or TypeScript file that tests the interactive core of the home. Its checks run at each width. The check removes the types of a `.ts` file, so the site needs no build step for its probe. `site-pages check --help` tells its functions.
 - `site-check-probe` also takes a probe for other pages, as `<page>=<file>` pairs separated by commas, for example `test-probe.js, /structures/=src/structures-probe.ts`. A file with no page is the probe of the first page. A page with no probe has none.
 - The check uses the Chromium of `playwright-core` at `site-check-playwright`, from the action `setup-playwright`. The artifact `site-check` has the screenshots and `report.json`.
+- Two calls of `reusable-pages.yml` in one run need two values of `artifact-prefix`. The prefix goes before the names `github-pages` and `site-check` of the artifacts.
+- A download by name gets only the latest artifact of the name. `download-artifact` also finds by ID only the latest artifact of each name. Thus two artifacts of one name in one run are a fault.
 - The check runs from `packages/site-pages/src/check` of the template commit of the workflow. It needs Node.js 22.18 or later.
 - A site with its own Pages workflow uses the action `site-check` before the upload of the Pages artifact. The inputs have the same names, and `out` is the built site.
 - A site with its own Pages workflow uses the action `data-stamps` for the freshness gate. Its input `stamps` is the file of stamps in the built site.
+- A scheduled build or a build after a release can build an older green commit. When that commit does not have the file of stamps yet, the gate warns and skips. When the build is of the commit of the workflow, a missing file fails the gate.
 - The workflow `site-audit.yml` of the template checks the live home of each public site each Monday. Start it by hand from the Actions tab.
 - The audit does not fail for a bad site. Its artifact `site-audit` has the screenshots, `report.json` of each site and `audit.json`.
+- The job `nav` of the audit starts `site-pages nav` on each site. Its artifact `site-nav` has the screenshots, `report.json` of each site and `nav.json`.
+- Each pull request starts `site-audit.yml`, so its check "Site audit OK" is always there. A pull request that changes `site-audit.yml` or the crawl starts only the job `nav`.
+- `site-bar: true` writes the shared site bar into each built HTML page. `site-bar-pages` names the pages of the bar, for example `Demo=demo/,Docs=docs/`. `site-bar-npm` gives the npm link.
+- With `site-bar: true`, the crawl `site-pages nav` examines the built site. A page with no bar, a page more than 2 clicks from home or a page with no way back stops the deploy.
+- `scroll-cue` (default `true`) gives each code block of each built HTML page the scroll cue of `site-pages cue`. A block wider than its box shows a fade at the edge with more content.
+- A code block with `data-overflow-ok` keeps no cue. `scroll-cue: false` stops the step.
 - `deploy: false` builds and uploads the artifact, with no deploy.
 - `indexnow-key` sends the URLs of `sitemap.xml` to the IndexNow engines after each deploy that is not scheduled.
 - The site must serve `<key>.txt` with the key. The key is public. A failure of the job `indexnow` does not fail the deploy.
@@ -354,7 +456,22 @@ The action `security-scan` has three scans in one job. On a pull request, a scan
 |---|---|---|
 | `dependency-review` | GitHub compares the dependencies of the base and of the pull request. The scan fails for a new dependency with a known vulnerability. | The scan does not start. |
 | `osv-scanner` | The scan reads the lockfiles of the base and of the pull request. It fails for a vulnerability that only the pull request has. | The scan reads all the lockfiles and uploads the results. |
-| `codeql` | CodeQL analyzes the source with no build. The scan fails for an alert on a line that the pull request adds or changes. | CodeQL analyzes the source and uploads the results. |
+| `codeql` | CodeQL analyzes the source with no build. The scan fails for a new alert on a line that the pull request adds or changes. | CodeQL analyzes the source and uploads the results. |
+
+CodeQL first downloads the bundle of the version of `codeql-action`. If that download fails (for example, GitHub gave HTTP 504 again and again on 2026-11-08), the action waits 60 seconds. Then it starts CodeQL again, with a second download of the same bundle. If the second start also fails, the scan fails. The step summary names the bundle and the start that passed. A start with no download is not possible, because `codeql-action` ignores `tools: toolcache` in a run of a push or a pull request.
+
+An alert of CodeQL that is already open on the base branch is not new. The step groups the alerts by rule, file and message. A group is new only when the pull request has more alerts of it than the base branch has open. Thus a second alert of a known group fails. The step reads the open alerts of the base branch from the code-scanning API, with `security-events: read`. If it cannot read them, the step fails.
+
+### A private repository
+
+In a private repository, the dependency review and the code-scanning API need GitHub Advanced Security. A personal account cannot buy it. Thus the inputs `dependency-review`, `codeql` and `osv-upload` have the default `auto`:
+
+- In a public repository, `auto` starts the part.
+- In a private repository, `auto` skips the part. osv-scanner runs, and its pull request check stays the same.
+- `true` and `false` keep their meaning. A private repository with GitHub Advanced Security sets `true`.
+- The first step reads the visibility from the event. The event of a schedule has no repository, so then the step reads the API.
+
+A skip is not a pass. The last step gives a warning for each scan that `auto` skips, and the table of the summary shows `skip`. On a push, a schedule or a manual run, osv-scanner does not upload its results. Then a warning gives the count, and the summary of the run lists the vulnerable packages.
 
 Each scan starts also when an earlier scan failed. The last step of the action fails when a scan fails, and its error names that scan. The summary of the run shows a table of the scans. If the inputs start a scan and no step of it starts, the last step also fails.
 
@@ -393,11 +510,12 @@ jobs:
 | Input | Default | What it sets |
 |---|---|---|
 | `fail-on-severity` | `high` | A pull request fails for a new finding at or above this severity: `low`, `moderate`, `high` or `critical`. |
-| `dependency-review` | `true` | The scan `dependency-review`. |
+| `dependency-review` | `auto` | The scan `dependency-review`: `true`, `false` or `auto` ("A private repository"). |
 | `dependency-review-scopes` | `runtime, development, unknown` | The scopes of the dependencies that the dependency review examines. |
 | `osv` | `true` | The scan `osv-scanner`. |
+| `osv-upload` | `auto` | The upload of the results of osv-scanner to code scanning: `true`, `false` or `auto`. |
 | `osv-lockfile` | (empty) | The lockfiles of osv-scanner, separated by spaces. Empty scans each lockfile of the repository. |
-| `codeql` | `true` | The scan `codeql`. |
+| `codeql` | `auto` | The scan `codeql`: `true`, `false` or `auto`. |
 | `codeql-languages` | `javascript-typescript,actions` | The CodeQL languages. The scan skips a language with no files in the repository. |
 | `codeql-build-mode` | `none` | The CodeQL build mode. |
 
@@ -407,7 +525,6 @@ jobs:
 - The severity of a finding is its CVSS score or its CodeQL `security-severity`. `high` is 7.0 or more, and `critical` is 9.0 or more.
 - A file `osv-scanner.toml` next to a lockfile tells osv-scanner which vulnerabilities to ignore.
 - A repository with the default setup of code scanning sets `codeql: false`, because the default setup refuses the results of a CodeQL workflow.
-- CodeQL in a private repository needs GitHub Advanced Security. Thus only the public repositories use this action.
 - The last step starts `verdict.ts` with the Node of the runner. Node 22.18 or later runs TypeScript with no build, and the `ubuntu-latest` image has such a Node.
 
 ### The old workflow
@@ -434,8 +551,12 @@ uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<full commit SHA>
 The workflows of the template call the shared workflows and actions by a local path, for example `./.github/workflows/reusable-ci.yml`. Thus each pull request of the template tests them:
 
 - `ci.yml` tests `reusable-ci.yml`.
-- `security.yml` tests the action `security-scan`. The tests of `scripts/workflows/security-scan.test.ts` examine the last step of the action, with no scan.
+- `security.yml` tests the action `security-scan`. The tests of `scripts/workflows/security-scan.test.ts` start no scan. They examine the choice of the scans, the last step and the step that finds the new CodeQL alerts.
+- Before the action, `security.yml` checks out the folder `.github/actions` of the template. This step operates only in the template. In a private repository, its partial clone makes the checkout of the base fail.
 - `actions-test.yml` tests the actions, `reusable-pages.yml` and the release workflows, with `dry-run`. It publishes nothing. On a pull request, it sets the input `require-main` of the release build to `false`.
+- On each pull request, the job `site` of `actions-test.yml` calls `pages.yml`. It builds the site of the template and starts its probe, with no deploy.
+- "Actions OK" is a check of the ruleset of `main`, and it needs the job `site`. Thus `gh pr merge --auto` waits for the probe of the site.
+- `ci.yml` cannot call `pages.yml`, because `release.yml` calls `ci.yml` with only `contents: read`.
 - `ai-review.yml` tests `reusable-ai-review.yml`, and `codex-review.yml` tests `reusable-codex-review.yml`. Without its API key, a review stops at once with a note.
 - The tests of `scripts/ai-review/` examine the request, the redaction and the post of the second review, with no network.
 

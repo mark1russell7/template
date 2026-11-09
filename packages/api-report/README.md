@@ -162,7 +162,7 @@ The package also exports the functions of the tool:
 - `packageReport(folder)` and `apiReport(name, root, entries)` give the text of one report.
 - `entriesOf(manifest, folder)`, `publishedManifest(manifest)` and `binsOf(manifest)` read a `package.json`.
 - `parseDeclarations(text)` and `statementsOf(text)` read a declaration file.
-- `packageFolders(root, globs)`, `globFolders(root, glob)`, `globToRegExp(glob)` and `workspaceGlobs(root)` find the packages.
+- `packageFolders(root, globs)`, `globFolders(root, glob)`, `globToRegExp(glob)` and `workspaceGlobs(root)` find the packages. They come from `@mark1russell7/conventions/workspace`.
 - `diffLines(before, after)` and `unifiedDiff(before, after)` give a line diff.
 - `pageFaults(report, packageName, pages, except, complete)` and `reportEntries(report)` hold a hand-written page against a report.
 - `referencePage(report, packageName, frontmatter)` gives the Markdown of the page of each export. The argument `frontmatter` is optional.

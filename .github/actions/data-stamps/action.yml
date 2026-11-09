@@ -6,6 +6,12 @@ inputs:
   stamps:
     description: The file of data stamps, from the root of the repository.
     required: true
+  config-sha:
+    description: >-
+      The commit of the workflow that gives the input stamps. A scheduled build or a build after a release can check out
+      an older green commit. When that commit does not have the file yet, the step warns and skips. When the checkout
+      is this commit, a missing file fails the step.
+    default: ${{ github.sha }}
 runs:
   using: composite
   steps:
@@ -17,4 +23,14 @@ runs:
         STAMPS: ${{ inputs.stamps }}
         # The gate reads the jobs of a run in flight with a hold. The caller job gives the permission actions: read.
         GITHUB_TOKEN: ${{ github.token }}
-      run: node "$GITHUB_ACTION_PATH/../../../packages/site-pages/src/check/freshness-main.ts" --stamps "$STAMPS"
+        CONFIG_SHA: ${{ inputs.config-sha }}
+      run: |
+        # The workflow file comes from a newer commit than the checkout. Its input can name a file that the older
+        # commit does not have yet: then this build has no stamps to check (client 2026-11-08, run 42472126280).
+        built=$(git rev-parse HEAD 2> /dev/null || true)
+        if [ ! -e "$STAMPS" ] && [ -n "$built" ] && [ "$built" != "$CONFIG_SHA" ]; then
+          echo "::warning::The built commit ${built:0:7} has no $STAMPS. The file comes after it (the workflow is of ${CONFIG_SHA:0:7}), so the freshness gate skips this build. The next build of a commit with the file checks it."
+          echo "The freshness gate skipped: the built commit \`${built:0:7}\` has no \`$STAMPS\` (the workflow is of \`${CONFIG_SHA:0:7}\`)." >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+        fi
+        node "$GITHUB_ACTION_PATH/../../../packages/site-pages/src/check/freshness-main.ts" --stamps "$STAMPS"

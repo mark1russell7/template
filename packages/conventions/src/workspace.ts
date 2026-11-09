@@ -1,10 +1,10 @@
 /**
  * The package folders of a repository: the folders that the globs of the workspace name, with a
- * `package.json` file. This file is a copy of `workspace.ts` of `@mark1russell7/api-report`, so that
- * each tool has no runtime dependency.
+ * `package.json` file. This file is the one home of this code. The subpath
+ * `@mark1russell7/conventions/workspace` exports it, and `@mark1russell7/api-report` imports it from there.
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 
 /** This function compares two strings by their code units, as the default sort does. */
 export const byCode = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -154,4 +154,25 @@ export function packageFolders(root: string, globs: readonly string[] | undefine
     .filter((folder) => existsSync(join(root, folder, "package.json")))
     .sort(byCode)
     .map((folder) => join(root, folder));
+}
+
+/**
+ * This function gives the folders of the reports when the command names no folder. With `globs`, these are the package
+ * folders of the globs. Without `globs`, these are the package folders of the workspace, and also the root when its
+ * package is public and the globs leave it out. A repository can publish its root and keep a private site in its
+ * workspace. The result has absolute paths, in the order of the code units.
+ */
+export function reportFolders(root: string, globs?: readonly string[]): string[] {
+  if (globs !== undefined) return packageFolders(root, globs);
+  const folders = packageFolders(root);
+  const top = resolve(root);
+  const manifest = join(top, "package.json");
+  if (workspaceGlobs(root) === undefined || !existsSync(manifest) || folders.some((folder) => resolve(folder) === top)) return folders;
+  let isPrivate = false;
+  try {
+    isPrivate = (JSON.parse(readFileSync(manifest, "utf8")) as { private?: unknown }).private === true;
+  } catch {
+    // The run reads the file again and tells the error of the root
+  }
+  return isPrivate ? folders : [top, ...folders];
 }

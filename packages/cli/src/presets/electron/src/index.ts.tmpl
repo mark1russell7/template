@@ -1,0 +1,113 @@
+/**
+ * The rules of the desktop app {{package}}, as data and pure functions. The main process (`main.ts`) applies them.
+ * Thus a test examines each rule with no Electron process.
+ *
+ * @packageDocumentation
+ */
+import { extname, join, normalize, sep } from "node:path";
+import type { BrowserWindowConstructorOptions } from "electron";
+
+/** The scheme of the page of the app. The main process serves the folder of the page under `app://page/`. */
+export const PAGE_SCHEME = "app";
+
+/** The address of the first page of the app. */
+export const PAGE_URL = "app://page/index.html";
+
+/**
+ * The content security policy of each file of the page. The page loads only its own scripts and styles. It has no
+ * inline script and no connection to a server.
+ */
+export const CONTENT_SECURITY_POLICY: string = [
+  "default-src 'none'",
+  "script-src 'self'",
+  "style-src 'self'",
+  "img-src 'self' data:",
+  "base-uri 'none'",
+  "form-action 'none'",
+  "frame-ancestors 'none'",
+].join("; ");
+
+/**
+ * This function gives the options of the window. The page has no Node.js, operates in a sandbox, and is isolated from the
+ * preload script. Only the preload script gets the message port of the main process.
+ */
+export function windowOptions(preload: string): BrowserWindowConstructorOptions {
+  return {
+    width: 1200,
+    height: 800,
+    show: false,
+    title: "{{name}}",
+    webPreferences: {
+      preload,
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      nodeIntegrationInWorker: false,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      webviewTag: false,
+    },
+  };
+}
+
+/** This function gives the origin of an address, or `undefined` when the text is not an address. */
+function originOf(address: string): string | undefined {
+  try {
+    const url = new URL(address);
+    // A standard scheme such as app: has the origin "null" in Node.js, so the origin is the scheme and the host
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return undefined;
+  }
+}
+
+/** This function tells if the window can go to an address. The window stays at the origin of its page. */
+export function allowsNavigation(page: string, target: string): boolean {
+  const origin = originOf(page);
+  return origin !== undefined && originOf(target) === origin;
+}
+
+/**
+ * This function gives the file of a request to the page scheme, or `undefined` when the request is not for a file in
+ * the folder of the page. A path that goes out of the folder, also with an encoded `..`, gives `undefined`. A
+ * backslash also gives `undefined`, so the rule is the same on Windows and on Linux.
+ */
+export function pageFile(root: string, address: string): string | undefined {
+  let url: URL;
+  let path: string;
+  try {
+    url = new URL(address);
+    path = decodeURIComponent(url.pathname);
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== `${PAGE_SCHEME}:` || url.host !== "page" || path.includes("\0") || path.includes("\\")) return undefined;
+  const base = normalize(root);
+  const file = normalize(join(base, path === "/" ? "index.html" : path));
+  return file.startsWith(base.endsWith(sep) ? base : base + sep) ? file : undefined;
+}
+
+/** The content type of each kind of file of the page. A module script must have a JavaScript type. */
+const TYPES: Readonly<Record<string, string>> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".woff2": "font/woff2",
+};
+
+/** This function gives the content type of a file of the page. An unknown kind gives `application/octet-stream`. */
+export function contentType(file: string): string {
+  return TYPES[extname(file).toLowerCase()] ?? "application/octet-stream";
+}
+
+/** A message on the port between the page and the main process. */
+export type Message = { readonly type: "ping" } | { readonly type: "pong" };
+
+/** This function gives the answer of the main process to a message of the page, or `undefined` for no answer. */
+export function answer(message: unknown): Message | undefined {
+  if (typeof message === "object" && message !== null && (message as { type?: unknown }).type === "ping") return { type: "pong" };
+  return undefined;
+}

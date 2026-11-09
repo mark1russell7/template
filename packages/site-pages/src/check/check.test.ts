@@ -35,7 +35,7 @@ beforeAll(() => {
   write("wide/index.html", page(`<h1>Wide</h1><div id="wide" style="width: 900px">A wide block</div>`));
   write("fixed-empty/index.html", page(`<h1>Panel</h1><aside id="panel" style="position: fixed; top: 0; left: 200px; width: 100%; height: 100vh"><div id="inner" style="width: 100%"><p style="width: 100px">Short</p></div></aside>`));
   write("fixed-text/index.html", page(`<h1>Panel</h1><aside id="over" style="position: fixed; top: 0; left: 200px; width: 100%; white-space: nowrap">This text is long, and the screen cuts it at the right edge of the view</aside>`));
-  write("scroller/index.html", page(`<h1>Scroller</h1><div data-overflow-ok style="overflow-x: auto"><table><tr><td style="min-width: 900px">A wide table in a scroller</td></tr></table></div><pre style="overflow-x:auto">a long line of code that is wider than a phone screen, in a pre that scrolls</pre>`));
+  write("scroller/index.html", page(`<h1>Scroller</h1><div data-overflow-ok style="overflow-x: auto"><table><tr><td style="min-width: 900px">A wide table in a scroller</td></tr></table></div><pre class="scroll-cue" style="overflow-x:auto; background-image: linear-gradient(#fff, #eee)">a long line of code that is wider than a phone screen, in a pre that scrolls</pre>`));
   write("broken/index.html", page(`<h1>Broken</h1><img src="missing.png" alt=""><script>console.error("bad thing")</script>`));
   write("throws/index.html", page(`<h1>Throws</h1><script>throw new Error("boom")</script>`));
   write("empty/index.html", page(``));
@@ -58,6 +58,9 @@ beforeAll(() => {
   write("clip-table/index.html", page(`<h1>Clip</h1><div id="card" style="overflow: hidden"><table style="min-width: 46rem"><tr><td>${LONG}</td></tr></table></div>`));
   write("clip-text/index.html", page(`<h1>Clip</h1><div id="card" style="overflow-x: clip"><p id="line" style="${NOWRAP}">${LONG} ${LONG}</p></div>`));
   write("clip-scroller/index.html", page(`<h1>Clip</h1><div id="card" style="overflow: hidden"><div style="width: 4000px; overflow-x: auto"><p style="${NOWRAP}">${LONG} ${LONG}</p></div></div>`));
+  // A code block of a highlighter: the text is in a span in a code element in the pre that scrolls.
+  write("wide-code/index.html", page(`<h1>Wide code</h1><pre id="wide-code" style="overflow-x: auto"><code><span>${LONG} ${LONG} ${LONG} ${LONG}</span></code></pre>`));
+  write("dead-code-cue/index.html", page(`<h1>Dead cue</h1><pre class="scroll-cue" style="overflow-x: auto">${LONG} ${LONG}</pre>`));
   write("wide-table/index.html", page(`<h1>Wide table</h1><div style="overflow-x: auto"><table style="min-width: 2000px"><tr><td>${LONG} ${LONG} ${LONG}</td></tr></table></div>`));
   write("over-1px/index.html", page(`<h1>Over</h1>${fit(-3)}`));
   write("under-1px/index.html", page(`<h1>Under</h1>${fit(-0.6)}`));
@@ -66,8 +69,8 @@ beforeAll(() => {
     page(
       [
         `<h1>Fine</h1>`,
-        `<pre id="code" style="overflow-x: auto">${LONG}</pre>`,
-        `<div style="overflow: hidden"><pre id="code-in-card" style="overflow-x: auto">${LONG}</pre></div>`,
+        `<pre id="code" class="scroll-cue" style="overflow-x: auto; background-image: linear-gradient(#fff, #eee)">${LONG}</pre>`,
+        `<div style="overflow: hidden"><pre id="code-in-card" data-overflow-ok style="overflow-x: auto">${LONG}</pre></div>`,
         `<div id="hex" style="overflow-x: auto; ${NOWRAP}; font-family: monospace"><div>00000000  47 49 46 38 39 61 01 00  01 00 80 00 00 ff ff ff 00 00 00 21 f9 04 01 00 00 00 00 2c 00 00 00 00</div></div>`,
         `<nav style="overflow-x: auto; ${NOWRAP}">${LONG}</nav>`,
         `<div data-overflow-ok style="overflow-x: auto"><table style="min-width: 46rem"><tr><td>${LONG}</td></tr></table></div>`,
@@ -86,6 +89,26 @@ beforeAll(() => {
     ),
   );
   write("404.html", page(`<h1>Not found</h1>`));
+  // The islands of Astro: an island with client:visible starts when one of its children comes into view, and then removes the
+  // attribute ssr. The island of coeval /learn/replay/ is below the first screen, and its content is wider than a phone.
+  const island = (client: string, child: string, extra = "") =>
+    `<astro-island ssr client="${client}" component-url="/_astro/${client}.js"${extra}><div class="child" ${child}>The content before the start</div></astro-island>`;
+  const start = (delay: number) =>
+    `<script>for (const island of document.querySelectorAll("astro-island[client=visible]")) new IntersectionObserver((entries, observer) => { if (!entries.some((entry) => entry.isIntersecting)) return; observer.disconnect(); setTimeout(() => { island.firstElementChild.innerHTML = '<div style="width: 900px">The journal of the replay, in one wide row</div>'; island.removeAttribute("ssr"); }, ${String(delay)}); }).observe(island.firstElementChild);</script>`;
+  const islandCss = `<style>astro-island { display: contents }</style>`;
+  write("island-below/index.html", page(`<h1>Replay</h1><div style="height: 3000px">The text above the island</div>${island("visible", "")}${start(50)}`, islandCss));
+  write(
+    "island-stuck/index.html",
+    page(
+      [
+        `<h1>Stuck</h1><div style="height: 3000px">The text above the islands</div>`,
+        island("load", ""),
+        island("visible", `style="display: none"`),
+        island("media", "", ` opts='{"name":"Menu","value":"(max-width: 1px)"}'`),
+      ].join(""),
+      islandCss,
+    ),
+  );
 });
 
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -153,6 +176,13 @@ describe("cutProblems", () => {
     expect(cutProblems([cut("table")], 360)).toEqual([`a table goes out of view at 360 px: table.api in div.card: content of 736 px in a box of 302 px, "runMigrations". Make the table fit, give the box the class scroll-cue, or add data-overflow-ok to the box.`]);
     expect(cutProblems([cut("clip")], 400)).toEqual([`a box cuts text at 400 px: table.api in div.card: content of 736 px in a box of 302 px, "runMigrations". Make the content fit, or add data-overflow-ok to the box.`]);
   });
+  it("names a code block in the text of its problem", () => {
+    const code: Cut = { kind: "code", box: "pre#x", element: "pre#x", scrollWidth: 736, clientWidth: 302, text: "pnpm add" };
+    expect(cutProblems([code], 360)).toEqual([`a code block goes out of view at 360 px: pre#x in pre#x: content of 736 px in a box of 302 px, "pnpm add". Make the lines fit, give the box the class scroll-cue, or add data-overflow-ok to the box.`]);
+    expect(cutProblems([{ ...code, deadCue: true }], 360)[0]).toMatch(/^a code block goes out of view at 360 px: .* The box has the class scroll-cue, but its computed style has no animation and no shade\./);
+    expect(cutProblems([code], PHONE_WIDTH)).toEqual([]);
+  });
+
   it("reports a clip at each width, and a table in a scroller only on a phone", () => {
     expect(cutProblems([cut("clip")], 1280)).toHaveLength(1);
     expect(cutProblems([cut("table")], PHONE_WIDTH - 1)).toHaveLength(1);
@@ -218,6 +248,18 @@ describe("runCheckCli", () => {
       expect(await runCheckCli(argv, run.io), argv.join(" ")).toBe(2);
       expect(run.err.join("")).toContain(message);
     }
+  });
+});
+
+describe("checkSite when the browser does not start", () => {
+  // Node is the browser here: it refuses the flags of Chromium and stops at once, so the launch throws.
+  it("stops the server of out, so the check ends", async () => {
+    const servers = (): number => process.getActiveResourcesInfo().filter((name) => name === "TCPServerWrap").length;
+    const before = servers();
+    const check = checkSite({ out: root, base: "/site/", pages: ["/"], widths: [360], schemes: ["light"], settleMs: 0, browser: process.execPath, timeoutMs: 10_000 });
+    await expect(check).rejects.toThrow(/the browser (stopped|did not start)/);
+    // The handle of a closed server goes some milliseconds after the close. A server that stays open does not go.
+    await expect.poll(servers, { timeout: 3000, interval: 50 }).toBe(before);
   });
 });
 
@@ -321,6 +363,16 @@ describe.skipIf(browser === undefined)("checkSite in a browser", () => {
     expect(at("/clip-scroller/", 360)).toContain("a box cuts text at 360 px: p in div#card");
   }, 120_000);
 
+  it("finds a code block wider than its box with no cue on a phone, and a dead cue on a code block", async () => {
+    const result = await checkSite(options(["/wide-code/", "/dead-code-cue/"], { widths: [360, 1280], schemes: ["light"] }));
+    const at = (page: string, width: number) => result.views.find((view) => view.page === page && view.width === width);
+    expect(at("/wide-code/", 360)?.problems.join(" ")).toContain("a code block goes out of view at 360 px: pre#wide-code in pre#wide-code");
+    expect(at("/wide-code/", 1280)?.problems).toEqual([]);
+    expect(at("/wide-code/", 1280)?.measure?.cut[0]).toMatchObject({ kind: "code", element: "pre#wide-code", box: "pre#wide-code" });
+    expect(at("/dead-code-cue/", 360)?.problems.join(" ")).toContain("a code block goes out of view at 360 px: pre.scroll-cue in pre.scroll-cue");
+    expect(at("/dead-code-cue/", 360)?.problems.join(" ")).toContain("The box has the class scroll-cue, but its computed style has no animation and no shade.");
+  }, 120_000);
+
   it("reports a table in a scroller on a desktop in the measure, not as a problem", async () => {
     const result = await checkSite(options(["/wide-table/"], { schemes: ["light"] }));
     const [phone, desktop] = result.views;
@@ -372,5 +424,18 @@ describe.skipIf(browser === undefined)("checkSite in a browser", () => {
     expect(result.ok).toBe(false);
     expect(result.views.filter((view) => !view.ok).map((view) => [view.page, view.problems])).toEqual([["/wide/", ["probe: the wide block is narrow (900)"]]]);
     expect(summary(result)).toContain("| `/wide/` | 1280 | light | **fail** (probe 0/1) | probe: the wide block is narrow (900) |");
+  }, 120_000);
+
+  it("scrolls to the end before the measure, so an island below the first screen starts and its content counts", async () => {
+    const result = await checkSite(options(["/island-below/"], { schemes: ["light"] }));
+    const at = (width: number) => result.views.find((view) => view.width === width)?.problems ?? [];
+    expect(at(360).join("\n")).toMatch(/wider than the screen|past the right edge/);
+    expect(at(360).join("\n")).not.toContain("an island did not start");
+    expect(at(1280)).toEqual([]);
+  }, 120_000);
+
+  it("fails an island that does not start in the time limit, and does not wait for a hidden island or an island of another media query", async () => {
+    const result = await checkSite(options(["/island-stuck/"], { widths: [360], schemes: ["light"], islandMs: 500 }));
+    expect(result.views[0]?.problems).toEqual(["an island did not start in 500 ms after a scroll to the end: load.js (client:load)"]);
   }, 120_000);
 });

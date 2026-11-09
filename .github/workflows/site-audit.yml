@@ -1,7 +1,12 @@
 # The audit of the live sites: `site-pages check --url` on the home of each public site of the account.
 # The check opens each home at the widths, in light and dark, and finds overflow, errors and empty pages.
 # The artifact site-audit has the screenshots, report.json of each site and audit.json for all sites.
+# The job nav starts `site-pages nav --url` on each site: it follows the links from home, and finds the
+# pages that are hidden or far from home, the pages with no way back and the links that open a new tab.
+# Its artifact site-nav has the screenshots and report.json of each site, and nav.json for all sites.
 # A failed site does not fail the run: the audit is a report. A run that cannot check a site fails.
+# Each pull request starts the workflow, so its check "Site audit OK" is always there. The job changes skips
+# the other jobs when the pull request changes no file of the crawl. Such a pull request starts only the job nav.
 name: Site audit
 
 on:
@@ -19,40 +24,55 @@ on:
         description: The repositories to skip, with commas.
         type: string
         default: "typeset"
+      preview-bar:
+        description: "true: the job nav also crawls each site with a preview of the shared site bar, with screenshots."
+        type: boolean
+        default: false
   # Each Monday, so the ranking of the sites stays current
   schedule:
     - cron: "28 5 * * 1"
+  pull_request:
 
 permissions: {}
 
 concurrency:
-  group: site-audit
+  group: site-audit-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  audit:
+  changes:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 5
     permissions:
       contents: read
+      pull-requests: read
+    outputs:
+      match: ${{ steps.changes.outputs.match }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          sparse-checkout: |
-            .github/actions
-            packages/site-pages/src/check
+          sparse-checkout: .github/actions
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - id: changes
+        uses: ./.github/actions/changes
         with:
-          node-version: 24
-      - name: Playwright for the site check
-        shell: bash
-        run: npm install --prefix "$RUNNER_TEMP/site-check-playwright" --no-save --no-package-lock --no-audit --no-fund "playwright-core@1.64.1"
-      - uses: ./.github/actions/setup-playwright
-        with:
-          command: ${{ runner.temp }}/site-check-playwright/node_modules/.bin/playwright-core
-          browsers: chromium
+          paths: |
+            .github/workflows/site-audit.yml
+            packages/site-pages/src/bar/bar.ts
+            packages/site-pages/src/check/nav.ts
+
+  sites:
+    needs: changes
+    if: needs.changes.outputs.match == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      list: ${{ steps.sites.outputs.list }}
+    steps:
       - name: The sites
+        id: sites
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -70,6 +90,39 @@ jobs:
           tr ',' '\n' <<< "$SKIP" | sed 's/^ *//;s/ *$//' | grep -v '^$' > "$RUNNER_TEMP/skip.txt" || true
           grep -vxF -f "$RUNNER_TEMP/skip.txt" "$RUNNER_TEMP/sites.txt" > "$RUNNER_TEMP/audit-sites.txt" || true
           echo "$(wc -l < "$RUNNER_TEMP/audit-sites.txt") sites: $(tr '\n' ' ' < "$RUNNER_TEMP/audit-sites.txt")"
+          echo "list=$(jq -Rnc '[inputs | select(length > 0)]' < "$RUNNER_TEMP/audit-sites.txt")" >> "$GITHUB_OUTPUT"
+
+  audit:
+    needs: [changes, sites]
+    if: needs.changes.outputs.match == 'true' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            .github/actions
+            packages/site-pages/src/bar
+            packages/site-pages/src/check
+            packages/site-pages/src/render
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Playwright for the site check
+        shell: bash
+        run: npm install --prefix "$RUNNER_TEMP/site-check-playwright" --no-save --no-package-lock --no-audit --no-fund "playwright-core@1.64.1"
+      - uses: ./.github/actions/setup-playwright
+        with:
+          command: ${{ runner.temp }}/site-check-playwright/node_modules/.bin/playwright-core
+          browsers: chromium
+      - name: The sites
+        shell: bash
+        env:
+          LIST: ${{ needs.sites.outputs.list }}
+        run: jq -r '.[]' <<< "$LIST" > "$RUNNER_TEMP/audit-sites.txt"
       - name: Site audit
         shell: bash
         env:
@@ -123,3 +176,148 @@ jobs:
           name: site-audit
           path: ${{ runner.temp }}/site-audit
           if-no-files-found: warn
+
+  nav:
+    needs: [changes, sites]
+    if: needs.changes.outputs.match == 'true' && needs.sites.outputs.list != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        repo: ${{ fromJSON(needs.sites.outputs.list) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            .github/actions
+            packages/site-pages/src/bar
+            packages/site-pages/src/check
+            packages/site-pages/src/render
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Playwright for the site check
+        shell: bash
+        run: npm install --prefix "$RUNNER_TEMP/site-check-playwright" --no-save --no-package-lock --no-audit --no-fund "playwright-core@1.64.1"
+      - uses: ./.github/actions/setup-playwright
+        with:
+          command: ${{ runner.temp }}/site-check-playwright/node_modules/.bin/playwright-core
+          browsers: chromium
+      - name: The navigation of ${{ matrix.repo }}
+        shell: bash
+        env:
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ matrix.repo }}
+        run: |
+          set -uo pipefail
+          out="$RUNNER_TEMP/site-nav/$REPO"
+          mkdir -p "$out"
+          owner="${OWNER,,}"
+          if [ "${REPO,,}" = "$owner.github.io" ]; then url="https://$owner.github.io/"; else url="https://$owner.github.io/$REPO/"; fi
+          code=0
+          node packages/site-pages/src/check/main.ts nav --url "$url" --shots "$out" --timeout 45000 > "$out/nav.log" 2>&1 || code=$?
+          cat "$out/nav.log"
+          echo "$code $url" > "$out/code.txt"
+          # Exit code 1 is a site with problems, and the audit is a report. Exit code 2 or no report is a failed audit.
+          if [ "$code" -eq 2 ] || [ ! -f "$out/report.json" ]; then exit 1; fi
+      # The same crawl, with the bar that the Pages workflow writes into each page: the screenshots show the bar on the
+      # live site, and the crawl tells which problems the bar solves.
+      - name: The navigation of ${{ matrix.repo }} with the site bar
+        if: github.event_name == 'pull_request' || inputs.preview-bar
+        shell: bash
+        env:
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ matrix.repo }}
+        run: |
+          set -uo pipefail
+          out="$RUNNER_TEMP/site-nav/$REPO/bar"
+          mkdir -p "$out"
+          owner="${OWNER,,}"
+          if [ "${REPO,,}" = "$owner.github.io" ]; then url="https://$owner.github.io/"; else url="https://$owner.github.io/$REPO/"; fi
+          code=0
+          node packages/site-pages/src/check/main.ts nav --url "$url" --preview-bar --require-bar --shots "$out" --timeout 45000 > "$out/nav.log" 2>&1 || code=$?
+          cat "$out/nav.log"
+          if [ "$code" -eq 2 ] || [ ! -f "$out/report.json" ]; then exit 1; fi
+      - name: The report of ${{ matrix.repo }}
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: site-nav-${{ matrix.repo }}
+          path: ${{ runner.temp }}/site-nav
+          if-no-files-found: warn
+
+  nav-report:
+    needs: [changes, nav]
+    # !cancelled(), not always(): after a cancel, a job with always() asks for a runner, and the next run of the group waits behind it
+    if: ${{ !cancelled() && needs.changes.outputs.match == 'true' && needs.nav.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: site-nav-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/site-nav
+      - name: The navigation of all sites
+        shell: bash
+        run: |
+          node - "$RUNNER_TEMP/site-nav" <<'EOF'
+          const { readdirSync, readFileSync, existsSync, writeFileSync, appendFileSync } = require("node:fs");
+          const { join } = require("node:path");
+          const out = process.argv[2];
+          const rows = readdirSync(out, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map(({ name }) => {
+            const file = join(out, name, "report.json");
+            const report = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : null;
+            const barFile = join(out, name, "bar", "report.json");
+            const bar = existsSync(barFile) ? JSON.parse(readFileSync(barFile, "utf8")) : null;
+            return { repo: name, home: report?.home ?? "", ok: report?.ok ?? false, pages: report?.pages?.length ?? 0, problems: report?.problems ?? ["the crawl gave no report"], unread: report?.unread ?? [], bar: bar === null ? null : { ok: bar.ok, problems: bar.problems, unread: bar.unread ?? [] } };
+          });
+          // A no-read is never a pass: each one is a warning on the check of the pull request, with its count and its pages
+          for (const row of rows) {
+            for (const [label, unread] of [["the crawl", row.unread], ["the crawl with the site bar", row.bar?.unread ?? []]]) {
+              if (unread.length === 0) continue;
+              const first = unread.slice(0, 10).map((path) => "/" + path).join(", ");
+              console.log(`::warning title=Site navigation%3A no read of ${row.repo}::${label} stopped at its page limit and did not read ${unread.length} pages: ${first}${unread.length > 10 ? ", and more" : ""}`);
+            }
+          }
+          rows.sort((a, b) => b.problems.length - a.problems.length || a.repo.localeCompare(b.repo));
+          writeFileSync(join(out, "nav.json"), JSON.stringify({ date: new Date().toISOString(), sites: rows }, null, 2) + "\n");
+          const cell = (text) => String(text).replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\r?\n/g, " ");
+          const lines = [
+            `## Site navigation: ${rows.filter((row) => row.ok).length} of ${rows.length} sites pass, ${rows.filter((row) => row.unread.length > 0).length} with no read`, "",
+            "| Site | Pages | Not read | Problems | With the site bar |", "| --- | ---: | ---: | --- | --- |",
+            ...rows.map((row) => `| [${row.repo}](${row.home}) | ${row.pages} | ${row.unread.length === 0 ? "0" : `**${row.unread.length}**`} | ${row.problems.length}: ${row.problems.slice(0, 5).map(cell).join("<br>") || "none"} | ${row.bar === null ? "not crawled" : `${row.bar.problems.length}: ${row.bar.problems.slice(0, 5).map(cell).join("<br>") || "none"}${row.bar.unread.length > 0 ? `<br>**${row.bar.unread.length} not read**` : ""}`} |`),
+          ];
+          if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
+          console.log(lines.join("\n"));
+          EOF
+      - name: The navigation reports of all sites
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: site-nav
+          path: ${{ runner.temp }}/site-nav
+          if-no-files-found: warn
+
+  site-audit-ok:
+    name: Site audit OK
+    if: ${{ !cancelled() }}
+    needs: [changes, sites, audit, nav, nav-report]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      - uses: ./.github/actions/gate-summary
+        with:
+          needs: ${{ toJSON(needs) }}
+          allow-skip: audit

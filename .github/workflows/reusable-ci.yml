@@ -52,6 +52,12 @@ on:
         description: The folder of the package.json, relative to the root of the repository.
         type: string
         default: "."
+      cue-version:
+        description: >-
+          The version of the cue CLI for the scripts, for example "0.15.1". The action setup-cue installs it before the
+          install of the dependencies, with retries and a sha256 check. The default "" installs no cue CLI.
+        type: string
+        default: ""
       fetch-depth:
         description: >-
           The number of commits that the checkout gets. 0 gets the whole history. The default 2 gets the parents of the
@@ -72,6 +78,31 @@ on:
         description: More globs of files that need no changeset, separated by spaces.
         type: string
         default: ""
+      coverage:
+        description: >-
+          After the scripts, start the tests of each package with Vitest again, with coverage (actions/coverage). The first
+          cell of the matrix does it. The summary gets a table of each package, and the artifact coverage has the reports.
+          Each package needs @vitest/coverage-v8.
+        type: boolean
+        default: false
+      coverage-floor:
+        description: The lowest percent of each measure of the coverage of each package. 0 is no floor. Only with coverage.
+        type: number
+        default: 0
+      coverage-on-main:
+        description: >-
+          With coverage false, a push to the default branch of a public repository still starts the action coverage, not strict: it skips a
+          package with no @vitest/coverage-v8, and a failure is a warning. So each repository has the artifact coverage on
+          main. false turns it off.
+        type: boolean
+        default: true
+    secrets:
+      CONVENTIONS_PRIVATE_PATTERNS:
+        description: >-
+          Private regular expressions, one on each line, of text that no file, commit message of the change or text of
+          its pull request has (the rule no-local-paths of check:conventions). The check shows no text of a match. A
+          caller gives it with secrets: inherit, or by name.
+        required: false
 
 jobs:
   changesets:
@@ -181,14 +212,43 @@ jobs:
               console.log(`${name} is set.`);
             }
           '
+      # The cue CLI comes before the install, so that a "prepare" script can use it. The action comes from the commit of
+      # this workflow, as in the job changesets. It has no post step, so the next step removes its folder, and the
+      # scripts do not see it.
+      - if: inputs.cue-version != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .shared-actions
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      - if: inputs.cue-version != ''
+        uses: ./.shared-actions/.github/actions/setup-cue
+        with:
+          version: ${{ inputs.cue-version }}
+      - if: inputs.cue-version != ''
+        working-directory: .
+        run: rm -rf .shared-actions
       - run: pnpm install --frozen-lockfile
       - name: Setup command
         if: inputs.setup != ''
         env:
           COMMAND: ${{ inputs.setup }}
         run: eval "$COMMAND"
+      # GitHub does not mask each line of a secret of more than one line, so this step masks each private pattern
+      - name: Mask the private patterns
+        env:
+          PATTERNS: ${{ secrets.CONVENTIONS_PRIVATE_PATTERNS }}
+        run: |
+          while IFS= read -r line; do
+            line="${line%$'\r'}"
+            [ -n "${line// /}" ] && echo "::add-mask::$line"
+          done <<< "$PATTERNS"
+          exit 0
       - name: Scripts
         env:
+          CONVENTIONS_PRIVATE_PATTERNS: ${{ secrets.CONVENTIONS_PRIVATE_PATTERNS }}
           SCRIPTS: ${{ inputs.scripts }}
           RECURSIVE: ${{ inputs.recursive-scripts }}
           CELL: ${{ matrix.os }}, node ${{ matrix.node }}
@@ -238,3 +298,19 @@ jobs:
         env:
           COMMAND: ${{ inputs.run }}
         run: eval "$COMMAND"
+      # The action comes from the commit of this workflow, as in the job changesets. The checkout is after the scripts,
+      # so the scripts do not see the folder .shared-actions.
+      - if: (inputs.coverage || (inputs.coverage-on-main && github.event_name == 'push' && !github.event.repository.private && github.ref == format('refs/heads/{0}', github.event.repository.default_branch))) && matrix.os == fromJSON(inputs.os)[0] && matrix.node == fromJSON(inputs.node-versions)[0]
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .shared-actions
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      - if: (inputs.coverage || (inputs.coverage-on-main && github.event_name == 'push' && !github.event.repository.private && github.ref == format('refs/heads/{0}', github.event.repository.default_branch))) && matrix.os == fromJSON(inputs.os)[0] && matrix.node == fromJSON(inputs.node-versions)[0]
+        uses: ./.shared-actions/.github/actions/coverage
+        with:
+          floor: ${{ inputs.coverage-floor }}
+          strict: ${{ inputs.coverage && 'true' || 'false' }}
+          working-directory: ${{ inputs.working-directory }}

@@ -18,16 +18,21 @@ export interface StepResult {
 
 /** The input of evaluate(). */
 export interface VerdictInput {
-  /** The `steps` context of the action, as `toJSON(steps)`. */
+  /** The outcome and the conclusion of each step of the action, by its id. */
   readonly steps: Readonly<Record<string, StepResult>>;
   /** The scans that the inputs and the event start. Such a scan must run and pass. */
   readonly expected: Readonly<Record<Scan, boolean>>;
+  /** The scans that the value "auto" skips, because the repository is private (choice.ts). */
+  readonly skipped?: readonly string[] | undefined;
 }
 
-/** The result of the checkout or of a scan. "off" is a scan that the inputs or the event do not start. */
+/**
+ * The result of the choice, of the checkout or of a scan. "off" is a scan that the inputs or the event do not start.
+ * "skip" is a scan that "auto" skips in a private repository. It is not a pass, so the step gives a warning for it.
+ */
 export interface Row {
-  readonly name: Scan | "checkout";
-  readonly state: "pass" | "fail" | "off";
+  readonly name: Scan | "choice" | "checkout";
+  readonly state: "pass" | "fail" | "off" | "skip";
   readonly reason: string;
 }
 
@@ -38,15 +43,21 @@ export interface Verdict {
   readonly failed: readonly string[];
 }
 
-/** The result of a step: its conclusion (after continue-on-error), or its outcome. A missing step did not run. */
-const resultOf = (step: StepResult | undefined): string => step?.conclusion ?? step?.outcome ?? "skipped";
+/**
+ * The result of a step: its conclusion (after continue-on-error), or its outcome. A missing step did not start.
+ * An empty value is also a step that did not start: the expression of such a step gives "".
+ */
+const resultOf = (step: StepResult | undefined): string => step?.conclusion || step?.outcome || "skipped";
 
 /** A result that fails the scan of the step. */
 const BAD: ReadonlySet<string> = new Set(["failure", "cancelled"]);
 
 /** This function gives the verdict of the checkout and of each scan. */
-export function evaluate({ steps, expected }: VerdictInput): Verdict {
+export function evaluate({ steps, expected, skipped = [] }: VerdictInput): Verdict {
   const rows: Row[] = [];
+  // The choice gives the expected scans. When it fails, the expected scans are not known.
+  const choice = resultOf(steps["choice"]);
+  rows.push(choice === "success" ? { name: "choice", state: "pass", reason: "success" } : { name: "choice", state: "fail", reason: `the step that chooses the scans ended with ${choice}` });
   const checkout = resultOf(steps["checkout"]);
   rows.push(checkout === "success" ? { name: "checkout", state: "pass", reason: "success" } : { name: "checkout", state: "fail", reason: `the checkout ended with ${checkout}` });
   for (const scan of SCANS) {
@@ -60,6 +71,8 @@ export function evaluate({ steps, expected }: VerdictInput): Verdict {
       rows.push({ name: scan, state: "pass", reason: `passed (steps that ran: ${String(own.filter(([, step]) => resultOf(step) === "success").length)})` });
     } else if (expected[scan]) {
       rows.push({ name: scan, state: "fail", reason: "the inputs start the scan, but no step of it ran" });
+    } else if (skipped.includes(scan)) {
+      rows.push({ name: scan, state: "skip", reason: `the repository is private, and the scan needs GitHub Advanced Security. Set the input ${scan} to "true" to start it` });
     } else {
       rows.push({ name: scan, state: "off", reason: "the inputs or the event do not start it" });
     }
@@ -77,12 +90,15 @@ export function main(env: NodeJS.ProcessEnv = process.env): number {
     return 1;
   }
   const on = (name: string): boolean => env[name] === "true";
-  const verdict = evaluate({ steps, expected: { "dependency-review": on("DEPENDENCY_REVIEW"), "osv-scanner": on("OSV_SCANNER"), codeql: on("CODEQL") } });
+  const skipped = (env["SKIPPED"] ?? "").split(",").map((name) => name.trim()).filter(Boolean);
+  const verdict = evaluate({ steps, expected: { "dependency-review": on("DEPENDENCY_REVIEW"), "osv-scanner": on("OSV_SCANNER"), codeql: on("CODEQL") }, skipped });
   const summary = ["### Security scans", "", "| Scan | Result | Reason |", "|---|---|---|"];
   for (const row of verdict.rows) {
     console.log(`${row.state.toUpperCase().padEnd(4)} ${row.name}: ${row.reason}`);
     summary.push(`| ${row.name} | ${row.state} | ${row.reason} |`);
   }
+  // A skipped scan is not a pass: the warning shows on the run and on the pull request
+  for (const row of verdict.rows) if (row.state === "skip") console.log(`::warning title=Security scan ${row.name} skipped::The scan ${row.name} did not run: ${row.reason}.`);
   for (const row of verdict.rows) if (row.state === "fail") console.log(`::error::Security scan ${row.name} failed: ${row.reason}. The log of that step tells why.`);
   const stepSummary = env["GITHUB_STEP_SUMMARY"];
   if (stepSummary) appendFileSync(stepSummary, `${summary.join("\n")}\n`);

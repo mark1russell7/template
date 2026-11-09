@@ -573,7 +573,7 @@ export async function runFreshnessCli(argv: readonly string[], io: CheckIo, fetc
   for (const problem of [...npm.problems, ...result.notRun]) io.stdout(`Not run: ${problem}\n`);
   for (const fault of result.faults) io.stderr(`${fault}\n`);
   if (result.faults.length > 0) return 1;
-  io.stdout(`The data stamps of ${parsed.stamps.pages.length} pages pass.\n`);
+  io.stdout(`The data stamps of ${parsed.stamps.pages.length} ${parsed.stamps.pages.length === 1 ? "page" : "pages"} pass.\n`);
   let held = true;
   for (const { page, at, fault } of failingCases(parsed.stamps, options)) {
     if (fault === undefined) {

@@ -1,0 +1,98 @@
+# Makes the pnpm-lock.yaml of a pull request branch again, on a runner. Use it when a merge of the default
+# branch conflicts in pnpm-lock.yaml and the local computer has no memory for an install (CLAUDE.md: heavy work
+# runs in CI).
+#
+# A repository calls it from its lockfile.yml, and a session starts that file on the branch of the pull request:
+#
+#   name: Lockfile
+#   on:
+#     workflow_dispatch:
+#   permissions: {}
+#   concurrency:
+#     group: lockfile-${{ github.ref }}
+#     cancel-in-progress: true
+#   jobs:
+#     lockfile:
+#       uses: mark1russell7/template/.github/workflows/reusable-lockfile.yml@<commit> # main
+#       permissions:
+#         contents: read
+#
+#   gh workflow run lockfile.yml -R <owner/repo> --ref <branch>
+#
+# GitHub starts a workflow_dispatch workflow only when its file is on the default branch: a dispatch of a
+# file that is only on the pull request branch gets HTTP 404. So add lockfile.yml to the default branch
+# first, in its own pull request, before the branch that needs it. The branch must also have the file:
+# merge the default branch into it, or add the same file to it.
+#
+# The run uses the code of its own branch, so no input names a branch and the cache of the default branch
+# stays out of reach.
+#
+# The job merges the default branch into the branch without a commit. It stops when a file other than
+# pnpm-lock.yaml conflicts. Then it takes the lockfile of the default branch and runs
+# "pnpm install --lockfile-only --ignore-scripts": no package script runs, and nothing is built.
+# The artifact "lockfile" has pnpm-lock.yaml and merge.txt with the commit of the default branch.
+#
+# The job pushes nothing: it has only "contents: read", and a push with the token of a run starts no checks.
+# So the session finishes the merge in its worktree:
+#
+#   gh run download <run id> -R <owner/repo> -n lockfile -D <folder>
+#   git merge <commit of merge.txt>          # the same commit, so the lockfile fits the merge
+#   cp <folder>/pnpm-lock.yaml pnpm-lock.yaml && git add pnpm-lock.yaml && git commit --no-edit
+name: Reusable lockfile
+
+on:
+  workflow_call:
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  lockfile:
+    name: Lockfile of ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Merge the default branch, with no commit
+        env:
+          DEFAULT: ${{ github.event.repository.default_branch }}
+        run: |
+          main=$(git rev-parse "origin/$DEFAULT")
+          git -c user.name=lockfile -c user.email=lockfile@invalid merge --no-commit --no-ff "$main" || true
+          conflicts=$(git diff --name-only --diff-filter=U)
+          other=$(printf '%s\n' "$conflicts" | grep -v -x 'pnpm-lock.yaml' | grep . || true)
+          if [ -n "$other" ]; then
+            echo "::error::These files conflict, and only pnpm-lock.yaml can be made again: $other"
+            exit 1
+          fi
+          # The lockfile of the default branch is the start; the install adds the changes of the branch
+          git checkout "$main" -- pnpm-lock.yaml
+          printf '%s %s\n' "$GITHUB_REPOSITORY" "$main" > "$RUNNER_TEMP/merge.txt"
+          echo "MAIN=$main" >> "$GITHUB_ENV"
+          echo "Merged $DEFAULT at $main. Conflicts: ${conflicts:-none}" >> "$GITHUB_STEP_SUMMARY"
+      # The pnpm version comes from "packageManager" in package.json
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+      - name: Make the lockfile again
+        run: |
+          pnpm install --lockfile-only --ignore-scripts
+          cp pnpm-lock.yaml "$RUNNER_TEMP/pnpm-lock.yaml"
+          git diff --stat "$MAIN" -- pnpm-lock.yaml >> "$GITHUB_STEP_SUMMARY" || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: lockfile
+          path: |
+            ${{ runner.temp }}/pnpm-lock.yaml
+            ${{ runner.temp }}/merge.txt
+          retention-days: 7
+          if-no-files-found: error

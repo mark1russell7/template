@@ -1,0 +1,71 @@
+name: coverage
+description: >-
+  Starts the tests of each package whose test script starts Vitest, with coverage. The summary of the job gets a table
+  of the four measures of each package, and the artifact coverage has the reports. An optional floor fails the step.
+inputs:
+  floor:
+    description: The lowest percent of each measure (statements, branches, functions, lines) of each package. 0 is no floor.
+    default: "0"
+  working-directory:
+    description: The folder of the root package.json, relative to the root of the repository.
+    default: "."
+  strict:
+    description: >-
+      "true": a package with no @vitest/coverage-v8, a failed run or a missing summary fails the step. "false": the step
+      skips a package with no @vitest/coverage-v8, and gives a warning for each other failure (the coverage on main).
+    default: "true"
+runs:
+  using: composite
+  steps:
+    # Each package needs @vitest/coverage-v8 (the provider of Vitest), with the version of its Vitest.
+    - name: Coverage
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        FLOOR: ${{ inputs.floor }}
+        STRICT: ${{ inputs.strict }}
+        SCRIPT: ${{ github.action_path }}/coverage.ts
+      run: |
+        mapfile -t dirs < <(pnpm ls -r --json --depth -1 | node "$SCRIPT" packages)
+        if [ ${#dirs[@]} -eq 0 ]; then
+          echo "::notice::No package has a test script that starts Vitest."
+          exit 0
+        fi
+        # Not strict: measure only the packages that have the provider. pnpm links it in the package or in the root.
+        if [ "$STRICT" != "true" ]; then
+          kept=()
+          for dir in "${dirs[@]}"; do
+            if [ -d "$dir/node_modules/@vitest/coverage-v8" ] || [ -d node_modules/@vitest/coverage-v8 ]; then kept+=("$dir")
+            else echo "::notice::$dir has no @vitest/coverage-v8, so it has no coverage report."; fi
+          done
+          dirs=("${kept[@]}")
+          if [ ${#dirs[@]} -eq 0 ]; then exit 0; fi
+        fi
+        failed=()
+        for dir in "${dirs[@]}"; do
+          echo "::group::coverage of $dir"
+          # The step continues after a failure, so the summary has each package. The thresholds of the Vitest config
+          # of a package also fail its run. The step fails after the summary, and names each package that failed.
+          if (cd "$dir" && pnpm exec vitest run --coverage.enabled --coverage.reporter=json-summary --coverage.reporter=json --coverage.reporter=text-summary --coverage.reportsDirectory=coverage); then :; else
+            code=$?
+            failed+=("$dir (exit code $code)")
+          fi
+          echo "::endgroup::"
+        done
+        level=error
+        if [ "$STRICT" != "true" ]; then level=warning; fi
+        summary=0
+        node "$SCRIPT" summary "$FLOOR" "${dirs[@]}" >> "$GITHUB_STEP_SUMMARY" 2> >(sed "s/^::error::/::$level::/" >&2) || summary=$?
+        for f in "${failed[@]}"; do echo "::$level::The tests with coverage failed in $f."; done
+        if [ "$STRICT" = "true" ] && { [ ${#failed[@]} -gt 0 ] || [ "$summary" -ne 0 ]; }; then exit 1; fi
+    - name: Coverage reports
+      if: always()
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: coverage
+        path: |
+          ${{ inputs.working-directory }}/**/coverage/coverage-summary.json
+          ${{ inputs.working-directory }}/**/coverage/coverage-final.json
+          !${{ inputs.working-directory }}/**/node_modules/**
+        if-no-files-found: warn
+        retention-days: 14

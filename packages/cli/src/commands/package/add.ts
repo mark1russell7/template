@@ -14,13 +14,19 @@ async function getScope(root: string): Promise<string> {
 
 const NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
 
-const DEV_DEPENDENCIES = ["@mark1russell7/cue", "@types/node", "typescript", "vitest"] as const;
+// @vitest/coverage-v8: the coverage of the shared CI (action coverage) needs it in each package with Vitest.
+const DEV_DEPENDENCIES = ["@mark1russell7/cue", "@types/node", "@vitest/coverage-v8", "typescript", "vitest"] as const;
+
+/** Each dependency that releases with the same versions as its partner. */
+const LOCKSTEP: Readonly<Record<string, string>> = { "@vitest/coverage-v8": "vitest" };
 
 /**
  * This function gives the version range of each named dependency of a new package. The range comes
  * from the repository: the root `package.json`, then the packages in name order. Thus
  * `pnpm up -r --latest` in the repository also updates the ranges of its new packages. A dependency
- * that the repository does not have gets the range of this CLI.
+ * that the repository does not have gets the range of this CLI. A dependency of `LOCKSTEP` gets the
+ * range of its partner instead, because the two release together. Thus a repository on Vitest 4 gets
+ * @vitest/coverage-v8 of Vitest 4, not the range of the CLI.
  *
  * @throws Error when neither the repository nor the CLI has a dependency
  */
@@ -39,10 +45,15 @@ export async function dependencyVersions(
     const folders = (await readdir(dir, { withFileTypes: true })).filter((e) => e.isDirectory()).map((e) => e.name).sort();
     for (const folder of folders) await read(resolve(dir, folder, "package.json"));
   }
+  const rangeIn = (list: readonly Manifest[], dep: string): string | undefined =>
+    list.map((m) => m.devDependencies?.[dep] ?? m.dependencies?.[dep]).find((v) => v !== undefined);
+  const repository = [...manifests];
   manifests.push(cli);
   const versions: Record<string, string> = {};
   for (const dep of names) {
-    const version = manifests.map((m) => m.devDependencies?.[dep] ?? m.dependencies?.[dep]).find((v) => v !== undefined);
+    const partner = LOCKSTEP[dep];
+    const partnerRange = partner !== undefined ? rangeIn(repository, partner) : undefined;
+    const version = rangeIn(repository, dep) ?? partnerRange ?? rangeIn(manifests, dep);
     if (!version) throw new Error(`Neither the repository nor ${cli.name ?? "the CLI"} has the dependency "${dep}".`);
     versions[dep] = version;
   }
@@ -58,7 +69,7 @@ export async function devDependencyVersions(root: string = repoRoot(), cli: Mani
 type CueConfig = "node" | "node-cjs" | "ts" | "vite" | "react";
 
 /** The name of a preset: the value of `--preset`. */
-export type PresetName = "node" | "node-cjs" | "ts" | "vite" | "react" | "service" | "site";
+export type PresetName = "node" | "node-cjs" | "ts" | "vite" | "react" | "service" | "site" | "electron";
 
 /** A preset of a new package, as data. */
 export interface Preset {
@@ -85,6 +96,46 @@ export interface Preset {
    * repository. The CLI keeps a file that exists.
    */
   readonly repoFiles?: Readonly<Record<string, string>>;
+  /**
+   * These packages can start their install scripts. The CLI adds each one to `allowBuilds` of
+   * `pnpm-workspace.yaml` before the install, with the reason. It keeps an entry that exists, also
+   * an entry with `false`.
+   */
+  readonly allowBuilds?: Readonly<Record<string, string>>;
+}
+
+/** A line of `pnpm-workspace.yaml` that starts a key at the top level. */
+const TOP_KEY = /^[^\s#][^:]*:/;
+
+/** This function gives the key of a line in a block of YAML, without quotes, or `undefined` for no key. */
+const keyOf = (line: string): string | undefined => /^\s+(?:"([^"]+)"|'([^']+)'|([^\s:#][^:]*?))\s*:/.exec(line)?.slice(1).find((key) => key !== undefined);
+
+/** The result of `withAllowBuilds`: the new text of `pnpm-workspace.yaml`, and the packages that it adds. */
+export interface AllowedBuilds {
+  readonly text: string;
+  readonly added: readonly string[];
+}
+
+/**
+ * This function gives the text of `pnpm-workspace.yaml` with each package of `allow` in its block
+ * `allowBuilds`, with its reason as a comment. It makes the block when it is not there. A package
+ * that is in the block keeps its entry. With nothing to add, the text does not change.
+ */
+export function withAllowBuilds(text: string, allow: Readonly<Record<string, string>>): AllowedBuilds {
+  const lines = text.split("\n");
+  const start = lines.findIndex((line) => /^allowBuilds:\s*(#.*)?$/.test(line));
+  let end = start + 1;
+  while (start >= 0 && end < lines.length && !TOP_KEY.test(lines[end] ?? "")) end++;
+  const present = new Set(start < 0 ? [] : lines.slice(start + 1, end).map(keyOf).filter((key) => key !== undefined));
+  const added = Object.keys(allow).filter((name) => !present.has(name));
+  if (added.length === 0) return { text, added };
+  const entries = added.flatMap((name) => [`  # ${allow[name] ?? ""}`, `  ${/^[\w-]+$/.test(name) ? name : JSON.stringify(name)}: true`]);
+  if (start >= 0) {
+    lines.splice(start + 1, 0, ...entries);
+    return { text: lines.join("\n"), added };
+  }
+  const body = text.endsWith("\n") || text === "" ? text : `${text}\n`;
+  return { text: `${body}\n# Packages allowed to run install scripts.\nallowBuilds:\n${entries.join("\n")}\n`, added };
 }
 
 /** The text of a new site (the preset `site`). */
@@ -150,6 +201,15 @@ export const PRESETS: Readonly<Record<PresetName, Preset>> = {
     scripts: { dev: "vite", build: "vite build" },
     files: "site",
     repoFiles: { ".github/workflows/pages.yml": "site-repo/pages.yml" },
+  },
+  // A desktop app: a main process with safe defaults, a preload script that gives the page only a message port, and a page.
+  electron: {
+    label: "electron — desktop app (Electron)",
+    tsconfig: "node",
+    install: { dependencies: [], devDependencies: ["electron", "tsdown"] },
+    scripts: { build: "tsdown", start: "tsdown && electron build/main/main.js", smoke: "tsdown && electron build/main/main.js --smoke" },
+    files: "electron",
+    allowBuilds: { electron: "electron: its install script downloads the Electron binary (the preset electron)." },
   },
 };
 
@@ -228,6 +288,8 @@ export interface WrittenPackage {
   readonly install: readonly string[];
   /** These files of the preset are not in the repository: the file exists, or the workflows pin no template commit. */
   readonly skipped: readonly string[];
+  /** These packages are new in `allowBuilds` of `pnpm-workspace.yaml`. */
+  readonly allowed: readonly string[];
 }
 
 /**
@@ -354,7 +416,15 @@ async function writeFiles({ root, dir, name, scope, packageName, preset, depende
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, fill(await readFile(presetDir(source), "utf8"), { ...words, pin }));
   }
-  return { dir, name: packageName, install, skipped };
+  // pnpm refuses the install script of a package that allowBuilds does not name, so the CLI names it before the install
+  let allowed: readonly string[] = [];
+  const workspace = resolve(root, "pnpm-workspace.yaml");
+  if (preset.allowBuilds && existsSync(workspace)) {
+    const result = withAllowBuilds(await readFile(workspace, "utf8"), preset.allowBuilds);
+    if (result.added.length > 0) await writeFile(workspace, result.text);
+    allowed = result.added;
+  }
+  return { dir, name: packageName, install, skipped, allowed };
 }
 
 export async function addPackage(args: string[]): Promise<void> {
@@ -395,6 +465,7 @@ export async function addPackage(args: string[]): Promise<void> {
 
   const written = await writePackage(root, name, preset, cliManifest(), parsed.site);
   p.log.success(`Created packages/${name}/ with the preset ${preset} (cue ${PRESETS[preset].tsconfig}.json)`);
+  for (const name of written.allowed) p.log.info(`pnpm-workspace.yaml: allowBuilds now names ${name}.`);
   for (const path of written.skipped) p.log.warn(`The CLI did not write ${path}. Do it by hand: the file exists, or the workflows pin no template commit.`);
 
   if (written.install.length === 0) {

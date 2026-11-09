@@ -9,14 +9,14 @@ import { byCode, relativePath, type Manifest } from "./entries.ts";
 import { pageFaults, type ApiPage, type FrontmatterValue } from "./page.ts";
 import { referencePage } from "./reference.ts";
 import { DEFAULT_TOOL, packageReport } from "./report.ts";
-import { globFolders, packageFolders, workspaceGlobs } from "./workspace.ts";
+import { globFolders, packageFolders, workspaceGlobs } from "@mark1russell7/conventions/workspace";
 
 /** The path of the report in a package folder, when the configuration gives no other path. */
 export const REPORT_FILE = "test/api/public-api.txt";
 
 /** The configuration of the reports: the field `apiReport` of the root `package.json`, or the options of the CLI. */
 export interface ApiReportConfig {
-  /** The globs of the package folders, relative to the root. A glob that starts with `!` removes folders. The default is the globs of the workspace. */
+  /** The globs of the package folders, relative to the root. A glob that starts with `!` removes folders. The default is the globs of the workspace and a public root package. */
   readonly packages?: readonly string[];
   /** The path of the report in each package folder. The default is `test/api/public-api.txt`. */
   readonly report?: string;
@@ -183,6 +183,27 @@ function writeReference(root: string, entry: ApiPage, report: string, packageNam
 }
 
 /** This function makes sure that the path of a report stays in its package folder. */
+/**
+ * This function gives the folders of the reports when the command names no folder. With `globs`, these are the package
+ * folders of the globs. Without `globs`, these are the package folders of the workspace, and also the root when its
+ * package is public and the globs leave it out. A repository can publish its root and keep a private site in its
+ * workspace. The result has absolute paths, in the order of the code units.
+ */
+export function reportFolders(root: string, globs?: readonly string[]): string[] {
+  if (globs !== undefined) return packageFolders(root, globs);
+  const folders = packageFolders(root);
+  const top = resolve(root);
+  const manifest = join(top, "package.json");
+  if (workspaceGlobs(root) === undefined || !existsSync(manifest) || folders.some((folder) => resolve(folder) === top)) return folders;
+  let isPrivate = false;
+  try {
+    isPrivate = (JSON.parse(readFileSync(manifest, "utf8")) as { private?: unknown }).private === true;
+  } catch {
+    // The run reads the file again and tells the error of the root
+  }
+  return isPrivate ? folders : [top, ...folders];
+}
+
 function checkReportPath(report: string): string {
   const clean = report.replaceAll("\\", "/").replace(/^\.\//, "");
   if (clean === "" || isAbsolute(report) || clean.split("/").includes("..")) throw new Error(`The path of a report must be relative to the package folder, with no "..": ${report}`);
@@ -212,7 +233,7 @@ export function runReports(options: RunOptions): RunResult {
   const root = resolve(options.root);
   const report = checkReportPath(options.report ?? REPORT_FILE);
   const named = options.folders !== undefined && options.folders.length > 0;
-  const folders = named ? (options.folders ?? []).map((folder) => resolve(root, folder)) : packageFolders(root, options.packages);
+  const folders = named ? (options.folders ?? []).map((folder) => resolve(root, folder)) : reportFolders(root, options.packages);
   const results: PackageResult[] = [];
   const skipped = new Set<string>();
   for (const folder of folders) {
@@ -363,7 +384,7 @@ export const USAGE: string = `Usage: api-report <check | update> [options] [<pac
                          command does not read.
 
   --root <folder>        The root of the repository. The default is the current folder.
-  --packages <glob>      A glob of package folders. Use it again for more globs. The default is the globs of the workspace.
+  --packages <glob>      A glob of package folders. Use it again for more globs. The default is the globs of the workspace and a public root package.
   --report <path>        The path of the report in each package folder. The default is ${REPORT_FILE}.
   --include-private      Also make a report for each private package.
   --no-publish-config    Read the fields of package.json without publishConfig.
