@@ -132,7 +132,7 @@ A library with many exports can keep each name on a page that the report makes. 
 
 - The command `update` writes the file. Do not edit it.
 - The command `check` fails when the file differs from the text that the report gives.
-- The file has a section for each entry, with an import of its names and their declarations. It has no comments, because the report has none.
+- The file has a section for each entry, with an import of its names and their declarations. It has no comments, because the report has none. The field `docs` adds the doc comments.
 - The hand-written pages explain the main calls. The first rule above does not apply to them, because the file shows each export. The rules for imports and declarations still apply. The list `pages` can be empty.
 
 A site can need more fields in the front matter of the page, for example an `order` for its menu. The field `frontmatter` gives them. A field `title` or `description` replaces the default text.
@@ -154,6 +154,36 @@ A site can need more fields in the front matter of the page, for example an `ord
 
 Each value is a text, a number or a boolean. The field `frontmatter` needs the field `reference`.
 
+The field `docs` puts the doc comment of each declaration above the declaration. The doc comments come from the built `.d.ts` files.
+
+```json
+{
+  "apiReport": {
+    "pages": [
+      {
+        "package": "packages/lib",
+        "pages": [],
+        "reference": "packages/site/content/docs/each-export.md",
+        "docs": true
+      }
+    ]
+  }
+}
+```
+
+- The report does not change. A change of a doc comment changes only the page.
+- The field `docs` needs the field `reference`. Without the field, the page has no doc comments.
+
+## The model of the API
+
+The function `packageModel(folder)` gives the public API of a package as data. A site can render it in its own shell.
+
+- `entries` has each entry point, with its subpath and its names.
+- Each name has its exported name, its kind, a type-only flag and the key of its declaration.
+- `declarations` has the text of each declaration by key, and the text of its doc comment.
+
+The model has the same entries, names and declarations as the report. `apiModel(report, packageName, docs)` gives the model of the text of a report. The text of a report has no doc comments, so the argument `docs` gives them.
+
 ## Library
 
 The package also exports the functions of the tool:
@@ -165,4 +195,5 @@ The package also exports the functions of the tool:
 - `packageFolders(root, globs)`, `globFolders(root, glob)`, `globToRegExp(glob)` and `workspaceGlobs(root)` find the packages. They come from `@mark1russell7/conventions/workspace`.
 - `diffLines(before, after)` and `unifiedDiff(before, after)` give a line diff.
 - `pageFaults(report, packageName, pages, except, complete)` and `reportEntries(report)` hold a hand-written page against a report.
-- `referencePage(report, packageName, frontmatter)` gives the Markdown of the page of each export. The argument `frontmatter` is optional.
+- `referencePage(report, packageName, frontmatter)` gives the Markdown of the page of each export. The argument `report` is the text of a report or a model. The argument `frontmatter` is optional.
+- `packageModel(folder)` and `apiModel(report, packageName, docs)` give the model of the API.

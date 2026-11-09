@@ -18,6 +18,8 @@ export interface ApiPage {
   readonly reference?: string;
   /** The fields that the page of each export adds to its front matter, for example the `order` of a site. A field `title` or `description` replaces the default. */
   readonly frontmatter?: Readonly<Record<string, FrontmatterValue>>;
+  /** When true, the page of each export puts the doc comment of each declaration above it. The field needs `reference`. */
+  readonly docs?: boolean;
   /** The names that the check does not examine, each with its reason. */
   readonly except?: Readonly<Record<string, string>>;
 }

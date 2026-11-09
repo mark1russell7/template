@@ -46,6 +46,27 @@ export interface DeclarationInfo {
   readonly ambient: Map<string, string[]>;
   /** Each module specifier that the file names: the files that it reaches. */
   readonly references: Set<string>;
+  /** The text of the doc comment of each declaration of `locals`, by name. A declaration without a doc comment has no item. */
+  readonly docs: Map<string, string>;
+}
+
+/** One top-level statement of a declaration file, and the text of the doc comment before it. */
+interface DocumentedStatement {
+  readonly statement: string;
+  readonly doc: string | undefined;
+}
+
+/**
+ * This function gives the text of a doc comment: the lines without the `/**` and `*` marks and the
+ * spaces at their ends. The first line and each line without a `*` mark also lose the spaces at their
+ * start. The result keeps the tags, for example `@param`, and the indent after a `*` mark.
+ */
+function docText(comment: string): string {
+  const inner = comment.replace(/^\/\*\*/, "").replace(/\*\/$/, "");
+  const lines = inner.split("\n").map((line, index) => (index > 0 && /^\s*\*/.test(line) ? line.replace(/^\s*\* ?/, "") : line.trimStart()).trimEnd());
+  while (lines.length > 0 && lines[0]?.trim() === "") lines.shift();
+  while (lines.length > 0 && lines.at(-1)?.trim() === "") lines.pop();
+  return lines.join("\n");
 }
 
 /** A mode of the reader of a template literal. */
@@ -83,10 +104,20 @@ const DECLARATION = unicode`^(export )?(default )?(?:declare )?(?:abstract )?(?:
  * comments, the blank lines and the spaces at the ends of the lines.
  */
 export function statementsOf(source: string): string[] {
+  return documentedStatementsOf(source).map(({ statement }) => statement);
+}
+
+/**
+ * This function splits the text of a declaration file into its top-level statements, as `statementsOf`
+ * does. Each statement also has the text of the last doc comment before it at the top level.
+ */
+function documentedStatementsOf(source: string): DocumentedStatement[] {
   // The declarations of a bin file keep its `#!` line
   const text = source.replace(/\r\n?/g, "\n").replace(/^#![^\n]*\n?/, "");
-  const statements: string[] = [];
+  const statements: DocumentedStatement[] = [];
   let current = "";
+  // The text of the last doc comment before the start of the current statement
+  let doc: string | undefined;
   let depth = 0;
   // The depth of the type arguments at the top level: `class A<T = {}> {` has a brace in them
   let angle = 0;
@@ -100,7 +131,10 @@ export function statementsOf(source: string): string[] {
       .split("\n")
       .map((line) => line.trimEnd())
       .filter((line) => line.trim() !== "");
-    if (lines.length > 0) statements.push(lines.join("\n"));
+    if (lines.length > 0) {
+      statements.push({ statement: lines.join("\n"), doc });
+      doc = undefined;
+    }
     current = "";
     angle = 0;
     body = false;
@@ -135,7 +169,11 @@ export function statementsOf(source: string): string[] {
     }
     if (char === "/" && next === "*") {
       const end = text.indexOf("*/", index + 2);
-      index = end < 0 ? text.length : end + 2;
+      const stop = end < 0 ? text.length : end + 2;
+      // A doc comment starts with `/**`, and `/**/` is an empty comment. Only a comment before the statement is its doc comment.
+      const isDoc = text.startsWith("/**", index) && text.charAt(index + 3) !== "/";
+      if (isDoc && modes.length === 0 && depth === 0 && current.trim() === "") doc = docText(text.slice(index, stop));
+      index = stop;
       current += " ";
       continue;
     }
@@ -237,14 +275,21 @@ export function parseDeclarations(source: string, file = "<text>"): DeclarationI
     imports: new Map(),
     ambient: new Map(),
     references: new Set(),
+    docs: new Map(),
   };
+  // The doc comment of the statement that the loop reads
+  let doc: string | undefined;
   const addLocal = (name: string, statement: string): void => {
     info.locals.set(name, [...(info.locals.get(name) ?? []), statement]);
+    // The first doc comment of a name wins: an overload or a merged interface can repeat it
+    if (doc !== undefined && doc !== "" && !info.docs.has(name)) info.docs.set(name, doc);
   };
   const addAmbient = (label: string, statement: string): void => {
     info.ambient.set(label, [...(info.ambient.get(label) ?? []), statement]);
   };
-  for (const statement of statementsOf(source)) {
+  for (const documented of documentedStatementsOf(source)) {
+    const { statement } = documented;
+    doc = documented.doc;
     const flat = statement.replace(/\s+/g, " ");
     for (const found of flat.matchAll(/\bimport\(\s*["']([^"']+)["']\s*\)/g)) info.references.add(found[1] ?? "");
     let match: RegExpExecArray | null;

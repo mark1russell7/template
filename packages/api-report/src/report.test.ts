@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { apiReport, binsOf, entriesOf, HEADER_LINES, packageReport, parseDeclarations, publishedManifest, statementsOf, targetOf } from "./index.ts";
+import { apiReport, binsOf, entriesOf, HEADER_LINES, packageModel, packageReport, parseDeclarations, publishedManifest, statementsOf, targetOf } from "./index.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "api-report-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -482,5 +482,78 @@ describe("the report of a package", () => {
     const files = (end: string): Record<string, unknown> => ({ "package.json": { name: "p", types: "./index.d.ts" }, "index.d.ts": ["export interface A {", "    b: 1;", "}", ""].join(end) });
     expect(body(files("\r\n"))).toBe(body(files("\n")));
     expect(apiReport("p", fixture({}), []).includes("\r")).toBe(false);
+  });
+});
+
+describe("the doc comments", () => {
+  it("gives the doc comment of each declaration by name, without the comment marks", () => {
+    const info = parseDeclarations(
+      [
+        "/**",
+        " * The sum of two numbers.",
+        " *",
+        " * @param a - The first number.",
+        " */",
+        "export declare function add(a: number, b: number): number;",
+        "/** The first overload wins. */",
+        "export declare function many(a: string): string;",
+        "/** The second overload. */",
+        "export declare function many(a: number): number;",
+        "/* A plain comment. */",
+        "export declare const plain: 1;",
+        "/**/",
+        "export declare const empty: 1;",
+        "/** A doc comment before an export list. */",
+        "export { add as sum };",
+        "export declare const after: 1;",
+        "export interface Shape {",
+        "    /** A member. */",
+        "    readonly size: number;",
+        "}",
+        "/** Two names. */",
+        "export declare const left: 1, right: 2;",
+        "/** *Bold* first.",
+        " * @example",
+        " *   indented(1);",
+        " */",
+        "export declare function marked(): void;",
+      ].join("\n"),
+    );
+    expect(info.docs.get("marked")).toBe("*Bold* first.\n@example\n  indented(1);");
+    expect(info.docs.get("add")).toBe("The sum of two numbers.\n\n@param a - The first number.");
+    expect(info.docs.get("many")).toBe("The first overload wins.");
+    expect(info.docs.has("plain")).toBe(false);
+    expect(info.docs.has("empty")).toBe(false);
+    expect(info.docs.has("after")).toBe(false);
+    expect(info.docs.has("Shape")).toBe(false);
+    expect(info.docs.get("left")).toBe("Two names.");
+    expect(info.docs.get("right")).toBe("Two names.");
+  });
+
+  it("changes neither the statements nor the report", () => {
+    const bare = "export declare function f(): void;\n";
+    const documented = `/** The function f. */\n${bare}`;
+    expect(statementsOf(documented)).toEqual(statementsOf(bare));
+    const files = (text: string): Record<string, unknown> => ({ "package.json": { name: "p", types: "./index.d.ts" }, "index.d.ts": text });
+    expect(body(files(documented))).toBe(body(files(bare)));
+  });
+
+  it("gives a model with the names of each entry and the doc comment of each declaration", () => {
+    const model = packageModel(
+      fixture({
+        "package.json": { name: "p", exports: { ".": { types: "./index.d.ts" }, "./more": { types: "./more.d.ts" } } },
+        "index.d.ts": '/** The value a. */\nexport declare const a: 1;\nexport type { B } from "./more.js";\n',
+        "more.d.ts": "/** The type B. */\nexport interface B {\n    c: 1;\n}\nexport declare const d: 2;\n",
+      }),
+    );
+    expect(model.packageName).toBe("p");
+    expect(model.entries.map((entry) => entry.subpath)).toEqual([".", "./more"]);
+    expect(model.entries[0]?.names).toEqual([
+      { name: "B", key: "more.d.ts#B", isType: true, kind: "declaration" },
+      { name: "a", key: "index.d.ts#a", isType: false, kind: "declaration" },
+    ]);
+    expect(model.declarations["index.d.ts#a"]).toEqual({ text: "export declare const a: 1;", doc: "The value a." });
+    expect(model.declarations["more.d.ts#B"]?.doc).toBe("The type B.");
+    expect(model.declarations["more.d.ts#d"]).toEqual({ text: "export declare const d: 2;" });
   });
 });
