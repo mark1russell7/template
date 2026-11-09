@@ -138,15 +138,48 @@ describe("the build info file of tsc", () => {
     expect(packedBy(["distribution"], "dist/.tsbuildinfo")).toBe(-1);
   });
 
-  // The results of npm pack --dry-run of npm 11.19 with the files dist/.tsbuildinfo, dist/a.tsbuildinfo and dist/index.js
-  it("reads a negation with no slash as a name at each depth, as npm does", () => {
-    expect(packedBy(["dist", "!*.tsbuildinfo"], "dist/.tsbuildinfo")).toBe(-1);
-    expect(packedBy(["dist", "!**/*.tsbuildinfo"], "dist/.tsbuildinfo")).toBe(-1);
-    expect(packedBy(["dist", "!.tsbuildinfo"], "dist/.tsbuildinfo")).toBe(-1);
-    expect(packedBy(["dist", "!dist/"], "dist/.tsbuildinfo")).toBe(-1);
-    // A negation with a slash stays at its place: it does not remove dist/a.tsbuildinfo
-    expect(packedBy(["dist", "!dist/.tsbuildinfo"], "dist/a.tsbuildinfo")).toBe(0);
-    expect(packedBy(["dist", "!lib/*.tsbuildinfo"], "dist/.tsbuildinfo")).toBe(0);
-    expect(packedBy(["dist", "!*.map"], "dist/.tsbuildinfo")).toBe(0);
+  // The results of npm pack --dry-run --json of npm 11.19.0 (npm-packlist 10.0.4), with the files of PACKED_PATHS.
+  // Each row: the field "files", and the paths that npm packed (package.json not shown).
+  const PACKED_PATHS = ["dist/.tsbuildinfo", "dist/a.tsbuildinfo", "dist/index.js", "dist/sub/x.js", "src/index.ts"];
+  const NPM: [unknown[], string[]][] = [
+    [["dist"], ["dist/.tsbuildinfo", "dist/a.tsbuildinfo", "dist/index.js", "dist/sub/x.js"]],
+    [["dist/"], ["dist/.tsbuildinfo", "dist/a.tsbuildinfo", "dist/index.js", "dist/sub/x.js"]],
+    [["./dist/*"], ["dist/.tsbuildinfo", "dist/a.tsbuildinfo", "dist/index.js", "dist/sub/x.js"]],
+    [["dist/**"], ["dist/.tsbuildinfo", "dist/a.tsbuildinfo", "dist/index.js", "dist/sub/x.js"]],
+    [["dis*"], []],
+    [["dist/*"], ["dist/.tsbuildinfo", "dist/a.tsbuildinfo", "dist/index.js", "dist/sub/x.js"]],
+    [["src", "dist/"], ["dist/.tsbuildinfo", "dist/a.tsbuildinfo", "dist/index.js", "dist/sub/x.js", "src/index.ts"]],
+    [["dist", "!*.tsbuildinfo"], ["dist/index.js", "dist/sub/x.js"]],
+    [["!*.tsbuildinfo", "dist"], ["dist/.tsbuildinfo", "dist/a.tsbuildinfo", "dist/index.js", "dist/sub/x.js"]],
+    [["dist", "!dist/.tsbuildinfo"], ["dist/a.tsbuildinfo", "dist/index.js", "dist/sub/x.js"]],
+    [["!dist/.tsbuildinfo", "dist"], ["dist/a.tsbuildinfo", "dist/index.js", "dist/sub/x.js"]],
+    [["dist", "!/dist/.tsbuildinfo"], ["dist/a.tsbuildinfo", "dist/index.js", "dist/sub/x.js"]],
+    [["dist", "!./dist/.tsbuildinfo"], ["dist/.tsbuildinfo", "dist/a.tsbuildinfo", "dist/index.js", "dist/sub/x.js"]],
+    [["dist", "!dist/"], []],
+    [["!dist/", "dist"], ["dist/.tsbuildinfo", "dist/a.tsbuildinfo", "dist/index.js", "dist/sub/x.js"]],
+    [["dist", "!dist"], []],
+    [["dist", "!**/*.tsbuildinfo"], ["dist/index.js", "dist/sub/x.js"]],
+    [["!**/*.tsbuildinfo", "dist"], ["dist/.tsbuildinfo", "dist/a.tsbuildinfo", "dist/index.js", "dist/sub/x.js"]],
+    [["dist/.tsbuildinfo", "!dist/.tsbuildinfo"], ["dist/.tsbuildinfo"]],
+    [["!dist/.tsbuildinfo", "dist/.tsbuildinfo"], []],
+    [["dist", "!.tsbuildinfo"], ["dist/a.tsbuildinfo", "dist/index.js", "dist/sub/x.js"]],
+    [["dist", "!dist/*.tsbuildinfo"], ["dist/index.js", "dist/sub/x.js"]],
+    [["!dist/*.tsbuildinfo", "dist"], ["dist/.tsbuildinfo", "dist/a.tsbuildinfo", "dist/index.js", "dist/sub/x.js"]],
+    [["dist", "!dist/sub"], ["dist/.tsbuildinfo", "dist/a.tsbuildinfo", "dist/index.js"]],
+    [["dist", "!sub"], ["dist/.tsbuildinfo", "dist/a.tsbuildinfo", "dist/index.js"]],
+    [["!sub", "dist"], ["dist/.tsbuildinfo", "dist/a.tsbuildinfo", "dist/index.js", "dist/sub/x.js"]],
+    [["dist", "!dist/*.tsbuildinfo", "dist/.tsbuildinfo"], ["dist/.tsbuildinfo", "dist/index.js", "dist/sub/x.js"]],
+    [["dist", "!*.tsbuildinfo", "!!*.tsbuildinfo"], ["dist/.tsbuildinfo", "dist/a.tsbuildinfo", "dist/index.js", "dist/sub/x.js"]],
+    [["dist", "!lib/*.tsbuildinfo"], ["dist/.tsbuildinfo", "dist/a.tsbuildinfo", "dist/index.js", "dist/sub/x.js"]],
+  ];
+
+  it.each(NPM)("packs the same paths as npm with the files %j", (files, packed) => {
+    expect(PACKED_PATHS.filter((path) => packedBy(files, path) >= 0)).toEqual(packed);
+  });
+
+  it("gives the entry of the rule that takes the file", () => {
+    expect(packedBy(["!dist/", "dist"], "dist/.tsbuildinfo")).toBe(1);
+    expect(packedBy(["dist", "!dist/*.tsbuildinfo", "dist/.tsbuildinfo"], "dist/.tsbuildinfo")).toBe(2);
+    expect(packedBy(["dist/.tsbuildinfo", "!dist/.tsbuildinfo"], "dist/.tsbuildinfo")).toBe(0);
   });
 });

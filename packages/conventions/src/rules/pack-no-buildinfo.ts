@@ -3,44 +3,123 @@
  * folder of its field `files` has the negation `!<path>` there.
  */
 import { readdirSync } from "node:fs";
-import { isAbsolute, join, relative } from "node:path";
+import { isAbsolute, join, posix, relative } from "node:path";
 import { buildInfoFile } from "../tsconfig.ts";
-import { cleanPath, codePackages, lineOf, type Break, type PackageInfo, type Rule } from "../rule.ts";
+import { codePackages, lineOf, type Break, type PackageInfo, type Rule } from "../rule.ts";
 import { globToRegExp } from "../workspace.ts";
 
 /** The names of the tsconfig files of a package folder. */
 const TSCONFIG = /^tsconfig(?:\.[\w-]+)?\.json$/;
 
-/** This function tells if an entry of the field `files` (without `!`) takes the path: the path, a folder of it, or a glob. */
-function entryTakes(entry: string, path: string): boolean {
-  let clean = cleanPath(entry);
-  // A loop, not a pattern: a pattern with a repeated slash at the end is slow on a long run of slashes
-  while (clean.endsWith("/")) clean = clean.slice(0, -1);
-  if (clean === "") return false;
-  return path === clean || path.startsWith(`${clean}/`) || globToRegExp(clean).test(path);
+/** A rule of the ignore list that npm makes from the field `files`, with the index of its entry. */
+interface PackRule {
+  /** The glob, without its `!` characters. */
+  readonly glob: string;
+  /** True when the rule includes the paths that it matches (an odd count of `!`). */
+  readonly include: boolean;
+  /** The index of the entry of `files`. */
+  readonly index: number;
+}
+
+/** This function gives the rule of a line of the ignore list, as minimatch reads it: each `!` inverts the rule. */
+function packRule(line: string, index: number): PackRule {
+  let bangs = 0;
+  while (line.charAt(bangs) === "!") bangs += 1;
+  // minimatch does not keep a repeated `/` (preserveMultipleSlashes is false)
+  return { glob: line.slice(bangs).replace(/\/{2,}/g, "/"), include: bangs % 2 === 1, index };
+}
+
+/** This function gives the regular expression of a glob, as npm reads it: with no case, and `*` also matches a dot. */
+function packRegExp(glob: string): RegExp {
+  return new RegExp(globToRegExp(glob).source, "i");
 }
 
 /**
- * This function tells if a negation of the field `files` (without `!`) removes the path. As in a `.gitignore` file, a
- * negation with no `/` (a slash at the end does not count) removes each file or folder with that name at each depth.
- * Thus npm 11.19 does not pack `dist/.tsbuildinfo` with `["dist", "!*.tsbuildinfo"]`.
+ * This function tells if a rule matches the path (`/`, relative to the package). A glob with no `/` matches the name
+ * at each depth (matchBase). A `/` at the start anchors the glob, as each glob with a `/` is. A `/` at the end
+ * matches a folder only. A rule that includes also matches a folder that holds a path that the glob can match.
  */
-function negationTakes(entry: string, path: string): boolean {
-  if (entryTakes(entry, path)) return true;
-  let clean = cleanPath(entry);
-  while (clean.endsWith("/")) clean = clean.slice(0, -1);
-  return clean !== "" && !clean.includes("/") && path.split("/").some((segment) => entryTakes(clean, segment));
+function ruleMatches(rule: PackRule, path: string, folder: boolean): boolean {
+  let glob = rule.glob;
+  if (glob.startsWith("/")) glob = glob.slice(1);
+  if (glob.endsWith("/")) {
+    if (!folder) return false;
+    glob = glob.slice(0, -1);
+  }
+  if (glob === "") return false;
+  const segments = path.split("/");
+  if (!rule.glob.includes("/")) return packRegExp(glob).test(segments[segments.length - 1] ?? path);
+  if (packRegExp(glob).test(path)) return true;
+  if (!folder || !rule.include) return false;
+  // A partial match: each segment of the folder matches its segment of the glob, and the glob has more segments
+  const parts = glob.split("/");
+  for (let at = 0; at < parts.length; at++) {
+    const part = parts[at] ?? "";
+    if (part === "**" || at >= segments.length) return true;
+    if (!packRegExp(part).test(segments[at] ?? "")) return false;
+  }
+  return false;
 }
 
 /**
- * This function tells if npm packs `path` (relative to the package, with `/`) by the field `files`. A negation `!<glob>`
- * removes a path in each place of the list (npm 11 packs `["!a/b", "a"]` as `["a", "!a/b"]`). It gives the index of
- * the first entry that takes the path, or -1 when npm does not pack it.
+ * This function gives the rules that npm 11 (npm-packlist 10) makes from the field `files`, for the path and its
+ * folders. npm examines each entry on the disk. At the time of the pack, the path is a file and each of its parents
+ * is a folder. This function takes each other entry as a pattern, and the rules of a pattern match the path in the
+ * same way.
+ */
+function packRules(files: readonly unknown[], path: string): { readonly strict: PackRule[]; readonly loose: PackRule[] } {
+  const parts = path.split("/");
+  const folders = new Set(parts.slice(0, -1).map((_, at) => parts.slice(0, at + 1).join("/")));
+  const strict: PackRule[] = [];
+  const loose: PackRule[] = [];
+  files.forEach((entry, index) => {
+    if (typeof entry !== "string") return;
+    let file = entry;
+    if (file.startsWith("./")) file = file.slice(1);
+    if (file.endsWith("/*")) file += "*";
+    const inverse = `!${file}`;
+    // The path that npm gives to lstat: without the `!` characters, normalized as path.join does
+    const target = posix
+      .normalize(file.replace(/^!+/, "") || ".")
+      .replace(/^\/+/, "")
+      .replace(/\/+$/, "");
+    if (target === path) {
+      // A file is strict: its rule goes before the strict rules of the earlier entries, so the first entry decides
+      strict.unshift(packRule(inverse, index));
+    } else if (folders.has(target)) {
+      loose.push(packRule(inverse, index), packRule(`${inverse}/**`, index));
+    } else {
+      loose.push(packRule(inverse, index));
+    }
+  });
+  return { strict, loose };
+}
+
+/**
+ * This function gives the last rule that matches the path, or undefined when no rule matches it. The rule `*` of
+ * npm comes first, so a path that no rule matches is not packed.
+ */
+function lastMatch(rules: readonly PackRule[], path: string, folder: boolean): PackRule | undefined {
+  let found: PackRule | undefined;
+  for (const rule of rules) if (ruleMatches(rule, path, folder)) found = rule;
+  return found;
+}
+
+/**
+ * This function tells if npm 11 packs `path` (relative to the package, with `/`) by the field `files`. It follows
+ * npm-packlist 10: the rule `*`, then a rule for each entry in its order, then the strict rules of the entries that
+ * name the file. The last rule that matches a path decides, and npm does not go into a folder that it does not take.
+ * The function gives the index of the entry of the rule that takes the file, or -1 when npm does not pack it.
  */
 export function packedBy(files: readonly unknown[], path: string): number {
-  const entries = files.filter((entry): entry is string => typeof entry === "string");
-  if (entries.some((entry) => entry.startsWith("!") && negationTakes(entry.slice(1), path))) return -1;
-  return files.findIndex((entry) => typeof entry === "string" && !entry.startsWith("!") && entryTakes(entry, path));
+  const { strict, loose } = packRules(files, path);
+  const rules = [...loose, ...strict];
+  const parts = path.split("/");
+  for (let at = 1; at < parts.length; at++) {
+    if (lastMatch(rules, parts.slice(0, at).join("/"), true)?.include !== true) return -1;
+  }
+  const rule = lastMatch(rules, path, false);
+  return rule?.include === true ? rule.index : -1;
 }
 
 /**
@@ -124,12 +203,18 @@ export const packNoBuildinfo: Rule = {
         }
         const index = packedBy(files, path);
         if (index < 0) continue;
-        const after = withNegation(pkg, index, `!${path}`);
+        // The negation after the entry stops the pack, except after an entry that names the file: the first decides
+        const negated = [...files.slice(0, index + 1), `!${path}`, ...files.slice(index + 1)];
+        const negationStops = packedBy(negated, path) < 0;
+        const after = negationStops ? withNegation(pkg, index, `!${path}`) : undefined;
+        const fix = negationStops
+          ? `Add "!${path}" after "${String(files[index])}" in "files".`
+          : `Remove the entry "${String(files[index])}" of "files": it names ${path}.`;
         breaks.push({
           file: pkg.file,
           ...(line === undefined ? {} : { line }),
           message: `npm packs ${path}, the build info file of ${config}, by the entry "${String(files[index])}" of "files" of ${name}.`,
-          ...(after === undefined ? { fix: `Add "!${path}" after "${String(files[index])}" in "files".` } : { edits: [{ file: pkg.file, before: pkg.text, after }] }),
+          ...(after === undefined ? { fix } : { edits: [{ file: pkg.file, before: pkg.text, after }] }),
         });
       }
     }
