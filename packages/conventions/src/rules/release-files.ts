@@ -5,6 +5,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { rangeOf } from "../change.ts";
 import { matchesAny, type Break, type Rule, type RuleContext } from "../rule.ts";
+import { escapeRegExp as escape } from "@mark1russell7/text";
 
 /** The facts of the pull request in the event file of GitHub Actions. */
 interface PullRequest {
@@ -27,9 +28,6 @@ function pullRequestOf(context: RuleContext): PullRequest {
     return { body: "" };
   }
 }
-
-/** This function escapes the special characters of a regular expression. */
-const escape = (text: string): string => text.replace(/[\\^$.|?*+()[\]{}]/g, "\\$&");
 
 export const releaseFiles: Rule = {
   id: "release-files",

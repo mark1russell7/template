@@ -5,6 +5,7 @@
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { escapeWorkflowData, escapeWorkflowProperty } from "@mark1russell7/text";
 import { addedFiles } from "./change.ts";
 import { findHomes, HOMES, mapMarkdown, mapText, mergeHomes, readOverlay, type Home } from "./map.ts";
 import { parseConfig, type ConventionsConfig } from "./config.ts";
@@ -245,17 +246,13 @@ export function summaryMarkdown(result: CheckResult): string {
   return `${out.join("\n")}\n`;
 }
 
-/** This function escapes a value of a workflow command of GitHub Actions. */
-const escapeData = (text: string): string => text.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
-const escapeProperty = (text: string): string => escapeData(text).replace(/:/g, "%3A").replace(/,/g, "%2C");
-
 /** This function gives an `::error` workflow command for each break, so that GitHub shows each break on its line in the pull request. */
 export function annotations(result: CheckResult): string {
   const out: string[] = [];
   for (const rule of result.rules) {
     for (const item of rule.breaks) {
       const line = item.line === undefined ? "" : `,line=${item.line}`;
-      out.push(`::error file=${escapeProperty(item.file)}${line},title=${escapeProperty(`conventions ${rule.id}`)}::${escapeData(`${item.message} Fix: ${item.fix ?? rule.fix}`)}`);
+      out.push(`::error file=${escapeWorkflowProperty(item.file)}${line},title=${escapeWorkflowProperty(`conventions ${rule.id}`)}::${escapeWorkflowData(`${item.message} Fix: ${item.fix ?? rule.fix}`)}`);
     }
   }
   return out.length === 0 ? "" : `${out.join("\n")}\n`;

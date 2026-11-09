@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { execSync } from "node:child_process";
 import * as p from "@clack/prompts";
 import { cliManifest, presetDir, repoRoot, type Manifest } from "../../paths.ts";
+import { escapeAttribute as escapeHtml } from "@mark1russell7/text";
 
 async function getScope(root: string): Promise<string> {
   const raw = await readFile(resolve(root, "package.json"), "utf8");
@@ -145,8 +146,6 @@ export interface SiteText {
   /** The npm name of the first package of the repository. It need not have a release yet. */
   readonly npm?: string | undefined;
 }
-
-const escapeHtml = (text: string): string => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
 /** This function gives the words of the files of the preset `site`. A command must work today, so a repository with no package name gets `git clone`. */
 function siteWords(scope: string, { description, npm }: SiteText): Record<string, string> {

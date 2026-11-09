@@ -223,6 +223,10 @@ importers:
         version: 5.0.5(@types/node@26.6.6)(@vitest/coverage-v8@5.0.5)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/boundaries:
+    dependencies:
+      '@mark1russell7/text':
+        specifier: ^0.0.2
+        version: 0.0.2
     devDependencies:
       '@mark1russell7/cue':
         specifier: ^2.0.0
@@ -251,6 +255,9 @@ importers:
       '@clack/prompts':
         specifier: ^1.8.1
         version: 1.8.1
+      '@mark1russell7/text':
+        specifier: ^0.0.2
+        version: 0.0.2
     devDependencies:
       '@mark1russell7/cue':
         specifier: ^2.0.0
@@ -276,6 +283,9 @@ importers:
 
   packages/conventions:
     dependencies:
+      '@mark1russell7/text':
+        specifier: ^0.0.2
+        version: 0.0.2
       yaml:
         specifier: ^2.9.1
         version: 2.9.1
@@ -322,6 +332,9 @@ importers:
       '@mark1russell7/template-cli':
         specifier: workspace:*
         version: link:../cli
+      '@mark1russell7/text':
+        specifier: ^0.0.2
+        version: 0.0.2
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.6
@@ -340,6 +353,9 @@ importers:
       '@mark1russell7/rigor-statistics':
         specifier: ^0.1.9
         version: 0.1.25
+      '@mark1russell7/text':
+        specifier: ^0.0.2
+        version: 0.0.2
     devDependencies:
       '@mark1russell7/cue':
         specifier: ^2.0.0
@@ -668,6 +684,10 @@ packages:
     resolution: {integrity: sha512-Z5GuoAvFk9Vf4tnN/XTHiffbU2SjtZb0EtcQsLJlSAApkXovQZTPOtCFyvRbcU+qMINiXJMXppwolSsxya6s8A==}
     engines: {node: '>=22'}
     hasBin: true
+
+  '@mark1russell7/text@0.0.2':
+    resolution: {integrity: sha512-m1aIB8X+PDekktzr1fYOp1/7gvlh9iL/2M7ktj/GnmPmVrWin0rTADgTm00dKFdWFRzXraCUYkjyCl3jQZHEVg==}
+    engines: {node: '>=22.12'}
 
   '@mark1russell7/typeset@0.1.5':
     resolution: {integrity: sha512-bPRzyy2qgs+5DhPYt0ktcyEHzyNyZnh+jgKE16y3spDkxw84z57izqZW39xIbTdvaHqdspwDAC3pli2XS7Jnzw==}
@@ -1924,6 +1944,8 @@ snapshots:
   '@mark1russell7/ste-lint@0.3.0':
     dependencies:
       typescript: 6.0.3
+
+  '@mark1russell7/text@0.0.2': {}
 
   '@mark1russell7/typeset@0.1.5':
     dependencies:

@@ -3,7 +3,7 @@
  * character of the text escaped. It knows strings, keys, keywords, numbers and line comments.
  */
 
-const escape = (text: string): string => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+import { escapeHtml as escape } from "@mark1russell7/text";
 
 const KEYWORDS = "import|export|from|const|let|function|return|async|await|default|type|interface|new|if|else|as|readonly|void";
 const TOKEN = new RegExp(String.raw`(\/\/.*$)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|` + "`(?:[^`\\\\]|\\\\.)*`" + String.raw`)(\s*:)?|\b(${KEYWORDS}|true|false|null)\b|(\b\d+(?:\.\d+)?\b)`, "g");
