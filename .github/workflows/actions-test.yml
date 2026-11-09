@@ -12,6 +12,9 @@
 #                   main checks that the commit is on main (the input require-main). The input
 #                   after-pack tests the tarballs, writes an output, adds a title and the
 #                   tarballs to each entry of the plan, and sets "latest" on one entry.
+#                   It also starts on each pull request that changes a file of a package (the output
+#                   release of the job changes). pack.ts refuses shipped files that differ from the
+#                   version on npm, so a pull request that changes them takes its version.
 #   release-publish The npm-publish action examines the tarballs with "dry-run": it publishes nothing.
 #                   The job has no "id-token: write", so npm cannot accept a publish. A step reads
 #                   the output of after-pack.
@@ -66,6 +69,7 @@ jobs:
       pull-requests: read
     outputs:
       match: ${{ steps.changes.outputs.match }}
+      release: ${{ steps.release.outputs.match }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -86,6 +90,22 @@ jobs:
             pnpm-lock.yaml
             packages/*/package.json
             packages/site-pages/src/check/**
+      # The release jobs also start for each file of a package. pack.ts compares the shipped files with the
+      # version on npm. Thus a pull request that changes the shipped files with no new version fails here, and
+      # main does not differ from npm at a released version. The other jobs keep the paths of the gate.
+      - id: release
+        uses: ./.github/actions/changes
+        with:
+          paths: |
+            .github/actions/**
+            .github/workflows/actions-test.yml
+            .github/workflows/reusable-pages.yml
+            .github/workflows/reusable-release-*.yml
+            .github/workflows/reusable-ci.yml
+            scripts/release/**
+            package.json
+            pnpm-lock.yaml
+            packages/**
 
   green-main:
     needs: changes
@@ -317,7 +337,7 @@ jobs:
 
   release-build:
     needs: changes
-    if: needs.changes.outputs.match == 'true'
+    if: needs.changes.outputs.release == 'true'
     uses: ./.github/workflows/reusable-release-build.yml
     permissions:
       contents: read
