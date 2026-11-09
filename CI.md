@@ -45,6 +45,8 @@ The job starts all the scripts, also after a failure. Then it fails with the nam
 | `coverage` | `false` | After the scripts, the first cell of the matrix starts the tests of each package with Vitest again, with coverage (refer to "Coverage"). |
 | `coverage-floor` | `0` | The lowest percent of each measure of each package. `0` is no floor. |
 | `coverage-on-main` | `true` | With `coverage: false`, a push to the default branch of a public repository still gives the coverage, not strict (refer to "Coverage"). |
+| `version-check` | `true` | On a pull request, the first cell of the matrix compares the shipped files of each published package with npm (refer to "The version check"). |
+| `version-check-fails-from` | `2026-12-07` | The day from which a difference of the version check fails the job. Before it, a difference gives a warning. `""` fails at once. |
 
 ### Coverage
 
@@ -71,6 +73,20 @@ jobs:
 ```
 
 A pull request from a fork gets no secret, so the private patterns are not examined there.
+
+### The version check
+
+The release skips each version that is on npm. Thus a pull request that changes the shipped files of a package and keeps its version ships nothing. The next version pull request then fails its release build.
+
+On a pull request, the first cell of the matrix examines this after the scripts:
+
+- The script `version-check.ts` of the action `version-check` packs each published package whose version is on npm.
+- It compares the files with the tarball on npm. The compare is the compare of the release (`scripts/release/unchanged.ts`).
+- In `package.json`, only the fields that change what a user installs count. A change of a test or of a development dependency ships nothing, so it passes.
+- A package whose version is not on npm passes: the release publishes it.
+- Before the day `version-check-fails-from`, a difference gives a warning, and the job passes. From that day, it gives an error.
+- The check needs the build. When the input `scripts` has no `build`, or a script fails, the check packs nothing.
+- The summary of the job gets a table of the packages.
 
 ### The changeset check
 

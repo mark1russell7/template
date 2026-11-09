@@ -16,6 +16,7 @@ These composite actions are shared by the repositories of mark1russell7. A repos
 | `data-stamps` | Checks the data stamps of the measured pages of a built site. `reusable-pages.yml` uses it. A site with its own Pages workflow uses it before the upload of the Pages artifact. A build of an older commit with no file of stamps warns and skips the gate. |
 | `security-scan` | Runs the dependency review, osv-scanner and CodeQL in one job. The last step fails when a scan fails, and names that scan. It replaces the three jobs of `reusable-security.yml` (`CI.md`, "Security"). |
 | `changeset-check` | Fails a pull request when a published package changes with no changeset, or when a changeset makes a `0.x` package into `1.0.0`. The job `changesets` of `reusable-ci.yml` uses it (`CI.md`). |
+| `version-check` | Packs each published package whose version is on npm, and compares its shipped files with npm. A difference gives a warning, and from a set day an error. `reusable-ci.yml` uses it with the input `version-check` (`CI.md`). |
 | `coverage` | Starts the tests of each package with Vitest again, with coverage, and writes a table of each package to the summary. An optional floor fails the step. `reusable-ci.yml` uses it with the input `coverage` (`CI.md`). |
 
 A browser job uses `setup-playwright` after the install of its dependencies:
