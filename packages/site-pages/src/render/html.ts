@@ -2,11 +2,11 @@
  * The HTML helpers of the pages: the escape functions and a small inline Markdown renderer.
  */
 
-import { escapeAttribute } from "@mark1russell7/text";
+const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 
-/** This function escapes a text for HTML content and for an attribute value in double quotes. The home of the escape is `@mark1russell7/text`. */
+/** This function escapes a text for HTML content and for an attribute value in double quotes. */
 export function escapeHtml(text: string): string {
-  return escapeAttribute(String(text));
+  return String(text).replace(/[&<>"']/g, (char) => ESCAPES[char] ?? char);
 }
 
 /**

@@ -353,9 +353,6 @@ importers:
       '@mark1russell7/rigor-statistics':
         specifier: ^0.1.9
         version: 0.1.25
-      '@mark1russell7/text':
-        specifier: ^0.0.2
-        version: 0.0.2
     devDependencies:
       '@mark1russell7/cue':
         specifier: ^2.0.0
