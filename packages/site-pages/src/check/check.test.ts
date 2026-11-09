@@ -286,6 +286,17 @@ describe.skipIf(browser === undefined)("checkSite in a browser", () => {
     expect(problems("/live-cue/")).toEqual([]);
   }, 60_000);
 
+  it("fails a view whose page does not answer, with its page and width, and checks the next view in a new browser", async () => {
+    // The probe blocks the page, so each later call of that browser gets no reply.
+    const lines: string[] = [];
+    const result = await checkSite(options(["/", "/scroller/"], { widths: [360], schemes: ["light"], probes: { "/": "for (;;) {}" }, callMs: 2_000, log: (line) => lines.push(line) }));
+    const [hung, next] = result.views;
+    expect(hung).toMatchObject({ page: "/", width: 360, ok: false });
+    expect(hung?.problems.join(" ")).toContain("the browser did not answer Runtime.evaluate in 2000 ms");
+    expect(next).toMatchObject({ page: "/scroller/", width: 360, ok: true, problems: [] });
+    expect(lines).toContain("the browser did not answer at / 360 light: the check starts a new browser");
+  }, 60_000);
+
   it("passes a good page and writes a screenshot of each view", async () => {
     const shots = join(root, "..", `${root.split(/[\\/]/).pop()}-shots`);
     try {

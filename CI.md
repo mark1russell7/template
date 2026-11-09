@@ -370,7 +370,7 @@ The gates are in the lane file, not in an input. Thus a local run and CI use the
 
 `reusable-pages.yml` has three jobs. The job `ref` decides if the commit of the event builds and deploys. It starts no code of the repository.
 
-The job `build` checks out the commit of the event, with no ref of its own. It installs, builds the site, adds the pages of `site-pages` and uploads the Pages artifact. It gets only read permissions. The job `deploy` deploys the artifact. It starts no code of the repository.
+The job `build` checks out the commit of the event, with no ref of its own. It installs, builds the site, adds the pages of `site-pages` and uploads the Pages artifact. It gets only read permissions. The job `deploy` deploys the artifact. It starts no code of the repository. Its action cancels a deployment after 606 s, before the job limit of 12 minutes.
 
 ```yaml
 on:
