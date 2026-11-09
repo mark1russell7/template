@@ -182,7 +182,10 @@ writeKpi: build/chunks/freshness.d.ts#writeKpi
 AttributeValue: build/chrome.d.ts#AttributeValue
 BuildInfo: build/chrome.d.ts#BuildInfo
 Child: build/chrome.d.ts#Child
+Choice: build/chrome.d.ts#Choice
 CopyTextOptions: build/chrome.d.ts#CopyTextOptions
+RovingAxis: build/chrome.d.ts#RovingAxis
+Segmented: build/chrome.d.ts#Segmented
 THEMES: build/chrome.d.ts#THEMES
 Theme: build/chrome.d.ts#Theme
 applyTheme: build/chrome.d.ts#applyTheme
@@ -192,6 +195,7 @@ copyToClipboard: build/chrome.d.ts#copyToClipboard
 currentTheme: build/chrome.d.ts#currentTheme
 h: build/chrome.d.ts#h
 nextTheme: build/chrome.d.ts#nextTheme
+rovingIndex: build/chrome.d.ts#rovingIndex
 setupTheme: build/chrome.d.ts#setupTheme
 showBuild: build/chrome.d.ts#showBuild
 
@@ -291,11 +295,28 @@ export interface BuildInfo {
 ### build/chrome.d.ts#Child
 export type Child = Node | string | null | undefined | false;
 
+### build/chrome.d.ts#Choice
+export interface Choice<T extends string> {
+  readonly value: T;
+  readonly label: string;
+  readonly title?: string;
+}
+
 ### build/chrome.d.ts#CopyTextOptions
 export interface CopyTextOptions {
   readonly copied?: string;
   readonly failed?: string;
   readonly ms?: number;
+}
+
+### build/chrome.d.ts#RovingAxis
+export type RovingAxis = "horizontal" | "vertical" | "both";
+
+### build/chrome.d.ts#Segmented
+export declare class Segmented<T extends string> {
+  constructor(container: HTMLElement, choices: readonly Choice<T>[], current: T, onChange: (value: T) => void, axis?: RovingAxis);
+  get value(): T;
+  set(value: T): void;
 }
 
 ### build/chrome.d.ts#THEMES
@@ -324,6 +345,9 @@ export declare function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs?:
 
 ### build/chrome.d.ts#nextTheme
 export declare function nextTheme(storageKey: string): Theme;
+
+### build/chrome.d.ts#rovingIndex
+export declare function rovingIndex(key: string, index: number, count: number, axis?: RovingAxis): number | undefined;
 
 ### build/chrome.d.ts#setupTheme
 export declare function setupTheme(button: HTMLButtonElement, storageKey: string): void;
