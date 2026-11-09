@@ -16,6 +16,11 @@ export interface Home {
   readonly packages: readonly string[];
   /** The repository of the home, as owner/name. */
   readonly repo: string;
+  /**
+   * The other repositories that hold code of the home while it moves, as owner/name: the source or the target of the move.
+   * The rule home-package does not break in them. Remove an entry when the move ends.
+   */
+  readonly alsoIn?: readonly string[];
   /** The state of the home. */
   readonly state: HomeState;
   /** More words that find the area in a search. */
@@ -42,6 +47,7 @@ export const HOMES: readonly Home[] = [
     covers: "quantiles, medians, means, SD, bootstrap intervals, sign and permutation tests, Holm, Wilson, Brier, calibration, correlation, noise floors, fits of laws to values, likelihoods, mixtures",
     packages: ["@mark1russell7/rigor-statistics"],
     repo: "mark1russell7/rigor",
+    alsoIn: ["mark1russell7/algebra", "mark1russell7/math"],
     state: "published",
     words: ["stats", "quantile", "median", "mean", "percentile", "bootstrap", "interval", "confidence", "p-value", "brier", "wilson", "holm", "spearman", "kendall", "noise", "stddev", "variance", "resample", "resampling", "bonferroni", "regression", "histogram", "pvalue", "significance", "welch", "ttest", "mann", "whitney", "pearson", "correlation"],
     signatures: ["quantiles?", "percentiles?", "median(Of)?", "std[Dd]ev", "standardDeviation", "variance", "bootstrap(?:Median|Mean|Interval|Ci|CI|Quantile|Percentile|Ratio|Diff|Difference|Samples?|Resamples?)?", "wilson[A-Za-z0-9]*", "holm[A-Za-z0-9]*", "brier[A-Za-z0-9]*", "spearman[A-Za-z0-9]*", "kendall[A-Za-z0-9]*", "signTest", "pairedPermutation", "permutationTest", "noiseFloor", "iqr"],
@@ -52,6 +58,7 @@ export const HOMES: readonly Home[] = [
     covers: "seeded random numbers, seeds from names, hashes for seeds, draws, input families with dimensions and ranges",
     packages: ["@mark1russell7/rigor-generators"],
     repo: "mark1russell7/rigor",
+    alsoIn: ["mark1russell7/algebra", "mark1russell7/math"],
     state: "published",
     words: ["seed", "prng", "mulberry32", "fnv", "hash", "shuffle", "sample", "fixture", "generator", "random", "rng", "seeded", "xorshift", "splitmix", "latin", "hypercube", "saltelli", "sobol", "halton", "sampler"],
     signatures: ["mulberry32", "splitmix[A-Za-z0-9]*", "xorshift[A-Za-z0-9]*", "sfc32", "xoshiro[A-Za-z0-9]*", "fnv1a[A-Za-z0-9]*", "deriveSeed", "seededRandom", "seededRng", "makeRng", "createRng"],
@@ -357,6 +364,7 @@ export function readOverlay(file: string): readonly Home[] {
   if (!Array.isArray(data.homes)) throw new Error(`${file}: the field "homes" must be an array`);
   for (const home of data.homes as Home[]) {
     if (typeof home.area !== "string" || typeof home.title !== "string" || typeof home.repo !== "string") throw new Error(`${file}: each home needs area, title and repo`);
+    if (home.alsoIn !== undefined && !(Array.isArray(home.alsoIn) && home.alsoIn.every((repo) => typeof repo === "string"))) throw new Error(`${file}: alsoIn of ${home.area} must be an array of owner/name strings`);
   }
   return data.homes as Home[];
 }
@@ -403,6 +411,7 @@ export function mapText(homes: readonly Home[]): string {
     .map((home) => {
       const where = home.packages.length > 0 ? home.packages.join(", ") : home.repo;
       const lines = [`${home.title} (${home.area}): ${where}${STATE_TEXT[home.state]}`, `  covers: ${home.covers}`, `  repo: ${home.repo}`];
+      if (home.alsoIn !== undefined && home.alsoIn.length > 0) lines.push(`  also in, while it moves: ${home.alsoIn.join(", ")}`);
       if (home.note !== undefined) lines.push(`  note: ${home.note}`);
       return lines.join("\n");
     })
