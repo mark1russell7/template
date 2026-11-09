@@ -5,6 +5,10 @@
 # A repository calls it from its lockfile.yml, and a session starts that file on the branch of the pull request:
 #
 #   permissions: {}
+
+defaults:
+  run:
+    shell: bash
 #   on:
 #     workflow_dispatch:
 #   jobs:

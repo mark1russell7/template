@@ -8,6 +8,11 @@ on:
 
 permissions: {}
 
+# One run for each branch: a new start cancels the older one
+concurrency:
+  group: lockfile-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lockfile:
     uses: ./.github/workflows/reusable-lockfile.yml
