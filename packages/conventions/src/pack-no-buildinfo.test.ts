@@ -137,4 +137,16 @@ describe("the build info file of tsc", () => {
     expect(packedBy(["dist", "!dist/*.tsbuildinfo"], "dist/.tsbuildinfo")).toBe(-1);
     expect(packedBy(["distribution"], "dist/.tsbuildinfo")).toBe(-1);
   });
+
+  // The results of npm pack --dry-run of npm 11.19 with the files dist/.tsbuildinfo, dist/a.tsbuildinfo and dist/index.js
+  it("reads a negation with no slash as a name at each depth, as npm does", () => {
+    expect(packedBy(["dist", "!*.tsbuildinfo"], "dist/.tsbuildinfo")).toBe(-1);
+    expect(packedBy(["dist", "!**/*.tsbuildinfo"], "dist/.tsbuildinfo")).toBe(-1);
+    expect(packedBy(["dist", "!.tsbuildinfo"], "dist/.tsbuildinfo")).toBe(-1);
+    expect(packedBy(["dist", "!dist/"], "dist/.tsbuildinfo")).toBe(-1);
+    // A negation with a slash stays at its place: it does not remove dist/a.tsbuildinfo
+    expect(packedBy(["dist", "!dist/.tsbuildinfo"], "dist/a.tsbuildinfo")).toBe(0);
+    expect(packedBy(["dist", "!lib/*.tsbuildinfo"], "dist/.tsbuildinfo")).toBe(0);
+    expect(packedBy(["dist", "!*.map"], "dist/.tsbuildinfo")).toBe(0);
+  });
 });

@@ -21,13 +21,25 @@ function entryTakes(entry: string, path: string): boolean {
 }
 
 /**
+ * This function tells if a negation of the field `files` (without `!`) removes the path. As in a `.gitignore` file, a
+ * negation with no `/` (a slash at the end does not count) removes each file or folder with that name at each depth.
+ * Thus npm 11.19 does not pack `dist/.tsbuildinfo` with `["dist", "!*.tsbuildinfo"]`.
+ */
+function negationTakes(entry: string, path: string): boolean {
+  if (entryTakes(entry, path)) return true;
+  let clean = cleanPath(entry);
+  while (clean.endsWith("/")) clean = clean.slice(0, -1);
+  return clean !== "" && !clean.includes("/") && path.split("/").some((segment) => entryTakes(clean, segment));
+}
+
+/**
  * This function tells if npm packs `path` (relative to the package, with `/`) by the field `files`. A negation `!<glob>`
  * removes a path in each place of the list (npm 11 packs `["!a/b", "a"]` as `["a", "!a/b"]`). It gives the index of
  * the first entry that takes the path, or -1 when npm does not pack it.
  */
 export function packedBy(files: readonly unknown[], path: string): number {
   const entries = files.filter((entry): entry is string => typeof entry === "string");
-  if (entries.some((entry) => entry.startsWith("!") && entryTakes(entry.slice(1), path))) return -1;
+  if (entries.some((entry) => entry.startsWith("!") && negationTakes(entry.slice(1), path))) return -1;
   return files.findIndex((entry) => typeof entry === "string" && !entry.startsWith("!") && entryTakes(entry, path));
 }
 
