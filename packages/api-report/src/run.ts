@@ -7,8 +7,9 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { unifiedDiff } from "./diff.ts";
 import { byCode, relativePath, type Manifest } from "./entries.ts";
 import { pageFaults, type ApiPage, type FrontmatterValue } from "./page.ts";
+import { apiModel } from "./model.ts";
 import { referencePage } from "./reference.ts";
-import { DEFAULT_TOOL, packageReport } from "./report.ts";
+import { DEFAULT_TOOL, documentedPackageReport, type DocumentedReport } from "./report.ts";
 import { globFolders, reportFolders, workspaceGlobs } from "@mark1russell7/conventions/workspace";
 
 /** The path of the report in a package folder, when the configuration gives no other path. */
@@ -116,18 +117,21 @@ function readPages(value: unknown): readonly ApiPage[] {
   return value.map((item: unknown, index): ApiPage => {
     const at = `apiReport.pages[${index}]`;
     if (typeof item !== "object" || item === null || Array.isArray(item)) throw new Error(`${at} must be an object.`);
-    const { package: folder, pages, except, reference, frontmatter } = item as Record<string, unknown>;
+    const { package: folder, pages, except, reference, frontmatter, docs } = item as Record<string, unknown>;
     if (typeof folder !== "string" || folder === "") throw new Error(`${at}.package must be a string.`);
     if (reference !== undefined && (typeof reference !== "string" || !isRootPath(reference))) throw new Error(`${at}.reference must be a path in the repository.`);
     const emptyOk = reference !== undefined;
     if (!Array.isArray(pages) || (pages.length === 0 && !emptyOk) || !pages.every((page) => typeof page === "string")) throw new Error(`${at}.pages must be an array of paths.`);
     if (frontmatter !== undefined && reference === undefined) throw new Error(`${at}.frontmatter needs the field reference.`);
+    if (docs !== undefined && typeof docs !== "boolean") throw new Error(`${at}.docs must be a boolean.`);
+    if (docs !== undefined && reference === undefined) throw new Error(`${at}.docs needs the field reference.`);
     const fields = frontmatter === undefined ? undefined : readFrontmatter(frontmatter, `${at}.frontmatter`);
     const named = {
       package: folder,
       pages: pages as string[],
       ...(reference === undefined ? {} : { reference: reference as string }),
       ...(fields === undefined ? {} : { frontmatter: fields }),
+      ...(docs === undefined ? {} : { docs }),
     };
     if (except === undefined) return named;
     if (typeof except !== "object" || except === null || Array.isArray(except) || !Object.values(except).every((reason) => typeof reason === "string")) {
@@ -160,22 +164,27 @@ function textOf(file: string): string | undefined {
 }
 
 /** This function gives the faults of the pages of one package. A file that does not exist is a fault, and so is a page of each export that differs from the report. */
-function faultsOfPages(root: string, entry: ApiPage, report: string, packageName: string): string[] {
+function faultsOfPages(root: string, entry: ApiPage, report: DocumentedReport, packageName: string): string[] {
   const missing = entry.pages.filter((page) => !existsSync(resolve(root, page)));
   if (missing.length > 0) return missing.map((page) => `${page}: the page does not exist.`);
   const faults: string[] = [];
-  if (entry.reference !== undefined && textOf(resolve(root, entry.reference)) !== referencePage(report, packageName, entry.frontmatter)) {
+  if (entry.reference !== undefined && textOf(resolve(root, entry.reference)) !== referenceOf(entry, report, packageName)) {
     faults.push(`${entry.reference}: the page differs from the report. Start the command update, and commit the page.`);
   }
   const pages = entry.pages.map((page) => readFileSync(resolve(root, page), "utf8"));
-  return [...faults, ...pageFaults(report, packageName, pages, entry.except, entry.reference !== undefined)];
+  return [...faults, ...pageFaults(report.text, packageName, pages, entry.except, entry.reference !== undefined)];
+}
+
+/** This function gives the page of each export of one package. With the field `docs`, the page also has the doc comments. */
+function referenceOf(entry: ApiPage, report: DocumentedReport, packageName: string): string {
+  return referencePage(apiModel(report.text, packageName, entry.docs === true ? report.docs : undefined), entry.frontmatter);
 }
 
 /** This function writes the page of each export of one package, and gives its path when the text changes. */
-function writeReference(root: string, entry: ApiPage, report: string, packageName: string): string[] {
+function writeReference(root: string, entry: ApiPage, report: DocumentedReport, packageName: string): string[] {
   if (entry.reference === undefined) return [];
   const file = resolve(root, entry.reference);
-  const text = referencePage(report, packageName, entry.frontmatter);
+  const text = referenceOf(entry, report, packageName);
   if (textOf(file) === text) return [];
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, text);
@@ -243,9 +252,9 @@ export function runReports(options: RunOptions): RunResult {
       }
       continue;
     }
-    let text: string;
+    let documented: DocumentedReport;
     try {
-      text = packageReport(folder, {
+      documented = documentedPackageReport(folder, {
         tool: options.tool ?? DEFAULT_TOOL,
         ...(options.publishConfig === undefined ? {} : { publishConfig: options.publishConfig }),
       });
@@ -253,9 +262,10 @@ export function runReports(options: RunOptions): RunResult {
       results.push({ folder: shown, file: shownFile, status: "error", error: error instanceof Error ? error.message : String(error) });
       continue;
     }
+    const { text } = documented;
     const ownPages = (options.pages ?? []).filter((entry) => resolve(root, entry.package) === folder);
-    const written = options.mode === "update" ? ownPages.flatMap((entry) => writeReference(root, entry, text, manifest.name ?? "")) : [];
-    const faults = ownPages.flatMap((entry) => faultsOfPages(root, entry, text, manifest.name ?? ""));
+    const written = options.mode === "update" ? ownPages.flatMap((entry) => writeReference(root, entry, documented, manifest.name ?? "")) : [];
+    const faults = ownPages.flatMap((entry) => faultsOfPages(root, entry, documented, manifest.name ?? ""));
     const onPages = {
       ...(options.mode === "check" && faults.length > 0 ? { pageFaults: faults } : {}),
       ...(written.length > 0 ? { writtenPages: written } : {}),
