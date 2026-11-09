@@ -315,15 +315,21 @@ jobs:
         shell: bash
         working-directory: ${{ inputs.working-directory }}
     steps:
-      # The tests stop 2 minutes before the limit of the job, so the job ends with its summary and its artifact
+      # Each run step stops at the deadline, 2 minutes before the limit of the job. A job that reaches its limit gets
+      # the result "cancelled", also with continue-on-error, and the CI fails. A step that stops at the deadline fails
+      # the step, so continue-on-error applies. The job ends with its summary and its artifact.
       - name: Start time
         env:
           LIMIT: ${{ inputs.coverage-timeout-minutes }}
+          LEVEL: ${{ inputs.coverage && 'error' || 'warning' }}
         working-directory: .
         run: |
           now=$(date +%s)
-          echo "JOB_START=$now" >> "$GITHUB_ENV"
-          echo "COVERAGE_DEADLINE=$((now + LIMIT * 60 - 120))" >> "$GITHUB_ENV"
+          {
+            echo "JOB_START=$now"
+            echo "COVERAGE_DEADLINE=$((now + LIMIT * 60 - 120))"
+            echo "DEADLINE_LEVEL=$LEVEL"
+          } >> "$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -335,9 +341,9 @@ jobs:
           node-version: ${{ fromJSON(inputs.node-versions)[0] }}
           cache: pnpm
           cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
-      # As in the job checks: the scripts do not see the folder .shared-actions
-      - if: inputs.cue-version != '' || (inputs.env != '{}' && inputs.env != '')
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # As in the job checks: the scripts do not see the folder .shared-actions. The function before_deadline goes to
+      # RUNNER_TEMP, outside the repository.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
@@ -352,15 +358,24 @@ jobs:
         uses: ./.shared-actions/.github/actions/setup-cue
         with:
           version: ${{ inputs.cue-version }}
-      - if: inputs.cue-version != '' || (inputs.env != '{}' && inputs.env != '')
-        working-directory: .
-        run: rm -rf .shared-actions
-      - run: pnpm install --frozen-lockfile
+      - working-directory: .
+        run: |
+          cp .shared-actions/.github/actions/coverage/deadline.sh "$RUNNER_TEMP/deadline.sh"
+          rm -rf .shared-actions
+      - name: Install
+        env:
+          DEADLINE: ${{ env.COVERAGE_DEADLINE }}
+        run: |
+          . "$RUNNER_TEMP/deadline.sh"
+          before_deadline pnpm install --frozen-lockfile
       - name: Setup command
         if: inputs.setup != ''
         env:
           COMMAND: ${{ inputs.setup }}
-        run: eval "$COMMAND"
+          DEADLINE: ${{ env.COVERAGE_DEADLINE }}
+        run: |
+          . "$RUNNER_TEMP/deadline.sh"
+          before_deadline bash -eo pipefail -c "$COMMAND"
       # A test can need the output of a build. Thus the job starts each build script that comes before test in the input
       # scripts, or the scripts of the input coverage-scripts.
       - name: Scripts before the tests
@@ -368,7 +383,9 @@ jobs:
           SCRIPTS: ${{ inputs.scripts }}
           CHOSEN: ${{ inputs.coverage-scripts }}
           RECURSIVE: ${{ inputs.recursive-scripts }}
+          DEADLINE: ${{ env.COVERAGE_DEADLINE }}
         run: |
+          . "$RUNNER_TEMP/deadline.sh"
           list=()
           if [ -n "${CHOSEN// /}" ]; then
             read -ra list <<< "$CHOSEN"
@@ -392,7 +409,7 @@ jobs:
               continue
             fi
             echo "::group::${command[*]}"
-            "${command[@]}"
+            before_deadline "${command[@]}"
             echo "::endgroup::"
           done
       # The action comes from the commit of this workflow, as in the job changesets. The checkout is after the scripts,

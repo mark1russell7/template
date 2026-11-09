@@ -45,7 +45,7 @@ The job starts all the scripts, also after a failure. Then it fails with the nam
 | `coverage` | `false` | The job `coverage` starts the tests of each package with Vitest again, with coverage. A failure fails the CI (refer to "Coverage"). |
 | `coverage-floor` | `0` | The lowest percent of each measure of each package. `0` is no floor. |
 | `coverage-on-main` | `true` | With `coverage: false`, a push to the default branch of a public repository still gives the coverage, not strict. It does not fail the CI (refer to "Coverage"). |
-| `coverage-timeout-minutes` | `30` | The time limit of the job `coverage`. The tests stop 2 minutes before it. |
+| `coverage-timeout-minutes` | `30` | The time limit of the job `coverage`. Each step of the job stops 2 minutes before it. |
 | `coverage-scripts` | (empty) | The scripts before the tests in the job `coverage`. The default takes each `build` or `build:*` script before `test` in `scripts`. |
 
 ### Coverage
@@ -53,7 +53,9 @@ The job starts all the scripts, also after a failure. Then it fails with the nam
 With `coverage: true`, the job `coverage` starts `vitest run` with coverage in each package whose `test` script starts Vitest. The job has the first runner and the first Node.js version of the matrix. It starts at the same time as the job `checks`, so the coverage does not make the checks slower.
 
 - Before the tests, the job installs, starts the command `setup` and the build scripts. These are each `build` or `build:*` script before `test` in `scripts`, or the scripts of `coverage-scripts`.
-- The job has its own time limit, `coverage-timeout-minutes` (30). The tests stop 2 minutes before that limit. Each package that the limit stopped fails the step, and the message names it.
+- The job has its own time limit, `coverage-timeout-minutes` (30). The install, the command `setup`, the scripts and the tests stop at a deadline 2 minutes before that limit. Each package that the deadline stopped fails the step, and the message names it.
+- A job that reaches its time limit gets the result `cancelled`, also with `continue-on-error`, and the CI fails. A step that stops at the deadline fails only the step. Thus the job ends with its summary and its artifact.
+- The deadline uses GNU `timeout`. Linux and Git Bash on Windows have it. macOS has it only as `gtimeout` from coreutils. Without it, the job gives a warning, and only the time limit of the job stops the steps.
 - The summary gives the time of the job and its limit. A time above 80 % of the limit gives a warning.
 
 - The summary of the job gets a table: the statements, branches, functions and lines of each package.
@@ -62,7 +64,7 @@ With `coverage: true`, the job `coverage` starts `vitest run` with coverage in e
 - A package whose tests fail also fails the step, after the summary. The thresholds of its Vitest config can cause this. The message names the package and the exit code.
 - With `coverage-floor`, a package with a measure under the floor fails the step. The message names the package and the measure.
 
-With `coverage: false` and `coverage-on-main: true` (the default), a push to the default branch of a public repository also starts the job, not strict (a private repository pays for its minutes, so it uses `coverage: true`). It skips a package with no `@vitest/coverage-v8`, and it gives a warning for a failure. The job has `continue-on-error`, so it does not fail the CI, also at its time limit. The gate of `release.yml` does not start it, so a release does not wait for the coverage. So each repository has the artifact `coverage` on main, and a tool can read which exported functions no test starts.
+With `coverage: false` and `coverage-on-main: true` (the default), a push to the default branch of a public repository also starts the job, not strict (a private repository pays for its minutes, so it uses `coverage: true`). It skips a package with no `@vitest/coverage-v8`, and it gives a warning for a failure. The job has `continue-on-error`, so a failure or a stop at the deadline does not fail the CI. The gate of `release.yml` does not start it, so a release does not wait for the coverage. So each repository has the artifact `coverage` on main, and a tool can read which exported functions no test starts.
 
 Each package with Vitest needs `@vitest/coverage-v8` in its `devDependencies`, with the version of its Vitest. The configuration of the coverage in `vitest.config.ts` (for example `include` and `exclude`) stays. The action sets only the reporters and the folder `coverage`.
 

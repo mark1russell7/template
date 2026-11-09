@@ -36,7 +36,13 @@ runs:
         STRICT: ${{ inputs.strict }}
         DEADLINE: ${{ inputs.deadline }}
         SCRIPT: ${{ github.action_path }}/coverage.ts
+        DEADLINE_SH: ${{ github.action_path }}/deadline.sh
       run: |
+        # shellcheck source=deadline.sh
+        . "$DEADLINE_SH"
+        level=error
+        if [ "$STRICT" != "true" ]; then level=warning; fi
+        export DEADLINE_LEVEL=$level
         mapfile -t dirs < <(pnpm ls -r --json --depth -1 | node "$SCRIPT" packages)
         if [ ${#dirs[@]} -eq 0 ]; then
           echo "::notice::No package has a test script that starts Vitest."
@@ -55,25 +61,15 @@ runs:
         failed=()
         stopped=()
         for dir in "${dirs[@]}"; do
-          # With a deadline, the step stops in time, so the job ends with its summary and not at the limit of the job
-          limit=()
-          if [ -n "$DEADLINE" ]; then
-            left=$((DEADLINE - $(date +%s)))
-            if [ "$left" -le 0 ]; then
-              stopped+=("$dir")
-              failed+=("$dir (not started: the time limit of the job)")
-              continue
-            fi
-            limit=(timeout --kill-after=20 "$left")
-          fi
           echo "::group::coverage of $dir"
           # The step continues after a failure, so the summary has each package. The thresholds of the Vitest config
           # of a package also fail its run. The step fails after the summary, and names each package that failed.
-          if (cd "$dir" && "${limit[@]}" pnpm exec vitest run --coverage.enabled --coverage.reporter=json-summary --coverage.reporter=json --coverage.reporter=text-summary --coverage.reportsDirectory=coverage); then :; else
+          # With a deadline, the step stops in time, so the job ends with its summary and not at the limit of the job.
+          if (cd "$dir" && before_deadline pnpm exec vitest run --coverage.enabled --coverage.reporter=json-summary --coverage.reporter=json --coverage.reporter=text-summary --coverage.reportsDirectory=coverage); then :; else
             code=$?
-            if [ ${#limit[@]} -gt 0 ] && { [ "$code" -eq 124 ] || [ "$code" -eq 137 ]; }; then
+            if [ -n "$DEADLINE" ] && [ "$code" -eq 124 ]; then
               stopped+=("$dir")
-              failed+=("$dir (stopped at the time limit of the job)")
+              failed+=("$dir (not started or stopped at the deadline of the job)")
             else
               failed+=("$dir (exit code $code)")
             fi
@@ -81,8 +77,6 @@ runs:
           echo "::endgroup::"
         done
         echo "stopped=${stopped[*]}" >> "$GITHUB_OUTPUT"
-        level=error
-        if [ "$STRICT" != "true" ]; then level=warning; fi
         summary=0
         node "$SCRIPT" summary "$FLOOR" "${dirs[@]}" >> "$GITHUB_STEP_SUMMARY" 2> >(sed "s/^::error::/::$level::/" >&2) || summary=$?
         for f in "${failed[@]}"; do echo "::$level::The tests with coverage failed in $f."; done
