@@ -143,6 +143,7 @@ noBuildOutput: build/index.d.ts#noBuildOutput
 noLocalPaths: build/index.d.ts#noLocalPaths
 npmLookup: build/index.d.ts#npmLookup
 npmUrl: build/index.d.ts#npmUrl
+packNoBuildinfo: build/index.d.ts#packNoBuildinfo
 packageFolders: build/workspace.chunk.d.ts#packageFolders
 pagesAfterRelease: build/index.d.ts#pagesAfterRelease
 pagesCalls: build/index.d.ts#pagesCalls
@@ -827,6 +828,9 @@ export declare const npmLookup: RegistryLookup;
 
 ### build/index.d.ts#npmUrl
 export declare function npmUrl(name: string, version: string): string;
+
+### build/index.d.ts#packNoBuildinfo
+export declare const packNoBuildinfo: Rule;
 
 ### build/index.d.ts#pagesAfterRelease
 export declare const pagesAfterRelease: Rule;

@@ -51,6 +51,9 @@ describe("the search", () => {
     expect(findHomes("strategy combinator")[0]?.area).toBe("strategy-space");
     expect(findHomes("context manager")[0]?.area).toBe("browser-monitoring");
     expect(findHomes("tracing")[0]?.area).toBe("browser-monitoring");
+    expect(findHomes("telemetry capture")[0]?.area).toBe("test-generation");
+    expect(findHomes("in-memory exporter")[0]?.area).toBe("test-generation");
+    expect(findHomes("otel capture")[0]?.area).toBe("test-generation");
     expect(findHomes("nothing-like-this")).toEqual([]);
     expect(findHomes("")).toBe(HOMES);
   });
