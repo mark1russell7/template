@@ -13,7 +13,9 @@ const TSCONFIG = /^tsconfig(?:\.[\w-]+)?\.json$/;
 
 /** This function tells if an entry of the field `files` (without `!`) takes the path: the path, a folder of it, or a glob. */
 function entryTakes(entry: string, path: string): boolean {
-  const clean = cleanPath(entry).replace(/\/+$/, "");
+  let clean = cleanPath(entry);
+  // A loop, not a pattern: a pattern with a repeated slash at the end is slow on a long run of slashes
+  while (clean.endsWith("/")) clean = clean.slice(0, -1);
   if (clean === "") return false;
   return path === clean || path.startsWith(`${clean}/`) || globToRegExp(clean).test(path);
 }
@@ -71,7 +73,11 @@ export const packNoBuildinfo: Rule = {
   reason:
     "The build info file changes on each build, also after a bump of a dev dependency. The release stops when the packed files of an unchanged version differ from npm. On 2026-11-09 the main of splay-react went red, because only `dist/.tsbuildinfo` differed. The cue lib preset writes this file in `dist`, and `files` packs `dist`.",
   fix: 'Add the negation of the path after its folder in `files`, for example `"files": ["dist", "!dist/.tsbuildinfo"]`. `conventions fix` writes it. Keep the file in `dist`: a `tsc -b` after a clean of `dist` must build again. A package with no field `files` packs each file of its folder: give it the field. A changed list of packed files needs a PATCH version.',
-  sources: [{ repo: "splay-react", rule: "pack-no-buildinfo", doc: "package.json (files, 1.0.2)" }],
+  sources: [
+    { repo: "splay-react", rule: "pack-no-buildinfo", doc: "package.json (files, 1.0.2)" },
+    { repo: "splay", rule: "pack-no-buildinfo", doc: "package.json (files)" },
+    { repo: "cue", rule: "pack-no-buildinfo", doc: "npm/package/ts.cue (files, 2.1.3)" },
+  ],
   options: {},
   failsFrom: "2026-11-25",
   check(context) {
