@@ -47,7 +47,11 @@ runs:
           if [ "$STRICT" = "true" ]; then exit 1; fi
           exit 0
         fi
-        mapfile -t dirs < <(pnpm ls -r --json --depth -1 | node "$SCRIPT" packages)
+        # The list goes through files, so a failure of pnpm or of the script stops the step.
+        list="$RUNNER_TEMP/coverage-packages.json"
+        pnpm ls -r --json --depth -1 > "$list"
+        node "$SCRIPT" packages "$list" > "$list.dirs"
+        mapfile -t dirs < "$list.dirs"
         if [ ${#dirs[@]} -eq 0 ]; then
           echo "::notice::No package has a test script that starts Vitest."
           exit 0

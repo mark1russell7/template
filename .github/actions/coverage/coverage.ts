@@ -1,6 +1,6 @@
 // The script of the action coverage. It has two commands:
 //
-//   node coverage.ts packages            reads the JSON of "pnpm ls -r --json --depth -1" from stdin and gives the
+//   node coverage.ts packages <file>     reads the JSON of "pnpm ls -r --json --depth -1" from the file and gives the
 //                                        folder of each package whose test script starts Vitest, one on each line
 //   node coverage.ts summary <floor> <dir>...
 //                                        reads <dir>/coverage/coverage-summary.json of each folder, gives a Markdown
@@ -59,7 +59,10 @@ export function coverageTable(rows: readonly Row[], floor: number): { markdown: 
 function main(argv: readonly string[]): number {
   const [command, ...rest] = argv;
   if (command === "packages") {
-    const list: unknown = JSON.parse(readFileSync(0, "utf8"));
+    // The list comes from a file, not from stdin. A read of a pipe that is not blocking fails with EAGAIN on the runners.
+    const [file] = rest;
+    if (file === undefined) throw new Error('The command "packages" needs the file of the JSON of "pnpm ls".');
+    const list: unknown = JSON.parse(readFileSync(file, "utf8"));
     const testScriptOf = (dir: string): string | undefined => {
       const file = resolve(dir, "package.json");
       return existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as { scripts?: { test?: string } }).scripts?.test : undefined;
