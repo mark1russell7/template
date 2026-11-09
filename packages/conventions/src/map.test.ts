@@ -57,6 +57,11 @@ describe("the search", () => {
     expect(findHomes("otel")[0]?.area).toBe("browser-monitoring");
     expect(findHomes("span")[0]?.area).toBe("browser-monitoring");
     expect(findHomes("opentelemetry")[0]?.area).toBe("browser-monitoring");
+    expect(findHomes("tee")[0]?.area).toBe("browser-monitoring");
+    expect(findHomes("meter fan-out")[0]?.area).toBe("browser-monitoring");
+    expect(findHomes("forwarding meter")[0]?.area).toBe("browser-monitoring");
+    expect(findHomes("meter combinator")[0]?.area).toBe("browser-monitoring");
+    expect(findHomes("fan-out")[0]?.area).toBe("service");
     expect(findHomes("nothing-like-this")).toEqual([]);
     expect(findHomes("")).toBe(HOMES);
   });
