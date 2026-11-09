@@ -488,10 +488,12 @@ import "@mark1russell7/site-pages/scroll-cue.css";
 The class sets `overflow-x: auto`. A browser with scroll timelines keeps the background of the box, so a code block keeps the color of its theme. A browser with no scroll timelines gets the background color `--scroll-cue-bg` and a shade of the color `--scroll-cue-shade`. Set `--scroll-cue-bg` to the background color of the box:
 
 ```css
-.code {
+.code.scroll-cue {
   --scroll-cue-bg: var(--code-bg);
 }
 ```
+
+The rule that sets `--scroll-cue-bg` must be more specific than `.scroll-cue`, which sets the default `Canvas`. The command `site-pages cue` puts its style last in `<head>`. Thus a rule with only `pre` or `.code` loses, and the fade gets the wrong color.
 
 The fades run on a scroll timeline (`animation-timeline: scroll(self inline)`). In Chromium, `document.getAnimations()` gives each fade as a running animation with one iteration, and the fade does not end. A test that waits for the end of each animation, for example before an axe check of the contrast, then stops at its time limit. Such a test must skip each animation whose timeline is not `document.timeline`:
 
