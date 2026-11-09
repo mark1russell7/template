@@ -41,7 +41,37 @@ describe("the names of a report", () => {
     expect([...(entries.get("./svg") ?? [])]).toEqual(["toSvg"]);
     expect([...(entries.get("./x.css") ?? [])]).toEqual([]);
   });
+
+  it("gives the same names as the parser of the report before the model", () => {
+    const external = "## . (build/index.d.ts): 2 names\n\nlayout: build/index.d.ts#layout\nOther: other-pkg#Other (external)\n";
+    const twice = "## . (a.d.ts): 1 names\n\na: a.d.ts#a\n\n## . (b.d.ts): 1 names\n\nb: b.d.ts#b\n";
+    for (const report of [REPORT, "", external, twice, "## bin: 1 commands\n\nlib: ./cli.js\n"]) {
+      const shape = (entries: ReadonlyMap<string, ReadonlySet<string>>): [string, string[]][] => [...entries].map(([key, names]) => [key, [...names]]);
+      expect(shape(reportEntries(report))).toEqual(shape(oldReportEntries(report)));
+    }
+  });
 });
+
+/** The parser of the names before the model, copied word for word. The test above holds that `reportEntries` gives the same names. */
+function oldReportEntries(report: string): ReadonlyMap<string, ReadonlySet<string>> {
+  const entries = new Map<string, Set<string>>();
+  let current: Set<string> | null = null;
+  for (const line of report.split("\n")) {
+    if (line.startsWith("## ")) {
+      const subpath = /^## (\.\S*?)(?: \(.*\))?: /.exec(line)?.[1];
+      current = null;
+      if (subpath !== undefined) {
+        const names = new Set<string>();
+        entries.set(subpath, names);
+        if (line.endsWith(" names")) current = names;
+      }
+      continue;
+    }
+    const name = /^(?:type )?([^\s:]+): /.exec(line)?.[1];
+    if (current !== null && name !== undefined && name !== "ambient" && !name.includes(".")) current.add(name);
+  }
+  return entries;
+}
 
 describe("the check of a page", () => {
   it("passes when each export shows in code, in a block or in a span", () => {

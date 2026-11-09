@@ -65,7 +65,7 @@ on:
         type: number
         default: 2
       timeout-minutes:
-        description: The time limit of each job of the matrix.
+        description: The time limit of each job of the matrix. The job coverage has its own limit.
         type: number
         default: 15
       changesets:
@@ -80,9 +80,10 @@ on:
         default: ""
       coverage:
         description: >-
-          After the scripts, start the tests of each package with Vitest again, with coverage (actions/coverage). The first
-          cell of the matrix does it. The summary gets a table of each package, and the artifact coverage has the reports.
-          Each package needs @vitest/coverage-v8.
+          Start the tests of each package with Vitest again, with coverage (actions/coverage), in the job coverage. That job
+          uses the first runner and Node.js version of the matrix, in parallel with the job checks. The summary gets a table
+          of each package, and the artifact coverage has the reports. Each package needs @vitest/coverage-v8. A failure
+          fails the CI.
         type: boolean
         default: false
       coverage-floor:
@@ -91,11 +92,24 @@ on:
         default: 0
       coverage-on-main:
         description: >-
-          With coverage false, a push to the default branch of a public repository still starts the action coverage, not strict: it skips a
+          With coverage false, a push to the default branch of a public repository still starts the job coverage, not strict: it skips a
           package with no @vitest/coverage-v8, and a failure is a warning. So each repository has the artifact coverage on
-          main. false turns it off.
+          main. This job does not fail the CI, also at its time limit, and the gate of release.yml does not start it.
+          false turns it off.
         type: boolean
         default: true
+      coverage-timeout-minutes:
+        description: >-
+          The time limit of the job coverage. The tests stop 2 minutes before it, so the job ends with its summary. The
+          summary gives the time of the job, and a time above 80 % of the limit gives a warning.
+        type: number
+        default: 30
+      coverage-scripts:
+        description: >-
+          The scripts that the job coverage starts before the tests, separated by spaces. The default "" takes each script
+          of the input scripts before test whose name is build or starts with build:.
+        type: string
+        default: ""
     secrets:
       CONVENTIONS_PRIVATE_PATTERNS:
         description: >-
@@ -195,27 +209,10 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: pnpm
           cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
-      - name: Environment variables
-        if: inputs.env != '{}' && inputs.env != ''
-        env:
-          ENV_JSON: ${{ inputs.env }}
-        run: |
-          node -e '
-            const { appendFileSync } = require("node:fs");
-            const { randomBytes } = require("node:crypto");
-            const env = JSON.parse(process.env.ENV_JSON);
-            if (env === null || typeof env !== "object" || Array.isArray(env)) throw new Error("The input env must be a JSON object.");
-            for (const [name, value] of Object.entries(env)) {
-              if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw new Error(`"${name}" is not a name of an environment variable.`);
-              const end = `END_${randomBytes(8).toString("hex")}`;
-              appendFileSync(process.env.GITHUB_ENV, `${name}<<${end}\n${value}\n${end}\n`);
-              console.log(`${name} is set.`);
-            }
-          '
-      # The cue CLI comes before the install, so that a "prepare" script can use it. The action comes from the commit of
-      # this workflow, as in the job changesets. It has no post step, so the next step removes its folder, and the
-      # scripts do not see it.
-      - if: inputs.cue-version != ''
+      # The variables of the input env, and the cue CLI before the install, so that a "prepare" script can use it. The
+      # actions come from the commit of this workflow, as in the job changesets. They have no post step, so the last step
+      # removes their folder, and the scripts do not see it.
+      - if: inputs.cue-version != '' || (inputs.env != '{}' && inputs.env != '')
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
@@ -223,11 +220,15 @@ jobs:
           path: .shared-actions
           sparse-checkout: .github/actions
           persist-credentials: false
+      - if: inputs.env != '{}' && inputs.env != ''
+        uses: ./.shared-actions/.github/actions/env-json
+        with:
+          env: ${{ inputs.env }}
       - if: inputs.cue-version != ''
         uses: ./.shared-actions/.github/actions/setup-cue
         with:
           version: ${{ inputs.cue-version }}
-      - if: inputs.cue-version != ''
+      - if: inputs.cue-version != '' || (inputs.env != '{}' && inputs.env != '')
         working-directory: .
         run: rm -rf .shared-actions
       - run: pnpm install --frozen-lockfile
@@ -298,19 +299,150 @@ jobs:
         env:
           COMMAND: ${{ inputs.run }}
         run: eval "$COMMAND"
-      # The action comes from the commit of this workflow, as in the job changesets. The checkout is after the scripts,
-      # so the scripts do not see the folder .shared-actions.
-      - if: (inputs.coverage || (inputs.coverage-on-main && github.event_name == 'push' && !github.event.repository.private && github.ref == format('refs/heads/{0}', github.event.repository.default_branch))) && matrix.os == fromJSON(inputs.os)[0] && matrix.node == fromJSON(inputs.node-versions)[0]
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+  # The tests with coverage, in parallel with the job checks and with a time limit of their own. Thus the coverage does
+  # not make the job checks slower, and a slow coverage does not stop it. Not strict (coverage on main), the job does not
+  # fail the CI. The gate of release.yml does not start it, so a release does not wait for it.
+  coverage:
+    if: inputs.coverage || (inputs.coverage-on-main && github.event_name == 'push' && !github.event.repository.private && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && !contains(github.workflow_ref, '/.github/workflows/release.yml@'))
+    runs-on: ${{ fromJSON(inputs.os)[0] }}
+    timeout-minutes: ${{ inputs.coverage-timeout-minutes }}
+    continue-on-error: ${{ !inputs.coverage }}
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      # Each run step stops at the deadline, 2 minutes before the limit of the job. A job that reaches its limit gets
+      # the result "cancelled", also with continue-on-error, and the CI fails. A step that stops at the deadline fails
+      # the step, so continue-on-error applies. The job ends with its summary and its artifact.
+      - name: Start time
+        env:
+          LIMIT: ${{ inputs.coverage-timeout-minutes }}
+          LEVEL: ${{ inputs.coverage && 'error' || 'warning' }}
+        working-directory: .
+        run: |
+          now=$(date +%s)
+          {
+            echo "JOB_START=$now"
+            echo "COVERAGE_DEADLINE=$((now + LIMIT * 60 - 120))"
+            echo "DEADLINE_LEVEL=$LEVEL"
+          } >> "$GITHUB_ENV"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: ${{ inputs.working-directory }}/package.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ fromJSON(inputs.node-versions)[0] }}
+          cache: pnpm
+          cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
+      # As in the job checks: the scripts do not see the folder .shared-actions. The script deadline.ts goes to
+      # RUNNER_TEMP, outside the repository. Node.js starts a .ts file from 22.18. With an older Node.js, the steps
+      # start with no deadline and a warning: DEADLINE_TS is empty, and ${DEADLINE_TS:+node "$DEADLINE_TS"} gives no word.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           path: .shared-actions
           sparse-checkout: .github/actions
           persist-credentials: false
-      - if: (inputs.coverage || (inputs.coverage-on-main && github.event_name == 'push' && !github.event.repository.private && github.ref == format('refs/heads/{0}', github.event.repository.default_branch))) && matrix.os == fromJSON(inputs.os)[0] && matrix.node == fromJSON(inputs.node-versions)[0]
-        uses: ./.shared-actions/.github/actions/coverage
+      - if: inputs.env != '{}' && inputs.env != ''
+        uses: ./.shared-actions/.github/actions/env-json
+        with:
+          env: ${{ inputs.env }}
+      - if: inputs.cue-version != ''
+        uses: ./.shared-actions/.github/actions/setup-cue
+        with:
+          version: ${{ inputs.cue-version }}
+      - working-directory: .
+        run: |
+          if node -e 'process.exit(process.features.typescript ? 0 : 1)'; then
+            cp .shared-actions/.github/actions/coverage/deadline.ts "$RUNNER_TEMP/deadline.ts"
+            echo "DEADLINE_TS=$RUNNER_TEMP/deadline.ts" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Node.js $(node --version) cannot start a .ts file (Node.js 22.18 or later can). The steps of the job coverage have no deadline. Only the limit of the job stops them."
+          fi
+          rm -rf .shared-actions
+      - name: Install
+        env:
+          DEADLINE: ${{ env.COVERAGE_DEADLINE }}
+        run: |
+          ${DEADLINE_TS:+node "$DEADLINE_TS"} pnpm install --frozen-lockfile
+      - name: Setup command
+        if: inputs.setup != ''
+        env:
+          COMMAND: ${{ inputs.setup }}
+          DEADLINE: ${{ env.COVERAGE_DEADLINE }}
+        run: |
+          ${DEADLINE_TS:+node "$DEADLINE_TS"} bash -eo pipefail -c "$COMMAND"
+      # A test can need the output of a build. Thus the job starts each build script that comes before test in the input
+      # scripts, or the scripts of the input coverage-scripts.
+      - name: Scripts before the tests
+        env:
+          SCRIPTS: ${{ inputs.scripts }}
+          CHOSEN: ${{ inputs.coverage-scripts }}
+          RECURSIVE: ${{ inputs.recursive-scripts }}
+          DEADLINE: ${{ env.COVERAGE_DEADLINE }}
+        run: |
+          list=()
+          if [ -n "${CHOSEN// /}" ]; then
+            read -ra list <<< "$CHOSEN"
+          else
+            for script in $SCRIPTS; do
+              [ "$script" = test ] && break
+              if [ "$script" = build ] || [[ "$script" == build:* ]]; then list+=("$script"); fi
+            done
+          fi
+          for script in "${list[@]}"; do
+            if ! [[ "$script" =~ ^[A-Za-z0-9][A-Za-z0-9:._-]*$ ]]; then
+              echo "::error::\"$script\" is not a name of a script."
+              exit 1
+            fi
+            if node -e 'process.exit(require("./package.json").scripts?.[process.argv[1]] ? 0 : 1)' "$script"; then
+              command=(pnpm run "$script")
+            elif [[ " $RECURSIVE " == *" $script "* ]]; then
+              command=(pnpm -r --if-present run "$script")
+            else
+              echo "package.json has no script \"$script\". The job skips it."
+              continue
+            fi
+            echo "::group::${command[*]}"
+            ${DEADLINE_TS:+node "$DEADLINE_TS"} "${command[@]}"
+            echo "::endgroup::"
+          done
+      # The action comes from the commit of this workflow, as in the job changesets. The checkout is after the scripts,
+      # so the scripts do not see the folder .shared-actions.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .shared-actions
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      - uses: ./.shared-actions/.github/actions/coverage
         with:
           floor: ${{ inputs.coverage-floor }}
           strict: ${{ inputs.coverage && 'true' || 'false' }}
           working-directory: ${{ inputs.working-directory }}
+          deadline: ${{ env.COVERAGE_DEADLINE }}
+      # The time of the job and its limit, for a reader of the run. The weekly audit of the main runs reads the same time.
+      - name: Time of the job
+        if: always()
+        working-directory: .
+        env:
+          LIMIT: ${{ inputs.coverage-timeout-minutes }}
+        run: |
+          used=$(( $(date +%s) - JOB_START ))
+          percent=$(( used * 100 / (LIMIT * 60) ))
+          line="The job coverage took $((used / 60)) min $((used % 60)) s of its limit of $LIMIT min ($percent %)."
+          printf '\n%s\n' "$line" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$percent" -gt 80 ]; then
+            echo "::warning::$line Raise the input coverage-timeout-minutes, or make the tests faster."
+          else
+            echo "$line"
+          fi
