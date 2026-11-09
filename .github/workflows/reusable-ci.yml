@@ -342,7 +342,8 @@ jobs:
           cache: pnpm
           cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
       # As in the job checks: the scripts do not see the folder .shared-actions. The script deadline.ts goes to
-      # RUNNER_TEMP, outside the repository.
+      # RUNNER_TEMP, outside the repository. Node.js starts a .ts file from 22.18. With an older Node.js, the steps
+      # start with no deadline and a warning: DEADLINE_TS is empty, and ${DEADLINE_TS:+node "$DEADLINE_TS"} gives no word.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
@@ -360,20 +361,25 @@ jobs:
           version: ${{ inputs.cue-version }}
       - working-directory: .
         run: |
-          cp .shared-actions/.github/actions/coverage/deadline.ts "$RUNNER_TEMP/deadline.ts"
+          if node -e 'process.exit(process.features.typescript ? 0 : 1)'; then
+            cp .shared-actions/.github/actions/coverage/deadline.ts "$RUNNER_TEMP/deadline.ts"
+            echo "DEADLINE_TS=$RUNNER_TEMP/deadline.ts" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Node.js $(node --version) cannot start a .ts file (Node.js 22.18 or later can). The steps of the job coverage have no deadline. Only the limit of the job stops them."
+          fi
           rm -rf .shared-actions
       - name: Install
         env:
           DEADLINE: ${{ env.COVERAGE_DEADLINE }}
         run: |
-          node "$RUNNER_TEMP/deadline.ts" pnpm install --frozen-lockfile
+          ${DEADLINE_TS:+node "$DEADLINE_TS"} pnpm install --frozen-lockfile
       - name: Setup command
         if: inputs.setup != ''
         env:
           COMMAND: ${{ inputs.setup }}
           DEADLINE: ${{ env.COVERAGE_DEADLINE }}
         run: |
-          node "$RUNNER_TEMP/deadline.ts" bash -eo pipefail -c "$COMMAND"
+          ${DEADLINE_TS:+node "$DEADLINE_TS"} bash -eo pipefail -c "$COMMAND"
       # A test can need the output of a build. Thus the job starts each build script that comes before test in the input
       # scripts, or the scripts of the input coverage-scripts.
       - name: Scripts before the tests
@@ -406,7 +412,7 @@ jobs:
               continue
             fi
             echo "::group::${command[*]}"
-            node "$RUNNER_TEMP/deadline.ts" "${command[@]}"
+            ${DEADLINE_TS:+node "$DEADLINE_TS"} "${command[@]}"
             echo "::endgroup::"
           done
       # The action comes from the commit of this workflow, as in the job changesets. The checkout is after the scripts,

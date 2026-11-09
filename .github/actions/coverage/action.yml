@@ -41,6 +41,12 @@ runs:
         level=error
         if [ "$STRICT" != "true" ]; then level=warning; fi
         export DEADLINE_LEVEL=$level
+        # The scripts of the action are TypeScript. Node.js starts a .ts file from 22.18.
+        if ! node -e 'process.exit(process.features.typescript ? 0 : 1)'; then
+          echo "::$level::Node.js $(node --version) cannot start the scripts of the action coverage (Node.js 22.18 or later can). The step measures no coverage."
+          if [ "$STRICT" = "true" ]; then exit 1; fi
+          exit 0
+        fi
         mapfile -t dirs < <(pnpm ls -r --json --depth -1 | node "$SCRIPT" packages)
         if [ ${#dirs[@]} -eq 0 ]; then
           echo "::notice::No package has a test script that starts Vitest."
