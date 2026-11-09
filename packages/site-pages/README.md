@@ -171,6 +171,7 @@ site-pages cue --out dist
 - A code block that is wider than its box shows a fade at the edge with more content. A block that is not wider shows no cue.
 - A block with `data-overflow-ok` or with the class `scroll-cue` stays as it is. The text of `script`, `style` and `textarea` does not change.
 - In a browser with no scroll timelines, a small script gives `--scroll-cue-bg` the background color of the block. Thus the block keeps the color of its theme.
+- A script of a page can make a code block in the browser, for example from Markdown. Thus a page with a script of its own also gets the style and a small script. That script gives the cue to each code block that the page makes, by the same rules.
 - The command can start two times on one folder. The second start gives the same pages.
 
 In `reusable-pages.yml`, the input `scroll-cue` (default `true`) starts the command before the site check and the upload.
