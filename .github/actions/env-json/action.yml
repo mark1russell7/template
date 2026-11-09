@@ -1,0 +1,29 @@
+name: env-json
+description: >-
+  Sets the environment variables of a JSON object for the next steps of the job. Each name must be a name of an
+  environment variable. The jobs checks and coverage of reusable-ci.yml use it with the input env.
+inputs:
+  env:
+    description: The variables, as a JSON object of names and values.
+    default: "{}"
+runs:
+  using: composite
+  steps:
+    - name: Environment variables
+      if: inputs.env != '{}' && inputs.env != ''
+      shell: bash
+      env:
+        ENV_JSON: ${{ inputs.env }}
+      run: |
+        node -e '
+          const { appendFileSync } = require("node:fs");
+          const { randomBytes } = require("node:crypto");
+          const env = JSON.parse(process.env.ENV_JSON);
+          if (env === null || typeof env !== "object" || Array.isArray(env)) throw new Error("The input env must be a JSON object.");
+          for (const [name, value] of Object.entries(env)) {
+            if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw new Error(`"${name}" is not a name of an environment variable.`);
+            const end = `END_${randomBytes(8).toString("hex")}`;
+            appendFileSync(process.env.GITHUB_ENV, `${name}<<${end}\n${value}\n${end}\n`);
+            console.log(`${name} is set.`);
+          }
+        '
