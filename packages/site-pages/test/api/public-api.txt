@@ -50,6 +50,7 @@ KpiError: build/chunks/freshness.d.ts#KpiError
 type KpiFile: build/chunks/freshness.d.ts#KpiFile
 type KpiInput: build/chunks/freshness.d.ts#KpiInput
 type KpiMeasure: build/chunks/freshness.d.ts#KpiMeasure
+type KpiTarget: build/chunks/freshness.d.ts#KpiTarget
 LAST_LIMIT_START: build/chunks/freshness.d.ts#LAST_LIMIT_START
 type Link: build/chunks/freshness.d.ts#Link
 type LinkOptions: build/index.d.ts#LinkOptions
@@ -520,6 +521,13 @@ interface KpiMeasure {
   unit?: string;
   at?: string;
   notCounted?: string;
+  targets?: KpiTarget[];
+}
+
+### build/chunks/freshness.d.ts#KpiTarget
+interface KpiTarget {
+  value: number;
+  by: string;
 }
 
 ### build/chunks/freshness.d.ts#LAST_LIMIT_START
