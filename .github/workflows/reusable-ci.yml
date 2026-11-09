@@ -96,6 +96,12 @@ on:
           main. false turns it off.
         type: boolean
         default: true
+      release-window:
+        description: >-
+          On a pull request that changes .github/workflows or scripts/release, the job release-window fails while a
+          release.yml run of the base branch is open (RELEASING.md, "A tag that GitHub refuses"). false turns it off.
+        type: boolean
+        default: true
     secrets:
       CONVENTIONS_PRIVATE_PATTERNS:
         description: >-
@@ -314,3 +320,45 @@ jobs:
           floor: ${{ inputs.coverage-floor }}
           strict: ${{ inputs.coverage && 'true' || 'false' }}
           working-directory: ${{ inputs.working-directory }}
+
+  # GitHub refuses the tag of a release (HTTP 403) when a workflow file changes between the version merge and the tag job
+  # (RELEASING.md, "A tag that GitHub refuses"). Thus a pull request that changes .github/workflows or scripts/release
+  # fails at once while a release.yml run of its base branch is open. A red check stops each merge: a person, the
+  # release train and the automerge of Renovate. After the release, a new run of the check passes.
+  release-window:
+    if: github.event_name == 'pull_request' && inputs.release-window
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      # The merge commit and its two parents: the files of the change are the difference to the first parent
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+          sparse-checkout: .github
+      - name: No open release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          files=$(git diff --no-renames --name-only HEAD^1 HEAD)
+          if ! grep -qE '^(\.github/workflows/|scripts/release/)' <<< "$files"; then
+            echo "The change has no file of .github/workflows or scripts/release."
+            exit 0
+          fi
+          if [ ! -f .github/workflows/release.yml ]; then
+            echo "The repository has no release.yml."
+            exit 0
+          fi
+          if ! open=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow release.yml --branch "$BASE" --limit 20 \
+            --json databaseId,status,url --jq '[.[] | select(.status != "completed")] | map(.url) | join(" ")'); then
+            echo "::warning::The job cannot read the runs of release.yml. A private repository gives the token actions: read."
+            exit 0
+          fi
+          if [ -n "$open" ]; then
+            echo "::error::A release.yml run of $BASE is open: $open. This change has a file of .github/workflows or scripts/release, so a merge now makes GitHub refuse the tag of that release (HTTP 403, RELEASING.md). Start this check again after the release."
+            exit 1
+          fi
+          echo "No release.yml run of $BASE is open."

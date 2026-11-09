@@ -141,6 +141,7 @@ The token of a workflow cannot change workflow files. Thus GitHub refuses a tag 
 - An old commit gets no tag after a change to a workflow file. For example, the versions before a repository copies this `release.yml` get no tag from the workflow.
 - For a version that the run published, the job fails. For a different version, the job gives a warning.
 - For each refused tag, the summary of the run shows a `gh release create` command. Start it with your own GitHub token.
+- The job `release-window` of the shared CI fails a pull request that changes a workflow file while a release is open (`CI.md`, "The release window").
 
 ### Tag rulesets
 
