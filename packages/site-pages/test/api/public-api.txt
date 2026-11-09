@@ -77,11 +77,11 @@ RELEASES_SCRIPT: build/index.d.ts#RELEASES_SCRIPT
 type ReadReleasesOptions: build/index.d.ts#ReadReleasesOptions
 type ReadStatusBoardOptions: build/index.d.ts#ReadStatusBoardOptions
 ReferenceDataError: build/index.d.ts#ReferenceDataError
-type ReferenceDeclaration: build/index.d.ts#ReferenceDeclaration
-type ReferenceEntry: build/index.d.ts#ReferenceEntry
-type ReferenceFile: build/index.d.ts#ReferenceFile
-type ReferenceName: build/index.d.ts#ReferenceName
-type ReferencePackage: build/index.d.ts#ReferencePackage
+type ReferenceDeclaration: build/chunks/freshness.d.ts#ReferenceDeclaration
+type ReferenceEntry: build/chunks/freshness.d.ts#ReferenceEntry
+type ReferenceFile: build/chunks/freshness.d.ts#ReferenceFile
+type ReferenceName: build/chunks/freshness.d.ts#ReferenceName
+type ReferencePackage: build/chunks/freshness.d.ts#ReferencePackage
 type Release: build/chunks/freshness.d.ts#Release
 type ReleaseChange: build/chunks/freshness.d.ts#ReleaseChange
 ReleaseDataError: build/index.d.ts#ReleaseDataError
@@ -594,6 +594,39 @@ interface PageStamp {
   readonly noLimit?: NoAgeLimit;
 }
 
+### build/chunks/freshness.d.ts#ReferenceDeclaration
+interface ReferenceDeclaration {
+  text: string;
+  doc?: string;
+}
+
+### build/chunks/freshness.d.ts#ReferenceEntry
+interface ReferenceEntry {
+  subpath: string;
+  names: ReferenceName[];
+}
+
+### build/chunks/freshness.d.ts#ReferenceFile
+interface ReferenceFile {
+  format: "api-model/1";
+  packages: ReferencePackage[];
+}
+
+### build/chunks/freshness.d.ts#ReferenceName
+interface ReferenceName {
+  name: string;
+  key: string;
+  isType: boolean;
+  kind: "declaration" | "namespace" | "external" | "ambient";
+}
+
+### build/chunks/freshness.d.ts#ReferencePackage
+interface ReferencePackage {
+  packageName: string;
+  entries: ReferenceEntry[];
+  declarations: Record<string, ReferenceDeclaration>;
+}
+
 ### build/chunks/freshness.d.ts#Release
 interface Release {
   version: string;
@@ -976,7 +1009,7 @@ type GitHubReleaseLag = {
 };
 
 ### build/index.d.ts#HELP
-export declare const HELP = "Usage: site-pages build --out <dir> [options]\n\nWrites <out>/data/releases.json, <out>/data/status.json, <out>/releases/index.html\nand <out>/status/index.html. Start it in the repository, after the build of the site.\n\nOptions:\n  --out <dir>           The built output folder of the site (necessary)\n  --repo <owner/name>   The GitHub repository (default: $GITHUB_REPOSITORY, else the remote \"origin\")\n  --base </name/>       The path of the site home (default: \"/<name>/\", or \"/\" for <owner>.github.io)\n  --roadmap <file>      The roadmap file (default: none, the status page has only the GitHub part)\n  --packages <names>    npm names or a @scope, separated by commas, for the npm dates\n  --changesets <glob>   The changelog files (default: packages/*/CHANGELOG.md, else CHANGELOG.md)\n  --group <name>        The npm name of the package whose changelog gives the versions\n  --token <token>       A GitHub token with read access (default: $GITHUB_TOKEN)\n  --css <file>          A CSS file for the pages, after the default CSS\n  --site-name <name>    The name of the site in the header (default: the repository name)\n  --data-only           Write only the JSON data, not the pages\n  -h, --help            Show this help\n\nUsage: site-pages check (--out <dir> | --url <url>) [options]\n\nOpens the pages of the site in a headless Chromium at phone and desktop widths. Start\n\"site-pages check --help\" for its options.\n\nUsage: site-pages freshness --stamps <file> [options]\n\nExamine the data stamps of the measured pages of a site. See\n\"site-pages freshness --help\" for its options.\n";
+export declare const HELP = "Usage: site-pages build --out <dir> [options]\n\nWrites <out>/data/releases.json, <out>/data/status.json, <out>/releases/index.html\nand <out>/status/index.html. Start it in the repository, after the build of the site.\nWhen <out>/reference.json exists (\"api-report model --out <out>/reference.json\" writes\nit), it also writes <out>/data/reference.json and <out>/reference/index.html.\n\nOptions:\n  --out <dir>           The built output folder of the site (necessary)\n  --repo <owner/name>   The GitHub repository (default: $GITHUB_REPOSITORY, else the remote \"origin\")\n  --base </name/>       The path of the site home (default: \"/<name>/\", or \"/\" for <owner>.github.io)\n  --roadmap <file>      The roadmap file (default: none, the status page has only the GitHub part)\n  --packages <names>    npm names or a @scope, separated by commas, for the npm dates\n  --changesets <glob>   The changelog files (default: packages/*/CHANGELOG.md, else CHANGELOG.md)\n  --group <name>        The npm name of the package whose changelog gives the versions\n  --token <token>       A GitHub token with read access (default: $GITHUB_TOKEN)\n  --css <file>          A CSS file for the pages, after the default CSS\n  --site-name <name>    The name of the site in the header (default: the repository name)\n  --data-only           Write only the JSON data, not the pages\n  -h, --help            Show this help\n\nUsage: site-pages check (--out <dir> | --url <url>) [options]\n\nOpens the pages of the site in a headless Chromium at phone and desktop widths. Start\n\"site-pages check --help\" for its options.\n\nUsage: site-pages freshness --stamps <file> [options]\n\nExamine the data stamps of the measured pages of a site. See\n\"site-pages freshness --help\" for its options.\n";
 
 ### build/index.d.ts#ItemGroup
 interface ItemGroup {
@@ -1086,39 +1119,6 @@ interface ReadStatusBoardOptions {
 export declare class ReferenceDataError extends Error {
   readonly problems: readonly string[];
   constructor(problems: readonly string[]);
-}
-
-### build/index.d.ts#ReferenceDeclaration
-interface ReferenceDeclaration {
-  text: string;
-  doc?: string;
-}
-
-### build/index.d.ts#ReferenceEntry
-interface ReferenceEntry {
-  subpath: string;
-  names: ReferenceName[];
-}
-
-### build/index.d.ts#ReferenceFile
-interface ReferenceFile {
-  format: "api-model/1";
-  packages: ReferencePackage[];
-}
-
-### build/index.d.ts#ReferenceName
-interface ReferenceName {
-  name: string;
-  key: string;
-  isType: boolean;
-  kind: "declaration" | "namespace" | "external" | "ambient";
-}
-
-### build/index.d.ts#ReferencePackage
-interface ReferencePackage {
-  packageName: string;
-  entries: ReferenceEntry[];
-  declarations: Record<string, ReferenceDeclaration>;
 }
 
 ### build/index.d.ts#ReleaseDataError
