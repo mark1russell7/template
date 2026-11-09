@@ -221,3 +221,22 @@ export const hasFile = (dir: string, file: string): boolean => existsSync(join(d
 export function codePackages(context: Pick<RuleContext, "rootPackage" | "packages">): readonly PackageInfo[] {
   return context.packages.length > 0 ? context.packages : [context.rootPackage];
 }
+
+/**
+ * This function gives the root package and the code packages, each one time. The root counts also when the globs of the
+ * workspace leave it out. A repository can publish its root and keep a private site in its workspace.
+ */
+export function rootAndCodePackages(context: Pick<RuleContext, "rootPackage" | "packages">): readonly PackageInfo[] {
+  const all = [context.rootPackage, ...codePackages(context)];
+  return all.filter((pkg, index) => all.findIndex((other) => other.file === pkg.file) === index);
+}
+
+/**
+ * This function gives the packages with a release version. These are the packages of `rootAndCodePackages` that are not
+ * private and have a name and a version.
+ */
+export function versionedPackages(context: Pick<RuleContext, "rootPackage" | "packages">): readonly PackageInfo[] {
+  return rootAndCodePackages(context).filter(
+    (pkg) => pkg.manifest["private"] !== true && typeof pkg.manifest["name"] === "string" && typeof pkg.manifest["version"] === "string",
+  );
+}

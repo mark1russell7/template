@@ -5,6 +5,10 @@
  * occurs also on a site that does not use the rehype plugin of site-pages. A box with no overflow has no active scroll
  * timeline, so it shows no cue.
  *
+ * A script of the page can make a code block after the load, for example from Markdown or from a template string. Thus
+ * each page with a script of its own also gets the style and a script. That script gives the cue to each code block
+ * that the page adds.
+ *
  * A block with `data-overflow-ok` or with the class `scroll-cue` stays as it is. The text of `script`, `style` and
  * `textarea` elements does not change.
  */
@@ -27,17 +31,26 @@ export function cueCss(): string {
 }
 
 /**
- * The script of a browser with no scroll timelines. In such a browser, the style gives the box the background color
- * `--scroll-cue-bg`. The script sets that variable to the color of the code block. When the block has no color, the
- * script uses the color of its first ancestor with a color. Thus the block keeps the color of its theme. A browser with
- * scroll timelines does not need the script.
+ * The script of the cue in the browser. It has two jobs.
+ *
+ * - It gives the cue to each code block that a script of the page makes, at the start and after it. The rules of
+ *   `cueAttributes` apply: a block with `data-overflow-ok` or with the class `scroll-cue` of the page stays as it is.
+ * - In a browser with no scroll timelines, the style gives the box the background color `--scroll-cue-bg`. The script
+ *   sets that variable to the color of each block with the mark. When the block has no color, the script uses the color
+ *   of its first ancestor with a color. Thus the block keeps the color of its theme.
  */
 export const CUE_SCRIPT: string =
-  '(() => { if (!window.CSS || CSS.supports("animation-timeline: scroll()")) return; ' +
-  `for (const box of document.querySelectorAll("pre[${CUE_ATTRIBUTE}]")) { box.classList.remove("scroll-cue"); ` +
-  'let node = box; let color = ""; ' +
+  '(() => { const old = !!window.CSS && !CSS.supports("animation-timeline: scroll()"); ' +
+  'const paint = (box) => { box.classList.remove("scroll-cue"); let node = box; let color = ""; ' +
   "while (node) { color = getComputedStyle(node).backgroundColor; if (color !== \"transparent\" && !/^rgba\\(.*,\\s*0\\)$/.test(color)) break; node = node.parentElement; } " +
-  'box.classList.add("scroll-cue"); if (node) box.style.setProperty("--scroll-cue-bg", color); } })();';
+  'box.classList.add("scroll-cue"); if (node) box.style.setProperty("--scroll-cue-bg", color); }; ' +
+  `const cue = (box) => { if (box.hasAttribute("data-overflow-ok")) return; if (!box.hasAttribute("${CUE_ATTRIBUTE}")) { ` +
+  'if (box.classList.contains("scroll-cue")) return; box.classList.add("scroll-cue"); ' +
+  `if (!box.hasAttribute("tabindex")) box.tabIndex = 0; box.setAttribute("${CUE_ATTRIBUTE}", ""); } if (old) paint(box); }; ` +
+  'const scan = (root) => { if (root.nodeType !== 1) return; if (root.matches("pre")) cue(root); for (const box of root.querySelectorAll("pre")) cue(box); }; ' +
+  "scan(document.documentElement); " +
+  "new MutationObserver((records) => { for (const record of records) for (const node of record.addedNodes) scan(node); })" +
+  ".observe(document.documentElement, { childList: true, subtree: true }); })();";
 
 const CLASS_PATTERN = /\sclass\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/i;
 
@@ -59,10 +72,15 @@ export function cueAttributes(attributes: string): string | undefined {
 /** The text of these elements is not HTML, so the step does not change it. */
 const RAW_TEXT = /<(script|style|textarea)\b[\s\S]*?<\/\1\s*>/gi;
 
+/** A script element that can make a code block: each script, but not a JSON data block. */
+const PAGE_SCRIPT = /<script\b(?![^>]*\btype\s*=\s*["']?application\/(?:ld\+)?json)[^>]*>/i;
+
 /**
  * This function writes the cue into the HTML of one page, and gives the HTML and the number of code blocks that it
  * changed. The style comes last in `<head>`, and the script comes last in `<body>`. A style and a script of an earlier
- * start go away, so the function can start two times on one page. A page with no changed block gets no style.
+ * start go away, so the function can start two times on one page. The script of a page can make a code block. Thus a
+ * page with a script of its own gets the style and the script also with no changed block. A page with no changed block
+ * and no script gets no style.
  */
 export function injectCue(html: string, css: string): { html: string; boxes: number } {
   let boxes = 0;
@@ -81,7 +99,7 @@ export function injectCue(html: string, css: string): { html: string; boxes: num
     at = raw.index + raw[0].length;
   }
   out += edit(source.slice(at));
-  const marked = boxes > 0 || source.includes(` ${CUE_ATTRIBUTE}`);
+  const marked = boxes > 0 || source.includes(` ${CUE_ATTRIBUTE}`) || PAGE_SCRIPT.test(source);
   if (!marked) return { html, boxes: 0 };
   const style = `<style id="${STYLE_ID}">${css}</style>`;
   const script = `<script id="${SCRIPT_ID}">${CUE_SCRIPT}</script>`;
@@ -113,7 +131,8 @@ export const CUE_HELP = `Usage: site-pages cue --out <dir>
 Gives each code block (pre) of each HTML page of the built site folder the class scroll-cue and a
 place in the tab order, and writes the style scroll-cue.css into each changed page. A code block that
 is wider than its box then shows a fade at the edge with more content. A block with the attribute
-data-overflow-ok or the class scroll-cue stays as it is.
+data-overflow-ok or the class scroll-cue stays as it is. A page with a script also gets a script that
+gives the cue to each code block that the page makes in the browser.
 
 Options:
   --out <dir>  The built site folder
