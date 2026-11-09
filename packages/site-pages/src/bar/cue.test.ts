@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { findBrowser, launch, type Browser } from "../check/browser.ts";
+import { checkSite } from "../check/check.ts";
 import { applyCue, CUE_ATTRIBUTE, CUE_SCRIPT, cueAttributes, cueCss, injectCue, runCueCli } from "./cue.ts";
 
 const css = cueCss();
@@ -51,6 +52,17 @@ describe("injectCue", () => {
   it("does not change a page with no block to change", () => {
     const html = page('<p>text</p><pre data-overflow-ok>a</pre><pre class="scroll-cue">b</pre>');
     expect(injectCue(html, css)).toEqual({ html, boxes: 0 });
+  });
+
+  it("writes the style and the script into a page with a script of its own, also with no block", () => {
+    const { html, boxes } = injectCue(page('<div id="readme"></div><script type="module" src="/main.js"></script>'), css);
+    expect(boxes).toBe(0);
+    expect(html.match(/<style id="site-cue-css">/g)).toHaveLength(1);
+    expect(html).toContain(`<script id="site-cue-js">${CUE_SCRIPT}</script></body>`);
+    expect(injectCue(html, css).html).toBe(html);
+    // A JSON data block makes no code block
+    const data = page('<script type="application/ld+json">{"@type":"WebSite"}</script><p>text</p>');
+    expect(injectCue(data, css)).toEqual({ html: data, boxes: 0 });
   });
 
   it("does not change the text of a script, a style or a textarea", () => {
@@ -120,4 +132,45 @@ describe.skipIf(executable === undefined)("the scroll cue of the step in a brows
     expect(read["wide"]?.right).not.toBe("0px");
     expect(read["narrow"]).toMatchObject({ overflow: false, left: "0px", right: "0px", tab: 0 });
   }, 60_000);
+
+  it("gives the cue to each code block that a script of the page makes, by the rules of the step", async () => {
+    const made =
+      '<style>body{margin:0}pre{width:300px;margin:0}</style><div id="root"></div><script>' +
+      `const root = document.getElementById("root"); root.innerHTML = '<pre id="now">${"x".repeat(200)}</pre>'; ` +
+      `setTimeout(() => root.insertAdjacentHTML("beforeend", '<section><pre id="later" class="code">${"y".repeat(200)}</pre></section>' + ` +
+      `'<pre id="ok" data-overflow-ok>z</pre><pre id="own" class="scroll-cue" tabindex="-1">w</pre>'), 50);</script>`;
+    const { html, boxes } = injectCue(page(made), css);
+    expect(boxes).toBe(0);
+    const loaded = browser.page.once("Page.loadEventFired", 30_000);
+    await browser.page.send("Page.navigate", { url: `data:text/html;base64,${Buffer.from(html).toString("base64")}` });
+    await loaded;
+    const read = await browser.page.evaluate<Record<string, { cue: boolean; mark: boolean; tab: number; animation: string }>>(
+      `new Promise((go) => setTimeout(() => requestAnimationFrame(() => go(Object.fromEntries(["now", "later", "ok", "own"].map((id) => { ` +
+        `const box = document.getElementById(id); ` +
+        `return [id, { cue: box.classList.contains("scroll-cue"), mark: box.hasAttribute("${CUE_ATTRIBUTE}"), tab: box.tabIndex, animation: getComputedStyle(box).animationName }]; })))), 200))`,
+    );
+    expect(read["now"]).toEqual({ cue: true, mark: true, tab: 0, animation: "scroll-cue-fades" });
+    expect(read["later"]).toEqual({ cue: true, mark: true, tab: 0, animation: "scroll-cue-fades" });
+    expect(read["ok"]).toMatchObject({ cue: false, mark: false });
+    expect(read["own"]).toMatchObject({ cue: true, mark: false, tab: -1 });
+  }, 60_000);
+
+  it("makes the site check pass a wide code block that a script makes, and the check still fails it with no cue", async () => {
+    const out = mkdtempSync(join(tmpdir(), "cue-check-"));
+    folders.push(out);
+    const site = (body: string) =>
+      `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>t</title></head><body>${body}</body></html>`;
+    // The style of the site lets a code block scroll, as the style of most sites does
+    const readme = `<style>pre{overflow-x:auto}</style><h1>Readme</h1><div id="readme"></div><script>document.getElementById("readme").innerHTML = "<pre><code>${"SELECT version FROM _migrations ORDER BY version; ".repeat(4)}</code></pre>";</script>`;
+    for (const folder of ["cued", "plain"]) {
+      mkdirSync(join(out, folder));
+      writeFileSync(join(out, folder, "index.html"), site(readme));
+    }
+    const cued = join(out, "cued", "index.html");
+    writeFileSync(cued, injectCue(readFileSync(cued, "utf8"), css).html);
+    const result = await checkSite({ out, pages: ["/cued/", "/plain/"], widths: [360], schemes: ["light"], settleMs: 100, timeoutMs: 30_000 });
+    const at = (path: string) => result.views.find((view) => view.page === path)?.problems ?? [];
+    expect(at("/cued/")).toEqual([]);
+    expect(at("/plain/").join(" ")).toContain("a code block goes out of view at 360 px: pre in pre");
+  }, 120_000);
 });
