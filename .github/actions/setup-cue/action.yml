@@ -115,7 +115,7 @@ runs:
         echo "$DIR" >> "$GITHUB_PATH"
         cli="$DIR/cue"
         [ -x "$cli" ] || cli="$DIR/cue.exe"
-        line=$("$cli" version | head -1)
+        line=$("$cli" version | sed -n 1p)  # sed reads all the output: with head, pipefail can fail the step on SIGPIPE (exit 141)
         echo "$line"
         [[ "$line" == *"v$VERSION"* ]] || { echo "::error::The CLI gives \"$line\", not the version v$VERSION."; exit 1; }
         echo "version=$VERSION" >> "$GITHUB_OUTPUT"

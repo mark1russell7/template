@@ -155,7 +155,7 @@ jobs:
         run: |
           cue version
           [ "$VERSION" = 0.15.1 ]
-          cue version | head -1 | grep -q "v0.15.1"
+          [[ "$(cue version | sed -n 1p)" == *"v0.15.1"* ]]
       # The archive of 0.15.1 is in the cache after the first call, and a wrong sha256 fails it there.
       # So a damaged cache entry fails the job, and this test needs no download after the first run.
       - id: wrong
@@ -185,7 +185,7 @@ jobs:
       recursive-scripts: ""
       changesets: false
       run: |
-        cue version | head -1 | grep -q "v0.15.1"
+        [[ "$(cue version | sed -n 1p)" == *"v0.15.1"* ]]
         test ! -e "$GITHUB_WORKSPACE/.shared-actions"
 
   data-stamps:
