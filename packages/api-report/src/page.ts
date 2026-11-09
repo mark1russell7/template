@@ -3,6 +3,7 @@
  * call, and the check holds its names. Each export shows in the code of the page. The page gives no name
  * as an export that the package does not have.
  */
+import { escapeRegExp } from "@mark1russell7/text";
 import { byCode } from "./entries.ts";
 
 /** The value of one field of the front matter of the page of each export. */
@@ -69,8 +70,7 @@ function codeOf(text: string): { readonly blocks: readonly string[]; readonly sp
 
 /** This function is true if the code has `name` as a whole word. */
 function hasWord(code: string, name: string): boolean {
-  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(?<![\\w$])${escaped}(?![\\w$])`).test(code);
+  return new RegExp(`(?<![\\w$])${escapeRegExp(name)}(?![\\w$])`).test(code);
 }
 
 /**

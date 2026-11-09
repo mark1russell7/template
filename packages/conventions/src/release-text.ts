@@ -5,6 +5,8 @@
  * does not import this package. A test of this package compares the two.
  */
 
+import { escapeRegExp as escape } from "@mark1russell7/text";
+
 /** GitHub refuses a release text of more than 125000 characters. */
 export const MAX_NOTES: number = 100_000;
 
@@ -12,8 +14,6 @@ export const MAX_NOTES: number = 100_000;
 export function tagName(name: string, version: string, packageCount: number): string {
   return packageCount === 1 ? `v${version}` : `${name}@${version}`;
 }
-
-const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * This function gives the text of the section of a version in a changelog, or undefined.

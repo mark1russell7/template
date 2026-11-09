@@ -14,6 +14,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, posix } from "node:path";
+import { escapeRegExp as escape } from "@mark1russell7/text";
 
 /** A rule of dependency-cruiser (the `forbidden` list). The package does not depend on the types of dependency-cruiser. */
 export interface Rule {
@@ -74,8 +75,6 @@ export interface BoundaryOptions {
   /** More options of dependency-cruiser. They replace the default options with the same key. */
   options?: Record<string, unknown>;
 }
-
-const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** The default build folders of a package. */
 const BUILD_FOLDERS = ["dist", "build"];

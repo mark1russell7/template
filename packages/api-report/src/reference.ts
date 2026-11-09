@@ -3,6 +3,7 @@
  * page, and a hand-written page explains the main calls. The report has the names and the declarations, so
  * this page has the same text as the report in each build.
  */
+import { escapeRegExp } from "@mark1russell7/text";
 import type { FrontmatterValue } from "./page.ts";
 
 /** One line of an entry of a report. */
@@ -107,7 +108,7 @@ function withExportNames(code: string, items: readonly ReportItem[]): string {
   for (const item of items) {
     const local = localName(item);
     if (!BUNDLER_NAME.test(local) || item.name.includes(".") || item.kind !== "declaration") continue;
-    const word = new RegExp(`(?<![\\w$])${local.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&")}(?![\\w$])`, "g");
+    const word = new RegExp(`(?<![\\w$])${escapeRegExp(local)}(?![\\w$])`, "g");
     text = text.replace(word, () => item.name);
   }
   return text;
