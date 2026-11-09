@@ -76,12 +76,12 @@ export const HOMES: readonly Home[] = [
   {
     area: "test-generation",
     title: "Test helpers and test generation",
-    covers: "property tests on fast-check, pairwise and covering arrays, metamorphic relations, chaos and load schedules, shared test fixtures",
+    covers: "property tests on fast-check, pairwise and covering arrays, metamorphic relations, chaos and load schedules, shared test fixtures, the capture of the OpenTelemetry SDK and the propagation gate for tests",
     packages: [],
     repo: "mark1russell7/rigor",
     state: "planned",
-    words: ["test", "testing", "property", "fast-check", "arbitrary", "pairwise", "metamorphic", "chaos", "load", "fake", "fastcheck", "covering", "combinatorial", "fault", "injection", "soak", "stress", "throughput", "shrink"],
-    note: "@mark1russell7/vex-testkit is only for Vex domains. A fake shell for tests is in @procedures/shell.",
+    words: ["test", "testing", "property", "fast-check", "arbitrary", "pairwise", "metamorphic", "chaos", "load", "fake", "fastcheck", "covering", "combinatorial", "fault", "injection", "soak", "stress", "throughput", "shrink", "capture", "in-memory", "exporter", "testkit"],
+    note: "@mark1russell7/vex-testkit is only for Vex domains. A fake shell for tests is in @procedures/shell. The capture of the OpenTelemetry SDK for tests (captureTelemetry) and the propagation gate are in @mark1russell7/rigor-testkit, entries /otel and /propagation.",
   },
   {
     area: "exact-math",

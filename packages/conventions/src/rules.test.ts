@@ -986,6 +986,15 @@ describe("api-report-script", () => {
     expect(rule(fixture({ "package.json": { name: "one" } }), "api-report-script").status).toBe("break");
   });
 
+  it("asks a public root with a private workspace for the script", () => {
+    // The form of cue on 2026-11-08: the root is the public package, and the workspace names only a private site
+    const site = { "packages/site/package.json": { name: "site", private: true } };
+    const result = rule(workspace({ name: "@scope/root", private: false, scripts: SCRIPTS }, site), "api-report-script");
+    expect(result.status).toBe("break");
+    expect(result.breaks[0]?.message).toContain("public package: @scope/root.");
+    expect(rule(workspace({ name: "@scope/root", private: false, scripts: { "check:api": "api-report check" } }, site), "api-report-script").status).toBe("pass");
+  });
+
   it("adds the script and the dependency, with the form of the file", () => {
     const root = fixture({
       "package.json": '{\r\n  "name": "root",\r\n  "private": true,\r\n  "files": ["a", "b"],\r\n  "scripts": {\r\n    "test": "vitest"\r\n  },\r\n  "devDependencies": {\r\n    "@mark1russell7/conventions": "^0.29.0",\r\n    "typescript": "^6.0.0"\r\n  }\r\n}\r\n',
