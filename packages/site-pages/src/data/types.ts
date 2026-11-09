@@ -143,6 +143,16 @@ export interface KpiMeasure {
   at?: string;
   /** The things that this count does not read, in plain words. So a 0 does not seem to tell more than the count measured. */
   notCounted?: string;
+  /** The values that the project plans for this measure, each with its date. The list is in the order of the dates. */
+  targets?: KpiTarget[];
+}
+
+/** One planned value of a measure, with the date for it. */
+export interface KpiTarget {
+  /** The planned value. It is a finite number that is not negative. */
+  value: number;
+  /** The date of the plan in UTC, as `YYYY-MM-DD`. */
+  by: string;
 }
 
 /** One engine that made the data of `kpi.json`. */

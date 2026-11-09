@@ -153,9 +153,11 @@ jobs:
         env:
           VERSION: ${{ steps.cue.outputs.version }}
         run: |
-          cue version
+          # No pipe into head or grep -q: an early close gives SIGPIPE (exit 141), and pipefail fails the step.
+          out=$(cue version)
+          echo "$out"
           [ "$VERSION" = 0.15.1 ]
-          cue version | head -1 | grep -q "v0.15.1"
+          [[ "${out%%$'\n'*}" == *v0.15.1* ]]
       # The archive of 0.15.1 is in the cache after the first call, and a wrong sha256 fails it there.
       # So a damaged cache entry fails the job, and this test needs no download after the first run.
       - id: wrong
@@ -185,7 +187,8 @@ jobs:
       recursive-scripts: ""
       changesets: false
       run: |
-        cue version | head -1 | grep -q "v0.15.1"
+        out=$(cue version)
+        [[ "${out%%$'\n'*}" == *v0.15.1* ]]
         test ! -e "$GITHUB_WORKSPACE/.shared-actions"
 
   data-stamps:
