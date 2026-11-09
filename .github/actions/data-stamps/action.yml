@@ -21,6 +21,8 @@ runs:
       shell: bash
       env:
         STAMPS: ${{ inputs.stamps }}
+        # The gate reads the jobs of a run in flight with a hold. The caller job gives the permission actions: read.
+        GITHUB_TOKEN: ${{ github.token }}
         CONFIG_SHA: ${{ inputs.config-sha }}
       run: |
         # The workflow file comes from a newer commit than the checkout. Its input can name a file that the older

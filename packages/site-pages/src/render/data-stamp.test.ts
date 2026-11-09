@@ -67,3 +67,17 @@ describe("renderDataStamp", () => {
     expect(renderDataStamp({ page: "index.html", runs: [{ ...run, id: "<b>" }] })).toContain("&lt;b&gt;");
   });
 });
+
+describe("the stamp of a run with a hold", () => {
+  it("tells since when a refresh runs, with its link and the end of the hold, and the real age of the data", () => {
+    const flight = { ...run, id: "43", url: "https://example.com/43", date: "2026-11-04T19:36:10Z" };
+    const hold = { until: "2026-11-08T19:36:10Z", stallHours: 6, reason: "The shared queue of CI is full." };
+    const html = renderDataStamp({ page: "index.html", runs: [{ ...run, date: "2026-10-28T18:14:08Z" }], inFlight: flight, hold }, "2026-11-07T20:00:00Z");
+    expect(html).toContain("A refresh has run since 2026-11-04 19:36Z: run <a");
+    expect(html).toContain("href=\"https://example.com/43\"");
+    expect(html).toContain("to 2026-11-08 19:36Z at the latest. The shared queue of CI is full.");
+    expect(html).toContain("The oldest data of this page is 10 days old at this build");
+    expect(html).not.toContain("A newer run is in flight");
+    expect(html).not.toContain("current");
+  });
+});

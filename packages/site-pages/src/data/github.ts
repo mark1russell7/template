@@ -404,3 +404,66 @@ export async function githubGreenRun(options: GitHubOptions & { workflow: string
     return failure(error, timeoutMs);
   }
 }
+
+/** The progress of one workflow run: its state, and the newest end of one of its jobs. */
+export interface RunProgress {
+  /** The state of the run, as GitHub gives it: `queued`, `in_progress` or `completed`. */
+  readonly status: string;
+  /** The result of a run that ended, for example `success` or `cancelled`. It is null while the run has not ended. */
+  readonly conclusion: string | null;
+  /** The ISO time of the newest end of a job of the run. It is null when no job ended. */
+  readonly lastJobEnd: string | null;
+}
+
+/** One job of a workflow run, with only the field that `runProgressOf` reads. */
+export interface WorkflowJobEnd {
+  readonly completed_at: string | null;
+}
+
+/** The result of `githubRunProgress`. */
+export type GitHubRunProgress = ({ available: true } & RunProgress) | { available: false; reason: string };
+
+/** This function gives the progress of a run from its state and its jobs. A job that has not ended does not count. */
+export function runProgressOf(run: { readonly status: string; readonly conclusion: string | null }, jobs: readonly WorkflowJobEnd[]): RunProgress {
+  const ends = jobs.map((job) => job.completed_at).filter((at): at is string => typeof at === "string" && Number.isFinite(Date.parse(at)));
+  const lastJobEnd = ends.reduce<string | null>((newest, at) => (newest === null || Date.parse(at) > Date.parse(newest) ? at : newest), null);
+  return { status: run.status, conclusion: run.conclusion, lastJobEnd };
+}
+
+/**
+ * This function reads the state of a workflow run and the ends of its jobs with the REST API.
+ * It gives `{ available: false, reason }` without a token or after an error. It does not throw.
+ *
+ * @remarks The function reads 100 jobs on each page, and at most `maxPages` pages (default 10). It reads only the newest try of each job.
+ */
+export async function githubRunProgress(options: GitHubOptions & { runId: string; endpoint?: string; maxPages?: number }): Promise<GitHubRunProgress> {
+  const stop = precheck(options);
+  if (stop) return stop;
+  const { owner, repo, token = "", runId, endpoint = GITHUB_API, maxPages = 10, timeoutMs = 15_000 } = options;
+  const fetcher = options.fetch ?? globalThis.fetch;
+  const headers = restHeaders(token);
+  const base = `${endpoint}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs/${encodeURIComponent(runId)}`;
+  try {
+    const response = await fetcher(base, { headers, signal: AbortSignal.timeout(timeoutMs) });
+    if (response.status === 404) return { available: false, reason: `GitHub has no run ${runId} in ${owner}/${repo}` };
+    if (!response.ok) return { available: false, reason: `GitHub answered with HTTP ${response.status}` };
+    const run = object(await response.json());
+    if (typeof run["status"] !== "string") return { available: false, reason: `GitHub gave no state of the run ${runId}` };
+    const jobs: WorkflowJobEnd[] = [];
+    let url: string | null = `${base}/jobs?filter=latest&per_page=100`;
+    for (let page = 0; url !== null; page++) {
+      if (page === maxPages) return { available: false, reason: `the run ${runId} has more than ${maxPages} pages of jobs` };
+      const jobsResponse: Response = await fetcher(url, { headers, signal: AbortSignal.timeout(timeoutMs) });
+      if (!jobsResponse.ok) return { available: false, reason: `GitHub answered with HTTP ${jobsResponse.status} for the jobs of the run ${runId}` };
+      for (const value of list(object(await jobsResponse.json())["jobs"])) {
+        const at = object(value)["completed_at"];
+        jobs.push({ completed_at: typeof at === "string" ? at : null });
+      }
+      url = linkedPage(jobsResponse.headers.get("link"), "next");
+    }
+    const conclusion = typeof run["conclusion"] === "string" ? run["conclusion"] : null;
+    return { available: true, ...runProgressOf({ status: run["status"], conclusion }, jobs) };
+  } catch (error) {
+    return failure(error, timeoutMs);
+  }
+}

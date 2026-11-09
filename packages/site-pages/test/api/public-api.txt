@@ -31,16 +31,18 @@ type DataRun: build/chunks/freshness.d.ts#DataRun
 type DataStamps: build/chunks/freshness.d.ts#DataStamps
 type DataStampsParse: build/chunks/freshness.d.ts#DataStampsParse
 type FailingCase: build/chunks/freshness.d.ts#FailingCase
+type FlightHold: build/chunks/freshness.d.ts#FlightHold
 type FreshnessCheck: build/chunks/freshness.d.ts#FreshnessCheck
 type FreshnessOptions: build/chunks/freshness.d.ts#FreshnessOptions
-GITHUB_API: build/index.d.ts#GITHUB_API
-GITHUB_GRAPHQL: build/index.d.ts#GITHUB_GRAPHQL
-type GitHubGreenRun: build/index.d.ts#GitHubGreenRun
+GITHUB_API: build/chunks/freshness.d.ts#GITHUB_API
+GITHUB_GRAPHQL: build/chunks/freshness.d.ts#GITHUB_GRAPHQL
+type GitHubGreenRun: build/chunks/freshness.d.ts#GitHubGreenRun
 type GitHubOpenWork: build/chunks/freshness.d.ts#GitHubOpenWork
-type GitHubOptions: build/index.d.ts#GitHubOptions
+type GitHubOptions: build/chunks/freshness.d.ts#GitHubOptions
 type GitHubRelease: build/chunks/freshness.d.ts#GitHubRelease
-type GitHubReleaseLag: build/index.d.ts#GitHubReleaseLag
+type GitHubReleaseLag: build/chunks/freshness.d.ts#GitHubReleaseLag
 type GitHubReleases: build/chunks/freshness.d.ts#GitHubReleases
+type GitHubRunProgress: build/chunks/freshness.d.ts#GitHubRunProgress
 HELP: build/index.d.ts#HELP
 type ItemGroup: build/index.d.ts#ItemGroup
 KPI_FILE: build/chunks/freshness.d.ts#KPI_FILE
@@ -54,8 +56,10 @@ LAST_LIMIT_START: build/chunks/freshness.d.ts#LAST_LIMIT_START
 type Link: build/chunks/freshness.d.ts#Link
 type LinkOptions: build/index.d.ts#LinkOptions
 MAX_DATA_AGE_DAYS: build/chunks/freshness.d.ts#MAX_DATA_AGE_DAYS
+MAX_HOLD_HOURS: build/chunks/freshness.d.ts#MAX_HOLD_HOURS
 MAX_LIMIT_DAYS_WITHOUT_RULING: build/chunks/freshness.d.ts#MAX_LIMIT_DAYS_WITHOUT_RULING
 MAX_MINORS_BEHIND: build/chunks/freshness.d.ts#MAX_MINORS_BEHIND
+MAX_STALL_HOURS: build/chunks/freshness.d.ts#MAX_STALL_HOURS
 MAX_STUDY_LIMIT_DAYS: build/chunks/freshness.d.ts#MAX_STUDY_LIMIT_DAYS
 type MarkdownTable: build/index.d.ts#MarkdownTable
 NPM_REGISTRY: build/index.d.ts#NPM_REGISTRY
@@ -83,6 +87,7 @@ type ReleaseReading: build/index.d.ts#ReleaseReading
 type ReleaseSources: build/index.d.ts#ReleaseSources
 type ReleaseSummary: build/index.d.ts#ReleaseSummary
 RoadmapParseError: build/index.d.ts#RoadmapParseError
+type RunProgress: build/chunks/freshness.d.ts#RunProgress
 STATUS_CLASSES: build/index.d.ts#STATUS_CLASSES
 STATUS_SCRIPT: build/index.d.ts#STATUS_SCRIPT
 type StatusBoardData: build/chunks/freshness.d.ts#StatusBoardData
@@ -96,7 +101,8 @@ type TimelineLayout: build/index.d.ts#TimelineLayout
 type TimelineMark: build/index.d.ts#TimelineMark
 type TimelineOptions: build/index.d.ts#TimelineOptions
 UsageError: build/index.d.ts#UsageError
-type WorkflowRunEnd: build/index.d.ts#WorkflowRunEnd
+type WorkflowJobEnd: build/chunks/freshness.d.ts#WorkflowJobEnd
+type WorkflowRunEnd: build/chunks/freshness.d.ts#WorkflowRunEnd
 build: build/index.d.ts#build
 buildStatusBoard: build/index.d.ts#buildStatusBoard
 changelogFaults: build/index.d.ts#changelogFaults
@@ -104,7 +110,7 @@ changelogGateProblem: build/index.d.ts#changelogGateProblem
 changelogReading: build/index.d.ts#changelogReading
 changelogVersions: build/index.d.ts#changelogVersions
 checkFreshness: build/chunks/freshness.d.ts#checkFreshness
-checkStateOf: build/index.d.ts#checkStateOf
+checkStateOf: build/chunks/freshness.d.ts#checkStateOf
 classCounts: build/index.d.ts#classCounts
 compareVersions: build/index.d.ts#compareVersions
 cronLines: build/chunks/freshness.d.ts#cronLines
@@ -113,12 +119,13 @@ escapeHtml: build/index.d.ts#escapeHtml
 failingCases: build/chunks/freshness.d.ts#failingCases
 firstSentence: build/index.d.ts#firstSentence
 gitTagDates: build/index.d.ts#gitTagDates
-githubGreenRun: build/index.d.ts#githubGreenRun
-githubOpenWork: build/index.d.ts#githubOpenWork
-githubReleaseLag: build/index.d.ts#githubReleaseLag
-githubReleases: build/index.d.ts#githubReleases
+githubGreenRun: build/chunks/freshness.d.ts#githubGreenRun
+githubOpenWork: build/chunks/freshness.d.ts#githubOpenWork
+githubReleaseLag: build/chunks/freshness.d.ts#githubReleaseLag
+githubReleases: build/chunks/freshness.d.ts#githubReleases
+githubRunProgress: build/chunks/freshness.d.ts#githubRunProgress
 globFiles: build/index.d.ts#globFiles
-greenRunOf: build/index.d.ts#greenRunOf
+greenRunOf: build/chunks/freshness.d.ts#greenRunOf
 headCommit: build/index.d.ts#headCommit
 headingAnchor: build/index.d.ts#headingAnchor
 headingDate: build/index.d.ts#headingDate
@@ -153,7 +160,7 @@ readKpi: build/chunks/freshness.d.ts#readKpi
 readReleases: build/index.d.ts#readReleases
 readStatusBoard: build/index.d.ts#readStatusBoard
 releaseBodyEntries: build/index.d.ts#releaseBodyEntries
-releaseLagOf: build/index.d.ts#releaseLagOf
+releaseLagOf: build/chunks/freshness.d.ts#releaseLagOf
 releaseReading: build/index.d.ts#releaseReading
 releaseSummary: build/index.d.ts#releaseSummary
 releasesLead: build/index.d.ts#releasesLead
@@ -162,6 +169,7 @@ renderReleasesPage: build/index.d.ts#renderReleasesPage
 renderStatusPage: build/index.d.ts#renderStatusPage
 roadmapItems: build/index.d.ts#roadmapItems
 runCli: build/index.d.ts#runCli
+runProgressOf: build/chunks/freshness.d.ts#runProgressOf
 safeUrl: build/index.d.ts#safeUrl
 sectionMarksBreak: build/index.d.ts#sectionMarksBreak
 sectionsOf: build/index.d.ts#sectionsOf
@@ -437,6 +445,13 @@ interface FailingCase {
   readonly fault?: string;
 }
 
+### build/chunks/freshness.d.ts#FlightHold
+interface FlightHold {
+  readonly until: string;
+  readonly stallHours: number;
+  readonly reason: string;
+}
+
 ### build/chunks/freshness.d.ts#FreshnessCheck
 interface FreshnessCheck {
   readonly faults: readonly string[];
@@ -450,7 +465,24 @@ interface FreshnessOptions {
   readonly maxAgeDays?: number;
   readonly maxMinorsBehind?: number;
   readonly schedules?: Readonly<Record<string, number | string>>;
+  readonly progress?: Readonly<Record<string, RunProgress | string>>;
 }
+
+### build/chunks/freshness.d.ts#GITHUB_API
+declare const GITHUB_API = "https://api.github.com";
+
+### build/chunks/freshness.d.ts#GITHUB_GRAPHQL
+declare const GITHUB_GRAPHQL = "https://api.github.com/graphql";
+
+### build/chunks/freshness.d.ts#GitHubGreenRun
+type GitHubGreenRun = {
+  available: true;
+  value: number;
+  at: string;
+} | {
+  available: false;
+  reason: string;
+};
 
 ### build/chunks/freshness.d.ts#GitHubOpenWork
 type GitHubOpenWork = {
@@ -463,6 +495,15 @@ type GitHubOpenWork = {
   reason: string;
 };
 
+### build/chunks/freshness.d.ts#GitHubOptions
+interface GitHubOptions {
+  owner: string;
+  repo: string;
+  token: string | undefined;
+  fetch?: typeof fetch;
+  timeoutMs?: number;
+}
+
 ### build/chunks/freshness.d.ts#GitHubRelease
 interface GitHubRelease {
   tag: string;
@@ -473,11 +514,30 @@ interface GitHubRelease {
   prerelease: boolean;
 }
 
+### build/chunks/freshness.d.ts#GitHubReleaseLag
+type GitHubReleaseLag = {
+  available: true;
+  value: number;
+  at: string;
+  release: string;
+} | {
+  available: false;
+  reason: string;
+};
+
 ### build/chunks/freshness.d.ts#GitHubReleases
 type GitHubReleases = {
   available: true;
   releases: GitHubRelease[];
 } | {
+  available: false;
+  reason: string;
+};
+
+### build/chunks/freshness.d.ts#GitHubRunProgress
+type GitHubRunProgress = ({
+  available: true;
+} & RunProgress) | {
   available: false;
   reason: string;
 };
@@ -534,11 +594,17 @@ interface Link {
 ### build/chunks/freshness.d.ts#MAX_DATA_AGE_DAYS
 declare const MAX_DATA_AGE_DAYS = 3;
 
+### build/chunks/freshness.d.ts#MAX_HOLD_HOURS
+declare const MAX_HOLD_HOURS = 96;
+
 ### build/chunks/freshness.d.ts#MAX_LIMIT_DAYS_WITHOUT_RULING
 declare const MAX_LIMIT_DAYS_WITHOUT_RULING = 14;
 
 ### build/chunks/freshness.d.ts#MAX_MINORS_BEHIND
 declare const MAX_MINORS_BEHIND = 1;
+
+### build/chunks/freshness.d.ts#MAX_STALL_HOURS
+declare const MAX_STALL_HOURS = 24;
 
 ### build/chunks/freshness.d.ts#MAX_STUDY_LIMIT_DAYS
 declare const MAX_STUDY_LIMIT_DAYS = 30;
@@ -573,6 +639,7 @@ interface PageStamp {
   readonly page: string;
   readonly runs: readonly DataRun[];
   readonly inFlight?: DataRun;
+  readonly hold?: FlightHold;
   readonly study?: true;
   readonly limit?: DataLimit;
   readonly noLimit?: NoAgeLimit;
@@ -597,6 +664,13 @@ interface ReleaseChange {
 ### build/chunks/freshness.d.ts#ReleaseKind
 type ReleaseKind = "first" | "major" | "minor" | "patch";
 
+### build/chunks/freshness.d.ts#RunProgress
+interface RunProgress {
+  readonly status: string;
+  readonly conclusion: string | null;
+  readonly lastJobEnd: string | null;
+}
+
 ### build/chunks/freshness.d.ts#StatusBoardData
 interface StatusBoardData {
   generatedAt: string;
@@ -620,14 +694,72 @@ interface StatusBoardData {
 ### build/chunks/freshness.d.ts#StatusClass
 type StatusClass = "waiting" | "blocked" | "progress" | "open" | "later" | "done";
 
+### build/chunks/freshness.d.ts#WorkflowJobEnd
+interface WorkflowJobEnd {
+  readonly completed_at: string | null;
+}
+
+### build/chunks/freshness.d.ts#WorkflowRunEnd
+interface WorkflowRunEnd {
+  readonly status: string;
+  readonly conclusion: string | null;
+  readonly updated_at: string;
+}
+
 ### build/chunks/freshness.d.ts#checkFreshness
 declare function checkFreshness(stamps: DataStamps, options: FreshnessOptions): FreshnessCheck;
+
+### build/chunks/freshness.d.ts#checkStateOf
+declare function checkStateOf(rollup: {
+  state?: string | null;
+} | null | undefined): CheckState;
 
 ### build/chunks/freshness.d.ts#cronLines
 declare function cronLines(workflow: string): CronLine[];
 
 ### build/chunks/freshness.d.ts#failingCases
 declare function failingCases(stamps: DataStamps, options: FreshnessOptions): readonly FailingCase[];
+
+### build/chunks/freshness.d.ts#githubGreenRun
+declare function githubGreenRun(options: GitHubOptions & {
+  workflow: string;
+  endpoint?: string;
+  limit?: number;
+}): Promise<GitHubGreenRun>;
+
+### build/chunks/freshness.d.ts#githubOpenWork
+declare function githubOpenWork(options: GitHubOptions & {
+  endpoint?: string;
+  first?: number;
+}): Promise<GitHubOpenWork>;
+
+### build/chunks/freshness.d.ts#githubReleaseLag
+declare function githubReleaseLag(options: GitHubOptions & {
+  tagPrefix: string;
+  branch?: string;
+  endpoint?: string;
+  maxPages?: number;
+  now?: string;
+}): Promise<GitHubReleaseLag>;
+
+### build/chunks/freshness.d.ts#githubReleases
+declare function githubReleases(options: GitHubOptions & {
+  endpoint?: string;
+  maxPages?: number;
+}): Promise<GitHubReleases>;
+
+### build/chunks/freshness.d.ts#githubRunProgress
+declare function githubRunProgress(options: GitHubOptions & {
+  runId: string;
+  endpoint?: string;
+  maxPages?: number;
+}): Promise<GitHubRunProgress>;
+
+### build/chunks/freshness.d.ts#greenRunOf
+declare function greenRunOf(runs: readonly WorkflowRunEnd[]): {
+  value: number;
+  at: string;
+} | null;
 
 ### build/chunks/freshness.d.ts#kpiFile
 declare function kpiFile(input: KpiInput, now?: number): KpiFile;
@@ -649,6 +781,15 @@ declare function parseDataStamps(raw: unknown): DataStampsParse;
 
 ### build/chunks/freshness.d.ts#readKpi
 declare function readKpi(text: string, now?: number): KpiFile;
+
+### build/chunks/freshness.d.ts#releaseLagOf
+declare function releaseLagOf(oldest: string | undefined, now: string): number;
+
+### build/chunks/freshness.d.ts#runProgressOf
+declare function runProgressOf(run: {
+  readonly status: string;
+  readonly conclusion: string | null;
+}, jobs: readonly WorkflowJobEnd[]): RunProgress;
 
 ### build/chunks/freshness.d.ts#writeKpi
 declare function writeKpi(out: string, input: KpiInput, now?: number): string;
@@ -919,42 +1060,6 @@ interface CliIo {
 ### build/index.d.ts#DEFAULT_CHANGELOGS
 export declare const DEFAULT_CHANGELOGS: readonly string[];
 
-### build/index.d.ts#GITHUB_API
-export declare const GITHUB_API = "https://api.github.com";
-
-### build/index.d.ts#GITHUB_GRAPHQL
-export declare const GITHUB_GRAPHQL = "https://api.github.com/graphql";
-
-### build/index.d.ts#GitHubGreenRun
-type GitHubGreenRun = {
-  available: true;
-  value: number;
-  at: string;
-} | {
-  available: false;
-  reason: string;
-};
-
-### build/index.d.ts#GitHubOptions
-interface GitHubOptions {
-  owner: string;
-  repo: string;
-  token: string | undefined;
-  fetch?: typeof fetch;
-  timeoutMs?: number;
-}
-
-### build/index.d.ts#GitHubReleaseLag
-type GitHubReleaseLag = {
-  available: true;
-  value: number;
-  at: string;
-  release: string;
-} | {
-  available: false;
-  reason: string;
-};
-
 ### build/index.d.ts#HELP
 export declare const HELP = "Usage: site-pages build --out <dir> [options]\n\nWrites <out>/data/releases.json, <out>/data/status.json, <out>/releases/index.html\nand <out>/status/index.html. Start it in the repository, after the build of the site.\n\nOptions:\n  --out <dir>           The built output folder of the site (necessary)\n  --repo <owner/name>   The GitHub repository (default: $GITHUB_REPOSITORY, else the remote \"origin\")\n  --base </name/>       The path of the site home (default: \"/<name>/\", or \"/\" for <owner>.github.io)\n  --roadmap <file>      The roadmap file (default: none, the status page has only the GitHub part)\n  --packages <names>    npm names or a @scope, separated by commas, for the npm dates\n  --changesets <glob>   The changelog files (default: packages/*/CHANGELOG.md, else CHANGELOG.md)\n  --group <name>        The npm name of the package whose changelog gives the versions\n  --token <token>       A GitHub token with read access (default: $GITHUB_TOKEN)\n  --css <file>          A CSS file for the pages, after the default CSS\n  --site-name <name>    The name of the site in the header (default: the repository name)\n  --data-only           Write only the JSON data, not the pages\n  -h, --help            Show this help\n\nUsage: site-pages check (--out <dir> | --url <url>) [options]\n\nOpens the pages of the site in a headless Chromium at phone and desktop widths. Start\n\"site-pages check --help\" for its options.\n\nUsage: site-pages freshness --stamps <file> [options]\n\nExamine the data stamps of the measured pages of a site. See\n\"site-pages freshness --help\" for its options.\n";
 
@@ -1186,13 +1291,6 @@ interface TimelineOptions {
 ### build/index.d.ts#UsageError
 export declare class UsageError extends Error {}
 
-### build/index.d.ts#WorkflowRunEnd
-interface WorkflowRunEnd {
-  readonly status: string;
-  readonly conclusion: string | null;
-  readonly updated_at: string;
-}
-
 ### build/index.d.ts#build
 export declare function build(options: BuildOptions): Promise<BuildResult>;
 
@@ -1214,11 +1312,6 @@ export declare function changelogReading(changelogs: readonly {
 ### build/index.d.ts#changelogVersions
 export declare function changelogVersions(markdown: string): string[];
 
-### build/index.d.ts#checkStateOf
-export declare function checkStateOf(rollup: {
-  state?: string | null;
-} | null | undefined): CheckState;
-
 ### build/index.d.ts#classCounts
 export declare function classCounts(items: readonly BoardItem[]): Record<StatusClass, number>;
 
@@ -1237,42 +1330,8 @@ export declare function firstSentence(text: string): string;
 ### build/index.d.ts#gitTagDates
 export declare function gitTagDates(repoDir: string): TagDate[];
 
-### build/index.d.ts#githubGreenRun
-export declare function githubGreenRun(options: GitHubOptions & {
-  workflow: string;
-  endpoint?: string;
-  limit?: number;
-}): Promise<GitHubGreenRun>;
-
-### build/index.d.ts#githubOpenWork
-export declare function githubOpenWork(options: GitHubOptions & {
-  endpoint?: string;
-  first?: number;
-}): Promise<GitHubOpenWork>;
-
-### build/index.d.ts#githubReleaseLag
-export declare function githubReleaseLag(options: GitHubOptions & {
-  tagPrefix: string;
-  branch?: string;
-  endpoint?: string;
-  maxPages?: number;
-  now?: string;
-}): Promise<GitHubReleaseLag>;
-
-### build/index.d.ts#githubReleases
-export declare function githubReleases(options: GitHubOptions & {
-  endpoint?: string;
-  maxPages?: number;
-}): Promise<GitHubReleases>;
-
 ### build/index.d.ts#globFiles
 export declare function globFiles(root: string, pattern: string): string[];
-
-### build/index.d.ts#greenRunOf
-export declare function greenRunOf(runs: readonly WorkflowRunEnd[]): {
-  value: number;
-  at: string;
-} | null;
 
 ### build/index.d.ts#headCommit
 export declare function headCommit(repoDir: string): string | null;
@@ -1357,9 +1416,6 @@ export declare function readStatusBoard(options: ReadStatusBoardOptions): Promis
 
 ### build/index.d.ts#releaseBodyEntries
 export declare function releaseBodyEntries(body: string): ChangelogEntry[];
-
-### build/index.d.ts#releaseLagOf
-export declare function releaseLagOf(oldest: string | undefined, now: string): number;
 
 ### build/index.d.ts#releaseReading
 export declare function releaseReading(listed: readonly string[], sources: ReleaseListSources, now?: number): ReleaseReading;

@@ -3,7 +3,7 @@
  * The line also shows the age of the data at the build. It tells when the numbers are a study, and it shows the reason for a longer age limit.
  */
 
-import type { DataRun, PageStamp } from "../check/freshness.ts";
+import type { DataRun, FlightHold, PageStamp } from "../check/freshness.ts";
 import { escapeHtml, link, listText } from "./html.ts";
 
 const DAY_MS = 86_400_000;
@@ -34,11 +34,23 @@ function ageHtml(stamp: PageStamp, now: string): string {
   return ` <span>The oldest data of this page is ${days} ${days === 1 ? "day" : "days"} old at this build, on ${escapeHtml(now.slice(0, 10))}.</span>`;
 }
 
+/** This function gives an ISO time in the short form, to the minute, for example `2026-11-04 19:36Z`. */
+function minuteText(time: string): string {
+  return `${time.slice(0, 10)} ${time.slice(11, 16)}Z`;
+}
+
+/** This function gives the html of a run in flight. A run with a hold tells since when the refresh runs, and the end of the hold. */
+function flightHtml(run: DataRun, hold: FlightHold | undefined): string {
+  if (hold === undefined) return ` <span>A newer run is in flight: ${runHtml(run)}.</span>`;
+  const held = `The gate holds this page while the jobs of that run end, to ${escapeHtml(minuteText(hold.until))} at the latest.`;
+  return ` <span>A refresh has run since ${escapeHtml(minuteText(run.date))}: ${runHtml(run)}. ${held} ${escapeHtml(hold.reason)}</span>`;
+}
+
 /** This function gives the html line of the stamp of a page. A page shows this line with its data. The value `now` is the ISO time of the build. */
 export function renderDataStamp(stamp: PageStamp, now: string = new Date().toISOString()): string {
   const study = stamp.study === true ? studyHtml(stamp) : "";
   const data = `<span>The data comes from ${listText(stamp.runs.map(runHtml))}.</span>`;
-  const flight = stamp.inFlight === undefined ? "" : ` <span>A newer run is in flight: ${runHtml(stamp.inFlight)}.</span>`;
+  const flight = stamp.inFlight === undefined ? "" : flightHtml(stamp.inFlight, stamp.hold);
   const start = stamp.limit?.startsAt === undefined ? "" : `, from ${escapeHtml(stamp.limit.startsAt.slice(0, 10))}`;
   const limit = stamp.limit === undefined ? "" : ` <span>The age limit of this data is ${stamp.limit.days} days${start}. ${escapeHtml(stamp.limit.reason)}</span>`;
   return `<p class="data-stamp">${study}${data}${ageHtml(stamp, now)}${flight}${limit}</p>`;
