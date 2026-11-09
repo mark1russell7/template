@@ -51,6 +51,12 @@ describe("the search", () => {
     expect(findHomes("strategy combinator")[0]?.area).toBe("strategy-space");
     expect(findHomes("context manager")[0]?.area).toBe("browser-monitoring");
     expect(findHomes("tracing")[0]?.area).toBe("browser-monitoring");
+    expect(findHomes("span capture")[0]?.area).toBe("test-generation");
+    expect(findHomes("telemetry capture")[0]?.area).toBe("test-generation");
+    expect(findHomes("propagation gate")[0]?.area).toBe("test-generation");
+    expect(findHomes("otel")[0]?.area).toBe("browser-monitoring");
+    expect(findHomes("span")[0]?.area).toBe("browser-monitoring");
+    expect(findHomes("opentelemetry")[0]?.area).toBe("browser-monitoring");
     expect(findHomes("nothing-like-this")).toEqual([]);
     expect(findHomes("")).toBe(HOMES);
   });
