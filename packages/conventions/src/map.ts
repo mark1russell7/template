@@ -18,6 +18,11 @@ export interface Home {
   readonly repo: string;
   /** The state of the home. */
   readonly state: HomeState;
+  /**
+   * The packages of a published home that are not on npm yet. Code uses them with workspace:* or a github: specifier
+   * pinned to a commit. The index of the exports of the homes does not read them.
+   */
+  readonly notOnNpm?: readonly string[];
   /** More words that find the area in a search. */
   readonly words: readonly string[];
   /**
@@ -79,13 +84,14 @@ export const HOMES: readonly Home[] = [
   {
     area: "exact-math",
     title: "Expressions and exact arithmetic",
-    covers: "expression documents, exact rationals, floats with error bounds, intervals, robust geometric predicates (orientation, in-circle)",
-    packages: ["@mark1russell7/expression", "@mark1russell7/rational"],
+    covers: "expression documents, exact rationals, floats with error bounds, intervals, robust geometric predicates (orientation, in-circle, segment intersection)",
+    packages: ["@mark1russell7/predicates", "@mark1russell7/rational", "@mark1russell7/expression"],
     repo: "mark1russell7/algebra",
-    state: "unpublished",
+    state: "published",
     words: ["math", "arithmetic", "rational", "bigint", "interval", "error bound", "predicate", "orientation", "symbolic", "exact"],
-    signatures: ["orient2d", "orientation", "inCircle", "incircle"],
-    note: "Statistics go to rigor-statistics, and geometry records go to layout-contract. There is no math package.",
+    signatures: ["orient2d", "orient2dSign", "orientation", "inCircle", "incircle", "classifySegments"],
+    note: "Exact geometric predicates are in @mark1russell7/predicates. Floats with error bounds and intervals go to @mark1russell7/interval (planned, 2026-11-09). Statistics go to rigor-statistics, and geometry records go to layout-contract. There is no math package.",
+    notOnNpm: ["@mark1russell7/expression"],
   },
   {
     area: "units",
@@ -187,7 +193,7 @@ export const HOMES: readonly Home[] = [
     state: "published",
     words: ["point", "rect", "box", "segment", "polygon", "tolerance", "overlap", "intersection", "bounds"],
     signatures: ["segmentsIntersect", "segmentsCross", "segmentIntersection", "segmentsIntersection", "boxesOverlap", "rectsOverlap", "rectsIntersect", "pointInPolygon", "distanceToSegment", "pointSegmentDistance"],
-    note: "Exact predicates go to algebra. @mark1russell7/vex-domains has 2D vectors for Vex formulas only.",
+    note: "Exact predicates go to @mark1russell7/predicates; segmentsCross of layout-contract builds on them. @mark1russell7/vex-domains has 2D vectors for Vex formulas only.",
   },
   {
     area: "strategy-space",
@@ -374,11 +380,21 @@ export function findHomes(query: string, homes: readonly Home[] = HOMES): readon
 
 const STATE_TEXT: Record<HomeState, string> = { published: "", unpublished: " (not on npm)", planned: " (planned)", none: " (no home)" };
 
+/** This function tells if a package of a home is on npm: the home is published, and `notOnNpm` does not name the package. */
+export function onNpm(home: Home, name: string): boolean {
+  return home.state === "published" && !(home.notOnNpm ?? []).includes(name);
+}
+
+/** This function gives the packages of a home, each marked "(not on npm)" when only its own package is not on npm. */
+function packagesOf(home: Home, quote: (name: string) => string): string {
+  return home.packages.map((name) => `${quote(name)}${home.state === "published" && !onNpm(home, name) ? " (not on npm)" : ""}`).join(", ");
+}
+
 /** This function writes the map as a Markdown table, with the rule first. */
 export function mapMarkdown(homes: readonly Home[] = HOMES): string {
   const cell = (text: string): string => text.replaceAll("|", "\\|");
   const rows = homes.map((home) => {
-    const where = home.packages.length > 0 ? home.packages.map((name) => `\`${name}\``).join(", ") : `\`${home.repo}\``;
+    const where = home.packages.length > 0 ? packagesOf(home, (name) => `\`${name}\``) : `\`${home.repo}\``;
     const covers = home.note === undefined ? home.covers : `${home.covers}. ${home.note}`;
     return `| ${cell(home.title)} | ${where}${STATE_TEXT[home.state]} | ${cell(covers)} |`;
   });
@@ -390,7 +406,7 @@ export function mapText(homes: readonly Home[]): string {
   if (homes.length === 0) return "No area matches. Ask the strategist for a home before you write the code.\n";
   return homes
     .map((home) => {
-      const where = home.packages.length > 0 ? home.packages.join(", ") : home.repo;
+      const where = home.packages.length > 0 ? packagesOf(home, (name) => name) : home.repo;
       const lines = [`${home.title} (${home.area}): ${where}${STATE_TEXT[home.state]}`, `  covers: ${home.covers}`, `  repo: ${home.repo}`];
       if (home.note !== undefined) lines.push(`  note: ${home.note}`);
       return lines.join("\n");
