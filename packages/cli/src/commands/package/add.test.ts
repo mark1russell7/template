@@ -17,6 +17,7 @@ const cli = {
     "@types/node": "^26.0.0",
     typescript: "^7.0.0",
     vitest: "^5.0.0",
+    "@vitest/coverage-v8": "^5.0.0",
   },
 };
 
@@ -38,6 +39,8 @@ describe("writePackage", () => {
     expect(readFileSync(join(written.dir, "src", "index.ts"), "utf8")).toBe("export {};\n");
     const manifest = json(join(written.dir, "package.json"));
     expect(manifest["dependencies"]).toBeUndefined();
+    // The coverage of the shared CI needs the provider in each package with Vitest.
+    expect(manifest["devDependencies"]).toMatchObject({ "@vitest/coverage-v8": "^5.0.0", vitest: "^5.0.0" });
     expect(manifest["main"]).toBe("./src/index.ts");
     expect(json(join(written.dir, "tsconfig.json"))["extends"]).toBe("@mark1russell7/cue/ts/config/node.json");
   });

@@ -14,13 +14,19 @@ async function getScope(root: string): Promise<string> {
 
 const NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
 
-const DEV_DEPENDENCIES = ["@mark1russell7/cue", "@types/node", "typescript", "vitest"] as const;
+// @vitest/coverage-v8: the coverage of the shared CI (action coverage) needs it in each package with Vitest.
+const DEV_DEPENDENCIES = ["@mark1russell7/cue", "@types/node", "@vitest/coverage-v8", "typescript", "vitest"] as const;
+
+/** Each dependency that releases with the same versions as its partner. */
+const LOCKSTEP: Readonly<Record<string, string>> = { "@vitest/coverage-v8": "vitest" };
 
 /**
  * This function gives the version range of each named dependency of a new package. The range comes
  * from the repository: the root `package.json`, then the packages in name order. Thus
  * `pnpm up -r --latest` in the repository also updates the ranges of its new packages. A dependency
- * that the repository does not have gets the range of this CLI.
+ * that the repository does not have gets the range of this CLI. A dependency of `LOCKSTEP` gets the
+ * range of its partner instead, because the two release together. Thus a repository on Vitest 4 gets
+ * @vitest/coverage-v8 of Vitest 4, not the range of the CLI.
  *
  * @throws Error when neither the repository nor the CLI has a dependency
  */
@@ -39,10 +45,15 @@ export async function dependencyVersions(
     const folders = (await readdir(dir, { withFileTypes: true })).filter((e) => e.isDirectory()).map((e) => e.name).sort();
     for (const folder of folders) await read(resolve(dir, folder, "package.json"));
   }
+  const rangeIn = (list: readonly Manifest[], dep: string): string | undefined =>
+    list.map((m) => m.devDependencies?.[dep] ?? m.dependencies?.[dep]).find((v) => v !== undefined);
+  const repository = [...manifests];
   manifests.push(cli);
   const versions: Record<string, string> = {};
   for (const dep of names) {
-    const version = manifests.map((m) => m.devDependencies?.[dep] ?? m.dependencies?.[dep]).find((v) => v !== undefined);
+    const partner = LOCKSTEP[dep];
+    const partnerRange = partner !== undefined ? rangeIn(repository, partner) : undefined;
+    const version = rangeIn(repository, dep) ?? partnerRange ?? rangeIn(manifests, dep);
     if (!version) throw new Error(`Neither the repository nor ${cli.name ?? "the CLI"} has the dependency "${dep}".`);
     versions[dep] = version;
   }
