@@ -21,7 +21,7 @@ export interface AlwaysGate {
 }
 
 /** This function tells if a job is a summary job: its name ends with ` OK`, or a step uses the action `gate-summary`. */
-function isSummary(lines: readonly string[], job: number): boolean {
+export function isSummary(lines: readonly string[], job: number): boolean {
   const end = lines.findIndex((line, at) => at > job && line.trim() !== "" && indentOf(line) <= indentOf(lines[job] ?? ""));
   const body = lines.slice(job + 1, end < 0 ? lines.length : end);
   const keys = childKeys(lines, job);

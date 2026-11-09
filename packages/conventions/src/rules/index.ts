@@ -7,6 +7,7 @@ import { cuePreset } from "./cue-preset.ts";
 import { gateAfterCancel } from "./gate-after-cancel.ts";
 import { gateTrigger } from "./gate-trigger.ts";
 import { securityOneJob } from "./security-one-job.ts";
+import { summaryJobRule } from "./summary-job.ts";
 import { setupCue } from "./setup-cue.ts";
 import { sharedCi } from "./shared-ci.ts";
 import { serviceRunMain } from "./service-run-main.ts";
@@ -70,6 +71,7 @@ export const RULES: readonly Rule[] = [
   gateAfterCancel,
   gateTrigger,
   securityOneJob,
+  summaryJobRule,
   sharedCi,
   setupCue,
   homePackage,
@@ -80,4 +82,4 @@ export const RULES: readonly Rule[] = [
 ];
 
 export { publishedMinor };
-export { apiReportScript, changelogVersion, cuePreset, gateAfterCancel, gateTrigger, securityOneJob, serviceRunMain, setupCue, sharedCi, homePackage, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, versionTitle, workflowParses, workspaceProtocol };
+export { apiReportScript, changelogVersion, cuePreset, gateAfterCancel, gateTrigger, securityOneJob, serviceRunMain, setupCue, sharedCi, summaryJobRule, homePackage, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, versionTitle, workflowParses, workspaceProtocol };
