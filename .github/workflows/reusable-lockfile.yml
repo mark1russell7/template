@@ -4,13 +4,13 @@
 #
 # A repository calls it from its lockfile.yml, and a session starts that file on the branch of the pull request:
 #
-#   permissions: {}
-
-defaults:
-  run:
-    shell: bash
+#   name: Lockfile
 #   on:
 #     workflow_dispatch:
+#   permissions: {}
+#   concurrency:
+#     group: lockfile-${{ github.ref }}
+#     cancel-in-progress: true
 #   jobs:
 #     lockfile:
 #       uses: mark1russell7/template/.github/workflows/reusable-lockfile.yml@<commit> # main
@@ -19,8 +19,13 @@ defaults:
 #
 #   gh workflow run lockfile.yml -R <owner/repo> --ref <branch>
 #
+# GitHub starts a workflow_dispatch workflow only when its file is on the default branch: a dispatch of a
+# file that is only on the pull request branch gets HTTP 404. So add lockfile.yml to the default branch
+# first, in its own pull request, before the branch that needs it. The branch must also have the file:
+# merge the default branch into it, or add the same file to it.
+#
 # The run uses the code of its own branch, so no input names a branch and the cache of the default branch
-# stays out of reach. The branch must have lockfile.yml: add the file to the branch first if it does not.
+# stays out of reach.
 #
 # The job merges the default branch into the branch without a commit. It stops when a file other than
 # pnpm-lock.yaml conflicts. Then it takes the lockfile of the default branch and runs
@@ -39,6 +44,10 @@ on:
   workflow_call:
 
 permissions: {}
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   lockfile:
