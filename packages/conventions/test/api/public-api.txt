@@ -59,6 +59,7 @@ type PrivatePattern: build/index.d.ts#PrivatePattern
 type PrivateSources: build/index.d.ts#PrivateSources
 REAL_COMPARE: build/index.d.ts#REAL_COMPARE
 RULES: build/index.d.ts#RULES
+RULE_WARN_DAYS: build/index.d.ts#RULE_WARN_DAYS
 type RegistryAnswer: build/index.d.ts#RegistryAnswer
 type RegistryLookup: build/index.d.ts#RegistryLookup
 type Rule: build/index.d.ts#Rule
@@ -266,6 +267,7 @@ interface CheckOptions {
   readonly base?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly rules?: readonly Rule[];
+  readonly today?: string;
 }
 
 ### build/index.d.ts#CheckResult
@@ -505,6 +507,9 @@ export declare const REAL_COMPARE = "process.argv[1] !== undefined && realpathSy
 ### build/index.d.ts#RULES
 export declare const RULES: readonly Rule[];
 
+### build/index.d.ts#RULE_WARN_DAYS
+export declare const RULE_WARN_DAYS = 14;
+
 ### build/index.d.ts#RegistryAnswer
 type RegistryAnswer = {
   readonly versions: readonly string[];
@@ -526,6 +531,7 @@ interface Rule {
   readonly sources: readonly AuditSource[];
   readonly options: Readonly<Record<string, OptionSpec>>;
   readonly changeScoped?: boolean;
+  readonly failsFrom?: string;
   check(context: RuleContext, options: Options): RuleOutcome;
 }
 
@@ -559,7 +565,7 @@ interface RuleResult {
   readonly id: string;
   readonly title: string;
   readonly fix: string;
-  readonly status: "pass" | "break" | "off" | "skipped" | "error";
+  readonly status: "pass" | "break" | "warn" | "off" | "skipped" | "error";
   readonly breaks: readonly Break[];
   readonly ignored: number;
   readonly note?: string;
