@@ -59,7 +59,7 @@ publishedManifest: build/index.d.ts#publishedManifest
 readConfig: build/index.d.ts#readConfig
 referencePage: build/index.d.ts#referencePage
 reportEntries: build/index.d.ts#reportEntries
-reportFolders: build/index.d.ts#reportFolders
+reportFolders: @mark1russell7/conventions/workspace#reportFolders (external)
 runCli: build/index.d.ts#runCli
 runReports: build/index.d.ts#runReports
 statementsOf: build/index.d.ts#statementsOf
@@ -346,9 +346,6 @@ export declare function referencePage(report: string, packageName: string, front
 
 ### build/index.d.ts#reportEntries
 export declare function reportEntries(report: string): ReadonlyMap<string, ReadonlySet<string>>;
-
-### build/index.d.ts#reportFolders
-export declare function reportFolders(root: string, globs?: readonly string[]): string[];
 
 ### build/index.d.ts#runCli
 export declare function runCli(args: readonly string[], io: CliIo): number;

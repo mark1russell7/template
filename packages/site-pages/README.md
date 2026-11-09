@@ -172,6 +172,8 @@ site-pages cue --out dist
 - A code block that is wider than its box shows a fade at the edge with more content. A block that is not wider shows no cue.
 - A block with `data-overflow-ok` or with the class `scroll-cue` stays as it is. The text of `script`, `style` and `textarea` does not change.
 - In a browser with no scroll timelines, a small script gives `--scroll-cue-bg` the background color of the block. Thus the block keeps the color of its theme.
+- A script of a page can make a code block in the browser, for example from Markdown. Thus a page with a script of its own also gets the style and a small script. That script gives the cue to each code block that the page makes, by the same rules.
+- A page can put a code block in a box of its own that scrolls, and give the block the width of its text. When that box holds only the block and the text is wider than the box, the script gives the box the cue.
 - The command can start two times on one folder. The second start gives the same pages.
 
 In `reusable-pages.yml`, the input `scroll-cue` (default `true`) starts the command before the site check and the upload.
@@ -487,10 +489,12 @@ import "@mark1russell7/site-pages/scroll-cue.css";
 The class sets `overflow-x: auto`. A browser with scroll timelines keeps the background of the box, so a code block keeps the color of its theme. A browser with no scroll timelines gets the background color `--scroll-cue-bg` and a shade of the color `--scroll-cue-shade`. Set `--scroll-cue-bg` to the background color of the box:
 
 ```css
-.code {
+.code.scroll-cue {
   --scroll-cue-bg: var(--code-bg);
 }
 ```
+
+The rule that sets `--scroll-cue-bg` must be more specific than `.scroll-cue`, which sets the default `Canvas`. The command `site-pages cue` puts its style last in `<head>`. Thus a rule with only `pre` or `.code` loses, and the fade gets the wrong color.
 
 The fades run on a scroll timeline (`animation-timeline: scroll(self inline)`). In Chromium, `document.getAnimations()` gives each fade as a running animation with one iteration, and the fade does not end. A test that waits for the end of each animation, for example before an axe check of the contrast, then stops at its time limit. Such a test must skip each animation whose timeline is not `document.timeline`:
 
@@ -561,16 +565,17 @@ interface KpiFile {
   project: string;
   at: string; // the ISO time of the data in UTC, never the time of the build
   commit: string; // the full commit of the build
-  measures: Array<{ id: string; value: number; unit?: string; at?: string; notCounted?: string }>;
+  measures: Array<{ id: string; value: number; unit?: string; at?: string; notCounted?: string; targets?: Array<{ value: number; by: string }> }>;
   engines?: Array<{ name: string; version: string }>; // the Status page shows them
 }
 ```
 
 - Give `at` from the record of the data. The writer has no default for this field, because a build time hides old data.
 - Give `at` on a measure when its data is from another time than the file. The Status page then shows a date for each measure.
+- Give `targets` on a measure with a plan. Each target has a value of 0 or more and a date `by` as `YYYY-MM-DD`. The dates go up from the first target to the last. The Status page shows the first target on or after the date of the data, with the unit of the measure. Without such a target, it shows the last target with the word "(past)".
 - Give `notCounted` on a count of faults, for example a count of old text. The text names what the count does not read, so a 0 does not seem to tell more than it measured. The Status page shows the text.
 - Without `commit`, the plugin takes `GITHUB_SHA`, else the head of the repository.
-- A fault in the data stops the build, and the old site stays. A fault is a wrong form, a value that is not finite, a repeated id or a time after the check. The time rules apply to the file and to each measure.
+- A fault in the data stops the build, and the old site stays. A fault is a wrong form, a value that is not finite, a repeated id, a time after the check or a wrong target. The time rules apply to the file and to each measure.
 - A site with no Vite build calls `writeKpi(out, input)` from the root entry, before `site-pages build`.
 - `site-pages build` reads the file from the output folder. It adds the file to `data/status.json`, and the Status page shows the measures, the data date and the engines.
 
