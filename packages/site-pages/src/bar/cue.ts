@@ -7,7 +7,8 @@
  *
  * A script of the page can make a code block after the load, for example from Markdown or from a template string. Thus
  * each page with a script of its own also gets the style and a script. That script gives the cue to each code block
- * that the page adds.
+ * that the page adds. When a box of the page around a block scrolls in place of the block, the script gives the box
+ * the cue.
  *
  * A block with `data-overflow-ok` or with the class `scroll-cue` stays as it is. The text of `script`, `style` and
  * `textarea` elements does not change.
@@ -35,6 +36,9 @@ export function cueCss(): string {
  *
  * - It gives the cue to each code block that a script of the page makes, at the start and after it. The rules of
  *   `cueAttributes` apply: a block with `data-overflow-ok` or with the class `scroll-cue` of the page stays as it is.
+ * - A page can put a code block in a box of its own that scrolls, and give the block the width of its text. Then the
+ *   box scrolls, not the block. When such a box holds only the block and its text is wider than the box, the script
+ *   gives the box the cue too. The script examines the box again when the size of the block or of the window changes.
  * - In a browser with no scroll timelines, the style gives the box the background color `--scroll-cue-bg`. The script
  *   sets that variable to the color of each block with the mark. When the block has no color, the script uses the color
  *   of its first ancestor with a color. Thus the block keeps the color of its theme.
@@ -44,9 +48,19 @@ export const CUE_SCRIPT: string =
   'const paint = (box) => { box.classList.remove("scroll-cue"); let node = box; let color = ""; ' +
   "while (node) { color = getComputedStyle(node).backgroundColor; if (color !== \"transparent\" && !/^rgba\\(.*,\\s*0\\)$/.test(color)) break; node = node.parentElement; } " +
   'box.classList.add("scroll-cue"); if (node) box.style.setProperty("--scroll-cue-bg", color); }; ' +
+  `const mark = (box) => { box.classList.add("scroll-cue"); if (!box.hasAttribute("tabindex")) box.tabIndex = 0; box.setAttribute("${CUE_ATTRIBUTE}", ""); }; ` +
+  "const watched = new Set(); " +
+  "const outer = (pre) => { if (!pre.isConnected) { watched.delete(pre); sizes?.unobserve(pre); return; } " +
+  "for (let node = pre.parentElement; node && node !== document.body; node = node.parentElement) { " +
+  'const x = getComputedStyle(node).overflowX; if (x === "visible") continue; ' +
+  'if ((x !== "auto" && x !== "scroll") || node.textContent.trim() !== pre.textContent.trim()) return; ' +
+  "if (node.scrollWidth <= node.clientWidth + 1) return; watched.delete(pre); sizes?.unobserve(pre); " +
+  'if (node.hasAttribute("data-overflow-ok") || node.classList.contains("scroll-cue")) return; mark(node); if (old) paint(node); return; } }; ' +
+  "const sizes = window.ResizeObserver ? new ResizeObserver((entries) => { for (const entry of entries) outer(entry.target); }) : undefined; " +
+  'addEventListener("resize", () => { for (const pre of [...watched]) outer(pre); }); ' +
   `const cue = (box) => { if (box.hasAttribute("data-overflow-ok")) return; if (!box.hasAttribute("${CUE_ATTRIBUTE}")) { ` +
-  'if (box.classList.contains("scroll-cue")) return; box.classList.add("scroll-cue"); ' +
-  `if (!box.hasAttribute("tabindex")) box.tabIndex = 0; box.setAttribute("${CUE_ATTRIBUTE}", ""); } if (old) paint(box); }; ` +
+  'if (box.classList.contains("scroll-cue")) return; mark(box); } ' +
+  "if (old) paint(box); if (!watched.has(box)) { watched.add(box); sizes?.observe(box); outer(box); } }; " +
   'const scan = (root) => { if (root.nodeType !== 1) return; if (root.matches("pre")) cue(root); for (const box of root.querySelectorAll("pre")) cue(box); }; ' +
   "scan(document.documentElement); " +
   "new MutationObserver((records) => { for (const record of records) for (const node of record.addedNodes) scan(node); })" +
