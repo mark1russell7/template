@@ -22,6 +22,11 @@ interface Signature {
   readonly pattern: RegExp;
 }
 
+/** This function gives the repositories, in lower case, that hold code of a home: its repository and each of `alsoIn`. */
+export function reposOf(home: Home): readonly string[] {
+  return [home.repo, ...(home.alsoIn ?? [])].map((repo) => repo.toLowerCase());
+}
+
 /** This function gives the signatures of the homes that a repository can use: on npm, or in a repository with a pin. */
 export function signaturesOf(homes: readonly Home[]): Signature[] {
   return homes.filter((home) => home.state === "published" || home.state === "unpublished").flatMap((home) => (home.signatures ?? []).map((source) => ({ home, pattern: new RegExp(`^(?:${source})$`) })));
@@ -70,7 +75,7 @@ export const homePackage: Rule = {
     const scope = options["scope"];
     if (scope !== "change" && scope !== "all") throw new Error(`The option scope is "change" or "all", not ${JSON.stringify(scope)}.`);
     const repo = repoOf(context);
-    const signatures = signaturesOf(HOMES).filter((signature) => signature.home.repo.toLowerCase() !== repo);
+    const signatures = signaturesOf(HOMES).filter((signature) => !reposOf(signature.home).includes(repo ?? ""));
     if (signatures.length === 0) return [];
     let files: readonly string[];
     let added: ReadonlyMap<string, ReadonlySet<number>> | undefined;
