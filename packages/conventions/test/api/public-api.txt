@@ -191,6 +191,7 @@ setupCue: build/index.d.ts#setupCue
 sharedCi: build/index.d.ts#sharedCi
 sharedDocsRule: build/index.d.ts#sharedDocsRule
 signaturesOf: build/index.d.ts#signaturesOf
+siteCheckInCi: build/index.d.ts#siteCheckInCi
 sourceMain: build/index.d.ts#sourceMain
 specifiersOf: build/index.d.ts#specifiersOf
 summaryMarkdown: build/index.d.ts#summaryMarkdown
@@ -964,6 +965,9 @@ export declare function sharedDocsRule(fetchHomes?: HomeFetch): Rule;
 
 ### build/index.d.ts#signaturesOf
 export declare function signaturesOf(homes: readonly Home[]): Signature[];
+
+### build/index.d.ts#siteCheckInCi
+export declare const siteCheckInCi: Rule;
 
 ### build/index.d.ts#sourceMain
 export declare const sourceMain: Rule;

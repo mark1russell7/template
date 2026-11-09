@@ -12,6 +12,7 @@ import { authorOf, convertGate, declaredName, hasTests, HOMES, mitText, pagesCal
 import { API_REPORT_RANGE } from "./rules/api-report-script.ts";
 import { minuteField } from "./rules/runner-budget.ts";
 import { runsOnMain, startsOnPush } from "./rules/main-runs-finish.ts";
+import { triggersOf } from "./rules/site-check-in-ci.ts";
 import { localBase, runCli } from "./run.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-rules-"));
@@ -612,6 +613,30 @@ describe("roadmap-parses", () => {
     expect(rule(only, "roadmap-parses").breaks).toHaveLength(1);
   });
 
+  it("reads the roadmap of .github/site.json for a call that gives no roadmap", () => {
+    const call = "jobs:\n  pages:\n    uses: o/t/.github/workflows/reusable-pages.yml@0123abc\n";
+    const site = (config: Record<string, unknown>): string => `{\n  "build": "b",\n  "out": "o",\n${Object.entries(config).map(([key, value]) => `  ${JSON.stringify(key)}: ${JSON.stringify(value)}`).join(",\n")}\n}\n`;
+    const good = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": call, ".github/site.json": site({ roadmap: "./docs/ROADMAP.md" }), "docs/ROADMAP.md": roadmap });
+    commitAll(good);
+    expect(rule(good, "roadmap-parses").breaks).toEqual([]);
+    // The rule parses the roadmap of the file, with the line of its key
+    const bad = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": call, ".github/site.json": site({ roadmap: "docs/GONE.md" }) });
+    commitAll(bad);
+    expect(rule(bad, "roadmap-parses").breaks.map((item) => `${item.file}:${String(item.line)}: ${item.message}`)).toEqual([
+      ".github/site.json:4: .github/site.json names the roadmap docs/GONE.md, and the file does not exist.",
+    ]);
+    const none = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": call, ".github/site.json": site({ "site-name": "x" }) });
+    commitAll(none);
+    expect(rule(none, "roadmap-parses").breaks.map((item) => item.message)).toEqual([".github/site.json gives no roadmap, so the Status page shows no roadmap item."]);
+    const noPages = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": call, ".github/site.json": site({ "site-pages": false }) });
+    commitAll(noPages);
+    expect(rule(noPages, "roadmap-parses").status).toBe("skipped");
+    // A file that is not a site config fails on the pull request, before the Pages run reads it
+    const typo = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": call, ".github/site.json": site({ roadmap: "docs/ROADMAP.md", "site-chek": true }), "docs/ROADMAP.md": roadmap });
+    commitAll(typo);
+    expect(rule(typo, "roadmap-parses").breaks.map((item) => item.message)).toEqual([expect.stringMatching(/"site-chek" is not a key of the site config/)]);
+  });
+
   it("reads the value of a roadmap key", () => {
     expect(["  roadmap: docs/R.md", "roadmap: './R.md' # x", "roadmap:", "roadmap: ${{ inputs.roadmap }}", "  roadmaps: x", "# roadmap: x"].map(roadmapOfLine)).toEqual(["docs/R.md", "R.md", undefined, undefined, undefined, undefined]);
   });
@@ -1099,6 +1124,59 @@ describe("pages-site", () => {
     const none = fixture({ "package.json": { name: "one" } });
     commitAll(none);
     expect(rule(none, "pages-site", { env: event({ private: false }) }).breaks.map((item) => item.message)).toEqual(["The repository is public, and no workflow deploys its site with the Pages workflow of the template."]);
+  });
+});
+
+describe("site-check-in-ci", () => {
+  const deploy = `on:\n  push:\n    branches: [main]\npermissions:\n  pages: write\njobs:\n  pages:\n    uses: mark1russell7/template/.github/workflows/reusable-pages.yml@${SHA} # main\n`;
+  const ci = `on:\n  pull_request:\n  push:\njobs:\n  ci:\n    uses: mark1russell7/template/.github/workflows/reusable-ci.yml@${SHA} # main\n  site:\n    uses: mark1russell7/template/.github/workflows/reusable-pages-check.yml@${SHA} # main\n    permissions:\n      contents: read\n  ok:\n    name: CI OK\n    needs:\n      - ci\n      - site\n    runs-on: ubuntu-latest\n`;
+  const site = { build: "pnpm build", out: "site/dist" };
+  /** This function gives the breaks of the rule on the files `files`, each as `file:line: message`. */
+  const breaksOf = (files: Record<string, unknown>): string[] => {
+    const root = fixture({ "package.json": { name: "one" }, ...files });
+    commitAll(root);
+    return rule(root, "site-check-in-ci").breaks.map((item) => `${item.file}${item.line === undefined ? "" : `:${item.line}`}: ${item.message}`);
+  };
+
+  it("reads the events of on in each form", () => {
+    expect(triggersOf("on: push\n")).toEqual(["push"]);
+    expect(triggersOf("on: [push, pull_request]\n")).toEqual(["push", "pull_request"]);
+    expect(triggersOf('"on":\n  - push\n  - pull_request_target\n')).toEqual(["push", "pull_request_target"]);
+    expect(triggersOf("on:\n  push:\n    branches: [main]\n  # pull_request:\n  workflow_dispatch:\n")).toEqual(["push", "workflow_dispatch"]);
+    expect(triggersOf("jobs: {}\n")).toEqual([]);
+  });
+
+  it("passes a site with its config and a check that CI OK needs, and skips a repository with no deploy", () => {
+    const root = fixture({ "package.json": { name: "one" }, ".github/site.json": site, ".github/workflows/pages.yml": deploy, ".github/workflows/ci.yml": ci });
+    commitAll(root);
+    expect(rule(root, "site-check-in-ci").status).toBe("pass");
+    const test = fixture({ "package.json": { name: "one" }, ".github/workflows/actions-test.yml": "on: pull_request\njobs:\n  pages:\n    uses: ./.github/workflows/reusable-pages.yml\n    with:\n      out: test-site\n      deploy: false\n" });
+    commitAll(test);
+    expect(rule(test, "site-check-in-ci").status).toBe("skipped");
+  });
+
+  it("breaks on the old form: site values in the call, a deploy on a pull request, and no check", () => {
+    const old = `on: [push, pull_request]\njobs:\n  pages:\n    uses: mark1russell7/template/.github/workflows/reusable-pages.yml@${SHA} # main\n    with:\n      build: pnpm build\n      out: dist\n      deploy: \${{ github.event_name != 'pull_request' }}\n`;
+    expect(breaksOf({ ".github/workflows/pages.yml": old })).toEqual([
+      ".github/site.json: The repository deploys a site, and it has no .github/site.json. The check of a pull request reads the site values there.",
+      ".github/workflows/pages.yml:6: .github/workflows/pages.yml gives the site value build to the Pages workflow. Give it only in .github/site.json.",
+      ".github/workflows/pages.yml:7: .github/workflows/pages.yml gives the site value out to the Pages workflow. Give it only in .github/site.json.",
+      ".github/workflows/pages.yml: .github/workflows/pages.yml deploys the site and starts on pull_request, so a job of a pull request gets the permission pages: write.",
+      ".github/workflows/ci.yml: No job checks the site on a pull request. Add a job that uses reusable-pages-check.yml, and add it to the needs of CI OK.",
+    ]);
+  });
+
+  it("breaks on a call of the deploy from a pull request, and on a check that the gate does not need", () => {
+    const called = deploy.replace("on:\n", "on:\n  workflow_call:\n");
+    const caller = 'on:\n  pull_request:\njobs:\n  site:\n    uses: ./.github/workflows/reusable-pages-check.yml\n  preview:\n    uses: ./.github/workflows/pages.yml\n  ok:\n    name: "CI OK"\n    needs: site-x\n';
+    expect(breaksOf({ ".github/site.json": site, ".github/workflows/pages.yml": called, ".github/workflows/ci.yml": caller })).toEqual([
+      ".github/workflows/ci.yml:7: .github/workflows/ci.yml starts on pull_request and calls .github/workflows/pages.yml, which deploys the site. A job of a pull request gets the permission pages: write.",
+      ".github/workflows/ci.yml:5: The job CI OK of .github/workflows/ci.yml does not need the job site, so a failed check of the site does not stop a merge.",
+    ]);
+    const noGate = "on: pull_request\njobs:\n  site:\n    uses: ./.github/workflows/reusable-pages-check.yml\n";
+    expect(breaksOf({ ".github/site.json": site, ".github/workflows/pages.yml": deploy, ".github/workflows/ci.yml": noGate })).toEqual([
+      ".github/workflows/ci.yml:4: .github/workflows/ci.yml checks the site in the job site, and the file has no job CI OK, so a failed check does not stop a merge.",
+    ]);
   });
 });
 

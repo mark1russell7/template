@@ -2,10 +2,12 @@
 #
 #   ref     Decides if the commit of the event builds and deploys (.github/actions/build-ref/ref.ts). It runs no
 #           code of the repository. Its step summary tells the decision and its reason.
-#   build   Checks out the commit of the event (github.sha) with no ref of its own. It installs, builds the site,
-#           adds the Releases page and the Status page (the site-pages action), checks the pages in a browser
-#           (site-check: true), and uploads the Pages artifact. It gets only read permissions. A failed check
-#           uploads nothing, so the job deploy does not start.
+#   build   Checks out the commit of the event (github.sha) with no ref of its own. The action site-config reads the
+#           site config (.github/site.json, or the inputs below when the repository has no such file). The action
+#           pages-build installs, builds the site, adds the Releases page and the Status page, checks the pages in a
+#           browser (site-check: true), and uploads the Pages artifact. reusable-pages-check.yml uses the same two
+#           actions on a pull request. The job gets only read permissions. A failed check uploads nothing, so the job
+#           deploy does not start.
 #   deploy  Deploys the artifact to GitHub Pages. It runs no code of the repository. It has no
 #           "permissions" key: it gets "pages: write" and "id-token: write" from the caller job.
 #
@@ -25,14 +27,18 @@ name: Reusable Pages
 on:
   workflow_call:
     inputs:
-      build:
-        description: The bash command that builds the site, after the install. It can have more lines.
+      site-config:
+        description: The path of the site config in the repository (CI.md, "The site config"). When the file is absent, the inputs below give the site.
         type: string
-        required: true
+        default: .github/site.json
+      build:
+        description: The bash command that builds the site, after the install. It can have more lines. A repository with a site config gives it there, not here.
+        type: string
+        default: ""
       out:
         description: The built output folder of the site, relative to the root of the repository, for example packages/site/dist.
         type: string
-        required: true
+        default: ""
       env:
         description: Environment variables for the install and the build, as a JSON object.
         type: string
@@ -221,6 +227,9 @@ jobs:
     if: needs.ref.outputs.build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout-minutes }}
+    # The job indexnow reads the key of the site config, not the input.
+    outputs:
+      indexnow-key: ${{ fromJSON(steps.config.outputs.config)['indexnow-key'] }}
     permissions:
       contents: read
       # site-pages reads the Actions runs, the pull requests, the issues and their checks.
@@ -235,47 +244,11 @@ jobs:
         with:
           fetch-depth: ${{ inputs.fetch-depth }}
           persist-credentials: false
-      # The pnpm version comes from "packageManager" in package.json
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ inputs.node-version-file == '' && inputs.node-version || '' }}
-          node-version-file: ${{ inputs.node-version-file }}
-          cache: pnpm
-      - name: Environment variables
-        if: inputs.env != '{}' && inputs.env != ''
-        shell: bash
-        env:
-          ENV_JSON: ${{ inputs.env }}
-        run: |
-          node -e '
-            const { appendFileSync } = require("node:fs");
-            const { randomBytes } = require("node:crypto");
-            const env = JSON.parse(process.env.ENV_JSON);
-            if (env === null || typeof env !== "object" || Array.isArray(env)) throw new Error("The input env must be a JSON object.");
-            for (const [name, value] of Object.entries(env)) {
-              if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw new Error(`"${name}" is not a name of an environment variable.`);
-              const end = `END_${randomBytes(8).toString("hex")}`;
-              appendFileSync(process.env.GITHUB_ENV, `${name}<<${end}\n${value}\n${end}\n`);
-              console.log(`${name} is set.`);
-            }
-          '
-      - run: pnpm install --frozen-lockfile
-      - name: Build
-        shell: bash
-        env:
-          COMMAND: ${{ inputs.build }}
-          # Empty when the input github-token is false
-          TOKEN: ${{ inputs.github-token && github.token || '' }}
-        run: |
-          if [ -n "$TOKEN" ]; then export GITHUB_TOKEN="$TOKEN"; fi
-          unset TOKEN
-          eval "$COMMAND"
-      # The site check, the site bar, the scroll cue and the freshness gate run from the source of the same template
-      # commit (packages/site-pages/src/check and src/bar import only Node.js, src/data and src/render/html.ts, and the
-      # cue reads styles/scroll-cue.css), so they need no npm release of site-pages.
-      - name: Shared actions (site-pages and the site check)
-        if: inputs.site-pages || inputs.site-check || inputs.site-bar || inputs.scroll-cue || inputs.data-stamps != ''
+      # The actions site-config and pages-build, and the source of the site config, the site check, the site bar, the
+      # scroll cue and the freshness gate, from the same template commit. packages/site-pages/src/check and src/bar
+      # import only Node.js, src/data and src/render/html.ts, and the cue reads styles/scroll-cue.css, so they need no
+      # npm release of site-pages.
+      - name: Shared actions (the site config, site-pages and the site check)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
@@ -285,71 +258,21 @@ jobs:
             .github/actions
             packages/site-pages/src/bar
             packages/site-pages/src/check
+            packages/site-pages/src/config
             packages/site-pages/src/data
             packages/site-pages/src/render
             packages/site-pages/styles
           persist-credentials: false
-      - if: inputs.data-stamps != ''
-        uses: ./.shared-actions/.github/actions/data-stamps
+      # The values of .github/site.json, or the inputs of this workflow when the repository has no such file
+      - id: config
+        uses: ./.shared-actions/.github/actions/site-config
         with:
-          stamps: ${{ inputs.data-stamps }}
-      # The Releases page and the Status page (releases/, status/ and their data/*.json), at deploy time
-      - if: inputs.site-pages
-        uses: ./.shared-actions/.github/actions/site-pages
+          path: ${{ inputs.site-config }}
+          inputs: ${{ toJSON(inputs) }}
+      - uses: ./.shared-actions/.github/actions/pages-build
         with:
-          out: ${{ inputs.out }}
-          version: ${{ inputs.site-pages-version }}
-          roadmap: ${{ inputs.roadmap }}
-          base: ${{ inputs.base }}
-          packages: ${{ inputs.packages }}
-          changesets: ${{ inputs.changesets }}
-          group: ${{ inputs.group }}
-          css: ${{ inputs.css }}
-          site-name: ${{ inputs.site-name }}
-          data-only: ${{ inputs.data-only }}
-      # One bar for each page of the site: the portfolio, the site, its pages, Releases, Status, GitHub and npm
-      - name: Site bar
-        if: inputs.site-bar
-        shell: bash
-        env:
-          OUT: ${{ inputs.out }}
-          BASE: ${{ inputs.base }}
-          SITE_NAME: ${{ inputs.site-name }}
-          PAGES: ${{ inputs.site-bar-pages }}
-          NPM: ${{ inputs.site-bar-npm }}
-          SITE_PAGES: ${{ inputs.site-pages && !inputs.data-only }}
-        run: |
-          args=(--out "$OUT" --repo "$GITHUB_REPOSITORY")
-          [ -z "$BASE" ] || args+=(--base "$BASE")
-          [ -z "$SITE_NAME" ] || args+=(--site-name "$SITE_NAME")
-          [ -z "$PAGES" ] || args+=(--pages "$PAGES")
-          [ -z "$NPM" ] || args+=(--npm "$NPM")
-          [ "$SITE_PAGES" != "true" ] || args+=(--site-pages)
-          node .shared-actions/packages/site-pages/src/bar/main.ts "${args[@]}"
-      # A fade at the edge of each code block that is wider than its box, at each width of the screen
-      - name: Scroll cue
-        if: inputs.scroll-cue
-        shell: bash
-        env:
-          OUT: ${{ inputs.out }}
-        run: node .shared-actions/packages/site-pages/src/bar/cue-main.ts --out "$OUT"
-      - name: Site check
-        if: inputs.site-check || inputs.site-bar
-        uses: ./.shared-actions/.github/actions/site-check
-        with:
-          out: ${{ inputs.out }}
-          base: ${{ inputs.base }}
-          visual: ${{ inputs.site-check }}
-          nav: ${{ inputs.site-bar }}
-          site-check-pages: ${{ inputs.site-check-pages }}
-          site-check-widths: ${{ inputs.site-check-widths }}
-          site-check-probe: ${{ inputs.site-check-probe }}
-          site-check-playwright: ${{ inputs.site-check-playwright }}
-          artifact-name: ${{ inputs.artifact-prefix }}site-check
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        with:
-          name: ${{ inputs.artifact-prefix }}github-pages
-          path: ${{ inputs.out }}
+          config: ${{ steps.config.outputs.config }}
+          artifact-prefix: ${{ inputs.artifact-prefix }}
 
   deploy:
     needs: [ref, build]
@@ -370,8 +293,8 @@ jobs:
   # Tell the search engines of IndexNow (Bing and others) about the pages of the new deploy. A failure here does not
   # fail the deploy. A scheduled deploy changes only the Status page, so it sends nothing.
   indexnow:
-    needs: deploy
-    if: inputs.deploy && inputs.indexnow-key != '' && github.event_name != 'schedule'
+    needs: [build, deploy]
+    if: inputs.deploy && needs.build.outputs.indexnow-key != '' && github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     continue-on-error: true
@@ -391,5 +314,5 @@ jobs:
       - name: IndexNow
         env:
           SITE: ${{ needs.deploy.outputs.page-url }}
-          KEY: ${{ inputs.indexnow-key }}
+          KEY: ${{ needs.build.outputs.indexnow-key }}
         run: node .shared-actions/packages/site-pages/src/indexnow/main.ts --site "${SITE%/}/" --key "$KEY"

@@ -1,0 +1,114 @@
+name: pages-build
+description: >-
+  Builds the site of a repository from its site config, and uploads the Pages artifact. It installs, builds, adds the
+  Releases page and the Status page, writes the site bar and the scroll cue, and checks the pages in a browser. A failed
+  check uploads nothing. reusable-pages.yml (build and deploy) and reusable-pages-check.yml (the check of a pull request)
+  use it, so the two build the same site (CI.md, "The site config").
+# The job checks out the repository into the workspace, and the template at the commit of the workflow into
+# .shared-actions, with the folders of the sparse checkout of reusable-pages.yml. The steps below use the actions of
+# that checkout by their path in the workspace.
+inputs:
+  config:
+    description: The site config as JSON, the output config of the action site-config.
+    required: true
+  artifact-prefix:
+    description: A prefix of the names of the artifacts github-pages and site-check.
+    default: ""
+runs:
+  using: composite
+  steps:
+    # The pnpm version comes from "packageManager" in package.json
+    - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: ${{ fromJSON(inputs.config)['node-version-file'] == '' && fromJSON(inputs.config)['node-version'] || '' }}
+        node-version-file: ${{ fromJSON(inputs.config)['node-version-file'] }}
+        cache: pnpm
+    # site-config checked each name and gave each value as a string
+    - name: Environment variables
+      shell: bash
+      env:
+        ENV_JSON: ${{ toJSON(fromJSON(inputs.config).env) }}
+      run: |
+        node -e '
+          const { appendFileSync } = require("node:fs");
+          const { randomBytes } = require("node:crypto");
+          for (const [name, value] of Object.entries(JSON.parse(process.env.ENV_JSON))) {
+            const end = `END_${randomBytes(8).toString("hex")}`;
+            appendFileSync(process.env.GITHUB_ENV, `${name}<<${end}\n${value}\n${end}\n`);
+            console.log(`${name} is set.`);
+          }
+        '
+    - shell: bash
+      run: pnpm install --frozen-lockfile
+    - name: Build
+      shell: bash
+      env:
+        COMMAND: ${{ fromJSON(inputs.config).build }}
+        # Empty when github-token is false
+        TOKEN: ${{ fromJSON(inputs.config)['github-token'] && github.token || '' }}
+      run: |
+        if [ -n "$TOKEN" ]; then export GITHUB_TOKEN="$TOKEN"; fi
+        unset TOKEN
+        eval "$COMMAND"
+    - if: fromJSON(inputs.config)['data-stamps'] != ''
+      uses: ./.shared-actions/.github/actions/data-stamps
+      with:
+        stamps: ${{ fromJSON(inputs.config)['data-stamps'] }}
+    # The Releases page and the Status page (releases/, status/ and their data/*.json)
+    - if: fromJSON(inputs.config)['site-pages']
+      uses: ./.shared-actions/.github/actions/site-pages
+      with:
+        out: ${{ fromJSON(inputs.config).out }}
+        version: ${{ fromJSON(inputs.config)['site-pages-version'] }}
+        roadmap: ${{ fromJSON(inputs.config).roadmap }}
+        base: ${{ fromJSON(inputs.config).base }}
+        packages: ${{ fromJSON(inputs.config).packages }}
+        changesets: ${{ fromJSON(inputs.config).changesets }}
+        group: ${{ fromJSON(inputs.config).group }}
+        css: ${{ fromJSON(inputs.config).css }}
+        site-name: ${{ fromJSON(inputs.config)['site-name'] }}
+        data-only: ${{ fromJSON(inputs.config)['data-only'] }}
+    # One bar for each page of the site: the portfolio, the site, its pages, Releases, Status, GitHub and npm
+    - name: Site bar
+      if: fromJSON(inputs.config)['site-bar']
+      shell: bash
+      env:
+        OUT: ${{ fromJSON(inputs.config).out }}
+        BASE: ${{ fromJSON(inputs.config).base }}
+        SITE_NAME: ${{ fromJSON(inputs.config)['site-name'] }}
+        PAGES: ${{ fromJSON(inputs.config)['site-bar-pages'] }}
+        NPM: ${{ fromJSON(inputs.config)['site-bar-npm'] }}
+        SITE_PAGES: ${{ fromJSON(inputs.config)['site-pages'] && !fromJSON(inputs.config)['data-only'] }}
+      run: |
+        args=(--out "$OUT" --repo "$GITHUB_REPOSITORY")
+        [ -z "$BASE" ] || args+=(--base "$BASE")
+        [ -z "$SITE_NAME" ] || args+=(--site-name "$SITE_NAME")
+        [ -z "$PAGES" ] || args+=(--pages "$PAGES")
+        [ -z "$NPM" ] || args+=(--npm "$NPM")
+        [ "$SITE_PAGES" != "true" ] || args+=(--site-pages)
+        node .shared-actions/packages/site-pages/src/bar/main.ts "${args[@]}"
+    # A fade at the edge of each code block that is wider than its box, at each width of the screen
+    - name: Scroll cue
+      if: fromJSON(inputs.config)['scroll-cue']
+      shell: bash
+      env:
+        OUT: ${{ fromJSON(inputs.config).out }}
+      run: node .shared-actions/packages/site-pages/src/bar/cue-main.ts --out "$OUT"
+    - name: Site check
+      if: fromJSON(inputs.config)['site-check'] || fromJSON(inputs.config)['site-bar']
+      uses: ./.shared-actions/.github/actions/site-check
+      with:
+        out: ${{ fromJSON(inputs.config).out }}
+        base: ${{ fromJSON(inputs.config).base }}
+        visual: ${{ fromJSON(inputs.config)['site-check'] }}
+        nav: ${{ fromJSON(inputs.config)['site-bar'] }}
+        site-check-pages: ${{ fromJSON(inputs.config)['site-check-pages'] }}
+        site-check-widths: ${{ fromJSON(inputs.config)['site-check-widths'] }}
+        site-check-probe: ${{ fromJSON(inputs.config)['site-check-probe'] }}
+        site-check-playwright: ${{ fromJSON(inputs.config)['site-check-playwright'] }}
+        artifact-name: ${{ inputs.artifact-prefix }}site-check
+    - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+      with:
+        name: ${{ inputs.artifact-prefix }}github-pages
+        path: ${{ fromJSON(inputs.config).out }}

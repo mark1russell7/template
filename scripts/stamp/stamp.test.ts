@@ -33,16 +33,26 @@ describe("the stamp", () => {
   it("gives the install command when the repository has a package name", async () => {
     const { out } = await stamped("@mark1russell7/demo");
     assert.match(read(out, "packages/site/index.html"), /pnpm add @mark1russell7\/demo/);
-    assert.match(read(out, ".github/workflows/pages.yml"), /packages: "@mark1russell7\/demo"/);
+    assert.equal((JSON.parse(read(out, ".github/site.json")) as { packages: string }).packages, "@mark1russell7/demo");
   });
 
-  it("names the site in the Pages workflow and pins the shared workflow", async () => {
+  it("names the site in the site config, and pins the shared workflows of the deploy and of the check", async () => {
     const { out, sha } = await stamped();
+    const text = read(out, ".github/site.json");
+    const site = JSON.parse(text) as Record<string, unknown>;
+    assert.equal(site["build"], "pnpm --filter @demo-repo/site run build");
+    assert.equal(site["out"], "packages/site/dist");
+    assert.equal(site["site-name"], "demo-repo");
+    assert.deepEqual(site["env"], { SITE_BASE: "/{repo}" });
+    assert.doesNotMatch(text, /@template\/site|"Template"|\{\{\w+\}\}/);
     const pages = read(out, ".github/workflows/pages.yml");
-    assert.match(pages, /build: pnpm --filter @demo-repo\/site run build/);
-    assert.match(pages, /out: packages\/site\/dist/);
     assert.ok(pages.includes(`reusable-pages.yml@${sha} # main`));
-    assert.doesNotMatch(pages, /@template\/site|site-name: Template|\{\{\w+\}\}/);
+    // The site values have one home: the Pages workflow gives none of them
+    assert.doesNotMatch(pages, /\n    with:\n/);
+    // The job site of ci.yml checks the site on each pull request, and CI OK needs it
+    const ci = read(out, ".github/workflows/ci.yml");
+    assert.ok(ci.includes(`uses: mark1russell7/template/.github/workflows/reusable-pages-check.yml@${sha} # main`));
+    assert.match(ci, /\n    needs: \[[^\]]*\bsite\b[^\]]*\]\n/);
   });
 
   it("leaves no range of a package that the repository does not have", async () => {

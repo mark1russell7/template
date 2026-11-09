@@ -10,6 +10,9 @@ The template holds the CI, the release and the Pages workflows of the repositori
 | `.github/workflows/reusable-release-tag.yml` | Workflow | Makes a git tag and a GitHub release for each published version. |
 | `.github/workflows/reusable-mutation.yml` | Workflow | Starts the mutation tests of each package with Stryker, with a gate for each package. |
 | `.github/workflows/reusable-pages.yml` | Workflow | Builds a site, adds the Releases page and the Status page, and deploys it to GitHub Pages. |
+| `.github/workflows/reusable-pages-check.yml` | Workflow | Builds and checks the site of a pull request in the job `site` of CI, with no deploy. |
+| `.github/actions/site-config` | Action | Reads `.github/site.json`, the one home of the values of the site, and gives them as JSON. |
+| `.github/actions/pages-build` | Action | Builds the site from the site config, adds the pages of `site-pages`, checks it and uploads the artifacts. |
 | `.github/actions/security-scan` | Action | Scans the dependencies and the code with the dependency review, osv-scanner and CodeQL, in one job. |
 | `.github/workflows/reusable-security.yml` | Workflow | Deprecated. The same scans in three jobs ("Security", "The old workflow"). |
 | `.github/workflows/reusable-ai-review.yml` | Workflow | Gives a pull request a review by Claude on request (the `ai-review` label), comment only (`AI-REVIEW.md`). |
@@ -363,6 +366,23 @@ The gates are in the lane file, not in an input. Thus a local run and CI use the
 
 The job `build` checks out the commit of the event, with no ref of its own. It installs, builds the site, adds the pages of `site-pages` and uploads the Pages artifact. It gets only read permissions. The job `deploy` deploys the artifact. It starts no code of the repository.
 
+The job `build` uses two actions. `site-config` reads the site config, and `pages-build` builds the site. The check of a pull request uses the same two actions ("The site config").
+
+The site values are in `.github/site.json`:
+
+```json
+{
+  "build": "pnpm --filter @crawler/site run build",
+  "out": "packages/site/dist",
+  "env": { "SITE_BASE": "/{repo}", "ASTRO_TELEMETRY_DISABLED": "1" },
+  "roadmap": "docs/ROADMAP.md",
+  "packages": "polite-crawler,polite-crawler-mcp",
+  "site-check": true
+}
+```
+
+The caller `pages.yml` gives only the permissions:
+
 ```yaml
 on:
   push:
@@ -395,12 +415,15 @@ jobs:
       statuses: read
       pages: write
       id-token: write
-    with:
-      build: pnpm --filter @crawler/site run build
-      out: packages/site/dist
-      env: '{"SITE_BASE": "/${{ github.event.repository.name }}", "ASTRO_TELEMETRY_DISABLED": "1"}'
-      roadmap: docs/ROADMAP.md
-      packages: polite-crawler,polite-crawler-mcp
+```
+
+The job `site` of `ci.yml` checks the site of each pull request, and "CI OK" needs it:
+
+```yaml
+  site:
+    uses: mark1russell7/template/.github/workflows/reusable-pages-check.yml@<commit> # main
+    permissions:
+      contents: read
 ```
 
 - A repository that publishes a package also starts Pages after a release, with `workflow_run` of `Release`, and on each day. A release starts no Pages run by itself, so the Releases page is behind npm until the next build. The rule `pages-after-release` of `@mark1russell7/conventions` examines both triggers, and `conventions fix` writes them.
@@ -413,7 +436,7 @@ jobs:
 - The input `pending` is `head` by default. With `pending: green`, a head whose CI runs deploys nothing.
 - The inputs of `site-pages` go to the action: `site-pages-version`, `roadmap`, `base`, `packages`, `changesets`, `group`, `css`, `site-name` and `data-only`.
 - `site-pages: false` builds the site without the Releases page and the Status page.
-- Without `roadmap`, the Status page shows only the open pull requests and issues. The rule `roadmap-parses` of `@mark1russell7/conventions` thus needs `roadmap` in each call, or `site-pages: false`.
+- Without `roadmap`, the Status page shows only the open pull requests and issues. The rule `roadmap-parses` of `@mark1russell7/conventions` thus needs `roadmap` in the site config or in each call, or `site-pages: false`.
 - `site-check: true` checks the built pages in a headless Chromium before the upload. A failed check stops the deploy. The next list tells the check.
 - The check opens each page of `site-check-pages` (default: the home) at the widths 360, 400 and 1280, in light and dark.
 - A page fails when it is wider than the screen, or an element goes past the right edge.
@@ -447,6 +470,26 @@ jobs:
 - The workflow gets the actions of the same template commit as the workflow file. A second checkout gets them.
 - Each public repository has a site. The rule `pages-site` of `@mark1russell7/conventions` needs a call of this workflow without `deploy: false`.
 - The Pages source of the repository is "GitHub Actions". To set it, start `gh api -X POST repos/<owner>/<repo>/pages -f build_type=workflow` one time.
+
+### The site config
+
+The file `.github/site.json` is the one home of the values of the site. The deploy of `main` and the check of each pull request read it. Thus a pull request checks the site that `main` deploys.
+
+- The keys of the file are the site inputs of `reusable-pages.yml`, with the same names and the same defaults. The file needs `build` and `out`.
+- The inputs `pending`, `deploy`, `fetch-depth`, `ci-workflow`, `artifact-prefix`, `page-url` and `timeout-minutes` stay in the call. They are not keys of the file.
+- In each string value, `{owner}` is the owner of the repository and `{repo}` is its name. For example, `"SITE_BASE": "/{repo}"`.
+- A boolean key takes `true` or `false`. The key `env` is an object of strings.
+- An unknown key, a value of the wrong type or a file that is not JSON stops the build with a message.
+- When the repository has the file, a call that also gives a site input with a value different from its default fails. Give each site value in one place.
+- A repository with no file keeps its site inputs in the call of `reusable-pages.yml`. The check of a pull request needs the file.
+- The job `site` of `ci.yml` uses `reusable-pages-check.yml`. "CI OK" needs the job, so a pull request with a bad site does not merge.
+- The check builds the site and starts the site check and the probe, as the deploy does. It uploads the artifacts and deploys nothing.
+- GitHub counts the permissions of a called workflow against the grant of the caller job. A CI job of a pull request has no write permission.
+- Thus `reusable-pages-check.yml` gets only `contents: read`. On a public repository, each read of `site-pages` works with this token.
+- The rule `roadmap-parses` of `@mark1russell7/conventions` reads the file. It reports a bad file on the pull request, before the deploy reads it.
+- The rule `site-check-in-ci` of `@mark1russell7/conventions` holds this form. It needs the file and a job that checks the site, in the needs of "CI OK".
+- The rule also finds a site input in the call of the deploy. It finds a deploy that a pull request starts, directly or through a call.
+- The preset `site` of `template-cli` writes `.github/site.json`, and the stamp writes the job `site` into `ci.yml`.
 
 ## Security
 
@@ -554,9 +597,10 @@ The workflows of the template call the shared workflows and actions by a local p
 - `security.yml` tests the action `security-scan`. The tests of `scripts/workflows/security-scan.test.ts` start no scan. They examine the choice of the scans, the last step and the step that finds the new CodeQL alerts.
 - Before the action, `security.yml` checks out the folder `.github/actions` of the template. This step operates only in the template. In a private repository, its partial clone makes the checkout of the base fail.
 - `actions-test.yml` tests the actions, `reusable-pages.yml` and the release workflows, with `dry-run`. It publishes nothing. On a pull request, it sets the input `require-main` of the release build to `false`.
-- On each pull request, the job `site` of `actions-test.yml` calls `pages.yml`. It builds the site of the template and starts its probe, with no deploy.
-- "Actions OK" is a check of the ruleset of `main`, and it needs the job `site`. Thus `gh pr merge --auto` waits for the probe of the site.
-- `ci.yml` cannot call `pages.yml`, because `release.yml` calls `ci.yml` with only `contents: read`.
+- On each pull request, the job `site` of `ci.yml` uses `reusable-pages-check.yml`. It builds the site of the template and starts its probe, with no deploy.
+- "CI OK" needs the job `site`. Thus `gh pr merge --auto` waits for the probe of the site.
+- `release.yml` uses `ci.yml` with only `contents: read`. The job `site` needs no more permissions.
+- The job `pages` of `actions-test.yml` uses `reusable-pages.yml` with no site config. It tests the site inputs of a repository with no `.github/site.json`.
 - `ai-review.yml` tests `reusable-ai-review.yml`, and `codex-review.yml` tests `reusable-codex-review.yml`. Without its API key, a review stops at once with a note.
 - The tests of `scripts/ai-review/` examine the request, the redaction and the post of the second review, with no network.
 

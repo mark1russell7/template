@@ -5,9 +5,6 @@
 #   pages           reusable-pages.yml builds a test site with the Releases page and the Status page,
 #                   and uploads the Pages artifact, with no deploy.
 #   pages-check     The pages and their JSON are in the artifact.
-#   site            On each pull request, pages.yml builds the site of the template and starts its site check with
-#                   the probe of packages/site, with no deploy. The check "Actions OK" needs it, so gh pr merge --auto
-#                   waits for the probe. The job has no paths filter, because each shared workflow is in the explorer.
 #   release-build   reusable-release-build.yml packs the packages of this repository. Only a run on
 #                   main checks that the commit is on main (the input require-main). The input
 #                   after-pack tests the tarballs, writes an output, adds a title and the
@@ -35,6 +32,7 @@ on:
       - ".github/actions/**"
       - ".github/workflows/actions-test.yml"
       - ".github/workflows/reusable-pages.yml"
+      - ".github/workflows/reusable-pages-check.yml"
       - ".github/workflows/reusable-release-*.yml"
       - ".github/workflows/reusable-ci.yml"
       - "scripts/release/**"
@@ -42,8 +40,9 @@ on:
       - "package.json"
       - "pnpm-lock.yaml"
       - "packages/*/package.json"
-      # The site check of reusable-pages.yml runs from this folder
+      # The site check and the site config of reusable-pages.yml run from these folders
       - "packages/site-pages/src/check/**"
+      - "packages/site-pages/src/config/**"
   # Each pull request starts this workflow, so the check "Actions OK" of the ruleset is always there. The job
   # changes skips the tests when the pull request changes no file of them (CI.md, "A gate with paths").
   pull_request:
@@ -79,6 +78,7 @@ jobs:
             .github/actions/**
             .github/workflows/actions-test.yml
             .github/workflows/reusable-pages.yml
+            .github/workflows/reusable-pages-check.yml
             .github/workflows/reusable-release-*.yml
             .github/workflows/reusable-ci.yml
             scripts/release/**
@@ -86,6 +86,7 @@ jobs:
             pnpm-lock.yaml
             packages/*/package.json
             packages/site-pages/src/check/**
+            packages/site-pages/src/config/**
 
   green-main:
     needs: changes
@@ -235,6 +236,8 @@ jobs:
       checks: read
       statuses: read
     with:
+      # The path of a file that does not exist: the call tests the old inputs of a caller with no site config
+      site-config: .github/no-site-config.json
       # The env input gets to the build command
       build: |
         test "$TEST_SITE" = actions-test
@@ -267,8 +270,7 @@ jobs:
     timeout-minutes: 5
     permissions: {}
     steps:
-      # The job site of this workflow uploads the artifacts github-pages and site-check on a pull request. So the
-      # call pages gives its artifacts the prefix test-.
+      # The call pages gives its artifacts the prefix test-, so the job tests the input artifact-prefix.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: test-github-pages
@@ -294,23 +296,6 @@ jobs:
             test -s "$CHECK/$page-$w-$s.png" || { echo "::error::the screenshot $page-$w-$s.png is missing"; exit 1; }
           done; done; done
           node -e 'const s = require(process.argv[1]); if (!s.github?.available) { console.error("::error::the GitHub part is not available:", s.github?.reason); process.exit(1); } if (!(s.items?.length > 0)) { console.error("::error::the Status page has no roadmap item"); process.exit(1); } console.log("github:", s.pullRequests.length, "open PRs,", s.issues.length, "open issues;", s.items.length, "roadmap items")' "$OUT/data/status.json"
-
-  # The site of the template on each pull request. pages.yml is the one home of its inputs. A push to main starts
-  # pages.yml by itself, so the job runs only on a pull request.
-  site:
-    if: github.event_name == 'pull_request'
-    uses: ./.github/workflows/pages.yml
-    # The permissions of the job pages of pages.yml. Only its deploy job uses pages and id-token, and that job does not
-    # run on a pull request. The environment github-pages also accepts a deploy only from main.
-    permissions:
-      contents: read
-      actions: read
-      issues: read
-      pull-requests: read
-      checks: read
-      statuses: read
-      pages: write
-      id-token: write
 
   release-build:
     needs: changes
@@ -377,7 +362,7 @@ jobs:
   actions-ok:
     name: Actions OK
     if: ${{ !cancelled() }}
-    needs: [changes, green-main, setup-cue, cue-ci, data-stamps, pages, pages-check, site, release-build, release-publish, release-tag]
+    needs: [changes, green-main, setup-cue, cue-ci, data-stamps, pages, pages-check, release-build, release-publish, release-tag]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}

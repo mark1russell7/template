@@ -200,7 +200,7 @@ export const PRESETS: Readonly<Record<PresetName, Preset>> = {
     install: { dependencies: [], devDependencies: ["vite", "@mark1russell7/site-pages"] },
     scripts: { dev: "vite", build: "vite build" },
     files: "site",
-    repoFiles: { ".github/workflows/pages.yml": "site-repo/pages.yml" },
+    repoFiles: { ".github/workflows/pages.yml": "site-repo/pages.yml", ".github/site.json": "site-repo/site.json" },
   },
   // A desktop app: a main process with safe defaults, a preload script that gives the page only a message port, and a page.
   electron: {
