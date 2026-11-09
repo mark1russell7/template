@@ -99,7 +99,7 @@ on:
       version-check:
         description: >-
           On a pull request, pack each published package whose version is on npm, after the build of the scripts, and
-          compare its files with npm (actions/version-check). A change of the shipped files needs a greater version.
+          compare its files with npm (scripts/version-check). A change of the shipped files needs a greater version.
           The first cell of the matrix does it. false turns it off.
         type: boolean
         default: true
@@ -321,7 +321,7 @@ jobs:
           ref: ${{ job.workflow_sha }}
           path: .version-check
           sparse-checkout: |
-            .github/actions/version-check
+            scripts/version-check
             scripts/release
           persist-credentials: false
       - name: Version check
@@ -341,7 +341,7 @@ jobs:
             echo "::notice::Node.js $(node --version) cannot start the version check (Node.js 22.18 or later can). The step checks nothing."
             exit 0
           fi
-          node "$RUNNER_TEMP/version-check/.github/actions/version-check/version-check.ts"
+          node "$RUNNER_TEMP/version-check/scripts/version-check/version-check.ts"
       # The action comes from the commit of this workflow, as in the job changesets. The checkout is after the scripts,
       # so the scripts do not see the folder .shared-actions.
       - if: (inputs.coverage || (inputs.coverage-on-main && github.event_name == 'push' && !github.event.repository.private && github.ref == format('refs/heads/{0}', github.event.repository.default_branch))) && matrix.os == fromJSON(inputs.os)[0] && matrix.node == fromJSON(inputs.node-versions)[0]

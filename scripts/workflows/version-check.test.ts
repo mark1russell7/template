@@ -1,10 +1,10 @@
-// Tests version-check.ts of the action version-check: the date that fails the step, the annotations and the exit code.
+// Tests scripts/version-check/version-check.ts: the date that fails the step, the annotations and the exit code.
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { drifts, evaluate, failsOn, type Drift } from "./version-check/version-check.ts";
+import { drifts, evaluate, failsOn, type Drift } from "../version-check/version-check.ts";
 
 const same: Drift = { name: "@scope/same", version: "1.0.0", differences: [] };
 const changed: Drift = { name: "@scope/changed", version: "0.2.3", differences: ["dist/index.js (changed)", "README.md (changed)"] };

@@ -80,7 +80,7 @@ The release skips each version that is on npm. Thus a pull request that changes 
 
 On a pull request, the first cell of the matrix examines this after the scripts:
 
-- The script `version-check.ts` of the action `version-check` packs each published package whose version is on npm.
+- The script `scripts/version-check/version-check.ts` packs each published package whose version is on npm.
 - It compares the files with the tarball on npm. The compare is the compare of the release (`scripts/release/unchanged.ts`).
 - In `package.json`, only the fields that change what a user installs count. A change of a test or of a development dependency ships nothing, so it passes.
 - A package whose version is not on npm passes: the release publishes it.

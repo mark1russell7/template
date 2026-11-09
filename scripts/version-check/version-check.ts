@@ -6,14 +6,15 @@
 // with the tarball on npm, with the compare of the release (scripts/release/unchanged.ts).
 //
 // Before the date FAILS_FROM, a difference gives a warning and the step passes. From that date, it
-// gives an error and the step fails. evaluate() has the rules and no I/O, so the tests call it directly.
+// gives an error and the step fails. evaluate() has the rules and no I/O, so the tests call it directly
+// (scripts/workflows/version-check.test.ts).
 
 import { execFileSync } from "node:child_process";
 import { appendFileSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { shippedDifferences, tarballFiles } from "../../../scripts/release/unchanged.ts";
-import { publishedPackages, type Packument } from "../../../scripts/release/workspace.ts";
+import { shippedDifferences, tarballFiles } from "../release/unchanged.ts";
+import { publishedPackages, type Packument } from "../release/workspace.ts";
 
 /** A published package whose version is on npm, with the shipped files that differ from npm. */
 export interface Drift {
