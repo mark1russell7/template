@@ -1,13 +1,14 @@
 // The audit of the time limits. `limit-audit.ts` has the rules, and its test does not start this file.
 //
-//   node scripts/limit-audit/main.ts [--repos a,b] [--hours 24] [--ci-runs 3] [--out <folder>] [--strict]
+//   node scripts/limit-audit/main.ts [--repos a,b] [--hours 24] [--ci-runs 3] [--out <folder>] [--strict] [--fails-from YYYY-MM-DD]
 //
 // For each public repository of the owner that is not archived (or each one of --repos), the script reads the runs of
 // the default branch that started in the last --hours hours. It reads the jobs of each run that did not pass and each run with a second
 // attempt, if the run took a minute or more, and the newest --ci-runs runs of ci.yml. Then it reads the annotations of each cancelled job of a
 // minute or more and of each job coverage. It writes limit-audit.json and the summary into --out, and an annotation for each finding.
-// With --strict, exit code 1 tells that a job stopped at a limit, or that the script could not read a repository: a
-// no-read is never a pass. Without --strict, the audit is a report, and only a wrong command line fails (exit code 2).
+// With --strict, exit code 1 tells that the script could not read a repository (a no-read is never a pass), or that a
+// job stopped at a limit on or after the day --fails-from. Before that day, a stop gives a warning. An empty
+// --fails-from fails at once. Without --strict, the audit is a report, and only a wrong command line fails (exit code 2).
 import { execFile } from "node:child_process";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -18,7 +19,8 @@ import {
   type Job,
   type Run,
   annotation,
-  fails,
+  exitCode,
+  failsOn,
   jobFindings,
   newestCiRuns,
   readsJob,
@@ -63,12 +65,21 @@ const { values } = parseArgs({
     "ci-runs": { type: "string", default: "3" },
     out: { type: "string", default: "limit-audit" },
     strict: { type: "boolean", default: false },
+    "fails-from": { type: "string", default: "" },
   },
 });
 const hours = Number(values.hours);
 const ciCount = Number(values["ci-runs"]);
 if (!Number.isInteger(hours) || hours < 1 || !Number.isInteger(ciCount) || ciCount < 0) {
   console.error("Usage: --hours is a whole number of 1 or more, and --ci-runs a whole number of 0 or more.");
+  process.exit(2);
+}
+const failsFrom = values["fails-from"];
+const today = new Date().toISOString().slice(0, 10);
+try {
+  failsOn(failsFrom, today);
+} catch (error) {
+  console.error(`Usage: --fails-from: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(2);
 }
 const owner = values.owner;
@@ -127,8 +138,8 @@ writeFileSync(join(out, "limit-audit.json"), `${JSON.stringify({ date: new Date(
 const summary = render(findings, repos.length, notRead, hours);
 writeFileSync(join(out, "summary.md"), `${summary.join("\n")}\n`);
 if (process.env["GITHUB_STEP_SUMMARY"]) appendFileSync(process.env["GITHUB_STEP_SUMMARY"], `${summary.join("\n")}\n`);
-for (const finding of findings) console.log(annotation(finding));
+for (const finding of findings) console.log(annotation(finding, failsFrom, today));
 for (const repo of notRead) console.log(`::error title=Time limit audit%3A no read::The audit could not read ${repo}.`);
 console.log(summary.join("\n"));
 console.log(`${calls} API reads.`);
-process.exit(values.strict && (findings.some(fails) || notRead.length > 0) ? 1 : 0);
+process.exit(exitCode(findings, notRead, values.strict, failsFrom, today));

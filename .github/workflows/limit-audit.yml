@@ -4,8 +4,10 @@
 # or warns above 80 % of its limit. The summary of the run has a table of the jobs, and the artifact limit-audit has
 # limit-audit.json. A daily run of 24 hours costs about 1 in 7 of the reads of a weekly run of 7 days. Thus each run
 # stays under the limit of the token of GitHub Actions, 1000 reads each hour.
-# The scheduled run fails when a job stopped at a limit, or when the audit could not read a repository. A pull request
-# that changes the audit starts it as a report, so the pull request shows the audit of the live runs.
+# The scheduled run fails when the audit could not read a repository. A job that stopped at a limit gives a warning
+# until the day FAILS_FROM, and from that day it fails the run. Each warning names the repository, the workflow, the
+# job, its limit and the run. The audit is not a gate of pull requests. To test a change, start the workflow by hand
+# on its branch, with strict false.
 name: Limit audit
 
 on:
@@ -20,16 +22,12 @@ on:
         type: string
         default: "24"
       strict:
-        description: "true: the run fails when a job stopped at a limit, or when the audit could not read a repository."
+        description: "true: the run fails when the audit could not read a repository, or, from FAILS_FROM, when a job stopped at a limit."
         type: boolean
         default: true
   # Each day, so each run reads only one day of runs
   schedule:
-    - cron: "43 6 * * *"
-  pull_request:
-    paths:
-      - .github/workflows/limit-audit.yml
-      - scripts/limit-audit/**
+    - cron: "50 6 * * *"
 
 permissions: {}
 
@@ -59,11 +57,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPOS: ${{ inputs.repos }}
           HOURS: ${{ inputs.hours || '24' }}
-          # A pull request starts the audit as a report. The schedule is strict.
+          # Until this day, a stop gives a warning and the run stays green. From this day, a stop fails the run.
+          FAILS_FROM: "2026-11-23"
+          # The schedule is strict. A start by hand is strict when its input strict is true.
           STRICT: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.strict) }}
         run: |
           set -euo pipefail
-          args=(--repos "$REPOS" --hours "$HOURS" --out "$RUNNER_TEMP/limit-audit")
+          args=(--repos "$REPOS" --hours "$HOURS" --fails-from "$FAILS_FROM" --out "$RUNNER_TEMP/limit-audit")
           if [ "$STRICT" = "true" ]; then args+=(--strict); fi
           node scripts/limit-audit/main.ts "${args[@]}"
       - name: The report of the audit

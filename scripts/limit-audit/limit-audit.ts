@@ -156,9 +156,33 @@ export function render(findings: readonly Finding[], repos: number, notRead: rea
   ];
 }
 
-/** This function gives the GitHub annotation of a finding: an error for a stop, a warning for a job near its limit. */
-export function annotation(finding: Finding): string {
-  const level = fails(finding) ? "error" : "warning";
+const DATE = /^\d{4}-\d{2}-\d{2}$/u;
+
+/** This function tells if a stop fails the audit on the day `today` (YYYY-MM-DD). An empty `failsFrom` fails at once. */
+export function failsOn(failsFrom: string, today: string): boolean {
+  if (failsFrom === "") return true;
+  if (!DATE.test(failsFrom)) throw new Error(`"${failsFrom}" is not a date: use YYYY-MM-DD, or "" to fail at once.`);
+  return today >= failsFrom;
+}
+
+/**
+ * This function gives the GitHub annotation of a finding. A stop is an error from the day `failsFrom`, and a warning
+ * before it. A job near its limit is always a warning.
+ */
+export function annotation(finding: Finding, failsFrom = "", today = ""): string {
+  const failing = fails(finding) && failsOn(failsFrom, today);
+  const level = failing ? "error" : "warning";
   const title = `Time limit%3A ${finding.repo}`;
-  return `::${level} title=${title}::${finding.workflow} / ${finding.job} ${finding.detail} in run ${finding.url}`;
+  const after = fails(finding) && !failing ? ` From ${failsFrom}, a stop fails the audit.` : "";
+  return `::${level} title=${title}::${finding.workflow} / ${finding.job} ${finding.detail} in run ${finding.url}.${after}`;
+}
+
+/**
+ * This function gives the exit code of a strict audit. A no-read always fails it, because a no-read is never a pass.
+ * A stop fails it only from the day `failsFrom`. A report (not strict) always gives 0.
+ */
+export function exitCode(findings: readonly Finding[], notRead: readonly string[], strict: boolean, failsFrom: string, today: string): number {
+  if (!strict) return 0;
+  if (notRead.length > 0) return 1;
+  return findings.some(fails) && failsOn(failsFrom, today) ? 1 : 0;
 }

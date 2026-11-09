@@ -6,7 +6,9 @@ import {
   type Run,
   annotation,
   classify,
+  exitCode,
   fails,
+  failsOn,
   isCoverage,
   jobFindings,
   newestCiRuns,
@@ -127,6 +129,29 @@ test("a job gives one finding of each kind, and a stop fails the audit but a nea
   assert.equal(fails(near[0]!), false);
   assert.match(annotation(found[0]!), /^::error title=Time limit%3A packing::CI \/ ci \/ checks .* reached its limit of 15m0s in run https:/);
   assert.match(annotation(near[0]!), /^::warning /);
+});
+
+test("before the day fails-from a stop is a warning and a strict audit passes, from that day it fails", () => {
+  const stop = jobFindings("packing", run({ id: 9 }), job(), ["The job has exceeded the maximum execution time of 15m0s"]);
+  const near = jobFindings("r", run(), job({ name: "ci / coverage" }), ["The job coverage took 25 min 0 s of its limit of 30 min (83 %)."]);
+  assert.equal(failsOn("2026-11-23", "2026-11-22"), false);
+  assert.equal(failsOn("2026-11-23", "2026-11-23"), true);
+  assert.equal(failsOn("2026-11-23", "2026-12-01"), true);
+  assert.equal(failsOn("", "2026-11-01"), true);
+  assert.throws(() => failsOn("23.11.2026", "2026-11-01"), /not a date/);
+  // Before the day: a warning that names the day, and exit code 0.
+  assert.match(annotation(stop[0]!, "2026-11-23", "2026-11-22"), /^::warning title=Time limit%3A packing::CI \/ ci \/ checks .* in run https:.*\. From 2026-11-23, a stop fails the audit\.$/);
+  assert.equal(exitCode(stop, [], true, "2026-11-23", "2026-11-22"), 0);
+  // From the day: an error with no note, and exit code 1.
+  assert.match(annotation(stop[0]!, "2026-11-23", "2026-11-23"), /^::error title=Time limit%3A packing::.*\.$/);
+  assert.doesNotMatch(annotation(stop[0]!, "2026-11-23", "2026-11-23"), /From 2026/);
+  assert.equal(exitCode(stop, [], true, "2026-11-23", "2026-11-23"), 1);
+  // A near limit never fails, a no-read always fails a strict audit, and a report never fails.
+  assert.match(annotation(near[0]!, "2026-11-23", "2026-11-23"), /^::warning /);
+  assert.doesNotMatch(annotation(near[0]!, "2026-11-23", "2026-11-22"), /From 2026/);
+  assert.equal(exitCode(near, [], true, "2026-11-23", "2026-11-23"), 0);
+  assert.equal(exitCode([], ["x (HTTP 403)"], true, "2026-11-23", "2026-11-22"), 1);
+  assert.equal(exitCode(stop, ["x (HTTP 403)"], false, "", "2026-11-23"), 0);
 });
 
 test("the summary puts the stops first, names the no-reads, and escapes the cells", () => {
