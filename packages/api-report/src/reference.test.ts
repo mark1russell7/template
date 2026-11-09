@@ -180,7 +180,7 @@ describe("the page of each export from a model", () => {
     ]);
     const page = referencePage(apiModel(REPORT, "lib", docs));
     expect(page).toContain("/** The layout of a tree. */\nfunction layout(): void;");
-    expect(page).toContain("/**\n * The text of a tick.\n *\n * @param tick - A tick. Its end mark *\/ stays inside.\n */\nfunction toSvg(tick: string): string;");
+    expect(page).toContain("/**\n * The text of a tick.\n *\n * @param tick - A tick. Its end mark *\\/ stays inside.\n */\nfunction toSvg(tick: string): string;");
   });
 
   it("gives the model of a report: the entries, their names and the declarations", () => {
