@@ -238,6 +238,7 @@ jobs:
           PAST_STOPPED: ${{ steps.past.outputs.stopped }}
           STRICT_OUTCOME: ${{ steps.strict.outcome }}
           SHORT_STOPPED: ${{ steps.short.outputs.stopped }}
+        shell: bash
         run: |
           # The action starts each package with @vitest/coverage-v8. The list comes from the workspace, so a new package
           # with coverage does not break the test.
@@ -246,9 +247,11 @@ jobs:
             if grep -q '"@vitest/coverage-v8"' "$f"; then EXPECTED="${EXPECTED:+$EXPECTED }$(dirname "$f")"; fi
           done
           echo "expected: [$EXPECTED], past: [$PAST_STOPPED], strict: $STRICT_OUTCOME, short: [$SHORT_STOPPED]"
+          # The test compares the sets. The glob puts site-pages/ before site/, because "-" sorts before "/".
+          sorted() { printf '%s\n' $1 | LC_ALL=C sort | tr '\n' ' '; }
           [ -n "$EXPECTED" ]
-          [ "$PAST_STOPPED" = "$EXPECTED" ]
-          [ "$SHORT_STOPPED" = "$EXPECTED" ]
+          [ "$(sorted "$PAST_STOPPED")" = "$(sorted "$EXPECTED")" ]
+          [ "$(sorted "$SHORT_STOPPED")" = "$(sorted "$EXPECTED")" ]
           [ "$STRICT_OUTCOME" = failure ]
 
   data-stamps:
