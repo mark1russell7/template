@@ -55,7 +55,7 @@ With `coverage: true`, the job `coverage` starts `vitest run` with coverage in e
 - Before the tests, the job installs, starts the command `setup` and the build scripts. These are each `build` or `build:*` script before `test` in `scripts`, or the scripts of `coverage-scripts`.
 - The job has its own time limit, `coverage-timeout-minutes` (30). The install, the command `setup`, the scripts and the tests stop at a deadline 2 minutes before that limit. Each package that the deadline stopped fails the step, and the message names it.
 - A job that reaches its time limit gets the result `cancelled`, also with `continue-on-error`, and the CI fails. A step that stops at the deadline fails only the step. Thus the job ends with its summary and its artifact.
-- The deadline uses GNU `timeout`. Linux and Git Bash on Windows have it. macOS has it only as `gtimeout` from coreutils. Without it, the job gives a warning, and only the time limit of the job stops the steps.
+- The script `deadline.ts` of the action `coverage` holds the deadline. At the deadline, it sends `TERM` to the processes of the step, and `KILL` 10 seconds later. It works on Linux, macOS and Windows.
 - The summary gives the time of the job and its limit. A time above 80 % of the limit gives a warning.
 
 - The summary of the job gets a table: the statements, branches, functions and lines of each package.

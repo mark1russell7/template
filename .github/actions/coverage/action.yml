@@ -36,10 +36,8 @@ runs:
         STRICT: ${{ inputs.strict }}
         DEADLINE: ${{ inputs.deadline }}
         SCRIPT: ${{ github.action_path }}/coverage.ts
-        DEADLINE_SH: ${{ github.action_path }}/deadline.sh
+        DEADLINE_TS: ${{ github.action_path }}/deadline.ts
       run: |
-        # shellcheck source=deadline.sh
-        . "$DEADLINE_SH"
         level=error
         if [ "$STRICT" != "true" ]; then level=warning; fi
         export DEADLINE_LEVEL=$level
@@ -65,7 +63,7 @@ runs:
           # The step continues after a failure, so the summary has each package. The thresholds of the Vitest config
           # of a package also fail its run. The step fails after the summary, and names each package that failed.
           # With a deadline, the step stops in time, so the job ends with its summary and not at the limit of the job.
-          if (cd "$dir" && before_deadline pnpm exec vitest run --coverage.enabled --coverage.reporter=json-summary --coverage.reporter=json --coverage.reporter=text-summary --coverage.reportsDirectory=coverage); then :; else
+          if (cd "$dir" && node "$DEADLINE_TS" pnpm exec vitest run --coverage.enabled --coverage.reporter=json-summary --coverage.reporter=json --coverage.reporter=text-summary --coverage.reportsDirectory=coverage); then :; else
             code=$?
             if [ -n "$DEADLINE" ] && [ "$code" -eq 124 ]; then
               stopped+=("$dir")
