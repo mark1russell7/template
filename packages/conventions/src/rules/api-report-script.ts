@@ -1,14 +1,14 @@
 /**
  * The rule `api-report-script`: a repository with a public package has the root script that checks its API reports.
  */
-import { codePackages, DEPENDENCY_FIELDS, lineOf, specifiersOf, type Break, type Edit, type PackageInfo, type Rule } from "../rule.ts";
+import { DEPENDENCY_FIELDS, lineOf, rootAndCodePackages, specifiersOf, type Break, type Edit, type PackageInfo, type Rule } from "../rule.ts";
 import { isPublic } from "./license-file.ts";
 
 /** The package of the reports. */
 const API_REPORT = "@mark1russell7/api-report";
 
 /** The range that the fix adds. The train moves it after that. */
-export const API_REPORT_RANGE = "^0.4.0";
+export const API_REPORT_RANGE = "^0.5.0";
 
 /** The command of the script. */
 const COMMAND = "api-report check";
@@ -72,7 +72,7 @@ export const apiReportScript: Rule = {
   },
   check(context, options) {
     const script = typeof options["script"] === "string" ? options["script"] : "check:api";
-    const published = codePackages(context).filter(isPublic);
+    const published = rootAndCodePackages(context).filter(isPublic);
     if (published.length === 0) return [];
     const root = context.rootPackage;
     const value = root.manifest["scripts"];
