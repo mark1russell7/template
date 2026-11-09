@@ -14,18 +14,39 @@ inputs:
       "true": a package with no @vitest/coverage-v8, a failed run or a missing summary fails the step. "false": the step
       skips a package with no @vitest/coverage-v8, and gives a warning for each other failure (the coverage on main).
     default: "true"
+  deadline:
+    description: >-
+      The time, in seconds since 1970 (date +%s), when the step stops the tests. A package that has not started is not
+      measured, and the step stops the tests of the package that is in progress. Each is a failure. "" is no limit.
+    default: ""
+outputs:
+  stopped:
+    description: The folders of the packages that the deadline stopped or did not start, separated by spaces. "" when no package.
+    value: ${{ steps.coverage.outputs.stopped }}
 runs:
   using: composite
   steps:
     # Each package needs @vitest/coverage-v8 (the provider of Vitest), with the version of its Vitest.
     - name: Coverage
+      id: coverage
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
         FLOOR: ${{ inputs.floor }}
         STRICT: ${{ inputs.strict }}
+        DEADLINE: ${{ inputs.deadline }}
         SCRIPT: ${{ github.action_path }}/coverage.ts
+        DEADLINE_TS: ${{ github.action_path }}/deadline.ts
       run: |
+        level=error
+        if [ "$STRICT" != "true" ]; then level=warning; fi
+        export DEADLINE_LEVEL=$level
+        # The scripts of the action are TypeScript. Node.js starts a .ts file from 22.18.
+        if ! node -e 'process.exit(process.features.typescript ? 0 : 1)'; then
+          echo "::$level::Node.js $(node --version) cannot start the scripts of the action coverage (Node.js 22.18 or later can). The step measures no coverage."
+          if [ "$STRICT" = "true" ]; then exit 1; fi
+          exit 0
+        fi
         mapfile -t dirs < <(pnpm ls -r --json --depth -1 | node "$SCRIPT" packages)
         if [ ${#dirs[@]} -eq 0 ]; then
           echo "::notice::No package has a test script that starts Vitest."
@@ -42,18 +63,24 @@ runs:
           if [ ${#dirs[@]} -eq 0 ]; then exit 0; fi
         fi
         failed=()
+        stopped=()
         for dir in "${dirs[@]}"; do
           echo "::group::coverage of $dir"
           # The step continues after a failure, so the summary has each package. The thresholds of the Vitest config
           # of a package also fail its run. The step fails after the summary, and names each package that failed.
-          if (cd "$dir" && pnpm exec vitest run --coverage.enabled --coverage.reporter=json-summary --coverage.reporter=json --coverage.reporter=text-summary --coverage.reportsDirectory=coverage); then :; else
+          # With a deadline, the step stops in time, so the job ends with its summary and not at the limit of the job.
+          if (cd "$dir" && node "$DEADLINE_TS" pnpm exec vitest run --coverage.enabled --coverage.reporter=json-summary --coverage.reporter=json --coverage.reporter=text-summary --coverage.reportsDirectory=coverage); then :; else
             code=$?
-            failed+=("$dir (exit code $code)")
+            if [ -n "$DEADLINE" ] && [ "$code" -eq 124 ]; then
+              stopped+=("$dir")
+              failed+=("$dir (not started or stopped at the deadline of the job)")
+            else
+              failed+=("$dir (exit code $code)")
+            fi
           fi
           echo "::endgroup::"
         done
-        level=error
-        if [ "$STRICT" != "true" ]; then level=warning; fi
+        echo "stopped=${stopped[*]}" >> "$GITHUB_OUTPUT"
         summary=0
         node "$SCRIPT" summary "$FLOOR" "${dirs[@]}" >> "$GITHUB_STEP_SUMMARY" 2> >(sed "s/^::error::/::$level::/" >&2) || summary=$?
         for f in "${failed[@]}"; do echo "::$level::The tests with coverage failed in $f."; done

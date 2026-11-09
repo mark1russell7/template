@@ -12,8 +12,24 @@ import { isTestFile } from "./tsconfig-test.ts";
 /** The package of the service. */
 export const SERVICE_PACKAGE = "@mark1russell7/service";
 
-/** An import of the service package or of one of its entries. */
-const SERVICE_IMPORT = /\bfrom\s+["']@mark1russell7\/service(\/[^"']*)?["']|\bimport\s*\(\s*["']@mark1russell7\/service(\/[^"']*)?["']\s*\)/;
+/** An import of the service package or of one of its entries. The groups are the name of the entry, if it has one. */
+const SERVICE_IMPORT = /\bfrom\s+["']@mark1russell7\/service(?:\/([^"']*))?["']|\bimport\s*\(\s*["']@mark1russell7\/service(?:\/([^"']*))?["']\s*\)/g;
+
+/**
+ * The entries of the service package that give only tools: no service and no part of one. A value of these entries can
+ * have its own `run`, for example the pool of `/channel`. Each other entry, a new entry too, counts as an entry of a
+ * service, so the rule stays strict.
+ */
+const TOOL_ENTRIES: ReadonlySet<string> = new Set(["channel", "clock", "heartbeat", "backoff", "limiter", "rules"]);
+
+/** This function tells if a source text imports the root of the service package, or an entry that is not a tool entry. */
+function importsService(text: string): boolean {
+  for (const match of text.matchAll(SERVICE_IMPORT)) {
+    const entry = match[1] ?? match[2];
+    if (entry === undefined || !TOOL_ENTRIES.has(entry)) return true;
+  }
+  return false;
+}
 
 /** A call of `run(` on a value, but not on `this`. */
 const RUN_CALL = /(?<!\bthis)\.run\s*\(/;
@@ -21,9 +37,13 @@ const RUN_CALL = /(?<!\bthis)\.run\s*\(/;
 /** The source files that the rule reads. */
 const SOURCE = /\.(c|m)?tsx?$/;
 
-/** This function gives the lines (from 1) of the calls of `run(` in a source text that imports the service package. */
+/**
+ * This function gives the lines (from 1) of the calls of `run(` in a source text that imports the service package. A
+ * text that imports only the tool entries (`/channel`, `/clock`, `/heartbeat`, `/backoff`, `/limiter`, `/rules`) has
+ * no calls: those entries give no service.
+ */
 export function runCalls(text: string): number[] {
-  if (!SERVICE_IMPORT.test(text)) return [];
+  if (!importsService(text)) return [];
   const found: number[] = [];
   text.split(/\r?\n/).forEach((line, index) => {
     const comment = line.indexOf("//");

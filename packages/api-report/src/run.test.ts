@@ -2,7 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import * as home from "@mark1russell7/conventions/workspace";
@@ -48,22 +48,8 @@ describe("the functions of the workspace", () => {
     expect(globFolders).toBe(home.globFolders);
     expect(globToRegExp).toBe(home.globToRegExp);
     expect(packageFolders).toBe(home.packageFolders);
+    expect(reportFolders).toBe(home.reportFolders);
     expect(workspaceGlobs).toBe(home.workspaceGlobs);
-  });
-
-  it("adds a public root that the globs of the workspace leave out, once", () => {
-    const open = workspace({ private: false });
-    expect(reportFolders(open)).toEqual([open, ...["a", "b", "hidden"].map((name) => join(open, "packages", name))]);
-    // A private root, explicit globs and a repository of one package get no root of their own
-    const closed = workspace();
-    expect(reportFolders(closed)).toEqual(packageFolders(closed));
-    expect(reportFolders(open, ["packages/*"])).toEqual(packageFolders(open, ["packages/*"]));
-    const single = fixture({ "package.json": { name: "solo" } });
-    expect(reportFolders(single)).toEqual([single]);
-    // A root that a glob of the workspace names is read one time
-    const named = fixture({ "package.json": { name: "root" }, "pnpm-workspace.yaml": 'packages:\n  - "."\n  - "site"\n', "site/package.json": { name: "site", private: true } });
-    expect(reportFolders(named).filter((folder) => resolve(folder) === resolve(named))).toHaveLength(1);
-    expect(reportFolders(named)).toHaveLength(2);
   });
 });
 
@@ -322,6 +308,30 @@ describe("check and update", () => {
     expect(read([1])).toThrow("must be an object of fields");
     expect(read({ "a b": 1 })).toThrow("is not a plain name");
     expect(read({ order: null })).toThrow("must be a text, a number or a boolean");
+  });
+
+  it("puts the doc comments on the page of each export only with the field docs, and holds them in the check", () => {
+    const pages = [{ package: "packages/a", pages: [], reference: "each.md", docs: true }];
+    const root = workspace({ apiReport: { pages } });
+    writeFileSync(join(root, "packages/a/index.d.ts"), "/** The value a. */\nexport declare const a: 1;\n");
+    expect(cli(root, ["update"]).code).toBe(0);
+    const page = readFileSync(join(root, "each.md"), "utf8");
+    expect(page).toContain("/** The value a. */\nconst a: 1;");
+    expect(cli(root, ["check"]).code).toBe(0);
+    writeFileSync(join(root, "packages/a/index.d.ts"), "/** The changed value a. */\nexport declare const a: 1;\n");
+    expect(cli(root, ["check"]).stdout).toContain("each.md: the page differs from the report.");
+
+    // Without the field, a doc comment changes neither the report nor the page
+    const plain = workspace({ apiReport: { pages: [{ package: "packages/a", pages: [], reference: "each.md" }] } });
+    writeFileSync(join(plain, "packages/a/index.d.ts"), "/** The value a. */\nexport declare const a: 1;\n");
+    cli(plain, ["update"]);
+    expect(readFileSync(join(plain, "each.md"), "utf8")).not.toContain("The value a.");
+    expect(readFileSync(join(plain, "packages/a", REPORT_FILE), "utf8")).not.toContain("The value a.");
+
+    const read = (docs: unknown) => () => readConfig(workspace({ apiReport: { pages: [{ package: "packages/a", pages: ["a.md"], reference: "each.md", docs }] } }));
+    expect(read(true)).not.toThrow();
+    expect(read("yes")).toThrow("docs must be a boolean");
+    expect(() => readConfig(workspace({ apiReport: { pages: [{ package: "packages/a", pages: ["a.md"], docs: true }] } }))).toThrow("docs needs the field reference");
   });
 
   it("gives exit code 2 and the help for wrong arguments", () => {

@@ -942,6 +942,14 @@ describe("home-package", () => {
     expect(rule(changed("function medianOf(xs: number[]): number {\n  return xs[0] ?? 0;\n}\n", "mark1russell7/rigor"), "home-package", { base: "base", env: {} }).status).toBe("pass");
   });
 
+  it("passes in a repository of alsoIn, where the code of a home moves", () => {
+    const code = "function medianOf(xs: number[]): number {\n  return xs[0] ?? 0;\n}\nfunction mulberry32(seed: number): number {\n  return seed;\n}\n";
+    expect(rule(changed(code, "mark1russell7/algebra"), "home-package", { base: "base", env: {} }).status).toBe("pass");
+    // The new name of the target repository after its rename.
+    expect(rule(changed(code, "mark1russell7/math"), "home-package", { base: "base", env: {} }).status).toBe("pass");
+    expect(rule(changed(code, "mark1russell7/other"), "home-package", { base: "base", env: {} }).breaks.length).toBe(2);
+  });
+
   it("skips with no change, and examines each line with the option scope all", () => {
     const root = changed("// the end\n");
     expect(rule(root, "home-package", { env: {} }).status).toBe("skipped");
@@ -978,6 +986,15 @@ describe("api-report-script", () => {
     expect(result.breaks[0]?.message).toContain('no script "check:api"');
     expect(result.breaks[0]?.message).toContain("public package: a.");
     expect(rule(fixture({ "package.json": { name: "one" } }), "api-report-script").status).toBe("break");
+  });
+
+  it("asks a public root with a private workspace for the script", () => {
+    // The form of cue on 2026-11-08: the root is the public package, and the workspace names only a private site
+    const site = { "packages/site/package.json": { name: "site", private: true } };
+    const result = rule(workspace({ name: "@scope/root", private: false, scripts: SCRIPTS }, site), "api-report-script");
+    expect(result.status).toBe("break");
+    expect(result.breaks[0]?.message).toContain("public package: @scope/root.");
+    expect(rule(workspace({ name: "@scope/root", private: false, scripts: { "check:api": "api-report check" } }, site), "api-report-script").status).toBe("pass");
   });
 
   it("adds the script and the dependency, with the form of the file", () => {

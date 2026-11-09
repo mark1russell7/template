@@ -39,16 +39,25 @@ The job starts all the scripts, also after a failure. Then it fails with the nam
 | `env` | `{}` | The environment variables of the job, as a JSON object. |
 | `working-directory` | `.` | The folder of `package.json`. |
 | `fetch-depth` | `2` | The commits of the checkout. `0` gets the whole history. With `2`, the checkout of a pull request has the parents of its merge commit. On a pull request, the job then deepens the checkout to the merge base, so `check:conventions` reads each commit of the change and the versions at the merge base. On a push to the default branch, the job fetches the commit before the push, for the rule `unreleased-change`. |
-| `timeout-minutes` | `15` | The time limit of each job of the matrix. |
+| `timeout-minutes` | `15` | The time limit of each job of the matrix. The job `coverage` has its own limit. |
 | `changesets` | `true` | The changeset check on a pull request (refer to the next section). |
 | `changeset-ignore` | (empty) | More globs of files that need no changeset. |
-| `coverage` | `false` | After the scripts, the first cell of the matrix starts the tests of each package with Vitest again, with coverage (refer to "Coverage"). |
+| `coverage` | `false` | The job `coverage` starts the tests of each package with Vitest again, with coverage. A failure fails the CI (refer to "Coverage"). |
 | `coverage-floor` | `0` | The lowest percent of each measure of each package. `0` is no floor. |
-| `coverage-on-main` | `true` | With `coverage: false`, a push to the default branch of a public repository still gives the coverage, not strict (refer to "Coverage"). |
+| `coverage-on-main` | `true` | With `coverage: false`, a push to the default branch of a public repository still gives the coverage, not strict. It does not fail the CI (refer to "Coverage"). |
+| `coverage-timeout-minutes` | `30` | The time limit of the job `coverage`. Each step of the job stops 2 minutes before it. |
+| `coverage-scripts` | (empty) | The scripts before the tests in the job `coverage`. The default takes each `build` or `build:*` script before `test` in `scripts`. |
 
 ### Coverage
 
-With `coverage: true`, the action `coverage` starts `vitest run` with coverage in each package whose `test` script starts Vitest. Only the first cell of the matrix does it.
+With `coverage: true`, the job `coverage` starts `vitest run` with coverage in each package whose `test` script starts Vitest. The job has the first runner and the first Node.js version of the matrix. It starts at the same time as the job `checks`, so the coverage does not make the checks slower.
+
+- Before the tests, the job installs, starts the command `setup` and the build scripts. These are each `build` or `build:*` script before `test` in `scripts`, or the scripts of `coverage-scripts`.
+- The job has its own time limit, `coverage-timeout-minutes` (30). The install, the command `setup`, the scripts and the tests stop at a deadline 2 minutes before that limit. Each package that the deadline stopped fails the step, and the message names it.
+- A job that reaches its time limit gets the result `cancelled`, also with `continue-on-error`, and the CI fails. A step that stops at the deadline fails only the step. Thus the job ends with its summary and its artifact.
+- The script `deadline.ts` of the action `coverage` holds the deadline. At the deadline, it sends `TERM` to the processes of the step, and `KILL` 10 seconds later. It works on Linux, macOS and Windows.
+- Node.js starts `deadline.ts` and `coverage.ts` from 22.18. With an older first version in `node-versions`, the steps have no deadline and give a warning. The step `Coverage` measures nothing: strict, it fails, and not strict, it gives a warning.
+- The summary gives the time of the job and its limit. A time above 80 % of the limit gives a warning.
 
 - The summary of the job gets a table: the statements, branches, functions and lines of each package.
 - The artifact `coverage` has `coverage-summary.json` and `coverage-final.json` of each package.
@@ -56,7 +65,7 @@ With `coverage: true`, the action `coverage` starts `vitest run` with coverage i
 - A package whose tests fail also fails the step, after the summary. The thresholds of its Vitest config can cause this. The message names the package and the exit code.
 - With `coverage-floor`, a package with a measure under the floor fails the step. The message names the package and the measure.
 
-With `coverage: false` and `coverage-on-main: true` (the default), a push to the default branch of a public repository also starts the action, not strict (a private repository pays for its minutes, so it uses `coverage: true`). It skips a package with no `@vitest/coverage-v8`, and it gives a warning for a failure. It does not fail the job. So each repository has the artifact `coverage` on main, and a tool can read which exported functions no test starts.
+With `coverage: false` and `coverage-on-main: true` (the default), a push to the default branch of a public repository also starts the job, not strict (a private repository pays for its minutes, so it uses `coverage: true`). It skips a package with no `@vitest/coverage-v8`, and it gives a warning for a failure. The job has `continue-on-error`, so a failure or a stop at the deadline does not fail the CI. The gate of `release.yml` does not start it, so a release does not wait for the coverage. So each repository has the artifact `coverage` on main, and a tool can read which exported functions no test starts.
 
 Each package with Vitest needs `@vitest/coverage-v8` in its `devDependencies`, with the version of its Vitest. The configuration of the coverage in `vitest.config.ts` (for example `include` and `exclude`) stays. The action sets only the reporters and the folder `coverage`.
 
@@ -540,7 +549,7 @@ uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<full commit SHA>
 ```
 
 - Renovate reads the comment `# main` and moves the pin to the newest commit of `main` (the preset of `renovate/`). The manager `github-actions` does this since Renovate 43.84.0.
-- These updates come in one group, "template workflows and actions", with no wait. Renovate merges them when CI passes.
+- These updates come in one group, "template workflows and actions", with no wait. The pull request gets the label `train-merge`. The release train merges it when CI passes and no release of the repository is open.
 - The group comes on Monday before 06:00 (New York time). A workflow change during a release makes the tag job fail with HTTP 403 (`RELEASING.md`).
 - Renovate does not change `release.yml`. The release session moves the pins of `release.yml` with `scripts/release/bump-pins.ts` (`RELEASING.md`).
 - A change of the template that must not wait for Renovate goes out with `bump-pins.ts --file <workflow>` (`RELEASING.md`).

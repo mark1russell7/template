@@ -6,6 +6,11 @@
 
 ## . (build/index.d.ts): names
 
+type ApiDeclaration: build/index.d.ts#ApiDeclaration
+type ApiEntry: build/index.d.ts#ApiEntry
+type ApiModel: build/index.d.ts#ApiModel
+type ApiName: build/index.d.ts#ApiName
+type ApiNameKind: build/index.d.ts#ApiNameKind
 type ApiPage: build/index.d.ts#ApiPage
 type ApiReportConfig: build/index.d.ts#ApiReportConfig
 type Bin: build/index.d.ts#Bin
@@ -31,6 +36,7 @@ type RunOptions: build/index.d.ts#RunOptions
 type RunResult: build/index.d.ts#RunResult
 USAGE: build/index.d.ts#USAGE
 type UnifiedDiffOptions: build/index.d.ts#UnifiedDiffOptions
+apiModel: build/index.d.ts#apiModel
 apiReport: build/index.d.ts#apiReport
 binsOf: build/index.d.ts#binsOf
 byCode: build/index.d.ts#byCode
@@ -41,6 +47,7 @@ formatResult: build/index.d.ts#formatResult
 globFolders: @mark1russell7/conventions/workspace#globFolders (external)
 globToRegExp: @mark1russell7/conventions/workspace#globToRegExp (external)
 packageFolders: @mark1russell7/conventions/workspace#packageFolders (external)
+packageModel: build/index.d.ts#packageModel
 packageReport: build/index.d.ts#packageReport
 pageFaults: build/index.d.ts#pageFaults
 parseDeclarations: build/index.d.ts#parseDeclarations
@@ -49,7 +56,7 @@ publishedManifest: build/index.d.ts#publishedManifest
 readConfig: build/index.d.ts#readConfig
 referencePage: build/index.d.ts#referencePage
 reportEntries: build/index.d.ts#reportEntries
-reportFolders: build/index.d.ts#reportFolders
+reportFolders: @mark1russell7/conventions/workspace#reportFolders (external)
 runCli: build/index.d.ts#runCli
 runReports: build/index.d.ts#runReports
 statementsOf: build/index.d.ts#statementsOf
@@ -64,12 +71,43 @@ api-report: ./build/cli.js
 
 ## Declarations
 
+### build/index.d.ts#ApiDeclaration
+interface ApiDeclaration {
+  readonly text: string;
+  readonly doc?: string;
+}
+
+### build/index.d.ts#ApiEntry
+interface ApiEntry {
+  readonly subpath: string;
+  readonly names: readonly ApiName[];
+}
+
+### build/index.d.ts#ApiModel
+interface ApiModel {
+  readonly packageName: string;
+  readonly entries: readonly ApiEntry[];
+  readonly declarations: Readonly<Record<string, ApiDeclaration>>;
+}
+
+### build/index.d.ts#ApiName
+interface ApiName {
+  readonly name: string;
+  readonly key: string;
+  readonly isType: boolean;
+  readonly kind: ApiNameKind;
+}
+
+### build/index.d.ts#ApiNameKind
+type ApiNameKind = "declaration" | "namespace" | "external" | "ambient";
+
 ### build/index.d.ts#ApiPage
 interface ApiPage {
   readonly package: string;
   readonly pages: readonly string[];
   readonly reference?: string;
   readonly frontmatter?: Readonly<Record<string, FrontmatterValue>>;
+  readonly docs?: boolean;
   readonly except?: Readonly<Record<string, string>>;
 }
 
@@ -117,6 +155,7 @@ interface DeclarationInfo {
   readonly imports: Map<string, ImportBinding>;
   readonly ambient: Map<string, string[]>;
   readonly references: Set<string>;
+  readonly docs: Map<string, string>;
 }
 
 ### build/index.d.ts#DiffLine
@@ -236,6 +275,9 @@ interface UnifiedDiffOptions {
   readonly to?: string;
 }
 
+### build/index.d.ts#apiModel
+export declare function apiModel(report: string, packageName: string, docs?: ReadonlyMap<string, string>): ApiModel;
+
 ### build/index.d.ts#apiReport
 export declare function apiReport(packageName: string, root: string, entries: readonly Entry[], options?: ReportOptions): string;
 
@@ -257,6 +299,9 @@ export declare function entriesOf(manifest: Manifest, root: string): Entry[];
 ### build/index.d.ts#formatResult
 export declare function formatResult(result: RunResult, tool?: string): string;
 
+### build/index.d.ts#packageModel
+export declare function packageModel(dir: string, options?: PackageReportOptions): ApiModel;
+
 ### build/index.d.ts#packageReport
 export declare function packageReport(dir: string, options?: PackageReportOptions): string;
 
@@ -276,13 +321,11 @@ export declare function publishedManifest(manifest: Manifest): Manifest;
 export declare function readConfig(root: string): ApiReportConfig;
 
 ### build/index.d.ts#referencePage
+export declare function referencePage(model: ApiModel, frontmatter?: Readonly<Record<string, FrontmatterValue>>): string;
 export declare function referencePage(report: string, packageName: string, frontmatter?: Readonly<Record<string, FrontmatterValue>>): string;
 
 ### build/index.d.ts#reportEntries
 export declare function reportEntries(report: string): ReadonlyMap<string, ReadonlySet<string>>;
-
-### build/index.d.ts#reportFolders
-export declare function reportFolders(root: string, globs?: readonly string[]): string[];
 
 ### build/index.d.ts#runCli
 export declare function runCli(args: readonly string[], io: CliIo): number;

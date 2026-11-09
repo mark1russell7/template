@@ -171,6 +171,8 @@ site-pages cue --out dist
 - A code block that is wider than its box shows a fade at the edge with more content. A block that is not wider shows no cue.
 - A block with `data-overflow-ok` or with the class `scroll-cue` stays as it is. The text of `script`, `style` and `textarea` does not change.
 - In a browser with no scroll timelines, a small script gives `--scroll-cue-bg` the background color of the block. Thus the block keeps the color of its theme.
+- A script of a page can make a code block in the browser, for example from Markdown. Thus a page with a script of its own also gets the style and a small script. That script gives the cue to each code block that the page makes, by the same rules.
+- A page can put a code block in a box of its own that scrolls, and give the block the width of its text. When that box holds only the block and the text is wider than the box, the script gives the box the cue.
 - The command can start two times on one folder. The second start gives the same pages.
 
 In `reusable-pages.yml`, the input `scroll-cue` (default `true`) starts the command before the site check and the upload.
@@ -486,10 +488,12 @@ import "@mark1russell7/site-pages/scroll-cue.css";
 The class sets `overflow-x: auto`. A browser with scroll timelines keeps the background of the box, so a code block keeps the color of its theme. A browser with no scroll timelines gets the background color `--scroll-cue-bg` and a shade of the color `--scroll-cue-shade`. Set `--scroll-cue-bg` to the background color of the box:
 
 ```css
-.code {
+.code.scroll-cue {
   --scroll-cue-bg: var(--code-bg);
 }
 ```
+
+The rule that sets `--scroll-cue-bg` must be more specific than `.scroll-cue`, which sets the default `Canvas`. The command `site-pages cue` puts its style last in `<head>`. Thus a rule with only `pre` or `.code` loses, and the fade gets the wrong color.
 
 The fades run on a scroll timeline (`animation-timeline: scroll(self inline)`). In Chromium, `document.getAnimations()` gives each fade as a running animation with one iteration, and the fade does not end. A test that waits for the end of each animation, for example before an axe check of the contrast, then stops at its time limit. Such a test must skip each animation whose timeline is not `document.timeline`:
 
