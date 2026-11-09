@@ -18,6 +18,8 @@
 #   setup-cue       The action installs the cue CLI on Linux, macOS and Windows. A wrong sha256 fails it, also on a
 #                   cache hit.
 #   cue-ci          The input cue-version of reusable-ci.yml gives the scripts the cue CLI, and no folder .shared-actions.
+#   coverage-deadline The action coverage stops at its deadline. Not strict, the step passes and names the stopped package.
+#                   Strict, the step fails.
 #   data-stamps     A missing file of stamps skips the gate when the build is of an older commit, and fails it when
 #                   the build is of the commit of the workflow.
 #   release-tag     reusable-release-tag.yml examines the plan, the tarballs and the tags with "dry-run".
@@ -190,6 +192,58 @@ jobs:
         out=$(cue version)
         [[ "${out%%$'\n'*}" == *v0.15.1* ]]
         test ! -e "$GITHUB_WORKSPACE/.shared-actions"
+
+  coverage-deadline:
+    needs: changes
+    if: needs.changes.outputs.match == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # A deadline in the past: no package starts
+      - name: The deadlines
+        run: |
+          echo "PAST=$(( $(date +%s) - 1 ))" >> "$GITHUB_ENV"
+      - id: past
+        uses: ./.github/actions/coverage
+        with:
+          strict: "false"
+          deadline: ${{ env.PAST }}
+      - id: strict
+        continue-on-error: true
+        uses: ./.github/actions/coverage
+        with:
+          strict: "true"
+          deadline: ${{ env.PAST }}
+      # A deadline of 1 second: the tests of the package stop
+      - name: A short deadline
+        run: echo "SHORT=$(( $(date +%s) + 1 ))" >> "$GITHUB_ENV"
+      - id: short
+        uses: ./.github/actions/coverage
+        with:
+          strict: "false"
+          deadline: ${{ env.SHORT }}
+      - name: The action names each stopped package, and strict fails
+        env:
+          PAST_STOPPED: ${{ steps.past.outputs.stopped }}
+          STRICT_OUTCOME: ${{ steps.strict.outcome }}
+          SHORT_STOPPED: ${{ steps.short.outputs.stopped }}
+        run: |
+          echo "past: [$PAST_STOPPED], strict: $STRICT_OUTCOME, short: [$SHORT_STOPPED]"
+          # Not strict, only packages/cli has @vitest/coverage-v8
+          [ "$PAST_STOPPED" = packages/cli ]
+          [ "$SHORT_STOPPED" = packages/cli ]
+          [ "$STRICT_OUTCOME" = failure ]
 
   data-stamps:
     needs: changes
@@ -380,7 +434,7 @@ jobs:
   actions-ok:
     name: Actions OK
     if: ${{ !cancelled() }}
-    needs: [changes, green-main, setup-cue, cue-ci, data-stamps, pages, pages-check, site, release-build, release-publish, release-tag]
+    needs: [changes, green-main, setup-cue, cue-ci, coverage-deadline, data-stamps, pages, pages-check, site, release-build, release-publish, release-tag]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}

@@ -173,4 +173,50 @@ describe.skipIf(executable === undefined)("the scroll cue of the step in a brows
     expect(at("/cued/")).toEqual([]);
     expect(at("/plain/").join(" ")).toContain("a code block goes out of view at 360 px: pre in pre");
   }, 120_000);
+
+  it("gives the cue to a box of the page that scrolls in place of its code block, and only to a box that holds only the block", async () => {
+    const wide = "z".repeat(200);
+    const made =
+      "<style>body{margin:0}.wrap{overflow-x:auto;width:300px}pre{width:max-content;margin:0}</style>" +
+      `<div class="wrap" id="static"><pre id="static-pre">${wide}</pre></div>` +
+      '<div class="wrap" id="later" tabindex="-1"><pre id="later-pre"></pre></div>' +
+      `<div class="wrap" id="mixed"><p>words</p><pre id="mixed-pre">${wide}</pre></div>` +
+      '<div class="wrap" id="short"><pre id="short-pre">short</pre></div>' +
+      `<div class="wrap" id="ok" data-overflow-ok><pre>${wide}</pre></div>` +
+      `<script>setTimeout(() => { document.getElementById("later-pre").textContent = "${wide}"; }, 50);</script>`;
+    const { html } = injectCue(page(made), css);
+    const loaded = browser.page.once("Page.loadEventFired", 30_000);
+    await browser.page.send("Page.navigate", { url: `data:text/html;base64,${Buffer.from(html).toString("base64")}` });
+    await loaded;
+    const read = await browser.page.evaluate<Record<string, { cue: boolean; mark: boolean; tab: number; animation: string }>>(
+      `new Promise((go) => setTimeout(() => requestAnimationFrame(() => go(Object.fromEntries(["static", "later", "mixed", "short", "ok"].map((id) => { ` +
+        `const box = document.getElementById(id); ` +
+        `return [id, { cue: box.classList.contains("scroll-cue"), mark: box.hasAttribute("${CUE_ATTRIBUTE}"), tab: box.tabIndex, animation: getComputedStyle(box).animationName }]; })))), 200))`,
+    );
+    expect(read["static"]).toEqual({ cue: true, mark: true, tab: 0, animation: "scroll-cue-fades" });
+    // The block gets its text after the start. The box keeps its own tab index.
+    expect(read["later"]).toEqual({ cue: true, mark: true, tab: -1, animation: "scroll-cue-fades" });
+    expect(read["mixed"]).toMatchObject({ cue: false, mark: false });
+    expect(read["short"]).toMatchObject({ cue: false, mark: false });
+    expect(read["ok"]).toMatchObject({ cue: false, mark: false });
+  }, 60_000);
+
+  it("makes the site check pass a code block whose own box scrolls, and the check still fails that box with no cue", async () => {
+    const out = mkdtempSync(join(tmpdir(), "cue-outer-"));
+    folders.push(out);
+    const site = (body: string) =>
+      `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>t</title></head><body>${body}</body></html>`;
+    // The pattern of a code lab: the box scrolls, and the block has the width of its text
+    const lab = `<style>.sample-scroll{overflow-x:auto}pre{width:max-content;margin:0}</style><div class="sample-scroll" id="sample-scroll" tabindex="0"><pre id="sample">${"const value = compute(first, second); ".repeat(4)}</pre></div>`;
+    for (const folder of ["cued", "plain"]) {
+      mkdirSync(join(out, folder));
+      writeFileSync(join(out, folder, "index.html"), site(lab));
+    }
+    const cued = join(out, "cued", "index.html");
+    writeFileSync(cued, injectCue(readFileSync(cued, "utf8"), css).html);
+    const result = await checkSite({ out, pages: ["/cued/", "/plain/"], widths: [360], schemes: ["light"], settleMs: 100, timeoutMs: 30_000 });
+    const at = (path: string) => result.views.find((view) => view.page === path)?.problems ?? [];
+    expect(at("/cued/")).toEqual([]);
+    expect(at("/plain/").join(" ")).toContain("a code block goes out of view at 360 px: pre#sample in div#sample-scroll");
+  }, 120_000);
 });
