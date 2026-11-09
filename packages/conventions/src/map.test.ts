@@ -62,6 +62,8 @@ describe("the search", () => {
     expect(findHomes("forwarding meter")[0]?.area).toBe("browser-monitoring");
     expect(findHomes("meter combinator")[0]?.area).toBe("browser-monitoring");
     expect(findHomes("fan-out")[0]?.area).toBe("service");
+    expect(findHomes("in-memory exporter")[0]?.area).toBe("test-generation");
+    expect(findHomes("otel capture")[0]?.area).toBe("test-generation");
     expect(findHomes("nothing-like-this")).toEqual([]);
     expect(findHomes("")).toBe(HOMES);
   });

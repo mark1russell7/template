@@ -74,8 +74,8 @@ export const HOMES: readonly Home[] = [
     packages: ["@mark1russell7/rigor-testkit"],
     repo: "mark1russell7/rigor",
     state: "published",
-    words: ["test", "testing", "property", "fast-check", "arbitrary", "pairwise", "metamorphic", "chaos", "load", "fake", "fastcheck", "covering", "combinatorial", "fault", "injection", "soak", "stress", "throughput", "shrink", "capture", "propagation", "transport"],
-    note: "@mark1russell7/rigor-testkit has the propagation gate and the OpenTelemetry capture. Its fast-check part is planned. @mark1russell7/vex-testkit is only for Vex domains. A fake shell for tests is in @procedures/shell.",
+    words: ["test", "testing", "property", "fast-check", "arbitrary", "pairwise", "metamorphic", "chaos", "load", "fake", "fastcheck", "covering", "combinatorial", "fault", "injection", "soak", "stress", "throughput", "shrink", "capture", "propagation", "transport", "in-memory", "exporter", "testkit"],
+    note: "@mark1russell7/rigor-testkit has the propagation gate (entry /propagation) and the capture of the OpenTelemetry SDK for tests (captureTelemetry, entry /otel). Its fast-check part is planned. @mark1russell7/vex-testkit is only for Vex domains. A fake shell for tests is in @procedures/shell.",
   },
   {
     area: "exact-math",
