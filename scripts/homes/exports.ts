@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { packageReport } from "@mark1russell7/api-report";
-import { HOMES } from "../../packages/conventions/src/map.ts";
+import { HOMES, onNpm } from "../../packages/conventions/src/map.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const INDEX_FILE: string = join(ROOT, "packages/conventions/src/home-exports.ts");
@@ -71,8 +71,7 @@ async function main(args: readonly string[]): Promise<number> {
   const index: Record<string, PackageExports> = {};
   try {
     for (const home of HOMES) {
-      if (home.state !== "published") continue;
-      for (const name of home.packages) index[name] = await exportsOf(name, temp);
+      for (const name of home.packages.filter((pkg) => onNpm(home, pkg))) index[name] = await exportsOf(name, temp);
     }
   } finally {
     rmSync(temp, { recursive: true, force: true });

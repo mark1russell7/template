@@ -142,6 +142,7 @@ noBuildOutput: build/index.d.ts#noBuildOutput
 noLocalPaths: build/index.d.ts#noLocalPaths
 npmLookup: build/index.d.ts#npmLookup
 npmUrl: build/index.d.ts#npmUrl
+onNpm: build/index.d.ts#onNpm
 packageFolders: build/workspace.chunk.d.ts#packageFolders
 pagesAfterRelease: build/index.d.ts#pagesAfterRelease
 pagesCalls: build/index.d.ts#pagesCalls
@@ -332,6 +333,7 @@ interface Home {
   readonly packages: readonly string[];
   readonly repo: string;
   readonly state: HomeState;
+  readonly notOnNpm?: readonly string[];
   readonly words: readonly string[];
   readonly signatures?: readonly string[];
   readonly note?: string;
@@ -823,6 +825,9 @@ export declare const npmLookup: RegistryLookup;
 
 ### build/index.d.ts#npmUrl
 export declare function npmUrl(name: string, version: string): string;
+
+### build/index.d.ts#onNpm
+export declare function onNpm(home: Home, name: string): boolean;
 
 ### build/index.d.ts#pagesAfterRelease
 export declare const pagesAfterRelease: Rule;

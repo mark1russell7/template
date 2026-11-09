@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { findHomes, HOMES, mapMarkdown, mergeHomes, runCli, type CliIo, type Home } from "./index.ts";
+import { findHomes, HOMES, mapMarkdown, mergeHomes, onNpm, runCli, type CliIo, type Home } from "./index.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-map-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -30,6 +30,31 @@ describe("the homes", () => {
   it("give each package one home", () => {
     const names = HOMES.flatMap((home) => home.packages);
     expect(new Set(names).size).toBe(names.length);
+  });
+
+  it("give each signature one home, so a break names one home", () => {
+    const signatures = HOMES.flatMap((home) => (home.signatures ?? []).map((signature) => `${signature} (${home.area})`));
+    const bare = signatures.map((text) => text.slice(0, text.indexOf(" (")));
+    const twice = signatures.filter((_, index) => bare.indexOf(bare[index] ?? "") !== index || bare.lastIndexOf(bare[index] ?? "") !== index);
+    expect(twice).toEqual([]);
+  });
+
+  it("name in notOnNpm only some packages of a published home", () => {
+    for (const home of HOMES.filter((each) => each.notOnNpm !== undefined)) {
+      const notOnNpm = home.notOnNpm ?? [];
+      expect(home.state, home.area).toBe("published");
+      expect(notOnNpm.length, home.area).toBeGreaterThan(0);
+      expect(notOnNpm.length, `${home.area}: when no package is on npm, the state is unpublished`).toBeLessThan(home.packages.length);
+      for (const name of notOnNpm) expect(home.packages, home.area).toContain(name);
+    }
+  });
+
+  it("mark only the package that is not on npm", () => {
+    const home: Home = { area: "x", title: "X", covers: "x", packages: ["@ex/a", "@ex/b"], repo: "mark1russell7/x", state: "published", words: [], notOnNpm: ["@ex/b"] };
+    expect(onNpm(home, "@ex/a")).toBe(true);
+    expect(onNpm(home, "@ex/b")).toBe(false);
+    expect(onNpm({ ...home, state: "unpublished", notOnNpm: [] }, "@ex/a")).toBe(false);
+    expect(mapMarkdown([home])).toContain("| X | `@ex/a`, `@ex/b` (not on npm) | x |");
   });
 });
 
