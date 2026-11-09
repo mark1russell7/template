@@ -549,7 +549,7 @@ uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<full commit SHA>
 ```
 
 - Renovate reads the comment `# main` and moves the pin to the newest commit of `main` (the preset of `renovate/`). The manager `github-actions` does this since Renovate 43.84.0.
-- These updates come in one group, "template workflows and actions", with no wait. Renovate merges them when CI passes.
+- These updates come in one group, "template workflows and actions", with no wait. The pull request gets the label `train-merge`. The release train merges it when CI passes and no release of the repository is open.
 - The group comes on Monday before 06:00 (New York time). A workflow change during a release makes the tag job fail with HTTP 403 (`RELEASING.md`).
 - Renovate does not change `release.yml`. The release session moves the pins of `release.yml` with `scripts/release/bump-pins.ts` (`RELEASING.md`).
 - A change of the template that must not wait for Renovate goes out with `bump-pins.ts --file <workflow>` (`RELEASING.md`).

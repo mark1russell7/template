@@ -60,7 +60,9 @@ env:
 
 ## Automerge
 
-With `default`, Renovate merges these groups when CI passes: the npm patch updates and the minor updates of the development dependencies. It also merges the minor, patch and digest updates of the GitHub Actions, with the pins of the template. It does not merge a minor update before 1.0.0, or an update of the Claude Code CLI.
+With `default`, Renovate merges these groups when CI passes: the npm patch updates and the minor updates of the development dependencies. It does not merge a minor update before 1.0.0, or an update of the Claude Code CLI.
+
+The minor, patch and digest updates of the GitHub Actions, with the pins of the template, get the label `train-merge`. The release train merges them when CI passes and no release of the repository is open. A workflow change during a release makes GitHub refuse its tag (HTTP 403).
 
 Renovate merges the pull request itself (`platformAutomerge` is `false`). Thus it waits for CI also in a repository with no branch protection.
 

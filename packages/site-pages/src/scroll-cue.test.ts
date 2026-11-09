@@ -32,7 +32,8 @@ describe("the scroll cue style", () => {
   });
 
   it("sets a background only in a browser with no scroll timelines, so a code block keeps the color of its theme", () => {
-    const base = /\.scroll-cue\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    // The rule starts a line. The doc comment of the file also has an example with the class.
+    const base = /^\.scroll-cue\s*\{([^}]*)\}/m.exec(css)?.[1] ?? "";
     expect(base).toContain("overflow-x: auto");
     expect(base).not.toMatch(/background/);
     expect(css).toMatch(/@supports not \(animation-timeline: scroll\(\)\)\s*\{\s*\.scroll-cue\s*\{\s*background-color: var\(--scroll-cue-bg\)/);
