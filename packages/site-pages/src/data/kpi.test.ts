@@ -121,6 +121,46 @@ describe("kpiProblems", () => {
   });
 });
 
+describe("the targets of a measure", () => {
+  const TARGETS = [{ value: 120, by: "2026-11-15" }, { value: 250, by: "2026-11-22" }];
+  const withTargets = (targets: unknown): string[] => faults({ measures: [{ id: "operators", value: 41, targets }] });
+
+  it("accepts targets in the order of their dates, a target of zero and a date in the past", () => {
+    expect(withTargets(TARGETS)).toEqual([]);
+    expect(withTargets([{ value: 0, by: "2020-01-01" }])).toEqual([]);
+  });
+
+  it("refuses a date that is not a calendar date of the form YYYY-MM-DD", () => {
+    expect(withTargets([{ value: 1, by: "2026-02-30" }])).toEqual(["Target 0 of measure 0 has no date of the form YYYY-MM-DD in its field by."]);
+    expect(withTargets([{ value: 1, by: "2026-11-15T00:00:00Z" }])).toHaveLength(1);
+    expect(withTargets([{ value: 1 }])).toHaveLength(1);
+  });
+
+  it("refuses a list that is not in the order of its dates, and a date that occurs two times", () => {
+    expect(withTargets([...TARGETS].reverse())).toEqual(["Target 1 of measure 0 has the date 2026-11-15, which is not after the date 2026-11-22 before it."]);
+    expect(withTargets([TARGETS[0], { value: 130, by: "2026-11-15" }])).toHaveLength(1);
+  });
+
+  it("refuses a negative value and a value that is not finite", () => {
+    expect(withTargets([{ value: -1, by: "2026-11-15" }])).toEqual(["Target 0 of measure 0 has no finite value of 0 or more."]);
+    expect(withTargets([{ value: Number.POSITIVE_INFINITY, by: "2026-11-15" }])).toHaveLength(1);
+  });
+
+  it("refuses an empty list, a field that is not a list and a target that is not an object", () => {
+    expect(withTargets([])).toHaveLength(1);
+    expect(withTargets({ value: 1, by: "2026-11-15" })).toHaveLength(1);
+    expect(withTargets(["2026-11-15"])).toEqual(["Target 0 of measure 0 is not an object."]);
+  });
+
+  it("keeps the targets as the last field of a measure, with only their known fields", () => {
+    const measures = [{ id: "operators", value: 41, notCounted: "Param values.", targets: [{ value: 120, by: "2026-11-15", note: "x" }] }];
+    const file = kpiFile({ ...INPUT, measures }, NOW);
+    expect(file.measures[0]).toEqual({ id: "operators", value: 41, notCounted: "Param values.", targets: [{ value: 120, by: "2026-11-15" }] });
+    expect(Object.keys(file.measures[0]!)).toEqual(["id", "value", "notCounted", "targets"]);
+    expect(readKpi(kpiText(file), NOW).measures[0]).toEqual(file.measures[0]);
+  });
+});
+
 describe("readKpi", () => {
   it("reads the text that kpiText writes", () => {
     const file = kpiFile({ ...INPUT, engines: [{ name: "a", version: "1.0.0" }] }, NOW);
