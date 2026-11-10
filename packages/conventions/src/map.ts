@@ -37,7 +37,7 @@ export interface Home {
 
 /** The rule of the map. Each session and each review applies it. */
 export const MAP_RULE =
-  "Before you write a helper, find its home in this map. If the home does not have the function, add it to the home, in a pull request of the home repository. Do not make a local copy, a new package or a new repository for an area that has a home: that needs the strategist. A home that is not on npm is used with workspace:* or a github: specifier pinned to a commit. If no area fits, ask the strategist for a home before you write the code.";
+  "Before you write a helper, find its home in this map. If the home does not have the function, add it to the home, in a pull request of the home repository. Do not make a local copy, a new package or a new repository for an area that has a home: that needs the strategist. A home that is not on npm is used with workspace:* inside its own repository. In another repository, a github: specifier pinned to a commit works only for a package that keeps its built files in git. For any other package, wait for its first npm publish (ask the strategist). If no area fits, ask the strategist for a home before you write the code.";
 
 /** The public homes. Each package that other code can use has one area. */
 export const HOMES: readonly Home[] = [
@@ -158,12 +158,12 @@ export const HOMES: readonly Home[] = [
     area: "headless-browser",
     title: "Headless browser runs",
     covers: "finding the browser of the system, a headless run with argv, a temporary profile, a time limit and a signal, and its output: PDF files, screenshots in PNG or JPEG, page text",
-    packages: [],
+    packages: ["@procedures/browser"],
     repo: "mark1russell7/client",
-    state: "planned",
+    state: "unpublished",
     words: ["browser", "chromium", "chrome", "headless", "screenshot", "pdf", "print", "png", "jpeg", "puppeteer", "playwright"],
     signatures: ["findBrowser", "renderScreenshot"],
-    note: "The home is @procedures/browser (planned). Today findBrowser and renderPdf are in @procedures/pdf, which re-exports them from the new home when it ships.",
+    note: "@procedures/browser is in mark1russell7/client, and @procedures/pdf depends on it. Its first npm version is 0.54.1. Before that publish, use it only with workspace:* inside client: client does not keep its built files in git, so a github: specifier does not work.",
   },
   {
     area: "cli",
@@ -199,12 +199,12 @@ export const HOMES: readonly Home[] = [
   {
     area: "geometry",
     title: "Geometry and layout records",
-    covers: "points, boxes, segments, tolerances, 3D points, boxes and transforms (planned), the input and record formats of the layout engines, converters",
+    covers: "points, boxes, segments, tolerances, space-filling curves (Hilbert, Moore, Morton) on a grid, 3D points, boxes and transforms (planned), the input and record formats of the layout engines, converters",
     packages: ["@mark1russell7/layout-contract"],
     repo: "mark1russell7/layout-contract",
     state: "published",
-    words: ["point", "rect", "box", "segment", "polygon", "tolerance", "overlap", "intersection", "bounds"],
-    signatures: ["segmentsIntersect", "segmentsCross", "segmentIntersection", "segmentsIntersection", "boxesOverlap", "rectsOverlap", "rectsIntersect", "pointInPolygon", "distanceToSegment", "pointSegmentDistance"],
+    words: ["point", "rect", "box", "segment", "polygon", "tolerance", "overlap", "intersection", "bounds", "curve", "space-filling", "hilbert", "moore", "morton", "z-order"],
+    signatures: ["segmentsIntersect", "segmentsCross", "segmentIntersection", "segmentsIntersection", "boxesOverlap", "rectsOverlap", "rectsIntersect", "pointInPolygon", "distanceToSegment", "pointSegmentDistance", "hilbertRank", "hilbertIndex", "hilbertCell", "d2xy", "xy2d", "mortonIndex", "mortonCode"],
     note: "Exact predicates go to algebra. @mark1russell7/vex-domains has 2D vectors for Vex formulas only.",
   },
   {
