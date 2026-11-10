@@ -26,7 +26,7 @@ export {
   type EntryFile,
   type Manifest,
 } from "./entries.ts";
-export { apiModel, packageModel, type ApiDeclaration, type ApiEntry, type ApiModel, type ApiName, type ApiNameKind } from "./model.ts";
+export { apiModel, MODEL_FORMAT, packageModel, type ApiDeclaration, type ApiEntry, type ApiModel, type ApiModelFile, type ApiName, type ApiNameKind } from "./model.ts";
 export { pageFaults, reportEntries, type ApiPage, type FrontmatterValue } from "./page.ts";
 export { referencePage } from "./reference.ts";
 export { apiReport, DEFAULT_TOOL, HEADER_LINES, packageReport, type PackageReportOptions, type ReportOptions } from "./report.ts";
@@ -38,9 +38,11 @@ export {
   runReports,
   summaryMarkdown,
   USAGE,
+  writeModel,
   type ApiReportConfig,
   type CliIo,
   type Mode,
+  type ModelOptions,
   type PackageResult,
   type RunOptions,
   type RunResult,

@@ -51,6 +51,7 @@ Then commit the reports with the change. Put the pathspec of `git diff` in quote
 |---|---|
 | `api-report check` | It compares each report with the built `.d.ts` files. It shows the diff of each changed report. The exit code is 1 when a report differs, is missing or has an error, when a folder has a report that the command does not read, or when the command finds no package. A repository of private packages passes. |
 | `api-report update` | It writes each report that is not current. It removes each report that the command does not read: the report of a private package, an excluded package or a removed package. The exit code is 1 when the command finds no package. |
+| `api-report model --out <file>` | It writes the model of each package, with its doc comments, into one JSON file. The section "The model of the API" tells its format. |
 
 In GitHub Actions, `check` also writes the diff to the summary of the run (`GITHUB_STEP_SUMMARY`).
 
@@ -59,6 +60,7 @@ In GitHub Actions, `check` also writes the diff to the summary of the run (`GITH
 | `--root <folder>` | The root of the repository. The default is the current folder. |
 | `--packages <glob>` | A glob of package folders. Use it again for more globs. |
 | `--report <path>` | The path of the report in each package folder. |
+| `--out <file>` | The file of the command `model`, relative to the current folder. |
 | `--include-private` | Each private package also gets a report. |
 | `--no-publish-config` | The tool reads the fields of `package.json` without `publishConfig`. |
 | `<package folder>` | Only these packages. A named private package also gets a report. |
@@ -184,6 +186,25 @@ The function `packageModel(folder)` gives the public API of a package as data. A
 
 The model has the same entries, names and declarations as the report. `apiModel(report, packageName, docs)` gives the model of the text of a report. The text of a report has no doc comments, so the argument `docs` gives them.
 
+The command `api-report model --out <file>` writes the model of each public package to one JSON file:
+
+```sh
+api-report model --out dist/reference.json
+```
+
+```ts
+interface ApiModelFile {
+  format: "api-model/1";
+  packages: ApiModel[]; // the packages in the sequence of the folders
+}
+```
+
+- The command reads the built `.d.ts` files and their doc comments, as `packageModel` does.
+- It takes the options `--root`, `--packages`, `--include-private`, `--no-publish-config` and the package folders.
+- The exit code is 1 when the command finds no package, and 2 without `--out`.
+- `site-pages build` reads `reference.json` from the output folder of a site and writes the reference page.
+- The file `test/fixtures/api-model-1.json` is the output of the command on a fixture package. The tests of api-report and site-pages read it, so a change of the format fails a test of each.
+
 ## Library
 
 The package also exports the functions of the tool:
@@ -197,3 +218,4 @@ The package also exports the functions of the tool:
 - `pageFaults(report, packageName, pages, except, complete)` and `reportEntries(report)` hold a hand-written page against a report.
 - `referencePage(model, frontmatter)` and `referencePage(report, packageName, frontmatter)` give the Markdown of the page of each export. The argument `frontmatter` is optional.
 - `packageModel(folder)` and `apiModel(report, packageName, docs)` give the model of the API.
+- `writeModel(options)` writes the file of the command `model`. `MODEL_FORMAT` is its format, `api-model/1`.

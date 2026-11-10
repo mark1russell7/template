@@ -8,11 +8,13 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { headCommit, originRepository } from "./data/git.ts";
 import { KPI_FILE, KpiError, readKpi } from "./data/kpi.ts";
+import { readReference, REFERENCE_FILE, ReferenceDataError } from "./data/reference.ts";
 import { changelogGateProblem, changelogReading } from "./data/changelog.ts";
 import { readChangelogFrom, readChangelogs, readReleases, ReleaseDataError } from "./data/releases.ts";
 import { readStatusBoard, RoadmapParseError } from "./data/status.ts";
-import type { Release, StatusBoardData } from "./data/types.ts";
+import type { ReferenceFile, Release, StatusBoardData } from "./data/types.ts";
 import { plural } from "./render/html.ts";
+import { renderReferencePage } from "./render/reference.ts";
 import { renderReleasesPage } from "./render/releases.ts";
 import { renderStatusPage } from "./render/status.ts";
 import type { PageOptions } from "./render/theme.ts";
@@ -59,6 +61,8 @@ export interface BuildResult {
   files: string[];
   releases: Release[];
   status: StatusBoardData;
+  /** The content of `reference.json`, when the output folder has that file. */
+  reference?: ReferenceFile;
 }
 
 function write(file: string, content: string, files: string[]): void {
@@ -70,9 +74,10 @@ function write(file: string, content: string, files: string[]): void {
 /**
  * This function reads the sources and writes `data/releases.json`, `data/status.json`,
  * `releases/index.html` and `status/index.html` into the output folder. When the output folder has a
- * `kpi.json`, the status data and the status page show it.
+ * `kpi.json`, the status data and the status page show it. When the output folder has a `reference.json`,
+ * the function also writes `data/reference.json` and `reference/index.html`, and each page links the reference.
  *
- * @throws ReleaseDataError, RoadmapParseError or KpiError when a source on disk is not correct
+ * @throws ReleaseDataError, RoadmapParseError, KpiError or ReferenceDataError when a source on disk is not correct
  */
 export async function build(options: BuildOptions): Promise<BuildResult> {
   const { repoDir, repository, warn = () => {} } = options;
@@ -103,6 +108,8 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
   });
   const kpiPath = join(out, KPI_FILE);
   const kpi = existsSync(kpiPath) ? readKpi(readFileSync(kpiPath, "utf8"), Date.parse(now)) : undefined;
+  const referencePath = join(out, REFERENCE_FILE);
+  const reference = existsSync(referencePath) ? readReference(readFileSync(referencePath, "utf8")) : undefined;
   const board = await readStatusBoard({ repoDir, roadmap: options.roadmap ?? null, owner, repo, token: options.token, commit, generatedAt: now, ...fetcher });
   const status: StatusBoardData = { ...board, ...(kpi === undefined ? {} : { kpi }), ...(reading === undefined ? {} : { changelog: reading }) };
   if (!status.github.available) warn(`the status page has no GitHub data: ${status.github.reason ?? "no reason"}.`);
@@ -110,6 +117,7 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
   const files: string[] = [];
   write(join(out, "data", "releases.json"), `${JSON.stringify(releases, null, 2)}\n`, files);
   write(join(out, "data", "status.json"), `${JSON.stringify(status, null, 2)}\n`, files);
+  if (reference !== undefined) write(join(out, "data", "reference.json"), `${JSON.stringify(reference, null, 2)}\n`, files);
   if (!options.dataOnly) {
     const page: PageOptions = {
       repository,
@@ -118,11 +126,13 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
       extraCss: options.css ? readFileSync(isAbsolute(options.css) ? options.css : resolve(repoDir, options.css), "utf8") : undefined,
       generatedAt: now,
       commit,
+      reference: reference !== undefined,
     };
     write(join(out, "releases", "index.html"), renderReleasesPage(releases, page), files);
     write(join(out, "status", "index.html"), renderStatusPage(status, page), files);
+    if (reference !== undefined) write(join(out, "reference", "index.html"), renderReferencePage(reference, page), files);
   }
-  return { files, releases, status };
+  return { files, releases, status, ...(reference === undefined ? {} : { reference }) };
 }
 
 /** The help of the CLI. */
@@ -130,6 +140,8 @@ export const HELP = `Usage: site-pages build --out <dir> [options]
 
 Writes <out>/data/releases.json, <out>/data/status.json, <out>/releases/index.html
 and <out>/status/index.html. Start it in the repository, after the build of the site.
+When <out>/reference.json exists ("api-report model --out <out>/reference.json" writes
+it), it also writes <out>/data/reference.json and <out>/reference/index.html.
 
 Options:
   --out <dir>           The built output folder of the site (necessary)
@@ -266,7 +278,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
     );
     return 0;
   } catch (error) {
-    if (error instanceof ReleaseDataError || error instanceof RoadmapParseError || error instanceof KpiError || (error as NodeJS.ErrnoException)?.code === "ENOENT") {
+    if (error instanceof ReleaseDataError || error instanceof RoadmapParseError || error instanceof KpiError || error instanceof ReferenceDataError || (error as NodeJS.ErrnoException)?.code === "ENOENT") {
       io.stderr(`site-pages: ${(error as Error).message}\n`);
       return 1;
     }

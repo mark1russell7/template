@@ -1,0 +1,103 @@
+{
+  "format": "api-model/1",
+  "packages": [
+    {
+      "packageName": "@acme/lib",
+      "entries": [
+        {
+          "subpath": ".",
+          "names": [
+            {
+              "name": "Options",
+              "key": "build/index.d.ts#Options",
+              "isType": false,
+              "kind": "declaration"
+            },
+            {
+              "name": "Other",
+              "key": "other-pkg#Other",
+              "isType": true,
+              "kind": "external"
+            },
+            {
+              "name": "layout",
+              "key": "build/index.d.ts#layout",
+              "isType": false,
+              "kind": "declaration"
+            },
+            {
+              "name": "many",
+              "key": "build/index.d.ts#many",
+              "isType": false,
+              "kind": "declaration"
+            },
+            {
+              "name": "ns",
+              "key": "build/ns.d.ts#*",
+              "isType": false,
+              "kind": "namespace"
+            },
+            {
+              "name": "ns.inner",
+              "key": "build/ns.d.ts#inner",
+              "isType": false,
+              "kind": "declaration"
+            },
+            {
+              "name": "version",
+              "key": "build/index.d.ts#version",
+              "isType": false,
+              "kind": "declaration"
+            }
+          ]
+        },
+        {
+          "subpath": "./svg",
+          "names": [
+            {
+              "name": "layout",
+              "key": "build/index.d.ts#layout",
+              "isType": false,
+              "kind": "declaration"
+            },
+            {
+              "name": "toSvg",
+              "key": "build/svg.d.ts#toSvg",
+              "isType": false,
+              "kind": "declaration"
+            }
+          ]
+        },
+        {
+          "subpath": "./x.css",
+          "names": []
+        }
+      ],
+      "declarations": {
+        "build/index.d.ts#Options": {
+          "text": "export interface Options {\n  readonly gap?: number;\n}",
+          "doc": "The options of {@link layout}."
+        },
+        "build/index.d.ts#layout": {
+          "text": "export declare function layout(options: Options): void;",
+          "doc": "The layout of a tree.\n\n- It reads the options.\n- It gives nothing.\n\n@param options - The <options>.\n@returns Nothing.\n@example\nlayout({ gap: 2 });"
+        },
+        "build/index.d.ts#many": {
+          "text": "export declare function many(a: string): string;\nexport declare function many(a: number): number;",
+          "doc": "The text of a value.\n\n@deprecated Use {@link layout}."
+        },
+        "build/index.d.ts#version": {
+          "text": "export declare const version: string;",
+          "doc": "The version of the package.\n\n@internal Only for the tests."
+        },
+        "build/ns.d.ts#inner": {
+          "text": "export declare const inner: number;",
+          "doc": "The inner value."
+        },
+        "build/svg.d.ts#toSvg": {
+          "text": "export declare function toSvg(): string;"
+        }
+      }
+    }
+  ]
+}

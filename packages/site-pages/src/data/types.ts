@@ -176,6 +176,46 @@ export interface KpiFile {
   engines?: KpiEngine[];
 }
 
+/** One name of an entry in `reference.json`. */
+export interface ReferenceName {
+  /** The exported name. A member of a namespace has the name of the namespace first: `ns.name`. */
+  name: string;
+  /** The key of the declaration of the name in `declarations`. An external name has the key `pkg#name`. */
+  key: string;
+  /** True when the entry exports the name as a type only. */
+  isType: boolean;
+  kind: "declaration" | "namespace" | "external" | "ambient";
+}
+
+/** One entry point of a package in `reference.json`: its subpath and its names. */
+export interface ReferenceEntry {
+  /** The subpath of the entry in the field `exports`: `.` or `./svg`. */
+  subpath: string;
+  names: ReferenceName[];
+}
+
+/** The declaration of one key in `reference.json`, and the text of its doc comment. */
+export interface ReferenceDeclaration {
+  /** The text of the declaration, without comments and private members. */
+  text: string;
+  /** The text of the doc comment, without the comment marks. */
+  doc?: string;
+}
+
+/** The public API of one package in `reference.json`. */
+export interface ReferencePackage {
+  packageName: string;
+  entries: ReferenceEntry[];
+  /** The declaration of each key of the names. */
+  declarations: Record<string, ReferenceDeclaration>;
+}
+
+/** The content of `reference.json`, format `api-model/1`. The command `api-report model` writes it. */
+export interface ReferenceFile {
+  format: "api-model/1";
+  packages: ReferencePackage[];
+}
+
 /** One fault of a version section, with the changelog file that has it. */
 export interface ChangelogFileFault {
   /** The path of the changelog file in the repository, with `/`. */

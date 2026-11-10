@@ -9,6 +9,7 @@
 type ApiDeclaration: build/index.d.ts#ApiDeclaration
 type ApiEntry: build/index.d.ts#ApiEntry
 type ApiModel: build/index.d.ts#ApiModel
+type ApiModelFile: build/index.d.ts#ApiModelFile
 type ApiName: build/index.d.ts#ApiName
 type ApiNameKind: build/index.d.ts#ApiNameKind
 type ApiPage: build/index.d.ts#ApiPage
@@ -24,8 +25,10 @@ type FrontmatterValue: build/index.d.ts#FrontmatterValue
 HEADER_LINES: build/index.d.ts#HEADER_LINES
 type ImportBinding: build/index.d.ts#ImportBinding
 type LocalExport: build/index.d.ts#LocalExport
+MODEL_FORMAT: build/index.d.ts#MODEL_FORMAT
 type Manifest: build/index.d.ts#Manifest
 type Mode: build/index.d.ts#Mode
+type ModelOptions: build/index.d.ts#ModelOptions
 PUBLISH_CONFIG_FIELDS: build/index.d.ts#PUBLISH_CONFIG_FIELDS
 type PackageReportOptions: build/index.d.ts#PackageReportOptions
 type PackageResult: build/index.d.ts#PackageResult
@@ -64,6 +67,7 @@ summaryMarkdown: build/index.d.ts#summaryMarkdown
 targetOf: build/index.d.ts#targetOf
 unifiedDiff: build/index.d.ts#unifiedDiff
 workspaceGlobs: @mark1russell7/conventions/workspace#workspaceGlobs (external)
+writeModel: build/index.d.ts#writeModel
 
 ## bin: 1 commands
 
@@ -88,6 +92,12 @@ interface ApiModel {
   readonly packageName: string;
   readonly entries: readonly ApiEntry[];
   readonly declarations: Readonly<Record<string, ApiDeclaration>>;
+}
+
+### build/index.d.ts#ApiModelFile
+interface ApiModelFile {
+  readonly format: typeof MODEL_FORMAT;
+  readonly packages: readonly ApiModel[];
 }
 
 ### build/index.d.ts#ApiName
@@ -197,6 +207,9 @@ interface LocalExport {
   readonly typeOnly: boolean;
 }
 
+### build/index.d.ts#MODEL_FORMAT
+export declare const MODEL_FORMAT = "api-model/1";
+
 ### build/index.d.ts#Manifest
 interface Manifest {
   readonly name?: string;
@@ -213,6 +226,13 @@ interface Manifest {
 
 ### build/index.d.ts#Mode
 type Mode = "check" | "update";
+
+### build/index.d.ts#ModelOptions
+interface ModelOptions extends Pick<ApiReportConfig, "packages" | "includePrivate" | "publishConfig"> {
+  readonly root: string;
+  readonly out: string;
+  readonly folders?: readonly string[];
+}
 
 ### build/index.d.ts#PUBLISH_CONFIG_FIELDS
 export declare const PUBLISH_CONFIG_FIELDS: readonly string[];
@@ -344,3 +364,6 @@ export declare function targetOf(value: unknown): string | null | undefined;
 
 ### build/index.d.ts#unifiedDiff
 export declare function unifiedDiff(before: string, after: string, options?: UnifiedDiffOptions): string;
+
+### build/index.d.ts#writeModel
+export declare function writeModel(options: ModelOptions): ApiModelFile;

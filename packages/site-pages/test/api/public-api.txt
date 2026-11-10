@@ -6,6 +6,7 @@
 
 ## . (build/index.d.ts): names
 
+type AnchorOf: build/index.d.ts#AnchorOf
 BASE_CSS: build/index.d.ts#BASE_CSS
 type BoardIssue: build/chunks/freshness.d.ts#BoardIssue
 type BoardItem: build/chunks/freshness.d.ts#BoardItem
@@ -70,9 +71,18 @@ type PageOptions: build/index.d.ts#PageOptions
 type PageParts: build/index.d.ts#PageParts
 type PageStamp: build/chunks/freshness.d.ts#PageStamp
 type ParsedVersion: build/index.d.ts#ParsedVersion
+REFERENCE_FILE: build/index.d.ts#REFERENCE_FILE
+REFERENCE_FORMAT: build/index.d.ts#REFERENCE_FORMAT
+REFERENCE_SCRIPT: build/index.d.ts#REFERENCE_SCRIPT
 RELEASES_SCRIPT: build/index.d.ts#RELEASES_SCRIPT
 type ReadReleasesOptions: build/index.d.ts#ReadReleasesOptions
 type ReadStatusBoardOptions: build/index.d.ts#ReadStatusBoardOptions
+ReferenceDataError: build/index.d.ts#ReferenceDataError
+type ReferenceDeclaration: build/chunks/freshness.d.ts#ReferenceDeclaration
+type ReferenceEntry: build/chunks/freshness.d.ts#ReferenceEntry
+type ReferenceFile: build/chunks/freshness.d.ts#ReferenceFile
+type ReferenceName: build/chunks/freshness.d.ts#ReferenceName
+type ReferencePackage: build/chunks/freshness.d.ts#ReferencePackage
 type Release: build/chunks/freshness.d.ts#Release
 type ReleaseChange: build/chunks/freshness.d.ts#ReleaseChange
 ReleaseDataError: build/index.d.ts#ReleaseDataError
@@ -110,6 +120,7 @@ classCounts: build/index.d.ts#classCounts
 compareVersions: build/index.d.ts#compareVersions
 cronLines: build/chunks/freshness.d.ts#cronLines
 dayRange: build/index.d.ts#dayRange
+declarationKind: build/index.d.ts#declarationKind
 escapeHtml: build/index.d.ts#escapeHtml
 failingCases: build/chunks/freshness.d.ts#failingCases
 firstSentence: build/index.d.ts#firstSentence
@@ -151,14 +162,19 @@ probeScript: build/index.d.ts#probeScript
 readChangelogFrom: build/index.d.ts#readChangelogFrom
 readChangelogs: build/index.d.ts#readChangelogs
 readKpi: build/chunks/freshness.d.ts#readKpi
+readReference: build/index.d.ts#readReference
 readReleases: build/index.d.ts#readReleases
 readStatusBoard: build/index.d.ts#readStatusBoard
+referenceLead: build/index.d.ts#referenceLead
+referenceProblems: build/index.d.ts#referenceProblems
 releaseBodyEntries: build/index.d.ts#releaseBodyEntries
 releaseLagOf: build/index.d.ts#releaseLagOf
 releaseReading: build/index.d.ts#releaseReading
 releaseSummary: build/index.d.ts#releaseSummary
 releasesLead: build/index.d.ts#releasesLead
 renderDataStamp: build/index.d.ts#renderDataStamp
+renderDoc: build/index.d.ts#renderDoc
+renderReferencePage: build/index.d.ts#renderReferencePage
 renderReleasesPage: build/index.d.ts#renderReleasesPage
 renderStatusPage: build/index.d.ts#renderStatusPage
 roadmapItems: build/index.d.ts#roadmapItems
@@ -586,6 +602,39 @@ interface PageStamp {
   readonly noLimit?: NoAgeLimit;
 }
 
+### build/chunks/freshness.d.ts#ReferenceDeclaration
+interface ReferenceDeclaration {
+  text: string;
+  doc?: string;
+}
+
+### build/chunks/freshness.d.ts#ReferenceEntry
+interface ReferenceEntry {
+  subpath: string;
+  names: ReferenceName[];
+}
+
+### build/chunks/freshness.d.ts#ReferenceFile
+interface ReferenceFile {
+  format: "api-model/1";
+  packages: ReferencePackage[];
+}
+
+### build/chunks/freshness.d.ts#ReferenceName
+interface ReferenceName {
+  name: string;
+  key: string;
+  isType: boolean;
+  kind: "declaration" | "namespace" | "external" | "ambient";
+}
+
+### build/chunks/freshness.d.ts#ReferencePackage
+interface ReferencePackage {
+  packageName: string;
+  entries: ReferenceEntry[];
+  declarations: Record<string, ReferenceDeclaration>;
+}
+
 ### build/chunks/freshness.d.ts#Release
 interface Release {
   version: string;
@@ -840,6 +889,9 @@ export declare function settle(record: ResponseRecord, wanted?: Partial<Explorer
 ### build/explorer/index.d.ts#viewOf
 export declare function viewOf(record: ResponseRecord, state: ExplorerState, options?: ViewOptions): ExplorerView;
 
+### build/index.d.ts#AnchorOf
+type AnchorOf = (name: string) => string | undefined;
+
 ### build/index.d.ts#BASE_CSS
 export declare const BASE_CSS: string;
 
@@ -876,6 +928,7 @@ interface BuildResult {
   files: string[];
   releases: Release[];
   status: StatusBoardData;
+  reference?: ReferenceFile;
 }
 
 ### build/index.d.ts#ChangelogEntry
@@ -964,7 +1017,7 @@ type GitHubReleaseLag = {
 };
 
 ### build/index.d.ts#HELP
-export declare const HELP = "Usage: site-pages build --out <dir> [options]\n\nWrites <out>/data/releases.json, <out>/data/status.json, <out>/releases/index.html\nand <out>/status/index.html. Start it in the repository, after the build of the site.\n\nOptions:\n  --out <dir>           The built output folder of the site (necessary)\n  --repo <owner/name>   The GitHub repository (default: $GITHUB_REPOSITORY, else the remote \"origin\")\n  --base </name/>       The path of the site home (default: \"/<name>/\", or \"/\" for <owner>.github.io)\n  --roadmap <file>      The roadmap file (default: none, the status page has only the GitHub part)\n  --packages <names>    npm names or a @scope, separated by commas, for the npm dates\n  --changesets <glob>   The changelog files (default: packages/*/CHANGELOG.md, else CHANGELOG.md)\n  --group <name>        The npm name of the package whose changelog gives the versions\n  --token <token>       A GitHub token with read access (default: $GITHUB_TOKEN)\n  --css <file>          A CSS file for the pages, after the default CSS\n  --site-name <name>    The name of the site in the header (default: the repository name)\n  --data-only           Write only the JSON data, not the pages\n  -h, --help            Show this help\n\nUsage: site-pages check (--out <dir> | --url <url>) [options]\n\nOpens the pages of the site in a headless Chromium at phone and desktop widths. Start\n\"site-pages check --help\" for its options.\n\nUsage: site-pages freshness --stamps <file> [options]\n\nExamine the data stamps of the measured pages of a site. See\n\"site-pages freshness --help\" for its options.\n";
+export declare const HELP = "Usage: site-pages build --out <dir> [options]\n\nWrites <out>/data/releases.json, <out>/data/status.json, <out>/releases/index.html\nand <out>/status/index.html. Start it in the repository, after the build of the site.\nWhen <out>/reference.json exists (\"api-report model --out <out>/reference.json\" writes\nit), it also writes <out>/data/reference.json and <out>/reference/index.html.\n\nOptions:\n  --out <dir>           The built output folder of the site (necessary)\n  --repo <owner/name>   The GitHub repository (default: $GITHUB_REPOSITORY, else the remote \"origin\")\n  --base </name/>       The path of the site home (default: \"/<name>/\", or \"/\" for <owner>.github.io)\n  --roadmap <file>      The roadmap file (default: none, the status page has only the GitHub part)\n  --packages <names>    npm names or a @scope, separated by commas, for the npm dates\n  --changesets <glob>   The changelog files (default: packages/*/CHANGELOG.md, else CHANGELOG.md)\n  --group <name>        The npm name of the package whose changelog gives the versions\n  --token <token>       A GitHub token with read access (default: $GITHUB_TOKEN)\n  --css <file>          A CSS file for the pages, after the default CSS\n  --site-name <name>    The name of the site in the header (default: the repository name)\n  --data-only           Write only the JSON data, not the pages\n  -h, --help            Show this help\n\nUsage: site-pages check (--out <dir> | --url <url>) [options]\n\nOpens the pages of the site in a headless Chromium at phone and desktop widths. Start\n\"site-pages check --help\" for its options.\n\nUsage: site-pages freshness --stamps <file> [options]\n\nExamine the data stamps of the measured pages of a site. See\n\"site-pages freshness --help\" for its options.\n";
 
 ### build/index.d.ts#ItemGroup
 interface ItemGroup {
@@ -1012,13 +1065,14 @@ interface PageOptions {
   extraCss?: string | undefined;
   generatedAt: string;
   commit: string | null;
+  reference?: boolean | undefined;
 }
 
 ### build/index.d.ts#PageParts
 interface PageParts {
   title: string;
   description: string;
-  current: "releases" | "status";
+  current: "releases" | "status" | "reference";
   main: string;
   script: string;
 }
@@ -1030,6 +1084,15 @@ interface ParsedVersion {
   patch: number;
   prerelease: string[];
 }
+
+### build/index.d.ts#REFERENCE_FILE
+export declare const REFERENCE_FILE = "reference.json";
+
+### build/index.d.ts#REFERENCE_FORMAT
+export declare const REFERENCE_FORMAT = "api-model/1";
+
+### build/index.d.ts#REFERENCE_SCRIPT
+export declare const REFERENCE_SCRIPT: string;
 
 ### build/index.d.ts#RELEASES_SCRIPT
 export declare const RELEASES_SCRIPT: string;
@@ -1058,6 +1121,12 @@ interface ReadStatusBoardOptions {
   commit?: string | null | undefined;
   fetch?: typeof fetch | undefined;
   generatedAt?: string | undefined;
+}
+
+### build/index.d.ts#ReferenceDataError
+export declare class ReferenceDataError extends Error {
+  readonly problems: readonly string[];
+  constructor(problems: readonly string[]);
 }
 
 ### build/index.d.ts#ReleaseDataError
@@ -1236,6 +1305,9 @@ export declare function compareVersions(a: string, b: string): number;
 ### build/index.d.ts#dayRange
 export declare function dayRange(start: number, end: number): string;
 
+### build/index.d.ts#declarationKind
+export declare function declarationKind(text: string): string;
+
 ### build/index.d.ts#escapeHtml
 export declare function escapeHtml(text: string): string;
 
@@ -1357,11 +1429,20 @@ export declare function readChangelogFrom(repoDir: string): string | null;
 ### build/index.d.ts#readChangelogs
 export declare function readChangelogs(repoDir: string, pattern?: string): ChangelogSource[];
 
+### build/index.d.ts#readReference
+export declare function readReference(text: string): ReferenceFile;
+
 ### build/index.d.ts#readReleases
 export declare function readReleases(options: ReadReleasesOptions): Promise<Release[]>;
 
 ### build/index.d.ts#readStatusBoard
 export declare function readStatusBoard(options: ReadStatusBoardOptions): Promise<StatusBoardData>;
+
+### build/index.d.ts#referenceLead
+export declare function referenceLead(file: ReferenceFile): string;
+
+### build/index.d.ts#referenceProblems
+export declare function referenceProblems(value: unknown): string[];
 
 ### build/index.d.ts#releaseBodyEntries
 export declare function releaseBodyEntries(body: string): ChangelogEntry[];
@@ -1380,6 +1461,12 @@ export declare function releasesLead(releases: readonly Release[]): string;
 
 ### build/index.d.ts#renderDataStamp
 export declare function renderDataStamp(stamp: PageStamp, now?: string): string;
+
+### build/index.d.ts#renderDoc
+export declare function renderDoc(doc: string, anchorOf?: AnchorOf): string;
+
+### build/index.d.ts#renderReferencePage
+export declare function renderReferencePage(file: ReferenceFile, options: PageOptions): string;
 
 ### build/index.d.ts#renderReleasesPage
 export declare function renderReleasesPage(releases: readonly Release[], options: PageOptions): string;

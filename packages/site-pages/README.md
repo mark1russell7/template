@@ -27,6 +27,7 @@ The command writes these files into the output folder:
 | `data/status.json` | The roadmap items, the open pull requests and the open issues |
 | `releases/index.html` | The releases page |
 | `status/index.html` | The status page |
+| `data/reference.json`, `reference/index.html` | The reference page and its data, when the output folder has `reference.json` |
 
 The options:
 
@@ -584,6 +585,25 @@ Two functions read a measure from GitHub at the build. Each result has the `at` 
 | --- | --- |
 | `githubGreenRun({ owner, repo, token, workflow })` | The scheduled runs of a workflow that passed in a row, from the newest run |
 | `githubReleaseLag({ owner, repo, token, tagPrefix, branch })` | The age in days of the oldest commit of the first-parent line of the branch that is not in the newest release of the tag prefix. A merge commit counts at its own date. Drafts and pre-releases do not count. |
+
+## The reference page
+
+The reference page shows each export of the packages, with its declaration and its doc comment. The data comes from `reference.json` at the root of the output folder.
+
+```sh
+api-report model --out dist/reference.json
+site-pages build --out dist
+```
+
+- The command `api-report model` of `@mark1russell7/api-report` writes the file in the format `api-model/1`.
+- `site-pages build` examines the file. A fault in the form stops the build with exit code 1.
+- The build writes `data/reference.json` and `reference/index.html`. The navigation of each page then has a Reference link.
+- The page has a section for each entry point, with its import path, an index and an article for each name.
+- A name of two entries has its article in the first entry only.
+- The lead counts each exported name. An external name or a namespace member counts, also without an article of its own.
+- The doc comments become HTML: paragraphs, lists, code fences, `{@link}` and the block tags. The page does not show `@internal`, `@privateRemarks` or `@hidden`.
+- A filter at the top shows only the names that contain its text. Without JavaScript, the page shows each name.
+- `readReference(text)` reads the file for a site with its own components. `renderReferencePage(file, options)` gives the HTML of the page.
 
 ## The shell of a site
 
