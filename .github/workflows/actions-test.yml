@@ -18,7 +18,7 @@
 #   setup-cue       The action installs the cue CLI on Linux, macOS and Windows. A wrong sha256 fails it, also on a
 #                   cache hit.
 #   cue-ci          The input cue-version of reusable-ci.yml gives the scripts the cue CLI, and no folder .shared-actions.
-#   coverage-deadline The action coverage stops at its deadline. Not strict, the step passes and names the stopped package.
+#   coverage-deadline The action coverage stops at its deadline. Not strict, the step passes and names each stopped package.
 #                   Strict, the step fails.
 #   data-stamps     A missing file of stamps skips the gate when the build is of an older commit, and fails it when
 #                   the build is of the commit of the workflow.
@@ -238,11 +238,20 @@ jobs:
           PAST_STOPPED: ${{ steps.past.outputs.stopped }}
           STRICT_OUTCOME: ${{ steps.strict.outcome }}
           SHORT_STOPPED: ${{ steps.short.outputs.stopped }}
+        shell: bash
         run: |
-          echo "past: [$PAST_STOPPED], strict: $STRICT_OUTCOME, short: [$SHORT_STOPPED]"
-          # Not strict, only packages/cli has @vitest/coverage-v8
-          [ "$PAST_STOPPED" = packages/cli ]
-          [ "$SHORT_STOPPED" = packages/cli ]
+          # The action starts each package with @vitest/coverage-v8. The list comes from the workspace, so a new package
+          # with coverage does not break the test.
+          EXPECTED=""
+          for f in packages/*/package.json; do
+            if grep -q '"@vitest/coverage-v8"' "$f"; then EXPECTED="${EXPECTED:+$EXPECTED }$(dirname "$f")"; fi
+          done
+          echo "expected: [$EXPECTED], past: [$PAST_STOPPED], strict: $STRICT_OUTCOME, short: [$SHORT_STOPPED]"
+          # The test compares the sets. The glob puts site-pages/ before site/, because "-" sorts before "/".
+          sorted() { printf '%s\n' $1 | LC_ALL=C sort | tr '\n' ' '; }
+          [ -n "$EXPECTED" ]
+          [ "$(sorted "$PAST_STOPPED")" = "$(sorted "$EXPECTED")" ]
+          [ "$(sorted "$SHORT_STOPPED")" = "$(sorted "$EXPECTED")" ]
           [ "$STRICT_OUTCOME" = failure ]
 
   data-stamps:
