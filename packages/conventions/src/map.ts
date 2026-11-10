@@ -37,7 +37,7 @@ export interface Home {
 
 /** The rule of the map. Each session and each review applies it. */
 export const MAP_RULE =
-  "Before you write a helper, find its home in this map. If the home does not have the function, add it to the home, in a pull request of the home repository. Do not make a local copy, a new package or a new repository for an area that has a home: that needs the strategist. A home that is not on npm is used with workspace:* or a github: specifier pinned to a commit. If no area fits, ask the strategist for a home before you write the code.";
+  "Before you write a helper, find its home in this map. If the home does not have the function, add it to the home, in a pull request of the home repository. Do not make a local copy, a new package or a new repository for an area that has a home: that needs the strategist. A home that is not on npm is used with workspace:* inside its own repository. In another repository, a github: specifier pinned to a commit works only for a package that keeps its built files in git. For any other package, wait for its first npm publish (ask the strategist). If no area fits, ask the strategist for a home before you write the code.";
 
 /** The public homes. Each package that other code can use has one area. */
 export const HOMES: readonly Home[] = [
@@ -163,7 +163,7 @@ export const HOMES: readonly Home[] = [
     state: "unpublished",
     words: ["browser", "chromium", "chrome", "headless", "screenshot", "pdf", "print", "png", "jpeg", "puppeteer", "playwright"],
     signatures: ["findBrowser", "renderScreenshot"],
-    note: "@procedures/browser is in mark1russell7/client and is not on npm yet. Until its first publish, use it with workspace:* inside client and a github: specifier pinned to a commit elsewhere. @procedures/pdf depends on it.",
+    note: "@procedures/browser is in mark1russell7/client, and @procedures/pdf depends on it. Its first npm version is 0.54.1. Before that publish, use it only with workspace:* inside client: client does not keep its built files in git, so a github: specifier does not work.",
   },
   {
     area: "cli",
