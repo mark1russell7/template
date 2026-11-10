@@ -248,6 +248,16 @@ export const HOMES: readonly Home[] = [
     note: "It has no site facts and no prices: a site and part records are input data. Units come from quantity, roll-ups from Vex.",
   },
   {
+    area: "ci-runners",
+    title: "Self-hosted CI runners",
+    covers: "a dispatcher of one-job runners: sources of queued jobs, trust rules as data, a provider that makes one machine for each job (Proxmox first)",
+    packages: [],
+    repo: "mark1russell7/runner-dispatch",
+    state: "planned",
+    words: ["runner", "self-hosted", "jit", "just-in-time", "ephemeral runner", "workflow_job", "dispatcher", "proxmox", "scale set", "garm", "arc"],
+    note: "Loops go to @mark1russell7/service, the machine state machine to @mark1russell7/algebra. It has no site facts.",
+  },
+  {
     area: "room-view",
     title: "3D room viewer",
     covers: "a three.js viewer of a room model (glTF) with placed objects, outlets and circuits as data",
