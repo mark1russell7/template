@@ -84,6 +84,12 @@ test("green: a change of devDependencies or of a script that is not an install s
   assert.deepEqual(differences(BASE, packed), []);
 });
 
+test("green: a change of packageManager (an update of pnpm)", () => {
+  const published = { ...BASE, "package.json": manifest({ dependencies: { a: "^1.0.0" }, packageManager: "pnpm@10.34.7" }) };
+  const packed = { ...BASE, "package.json": manifest({ dependencies: { a: "^1.0.0" }, packageManager: "pnpm@10.34.9" }) };
+  assert.deepEqual(differences(published, packed), []);
+});
+
 test("green: the key order of package.json does not count", () => {
   const packed = { ...BASE, "package.json": JSON.stringify({ scripts: { build: "tsc" }, devDependencies: { vitest: "^3.0.0" }, dependencies: { a: "^1.0.0" }, main: "build/index.js", version: "0.1.23", name: "@scope/core" }) };
   assert.deepEqual(differences(BASE, packed), []);

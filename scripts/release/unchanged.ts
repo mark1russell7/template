@@ -83,6 +83,8 @@ export function tarballFiles(tgz: Buffer): Map<string, Buffer> {
 export function installedManifest(raw: Buffer): string {
   const manifest = JSON.parse(raw.toString("utf8")) as Record<string, unknown>;
   delete manifest["devDependencies"];
+  // A package manager reads packageManager only in the root project, not in an installed package.
+  delete manifest["packageManager"];
   for (const field of RANGE_FIELDS) {
     const ranges = manifest[field];
     if (ranges && typeof ranges === "object") {
