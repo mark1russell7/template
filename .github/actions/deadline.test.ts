@@ -1,5 +1,6 @@
 // Tests deadline.ts of the action coverage: the time that is left, the exit codes and the stop at the deadline.
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -78,5 +79,58 @@ describe("deadline: the command", () => {
 
   it("refuses an empty command", async () => {
     await assert.rejects(async () => runBeforeDeadline([], { deadline: undefined }), /Give the command/);
+  });
+});
+
+describe("deadline: a duration, a label and a stopper", () => {
+  it("stops a slow command after the duration, with the label and the level in the message", async () => {
+    const lines: string[] = [];
+    const start = Date.now();
+    const code = await runBeforeDeadline([node, "-e", "setTimeout(() => {}, 60_000)"], {
+      durationMs: 1_000,
+      label: "the try",
+      level: "notice",
+      log: (l) => lines.push(l),
+    });
+    assert.equal(code, STOPPED);
+    assert.ok(Date.now() - start < 20_000, `it took ${Date.now() - start} ms`);
+    assert.match(lines[0] ?? "", /^::notice::.* stopped at the deadline of the try\.$/);
+  });
+
+  it("gives the exit code of a command that ends inside the duration", async () => {
+    const code = await runBeforeDeadline([node, "-e", "process.exit(5)"], { durationMs: 60_000, log: () => {} });
+    assert.equal(code, 5);
+  });
+
+  it("uses the earlier of a deadline and a duration", async () => {
+    const lines: string[] = [];
+    const code = await runBeforeDeadline([node, "-e", "process.exit(0)"], { deadline: seconds(-1), durationMs: 60_000, log: (l) => lines.push(l) });
+    assert.equal(code, STOPPED);
+    assert.match(lines[0] ?? "", /did not start: the deadline of the coverage job is past\.$/);
+  });
+
+  it("calls the stopper with the process ID and the time to KILL, and waits for it", async () => {
+    const calls: Array<[number, number]> = [];
+    let ended = false;
+    const code = await runBeforeDeadline([node, "-e", "setTimeout(() => {}, 60_000)"], {
+      durationMs: 1_000,
+      killAfterMs: 700,
+      log: () => {},
+      stopper: async (pid, graceMs) => {
+        calls.push([pid, graceMs]);
+        if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore" });
+        else process.kill(-pid, "SIGKILL");
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        ended = true;
+      },
+    });
+    assert.equal(code, STOPPED);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]?.[1], 700);
+    assert.equal(ended, true);
+  });
+
+  it("refuses a duration that is not a positive number", () => {
+    assert.throws(() => runBeforeDeadline([node, "-e", ""], { durationMs: 0 }), /not a positive number/);
   });
 });

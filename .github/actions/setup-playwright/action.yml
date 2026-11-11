@@ -2,7 +2,8 @@ name: setup-playwright
 description: >-
   Installs the Playwright browsers and their system packages from a cache, with a time limit and one more try, so
   that a slow package mirror or a hung download does not hold the job until its timeout. With packages
-  "best-effort", a package mirror that does not answer does not fail the step when each browser starts.
+  "best-effort", the system packages get one try with a time limit, and a failed try does not fail the step when
+  each browser starts. The step needs Node.js 22.18 or later.
 inputs:
   browsers:
     description: The browsers, separated by spaces (for example "chromium firefox webkit").
@@ -16,18 +17,25 @@ inputs:
     description: The directory where the command runs.
     default: .
   timeout-minutes:
-    description: The time limit of each try of an install.
+    description: The time limit of each try of an install, in minutes (a whole number of 1 or more).
     default: "12"
   attempts:
-    description: The number of tries of each install (the browsers, then the system packages).
+    description: >-
+      The number of tries of each install (the browsers, then the system packages with "required"), a whole number of
+      1 or more.
     default: "2"
   packages:
     description: >-
-      "required": a failure of the system packages fails the step. "best-effort": on Linux, the step first probes the
-      package mirror with apt-get update (90 seconds at most). When the probe or the tries fail, the step starts each
-      browser. When each browser starts, the step warns, sets the output packages to "missing" and passes. When a
-      browser does not start, the step fails. On macOS and Windows there is no probe.
+      "required": the system packages get the tries of attempts and timeout-minutes, and a failure of the last try
+      fails the step. "best-effort": the system packages get one try of best-effort-minutes. When that try fails or
+      reaches its limit, the step starts each browser. When each browser starts, the step warns, sets the output
+      packages to "missing" and passes. When a browser does not start, the step fails.
     default: required
+  best-effort-minutes:
+    description: >-
+      The time limit of the one try of the system packages with "best-effort", in minutes (a whole number of 1 or
+      more). In one measured run, a try with a cache hit took 207 seconds during an outage of the package mirror.
+    default: "5"
 outputs:
   version:
     description: The Playwright version.
@@ -40,6 +48,11 @@ outputs:
       "installed" when the system packages are installed, "missing" when the input packages is "best-effort" and they
       are not. A job that needs the fonts (a pixel comparison, a text measure) can refuse "missing".
     value: ${{ steps.install.outputs.packages }}
+  packages-cause:
+    description: >-
+      Empty with "installed". With "missing": "failed" when the try of the system packages ended with an error, and
+      "time-limit" when it reached best-effort-minutes.
+    value: ${{ steps.install.outputs.packages-cause }}
 runs:
   using: composite
   steps:
@@ -51,11 +64,18 @@ runs:
         COMMAND: ${{ inputs.command }}
         BROWSERS: ${{ inputs.browsers }}
         PACKAGES: ${{ inputs.packages }}
+        MINUTES: ${{ inputs.timeout-minutes }}
+        ATTEMPTS: ${{ inputs.attempts }}
+        BEST_EFFORT_MINUTES: ${{ inputs.best-effort-minutes }}
+        SCRIPT: ${{ github.action_path }}/install.ts
       run: |
-        case "$PACKAGES" in
-          required | best-effort) ;;
-          *) echo "::error::The input packages is \"$PACKAGES\". Give \"required\" or \"best-effort\"."; exit 1 ;;
-        esac
+        # The script of the action is TypeScript. Node.js starts a .ts file from 22.18.
+        if ! node -e 'process.exit(process.features.typescript ? 0 : 1)'; then
+          echo "::error::Node.js $(node --version) cannot start the script of the action setup-playwright (Node.js 22.18 or later can)."
+          exit 1
+        fi
+        # The inputs are checked before the cache step.
+        node "$SCRIPT" check
         version=$($COMMAND --version | awk '{print $NF}')
         [ -n "$version" ] || { echo "::error::\"$COMMAND --version\" gave no version."; exit 1; }
         # One browser folder on each OS, so that the cache path is the same everywhere.
@@ -97,7 +117,9 @@ runs:
         MINUTES: ${{ inputs.timeout-minutes }}
         ATTEMPTS: ${{ inputs.attempts }}
         PACKAGES: ${{ inputs.packages }}
-      run: bash "$GITHUB_ACTION_PATH/install.sh"
+        BEST_EFFORT_MINUTES: ${{ inputs.best-effort-minutes }}
+        SCRIPT: ${{ github.action_path }}/install.ts
+      run: node "$SCRIPT" install
     - name: Save the browsers and the system packages in the cache
       if: steps.cache.outputs.cache-hit != 'true' && steps.install.outputs.packages == 'installed'
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

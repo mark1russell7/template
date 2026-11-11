@@ -18,10 +18,11 @@
 #   setup-cue       The action installs the cue CLI on Linux, macOS and Windows. A wrong sha256 fails it, also on a
 #                   cache hit.
 #   setup-playwright The action installs Chromium and gives the output packages=installed, also with packages
-#                   "best-effort". An unknown value of packages fails it.
-#   setup-playwright-fault The package mirror of apt does not answer. With "best-effort", the action passes in a
-#                   short time with packages=missing, its warning is in the annotations, and Chromium starts. With
-#                   "required", the action fails.
+#                   "best-effort". An unknown value of packages and a limit of 0 minutes fail it.
+#   setup-playwright-fault The package mirror of apt refuses each connection or never answers. With "best-effort",
+#                   the action passes with packages=missing and the cause "failed" or "time-limit", its warning is in
+#                   the annotations, and Chromium starts. After a hang, no process of the try is left and the package
+#                   database is in order. With "required", the action fails.
 #   cue-ci          The input cue-version of reusable-ci.yml gives the scripts the cue CLI, and no folder .shared-actions.
 #   coverage-deadline The action coverage stops at its deadline. Not strict, the step passes and names each stopped package.
 #                   Strict, the step fails.
@@ -185,8 +186,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.match == 'true'
     runs-on: ubuntu-latest
-    # Two calls of the action, each with a time limit of 12 minutes for each try
-    timeout-minutes: 30
+    # Two calls of the action that install: the browsers have 2 tries of 12 minutes, the system packages 2 tries of
+    # 12 minutes (required) or 1 try of 5 minutes (best-effort). The two calls that fail stop at their input check.
+    timeout-minutes: 45
     permissions:
       contents: read
     defaults:
@@ -209,7 +211,7 @@ jobs:
         uses: ./.github/actions/setup-playwright
         with:
           command: ${{ env.PW }}
-      # With a mirror that answers, the probe of best-effort passes and the system packages install
+      # With a mirror that answers, the one try of best-effort (the default limit of 5 minutes) installs the packages
       - id: best-effort
         uses: ./.github/actions/setup-playwright
         with:
@@ -221,40 +223,58 @@ jobs:
         with:
           command: ${{ env.PW }}
           packages: maybe
-      - name: The output is installed, Chromium starts, and an unknown value fails the action
+      - id: bad-minutes
+        continue-on-error: true
+        uses: ./.github/actions/setup-playwright
+        with:
+          command: ${{ env.PW }}
+          packages: best-effort
+          best-effort-minutes: "0"
+      - name: The output is installed, Chromium starts, and an incorrect input fails the action
         env:
           DEFAULTS: ${{ steps.defaults.outputs.packages }}
+          DEFAULTS_CAUSE: ${{ steps.defaults.outputs.packages-cause }}
           BEST_EFFORT: ${{ steps.best-effort.outputs.packages }}
+          BEST_EFFORT_CAUSE: ${{ steps.best-effort.outputs.packages-cause }}
           UNKNOWN: ${{ steps.unknown.outcome }}
+          BAD_MINUTES: ${{ steps.bad-minutes.outcome }}
         run: |
-          echo "defaults: $DEFAULTS, best-effort: $BEST_EFFORT, packages maybe: $UNKNOWN"
-          [ "$DEFAULTS" = installed ]
-          [ "$BEST_EFFORT" = installed ]
+          echo "defaults: $DEFAULTS ($DEFAULTS_CAUSE), best-effort: $BEST_EFFORT ($BEST_EFFORT_CAUSE)"
+          echo "packages maybe: $UNKNOWN, best-effort-minutes 0: $BAD_MINUTES"
+          [ "$DEFAULTS" = installed ] && [ -z "$DEFAULTS_CAUSE" ]
+          [ "$BEST_EFFORT" = installed ] && [ -z "$BEST_EFFORT_CAUSE" ]
           [ "$UNKNOWN" = failure ]
+          [ "$BAD_MINUTES" = failure ]
           timeout 120 "$PW" screenshot --browser chromium about:blank "$RUNNER_TEMP/blank.png"
           test -s "$RUNNER_TEMP/blank.png"
 
-  # The package mirror does not answer. best-effort passes with the output missing, in less than LIMIT seconds.
-  # required fails (the flip).
+  # The package mirror refuses each connection (refused) or accepts it and never answers (hang).
+  #   refused, best-effort  The one try fails: the action passes with packages=missing and the cause "failed".
+  #   refused, required     The action fails (the flip).
+  #   hang, best-effort     The try reaches its limit of 1 minute: the action stops the tree of the try, repairs the
+  #                         package database and passes with packages=missing and the cause "time-limit".
   setup-playwright-fault:
-    name: setup-playwright mirror fault (${{ matrix.packages }})
+    name: setup-playwright fault (${{ matrix.fault }}, ${{ matrix.packages }})
     needs: changes
     if: needs.changes.outputs.match == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
       contents: read
     strategy:
       fail-fast: false
+      max-parallel: 3
       matrix:
-        packages: [best-effort, required]
+        include:
+          - fault: refused
+            packages: best-effort
+          - fault: refused
+            packages: required
+          - fault: hang
+            packages: best-effort
     defaults:
       run:
         shell: bash
-    env:
-      # The limit of the time of the action with best-effort, in seconds. A download of the browsers on a cold cache
-      # takes about 1 minute, the probe fails at once on a refused connection, and the start check takes seconds.
-      LIMIT: "300"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -268,57 +288,105 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/playwright-test" --no-save --no-package-lock --no-audit --no-fund playwright-core@1.64.1
           echo "PW=$RUNNER_TEMP/playwright-test/node_modules/.bin/playwright-core" >> "$GITHUB_ENV"
       - id: fault
-        name: Make the package mirror unreachable
+        name: Make the package mirror refuse or hang
+        env:
+          FAULT: ${{ matrix.fault }}
         run: |
           # The image names its mirrors in a list (mirror+file:/etc/apt/apt-mirrors.txt). Each host of the list and of
-          # the apt sources goes to 127.0.0.1 and ::1, where no server listens. So apt gets a refused connection.
+          # the apt sources goes to 127.0.0.1 and ::1.
           hosts=$(cat /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null \
             | grep -oE '[a-z+]+://[^/[:space:]]+' | sed -E 's#^[a-z+]+://##; s#^.*@##; s#:[0-9]+$##' | sort -u || true)
           [ -n "$hosts" ] || { echo "::error::No host of an apt source was found."; exit 1; }
-          for host in $hosts; do printf '127.0.0.1 %s\n::1 %s\n' "$host" "$host"; done | sudo tee -a /etc/hosts
-          # With no lists, apt cannot install from the .deb files of the cache. So the fault shows also on a cache hit.
-          sudo find /var/lib/apt/lists -maxdepth 1 -type f -delete
-          # The fault is real: apt-get update with the error mode "any" fails.
-          if sudo apt-get update -o APT::Update::Error-Mode=any -o Acquire::Retries=0; then
-            echo "::error::apt-get update passed: the package mirror still answers."
-            exit 1
+          if [ "$FAULT" = hang ]; then
+            # A listener on the ports 80 and 443 accepts each connection and never answers. apt waits 600 seconds for
+            # an answer, much more than the limit of the try.
+            sudo "$(command -v node)" -e '
+              const net = require("node:net");
+              for (const host of ["127.0.0.1", "::1"]) for (const port of [80, 443]) {
+                net.createServer((socket) => socket.on("error", () => {})).on("error", (e) => console.error(String(e))).listen(port, host);
+              }' > "$RUNNER_TEMP/listener.log" 2>&1 &
+            printf '%s\n' 'Acquire::http::Timeout "600";' 'Acquire::https::Timeout "600";' | sudo tee /etc/apt/apt.conf.d/98-hang-test
+            want=28
+          else
+            # No server listens, so apt gets a refused connection. With no lists, apt cannot install from the .deb
+            # files of the cache. So the fault shows also on a cache hit.
+            sudo find /var/lib/apt/lists -maxdepth 1 -type f -delete
+            want=7
           fi
-          # The flip shows only when the image does not have each system package of Chromium (on the image
-          # ubuntu-24.04 20261101.360.1, some fonts are missing). install-deps --dry-run exits 1 when a package is missing.
+          for host in $hosts; do printf '127.0.0.1 %s\n::1 %s\n' "$host" "$host"; done | sudo tee -a /etc/hosts
+          # The fault is real: one direct request to each host is refused (curl exit code 7) or gets no answer in
+          # 5 seconds (curl exit code 28).
+          for host in $hosts; do
+            for try in 1 2 3 4 5 6 7 8 9 10; do
+              code=0
+              curl -sS -o /dev/null --max-time 5 "http://$host/" || code=$?
+              [ "$code" = "$want" ] && break
+              sleep 1
+            done
+            echo "curl http://$host/: exit code $code (want $want)"
+            [ "$code" = "$want" ]
+          done
+          # The flip of required shows only when the image does not have each system package of Chromium (on the
+          # image ubuntu-24.04 20261101.360.1, some fonts are missing). install-deps --dry-run exits 1 when a package
+          # is missing.
           if "$PW" install-deps --dry-run chromium; then complete=true; else complete=false; fi
           echo "complete=$complete" >> "$GITHUB_OUTPUT"
-          echo "START=$(date +%s)" >> "$GITHUB_ENV"
       - id: setup
         continue-on-error: ${{ matrix.packages == 'required' }}
+        # The upper bound of the hang leg. Its parts: the browsers (a download of about 1 minute on a cold cache, 3
+        # minutes at most for a slow download), the try (1 minute), the grace from TERM to KILL (15 seconds) and 5
+        # more seconds after KILL, the repair (seconds) and the start of Chromium (seconds). That is about 5 minutes at
+        # most. The bound of 8 minutes keeps a margin of 3 minutes for a slow runner, and it is much less than the
+        # 600 seconds that apt waits.
+        timeout-minutes: 8
         uses: ./.github/actions/setup-playwright
         with:
           command: ${{ env.PW }}
           packages: ${{ matrix.packages }}
-          # best-effort keeps the defaults (2 tries of 12 minutes): the probe makes it short. The flip is kept short.
+          best-effort-minutes: ${{ matrix.fault == 'hang' && '1' || '5' }}
+          # The flip is kept short.
           timeout-minutes: ${{ matrix.packages == 'required' && '3' || '12' }}
           attempts: ${{ matrix.packages == 'required' && '1' || '2' }}
-      - name: best-effort passes with missing in time, required fails, and Chromium starts
+      - name: The outcome and the outputs agree with the fault
         env:
+          FAULT: ${{ matrix.fault }}
           PACKAGES: ${{ matrix.packages }}
           OUTCOME: ${{ steps.setup.outcome }}
           OUTPUT: ${{ steps.setup.outputs.packages }}
+          CAUSE: ${{ steps.setup.outputs.packages-cause }}
           COMPLETE: ${{ steps.fault.outputs.complete }}
         run: |
-          elapsed=$(( $(date +%s) - START ))
-          echo "packages: $PACKAGES, outcome: $OUTCOME, output: $OUTPUT, time: $elapsed s (limit $LIMIT s), image has each package: $COMPLETE"
-          if [ "$PACKAGES" = best-effort ]; then
-            [ "$OUTCOME" = success ]
-            [ "$OUTPUT" = missing ]
-            [ "$elapsed" -lt "$LIMIT" ]
-          elif [ "$COMPLETE" = true ]; then
-            echo "::warning::The image has each system package of Chromium, so the fault cannot fail the action with required."
+          echo "fault: $FAULT, packages: $PACKAGES, outcome: $OUTCOME, output: $OUTPUT, cause: $CAUSE, image has each package: $COMPLETE"
+          if [ "$PACKAGES" = required ]; then
+            if [ "$COMPLETE" = true ]; then
+              echo "::warning::The image has each system package of Chromium, so the fault cannot fail the action with required."
+            else
+              [ "$OUTCOME" = failure ]
+            fi
+          elif [ "$FAULT" = hang ]; then
+            [ "$OUTCOME" = success ] && [ "$OUTPUT" = missing ] && [ "$CAUSE" = time-limit ]
           else
-            [ "$OUTCOME" = failure ]
+            [ "$OUTCOME" = success ] && [ "$OUTPUT" = missing ] && [ "$CAUSE" = failed ]
           fi
+      - name: No process of the try is left, and the package database is in order
+        if: matrix.fault == 'hang'
+        run: |
+          # apt-get, dpkg, the methods of apt, the CLI and the script of the action
+          if pgrep -a -f -- 'apt-get|/usr/lib/apt/methods/|dpkg|playwright-core|setup-playwright/install\.ts'; then
+            echo "::error::A process of the stopped try is left."
+            exit 1
+          fi
+          audit=$(dpkg --audit)
+          [ -z "$audit" ] || { echo "::error::dpkg --audit: $audit"; exit 1; }
+          # dpkg takes its lock at once, or fails at once when a process holds it.
+          sudo timeout 30 dpkg --configure -a
+      - name: Chromium starts
+        run: |
           timeout 120 "$PW" screenshot --browser chromium about:blank "$RUNNER_TEMP/blank.png"
           test -s "$RUNNER_TEMP/blank.png"
 
-  # The warning of best-effort is in the annotations of its job. A job reads them after the end of that job.
+  # The warning of best-effort is in the annotations of each job with best-effort. A job reads them after the end of
+  # those jobs.
   setup-playwright-warning:
     needs: setup-playwright-fault
     runs-on: ubuntu-latest
@@ -327,16 +395,21 @@ jobs:
       actions: read
       checks: read
     steps:
-      - name: The job with best-effort has the warning
+      - name: Each job with best-effort has the warning with its cause
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          url=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs" --paginate \
-            --jq '.jobs[] | select(.name == "setup-playwright mirror fault (best-effort)") | .check_run_url')
-          [ -n "$url" ] || { echo "::error::The job with best-effort was not found."; exit 1; }
-          gh api "$url/annotations" --paginate --jq '.[] | "\(.annotation_level): \(.message)"' > "$RUNNER_TEMP/annotations.txt"
-          cat "$RUNNER_TEMP/annotations.txt"
-          grep -q '^warning: The system packages of the browsers are not installed: the package mirror did not answer' "$RUNNER_TEMP/annotations.txt"
+          check() {
+            url=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs" --paginate \
+              --jq ".jobs[] | select(.name == \"setup-playwright fault ($1, best-effort)\") | .check_run_url")
+            [ -n "$url" ] || { echo "::error::The job $1 with best-effort was not found."; exit 1; }
+            gh api "$url/annotations" --paginate --jq '.[] | "\(.annotation_level): \(.message)"' > "$RUNNER_TEMP/$1.txt"
+            echo "$1:"
+            cat "$RUNNER_TEMP/$1.txt"
+            grep -qE "^warning: The system packages of the browsers are not installed: \"playwright install-deps chromium\" $2\\. " "$RUNNER_TEMP/$1.txt"
+          }
+          check refused 'ended with code [0-9]+'
+          check hang 'took more than 1 minute'
 
   cue-ci:
     needs: changes

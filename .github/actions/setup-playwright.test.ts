@@ -1,178 +1,320 @@
-// Tests install.sh of the action setup-playwright with a fake Playwright CLI and a fake sudo: the order of the
-// installs, the input packages, the probe of the package mirror, the start check and the output packages.
-// No browser starts and no package installs. The workflow actions-test.yml tests the action on a real runner.
+// Tests install.ts of the action setup-playwright: the inputs, the order of the steps, the two values of packages,
+// the stop of a try at its limit and the start check. The process work is fake: no test starts a process.
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
-import { after, describe, it } from "node:test";
+import { describe, it } from "node:test";
+import {
+  browserArguments,
+  install,
+  parseProcesses,
+  processTree,
+  readInputs,
+  stopTree,
+  type Inputs,
+  type ProcessRow,
+  type RunResult,
+  type System,
+  type Work,
+} from "./setup-playwright/install.ts";
 
-// On Windows, a bare "bash" can start the bash of WSL. The bash of Git for Windows runs the script as the runners do.
-const bash = process.platform === "win32" ? "C:/Program Files/Git/bin/bash.exe" : "bash";
-const skip = spawnSync(bash, ["--version"]).status === 0 ? false : "bash is not installed";
-const script = join(import.meta.dirname, "setup-playwright", "install.sh");
-const root = mkdtempSync(join(tmpdir(), "setup-playwright-")).replaceAll("\\", "/");
-after(() => rmSync(root, { recursive: true, force: true }));
+const env = (change: Record<string, string> = {}): Record<string, string> => ({
+  COMMAND: "npx playwright",
+  BROWSERS: "chromium",
+  HIT: "false",
+  MINUTES: "12",
+  ATTEMPTS: "2",
+  PACKAGES: "required",
+  BEST_EFFORT_MINUTES: "5",
+  ...change,
+});
 
-// The fake CLI writes each call to the log. FAKE_INSTALL, FAKE_DEPS and FAKE_START are the exit codes of install,
-// install-deps and screenshot. A screenshot that passes writes its file (the last argument).
-writeFileSync(
-  `${root}/playwright`,
-  `#!/usr/bin/env bash
-echo "playwright $*" >> "$FAKE_LOG"
-case "$1" in
-  install) exit "\${FAKE_INSTALL:-0}" ;;
-  install-deps) exit "\${FAKE_DEPS:-0}" ;;
-  screenshot) [ "\${FAKE_START:-0}" = 0 ] || exit 1; echo png > "\${!#}"; exit 0 ;;
-esac
-exit 2
-`,
-);
-// The fake sudo writes each call to the log. FAKE_PROBE is the exit code of apt-get update. pkill finds no process.
-writeFileSync(
-  `${root}/sudo`,
-  `#!/usr/bin/env bash
-echo "sudo $*" >> "$FAKE_LOG"
-case "$*" in
-  *"apt-get update"*) exit "\${FAKE_PROBE:-0}" ;;
-  pkill*) exit 1 ;;
-esac
-exit 0
-`,
-);
-
-interface Run {
-  code: number | null;
-  stdout: string;
-  calls: string[];
-  output: string;
+/** The calls of a fake run, and the result that the fake gives for each step. */
+interface Fake {
+  readonly work: Work;
+  readonly runs: Array<{ command: string; limitMs: number }>;
+  readonly lines: string[];
+  repairs: number;
+  readonly starts: string[];
 }
 
-let count = 0;
-
-/** This function starts install.sh with the environment `env` and gives its exit code, its output and the calls. */
-function run(env: Record<string, string>): Run {
-  count += 1;
-  const log = `${root}/log-${count}`;
-  const output = `${root}/output-${count}`;
-  writeFileSync(log, "");
-  writeFileSync(output, "");
-  const result = spawnSync(bash, [script], {
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      PATH: `${root}${delimiter}${process.env["PATH"] ?? ""}`,
-      COMMAND: `bash ${root}/playwright`,
-      BROWSERS: "chromium",
-      HIT: "",
-      MINUTES: "1",
-      ATTEMPTS: "2",
-      PACKAGES: "required",
-      RUNNER_OS: "Linux",
-      RUNNER_TEMP: root,
-      GITHUB_OUTPUT: output,
-      FAKE_LOG: log,
-      ...env,
+/** A fake of the process work. `results` gives the results of each step in order, and the last one repeats. */
+function fake(
+  results: Record<string, readonly RunResult[]>,
+  options: { repair?: boolean; starts?: boolean; platform?: NodeJS.Platform } = {},
+): Fake {
+  const count = new Map<string, number>();
+  const state: Fake = {
+    runs: [],
+    lines: [],
+    repairs: 0,
+    starts: [],
+    work: {
+      run: async (command, limitMs) => {
+        state.runs.push({ command: command.join(" "), limitMs });
+        const step = command[2] ?? "";
+        const list = results[step] ?? [{ code: 0, stopped: false }];
+        const i = count.get(step) ?? 0;
+        count.set(step, i + 1);
+        return list[Math.min(i, list.length - 1)] ?? { code: 0, stopped: false };
+      },
+      repair: async () => {
+        state.repairs += 1;
+        return options.repair ?? true;
+      },
+      starts: async (name, args) => {
+        state.starts.push(`${name}: ${args.join(" ")}`);
+        return options.starts ?? true;
+      },
+      log: (line) => state.lines.push(line),
+      platform: options.platform ?? "linux",
     },
-  });
-  const calls = readFileSync(log, "utf8").split("\n").filter((line) => line !== "");
-  return { code: result.status, stdout: result.stdout, calls, output: readFileSync(output, "utf8").trim() };
+  };
+  return state;
 }
 
-const named = (calls: string[], start: string): string[] => calls.filter((call) => call.startsWith(start));
+const passed: RunResult = { code: 0, stopped: false };
+const failed: RunResult = { code: 100, stopped: false };
+const limit: RunResult = { code: 124, stopped: true };
 
-describe("setup-playwright: install.sh", { skip }, () => {
-  it("refuses a value of packages that it does not know, before any install", () => {
-    const r = run({ PACKAGES: "maybe" });
-    assert.equal(r.code, 1);
-    assert.match(r.stdout, /::error::The input packages is "maybe"\. Give "required" or "best-effort"\./);
-    assert.deepEqual(r.calls, []);
+const inputs = (change: Record<string, string> = {}): Inputs => readInputs(env(change));
+
+describe("setup-playwright: the inputs", () => {
+  it("reads the inputs", () => {
+    assert.deepEqual(inputs({ BROWSERS: " chromium  firefox ", HIT: "true", PACKAGES: "best-effort" }), {
+      command: ["npx", "playwright"],
+      browsers: ["chromium", "firefox"],
+      hit: true,
+      minutes: 12,
+      attempts: 2,
+      packages: "best-effort",
+      bestEffortMinutes: 5,
+    });
   });
 
-  it("installs the browsers first and the system packages second, and gives installed", () => {
-    const r = run({});
-    assert.equal(r.code, 0, r.stdout);
-    assert.deepEqual(named(r.calls, "playwright"), ["playwright install chromium", "playwright install-deps chromium"]);
-    assert.equal(r.output, "packages=installed");
+  it("refuses an unknown value of packages", () => {
+    assert.throws(() => inputs({ PACKAGES: "skip" }), /The input packages is "skip"\. Give "required" or "best-effort"\./);
+    assert.throws(() => inputs({ PACKAGES: "" }), /The input packages is ""/);
   });
 
-  it("skips the install of the browsers on a cache hit", () => {
-    const r = run({ HIT: "true", BROWSERS: "chromium firefox" });
-    assert.equal(r.code, 0, r.stdout);
-    assert.deepEqual(named(r.calls, "playwright"), ["playwright install-deps chromium firefox"]);
-  });
+  for (const [variable, input] of [
+    ["MINUTES", "timeout-minutes"],
+    ["ATTEMPTS", "attempts"],
+    ["BEST_EFFORT_MINUTES", "best-effort-minutes"],
+  ] as const) {
+    for (const value of ["0", "-1", "1.5", "abc", "", "05"]) {
+      it(`refuses ${input} "${value}"`, () => {
+        assert.throws(() => inputs({ [variable]: value }), new RegExp(`The input ${input} is "${value.replace(".", "\\.")}"\\. Give a whole number of 1 or more\\.`));
+      });
+    }
+  }
 
-  it("required: fails after the tries of the system packages, with no probe and no start check", () => {
-    const r = run({ FAKE_DEPS: "1" });
-    assert.equal(r.code, 1);
-    assert.equal(named(r.calls, "playwright install-deps").length, 2);
-    assert.deepEqual(named(r.calls, "playwright screenshot"), []);
-    assert.deepEqual(named(r.calls, "sudo timeout"), []);
-    assert.match(r.stdout, /::error::"playwright install-deps chromium" failed 2 times\./);
-    assert.equal(r.output, "");
+  it("refuses an empty command or an empty list of browsers", () => {
+    assert.throws(() => inputs({ COMMAND: " " }), /The input command is empty/);
+    assert.throws(() => inputs({ BROWSERS: "" }), /The input browsers is empty/);
   });
+});
 
-  it("fails when the browsers do not install, also with best-effort", () => {
-    const r = run({ PACKAGES: "best-effort", FAKE_INSTALL: "1" });
-    assert.equal(r.code, 1);
-    assert.equal(named(r.calls, "playwright install chromium").length, 2);
-    assert.deepEqual(named(r.calls, "playwright install-deps"), []);
-  });
-
-  it("best-effort: a failed probe skips the system packages, and a browser that starts gives missing", () => {
-    const r = run({ PACKAGES: "best-effort", FAKE_PROBE: "100", FAKE_DEPS: "1" });
-    assert.equal(r.code, 0, r.stdout);
-    assert.equal(named(r.calls, "sudo timeout").length, 1);
-    assert.match(named(r.calls, "sudo timeout")[0] ?? "", /apt-get update -q -o APT::Update::Error-Mode=any -o Acquire::Retries=0/);
-    assert.deepEqual(named(r.calls, "playwright install-deps"), []);
-    assert.equal(named(r.calls, "playwright screenshot --browser chromium --timeout 60000 about:blank").length, 1);
-    assert.match(r.stdout, /::warning::The system packages of the browsers are not installed: the package mirror did not answer/);
-    assert.equal(r.output, "packages=missing");
-  });
-
-  it("best-effort: a failed probe and a browser that does not start fail the step", () => {
-    const r = run({ PACKAGES: "best-effort", FAKE_PROBE: "100", FAKE_START: "1" });
-    assert.equal(r.code, 1);
-    assert.match(r.stdout, /::error::chromium does not start/);
-    assert.match(r.stdout, /::error::The system packages are not installed \(the package mirror did not answer/);
-    assert.equal(r.output, "");
-  });
-
-  it("best-effort: failed tries after a probe that passed give missing when the browser starts", () => {
-    const r = run({ PACKAGES: "best-effort", FAKE_DEPS: "1" });
-    assert.equal(r.code, 0, r.stdout);
-    assert.equal(named(r.calls, "playwright install-deps").length, 2);
-    assert.match(r.stdout, /::warning::The system packages of the browsers are not installed: "playwright install-deps chromium" failed 2 times/);
-    assert.equal(r.output, "packages=missing");
-  });
-
-  it("best-effort: a probe and tries that pass give installed, with no start check", () => {
-    const r = run({ PACKAGES: "best-effort" });
-    assert.equal(r.code, 0, r.stdout);
-    assert.equal(named(r.calls, "sudo timeout").length, 1);
-    assert.deepEqual(named(r.calls, "playwright screenshot"), []);
-    assert.equal(r.output, "packages=installed");
-  });
-
-  it("best-effort on macOS: no probe, and failed tries give missing when the browser starts", () => {
-    const r = run({ PACKAGES: "best-effort", RUNNER_OS: "macOS", FAKE_DEPS: "1" });
-    assert.equal(r.code, 0, r.stdout);
-    assert.deepEqual(named(r.calls, "sudo"), []);
-    assert.equal(named(r.calls, "playwright install-deps").length, 2);
-    assert.equal(r.output, "packages=missing");
-  });
-
-  it("starts each browser with its name, and skips ffmpeg", () => {
-    const r = run({ PACKAGES: "best-effort", FAKE_PROBE: "100", BROWSERS: "chromium firefox webkit ffmpeg chrome" });
-    assert.equal(r.code, 0, r.stdout);
-    const starts = named(r.calls, "playwright screenshot").map((call) => call.replace(/ --timeout.*/, ""));
-    assert.deepEqual(starts, [
-      "playwright screenshot --browser chromium",
-      "playwright screenshot --browser firefox",
-      "playwright screenshot --browser webkit",
-      "playwright screenshot --browser chromium --channel chrome",
+describe("setup-playwright: the browsers and required", () => {
+  it("installs the browsers first and the system packages second, each with timeout-minutes", async () => {
+    const f = fake({});
+    const outcome = await install(inputs(), f.work);
+    assert.deepEqual(outcome, { code: 0, packages: "installed", cause: "" });
+    assert.deepEqual(f.runs, [
+      { command: "npx playwright install chromium", limitMs: 720_000 },
+      { command: "npx playwright install-deps chromium", limitMs: 720_000 },
     ]);
-    assert.ok(!existsSync(`${root}/setup-playwright-start-chromium.png`), "the start check removes its screenshot");
+  });
+
+  it("does not install the browsers after a cache hit", async () => {
+    const f = fake({});
+    await install(inputs({ HIT: "true" }), f.work);
+    assert.deepEqual(f.runs.map((r) => r.command), ["npx playwright install-deps chromium"]);
+    assert.ok(f.lines.includes("The browsers came from the cache."));
+  });
+
+  it("fails required after each try of the system packages fails, with no start check", async () => {
+    const f = fake({ "install-deps": [failed] });
+    const outcome = await install(inputs({ ATTEMPTS: "3" }), f.work);
+    assert.deepEqual(outcome, { code: 1 });
+    assert.equal(f.runs.filter((r) => r.command.includes("install-deps")).length, 3);
+    assert.ok(f.lines.includes('::warning::Try 1 of 3 of "playwright install-deps chromium" ended with code 100.'));
+    assert.ok(f.lines.includes('::error::"playwright install-deps chromium" failed 3 times.'));
+    assert.equal(f.repairs, 0);
+    assert.deepEqual(f.starts, []);
+  });
+
+  it("passes required when a later try passes, and repairs after a try at the limit", async () => {
+    const f = fake({ "install-deps": [limit, passed] });
+    const outcome = await install(inputs(), f.work);
+    assert.deepEqual(outcome, { code: 0, packages: "installed", cause: "" });
+    assert.ok(f.lines.includes('::warning::Try 1 of 2 of "playwright install-deps chromium" took more than 12 minutes.'));
+    assert.equal(f.repairs, 1);
+  });
+
+  it("fails required when the repair after a try at the limit fails", async () => {
+    const f = fake({ "install-deps": [limit, passed] }, { repair: false });
+    const outcome = await install(inputs(), f.work);
+    assert.deepEqual(outcome, { code: 1 });
+    assert.equal(f.runs.filter((r) => r.command.includes("install-deps")).length, 1);
+    assert.match(f.lines.at(-1) ?? "", /^::error::The repair of the package database/);
+  });
+
+  for (const packages of ["required", "best-effort"]) {
+    it(`fails when the browsers do not install, with ${packages}`, async () => {
+      const f = fake({ install: [failed] });
+      const outcome = await install(inputs({ PACKAGES: packages }), f.work);
+      assert.deepEqual(outcome, { code: 1 });
+      assert.deepEqual(f.runs.map((r) => r.command), ["npx playwright install chromium", "npx playwright install chromium"]);
+      assert.ok(f.lines.includes('::error::"playwright install chromium" failed 2 times.'));
+    });
+  }
+});
+
+describe("setup-playwright: best-effort", () => {
+  it("gives installed when the one try passes, with best-effort-minutes", async () => {
+    const f = fake({});
+    const outcome = await install(inputs({ PACKAGES: "best-effort", BEST_EFFORT_MINUTES: "3" }), f.work);
+    assert.deepEqual(outcome, { code: 0, packages: "installed", cause: "" });
+    assert.deepEqual(f.runs.at(-1), { command: "npx playwright install-deps chromium", limitMs: 180_000 });
+    assert.deepEqual(f.starts, []);
+  });
+
+  it("gives missing with the cause failed after one failed try, when each browser starts", async () => {
+    const f = fake({ "install-deps": [failed, passed] });
+    const outcome = await install(inputs({ PACKAGES: "best-effort", BROWSERS: "chromium firefox" }), f.work);
+    assert.deepEqual(outcome, { code: 0, packages: "missing", cause: "failed" });
+    assert.equal(f.runs.filter((r) => r.command.includes("install-deps")).length, 1);
+    assert.equal(f.repairs, 0);
+    assert.deepEqual(f.starts, ["chromium: --browser chromium", "firefox: --browser firefox"]);
+    assert.equal(
+      f.lines.at(-1),
+      '::warning::The system packages of the browsers are not installed: "playwright install-deps chromium firefox" ended with code 100. Each browser starts, but fonts and other system packages can be missing.',
+    );
+  });
+
+  it("gives missing with the cause time-limit after a try at the limit, after the repair and the start check", async () => {
+    const f = fake({ "install-deps": [limit] });
+    const outcome = await install(inputs({ PACKAGES: "best-effort", BEST_EFFORT_MINUTES: "1" }), f.work);
+    assert.deepEqual(outcome, { code: 0, packages: "missing", cause: "time-limit" });
+    assert.equal(f.repairs, 1);
+    assert.deepEqual(f.starts, ["chromium: --browser chromium"]);
+    assert.match(f.lines.at(-1) ?? "", /^::warning::The system packages of the browsers are not installed: "playwright install-deps chromium" took more than 1 minute\. /);
+  });
+
+  it("does not repair on macOS or Windows, with the same rule", async () => {
+    for (const platform of ["darwin", "win32"] as const) {
+      const f = fake({ "install-deps": [limit] }, { platform });
+      const outcome = await install(inputs({ PACKAGES: "best-effort" }), f.work);
+      assert.deepEqual(outcome, { code: 0, packages: "missing", cause: "time-limit" });
+      assert.equal(f.repairs, 0);
+    }
+  });
+
+  it("fails when a browser does not start", async () => {
+    const f = fake({ "install-deps": [failed] }, { starts: false });
+    const outcome = await install(inputs({ PACKAGES: "best-effort" }), f.work);
+    assert.deepEqual(outcome, { code: 1 });
+    assert.ok(f.lines.some((l) => l.startsWith("::error::chromium does not start")));
+    assert.match(f.lines.at(-1) ?? "", /^::error::The system packages are not installed \(.* ended with code 100\), and a browser does not start\.$/);
+  });
+
+  it("fails when the repair after a try at the limit fails, with no start check", async () => {
+    const f = fake({ "install-deps": [limit] }, { repair: false });
+    const outcome = await install(inputs({ PACKAGES: "best-effort" }), f.work);
+    assert.deepEqual(outcome, { code: 1 });
+    assert.deepEqual(f.starts, []);
+  });
+
+  it("starts no ffmpeg", async () => {
+    const f = fake({ "install-deps": [failed] });
+    await install(inputs({ PACKAGES: "best-effort", BROWSERS: "chromium ffmpeg" }), f.work);
+    assert.deepEqual(f.starts, ["chromium: --browser chromium"]);
+  });
+});
+
+describe("setup-playwright: the names of the browsers", () => {
+  it("gives the arguments of the CLI for each name", () => {
+    assert.deepEqual(browserArguments("chromium"), ["--browser", "chromium"]);
+    assert.deepEqual(browserArguments("chromium-headless-shell"), ["--browser", "chromium"]);
+    assert.deepEqual(browserArguments("firefox"), ["--browser", "firefox"]);
+    assert.deepEqual(browserArguments("firefox-beta"), ["--browser", "firefox"]);
+    assert.deepEqual(browserArguments("webkit"), ["--browser", "webkit"]);
+    assert.deepEqual(browserArguments("chrome"), ["--browser", "chromium", "--channel", "chrome"]);
+    assert.deepEqual(browserArguments("msedge"), ["--browser", "chromium", "--channel", "msedge"]);
+    assert.equal(browserArguments("ffmpeg"), undefined);
+  });
+});
+
+const row = (pid: number, ppid: number, pgid: number, uid = 1001, start = "a"): ProcessRow => ({ pid, ppid, pgid, uid, key: `${pid}@${start}` });
+
+describe("setup-playwright: the tree of a try", () => {
+  it("reads the table of ps, and skips a zombie", () => {
+    const rows = parseProcesses(
+      [
+        "  100     1   100  1001 Ss   Tue Nov 11 16:29:01 2026",
+        "  101   100   100     0 S+   Tue Nov 11 16:29:02 2026",
+        "  102   101   102     0 Z    Tue Nov 11 16:29:03 2026",
+        "",
+      ].join("\n"),
+    );
+    assert.deepEqual(rows, [
+      { pid: 100, ppid: 1, pgid: 100, uid: 1001, key: "100@Tue Nov 11 16:29:01 2026" },
+      { pid: 101, ppid: 100, pgid: 100, uid: 0, key: "101@Tue Nov 11 16:29:02 2026" },
+    ]);
+  });
+
+  it("finds the descendants by parent also in a new group, and the members of the group", () => {
+    // 10 is the try. 11 (sudo) is its child, 12 (root, a new session behind the terminal of sudo) is a child of 11,
+    // 13 is a child of 12. 14 left the tree but stays in the group. 20 and 21 are not of the try.
+    const rows = [row(10, 1, 10), row(11, 10, 10), row(12, 11, 12, 0), row(13, 12, 12, 0), row(14, 1, 10), row(20, 1, 20), row(21, 20, 20)];
+    assert.deepEqual(processTree(rows, 10, undefined).map((r) => r.pid).sort((a, b) => a - b), [10, 11, 12, 13, 14]);
+  });
+
+  it("finds the processes of a stopped parent by their keys, and not a new process with a reused ID", () => {
+    const known = new Set(["12@a", "13@a"]);
+    // 12 moved to the parent 1. A new process 13 with a new start time is not the old one.
+    const rows = [row(12, 1, 12, 0), row(15, 12, 12, 0), row(13, 1, 13, 1001, "b")];
+    assert.deepEqual(processTree(rows, 10, known).map((r) => r.pid).sort((a, b) => a - b), [12, 15]);
+  });
+
+  it("stops the tree with TERM, and with KILL after the grace when a process is left", async () => {
+    let now = 0;
+    let table = [row(10, 1, 10), row(11, 10, 10), row(12, 11, 12, 0), row(30, 1, 30)];
+    const signals: string[] = [];
+    const system: System = {
+      table: () => table,
+      signal: (rows, signal) => {
+        signals.push(`${signal} ${rows.map((r) => r.pid).join(",")}`);
+        // 10 and 11 stop at TERM. 12 ignores TERM and stops at KILL.
+        table = signal === "SIGTERM" ? table.filter((r) => r.pid !== 10 && r.pid !== 11).map((r) => (r.pid === 12 ? { ...r, ppid: 1 } : r)) : table.filter((r) => r.pid === 30);
+      },
+      sleep: async (ms) => {
+        now += ms;
+      },
+      now: () => now,
+    };
+    const left = await stopTree(10, 1_000, system);
+    assert.equal(left, 0);
+    assert.deepEqual(signals, ["SIGTERM 10,11,12", "SIGKILL 12"]);
+    assert.ok(now >= 1_000);
+  });
+
+  it("gives the number of processes that are left after KILL", async () => {
+    let now = 0;
+    const system: System = {
+      table: () => [row(10, 1, 10)],
+      signal: () => {},
+      sleep: async (ms) => {
+        now += ms;
+      },
+      now: () => now,
+    };
+    assert.equal(await stopTree(10, 500, system), 1);
+  });
+
+  it("sends no signal when the try already stopped", async () => {
+    const signals: string[] = [];
+    const system: System = { table: () => [row(30, 1, 30)], signal: (_r, s) => signals.push(s), sleep: async () => {}, now: () => 0 };
+    assert.equal(await stopTree(10, 500, system), 0);
+    assert.deepEqual(signals, []);
   });
 });
