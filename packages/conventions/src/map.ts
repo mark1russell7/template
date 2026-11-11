@@ -76,12 +76,13 @@ export const HOMES: readonly Home[] = [
   {
     area: "test-generation",
     title: "Test helpers and test generation",
-    covers: "property tests on fast-check, pairwise and covering arrays, metamorphic relations, chaos and load schedules, shared test fixtures, the capture of the OpenTelemetry SDK and the propagation gate for tests",
-    packages: [],
+    covers:
+      "property tests on fast-check, pairwise and covering arrays, metamorphic relations, chaos and load schedules, shared test fixtures, the propagation gate of one context id over each transport, the capture of the OpenTelemetry SDK for tests (spans, log records, metric points)",
+    packages: ["@mark1russell7/rigor-testkit"],
     repo: "mark1russell7/rigor",
-    state: "planned",
-    words: ["test", "testing", "property", "fast-check", "arbitrary", "pairwise", "metamorphic", "chaos", "load", "fake", "fastcheck", "covering", "combinatorial", "fault", "injection", "soak", "stress", "throughput", "shrink", "capture", "in-memory", "exporter", "testkit"],
-    note: "@mark1russell7/vex-testkit is only for Vex domains. A fake shell for tests is in @procedures/shell. The capture of the OpenTelemetry SDK for tests (captureTelemetry) and the propagation gate are in @mark1russell7/rigor-testkit, entries /otel and /propagation.",
+    state: "published",
+    words: ["test", "testing", "property", "fast-check", "arbitrary", "pairwise", "metamorphic", "chaos", "load", "fake", "fastcheck", "covering", "combinatorial", "fault", "injection", "soak", "stress", "throughput", "shrink", "capture", "propagation", "transport", "in-memory", "exporter", "testkit"],
+    note: "@mark1russell7/rigor-testkit has the propagation gate (entry /propagation) and the capture of the OpenTelemetry SDK for tests (captureTelemetry, entry /otel). Its fast-check part is planned. @mark1russell7/vex-testkit is only for Vex domains. A fake shell for tests is in @procedures/shell.",
   },
   {
     area: "exact-math",
@@ -346,11 +347,11 @@ export const HOMES: readonly Home[] = [
   {
     area: "browser-monitoring",
     title: "Observability and context",
-    covers: "OpenTelemetry for browsers and Node services, and the one context of logs, metrics and traces: trace and baggage in process and across calls (otel-ts, its /context and /node entries); main-thread lag, long tasks, Web Vitals, the page lifecycle, async context in browsers",
+    covers: "OpenTelemetry for browsers and Node services, and the one context of logs, metrics and traces: trace and baggage in process and across calls (otel-ts, its /context and /node entries); main-thread lag, long tasks, Web Vitals, the page lifecycle, async context in browsers; meter combinators (tee, fan-out, forwarding) on the api types: lag/meters",
     packages: ["@mark1russell7/otel-ts", "async-browser-context", "@mark1russell7/lag", "@mark1russell7/lag-hud", "page-lifecycle-tracker"],
     repo: "mark1russell7/otel-ts",
     state: "published",
-    words: ["telemetry", "web vitals", "inp", "long task", "visibility", "opentelemetry", "async context", "observability", "baggage", "traceparent", "tracing", "span", "asynclocalstorage", "context manager"],
+    words: ["telemetry", "web vitals", "inp", "long task", "visibility", "opentelemetry", "async context", "observability", "baggage", "traceparent", "tracing", "span", "asynclocalstorage", "context manager", "meter", "tee", "forwarding meter", "meter combinator"],
   },
   {
     area: "repo-structure",
