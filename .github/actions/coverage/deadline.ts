@@ -13,7 +13,9 @@
 // At the deadline, the script sends TERM to the process group of the command, and KILL 10 seconds later. On Windows,
 // taskkill stops the tree of the command. bash starts the command ('exec "$@"'), so a step finds the same commands.
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { realpathSync } from "node:fs";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 
 /** The exit code of a command that did not start or that stopped at the deadline, as of GNU timeout. */
 export const STOPPED = 124;
@@ -147,7 +149,9 @@ export function runBeforeDeadline(command: readonly string[], options: DeadlineO
   });
 }
 
-if (import.meta.main) {
+// Not import.meta.main: Node.js 23.6 to 24.1 strip the types but do not have it. reusable-ci.yml starts a copy of
+// this file, and the test holds for the copy too.
+if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   process.exitCode = await runBeforeDeadline(process.argv.slice(2), {
     deadline: process.env["DEADLINE"],
     level: process.env["DEADLINE_LEVEL"],

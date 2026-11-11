@@ -1,6 +1,8 @@
 // Tests install.ts of the action setup-playwright: the inputs, the order of the steps, the two values of packages,
 // the stop of a try at its limit and the start check. The process work is fake: no test starts a process.
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import {
   browserArguments,
@@ -113,6 +115,29 @@ describe("setup-playwright: the inputs", () => {
   });
 });
 
+describe("setup-playwright: the command line", () => {
+  const script = fileURLToPath(new URL("./setup-playwright/install.ts", import.meta.url));
+  const start = (mode: string, change: Record<string, string>) =>
+    spawnSync(process.execPath, [script, mode], { encoding: "utf8", env: { ...process.env, ...env(change) } });
+
+  it("checks the inputs and exits 0 with correct inputs", () => {
+    const result = start("check", {});
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  });
+
+  it("exits 1 with an error for an incorrect input, so the step cannot pass with no work", () => {
+    const result = start("check", { PACKAGES: "maybe" });
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /^::error::The input packages is "maybe"/m);
+  });
+
+  it("refuses an unknown mode", () => {
+    const result = start("probe", {});
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /^::error::Give the mode/m);
+  });
+});
+
 describe("setup-playwright: the browsers and required", () => {
   it("installs the browsers first and the system packages second, each with timeout-minutes", async () => {
     const f = fake({});
@@ -140,6 +165,13 @@ describe("setup-playwright: the browsers and required", () => {
     assert.ok(f.lines.includes('::error::"playwright install-deps chromium" failed 3 times.'));
     assert.equal(f.repairs, 0);
     assert.deepEqual(f.starts, []);
+  });
+
+  it("writes the singular for one try", async () => {
+    const f = fake({ "install-deps": [failed] });
+    const outcome = await install(inputs({ ATTEMPTS: "1" }), f.work);
+    assert.deepEqual(outcome, { code: 1 });
+    assert.ok(f.lines.includes('::error::"playwright install-deps chromium" failed 1 time.'));
   });
 
   it("passes required when a later try passes, and repairs after a try at the limit", async () => {

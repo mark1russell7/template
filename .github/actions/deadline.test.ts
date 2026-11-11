@@ -1,9 +1,10 @@
 // Tests deadline.ts of the action coverage: the time that is left, the exit codes and the stop at the deadline.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import { millisecondsLeft, runBeforeDeadline, STOPPED } from "./coverage/deadline.ts";
 
@@ -132,5 +133,19 @@ describe("deadline: a duration, a label and a stopper", () => {
 
   it("refuses a duration that is not a positive number", () => {
     assert.throws(() => runBeforeDeadline([node, "-e", ""], { durationMs: 0 }), /not a positive number/);
+  });
+});
+
+describe("deadline: the command line", () => {
+  it("runs a copy of the file in another folder, as reusable-ci.yml does", () => {
+    const dir = mkdtempSync(join(tmpdir(), "deadline-copy-"));
+    try {
+      const copy = join(dir, "deadline.ts");
+      copyFileSync(fileURLToPath(new URL("./coverage/deadline.ts", import.meta.url)), copy);
+      const result = spawnSync(process.execPath, [copy, node, "-e", "process.exit(3)"], { encoding: "utf8", env: { ...process.env, DEADLINE: seconds(60) } });
+      assert.equal(result.status, 3, result.stdout + result.stderr);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

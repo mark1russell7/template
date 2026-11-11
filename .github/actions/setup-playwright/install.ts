@@ -15,10 +15,11 @@
 // The function install takes the process work (the runner, the repair, the start check, the log, the platform) as
 // arguments, so that the tests give fakes and start no process.
 import { spawnSync } from "node:child_process";
-import { appendFileSync, rmSync, statSync } from "node:fs";
+import { appendFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import { runBeforeDeadline, type Stopper } from "../coverage/deadline.ts";
 
 /** The time from TERM to KILL when a try reaches its limit, in milliseconds. */
@@ -118,6 +119,7 @@ export function browserArguments(name: string): readonly string[] | undefined {
 }
 
 const minutesText = (n: number): string => `${n} minute${n === 1 ? "" : "s"}`;
+const timesText = (n: number): string => `${n} time${n === 1 ? "" : "s"}`;
 
 /** This function installs the browsers and their system packages with the inputs `inputs`, and gives the outcome. */
 export async function install(inputs: Inputs, work: Work): Promise<Outcome> {
@@ -151,7 +153,7 @@ export async function install(inputs: Inputs, work: Work): Promise<Outcome> {
     const step = ["install", ...browsers];
     const result = await tries(step, false);
     if (result !== "passed") {
-      work.log(`::error::${name(step)} failed ${attempts} times.`);
+      work.log(`::error::${name(step)} failed ${timesText(attempts)}.`);
       return { code: 1 };
     }
   }
@@ -161,7 +163,7 @@ export async function install(inputs: Inputs, work: Work): Promise<Outcome> {
     const result = await tries(step, true);
     if (result === "broken") return { code: 1 };
     if (result === "failed") {
-      work.log(`::error::${name(step)} failed ${attempts} times.`);
+      work.log(`::error::${name(step)} failed ${timesText(attempts)}.`);
       return { code: 1 };
     }
     return { code: 0, packages: "installed", cause: "" };
@@ -331,6 +333,7 @@ function realWork(inputs: Inputs): Work {
   };
   const run = async (command: readonly string[], limitMs: number): Promise<RunResult> => {
     let stopped = false;
+    const start = Date.now();
     const stopper = treeStopper(log);
     const code = await runBeforeDeadline(command, {
       durationMs: limitMs,
@@ -342,6 +345,8 @@ function realWork(inputs: Inputs): Work {
         return stopper(pid, graceMs);
       },
     });
+    const seconds = ((Date.now() - start) / 1000).toFixed(1);
+    log(`"${command.join(" ")}" ended after ${seconds} seconds with the exit code ${code}${stopped ? " (stopped at its limit)" : ""}.`);
     return { code, stopped };
   };
   return {
@@ -367,7 +372,8 @@ function realWork(inputs: Inputs): Work {
   };
 }
 
-if (import.meta.main) {
+// The form of the other scripts of the actions: it needs no new feature of Node.js, and it holds for a copy.
+if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   const mode = process.argv[2];
   let inputs: Inputs | undefined;
   try {
