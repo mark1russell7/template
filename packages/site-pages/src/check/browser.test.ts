@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { findBrowser, launch, type Browser } from "./browser.ts";
+import { findBrowser, launch, NoReplyError, type Browser } from "./browser.ts";
 
 const executable = findBrowser();
 if (executable === undefined && process.env["CI"]) throw new Error("CI has no Chromium browser for the tests of the page calls");
@@ -32,5 +32,25 @@ describe.skipIf(executable === undefined)("a call of a function in the page", ()
 
   it("throws with the message of an exception in the page", async () => {
     await expect(browser.page.call("function (text) { throw new Error(text); }", "no link")).rejects.toThrow("no link");
+  });
+});
+
+describe.skipIf(executable === undefined)("a call of the page with no reply", () => {
+  let browser: Browser;
+
+  beforeAll(async () => {
+    browser = await launch(executable as string, 30_000, 500);
+    await browser.page.send("Runtime.enable");
+  }, 60_000);
+
+  afterAll(async () => {
+    await browser?.close();
+  });
+
+  it("fails after the time limit of a call with the method in its message, and the next call has its reply", async () => {
+    const hang = browser.page.evaluate("new Promise(() => {})");
+    await expect(hang).rejects.toBeInstanceOf(NoReplyError);
+    await expect(hang).rejects.toThrow("the browser did not answer Runtime.evaluate in 500 ms");
+    expect(await browser.page.evaluate<number>("1 + 1")).toBe(2);
   });
 });
