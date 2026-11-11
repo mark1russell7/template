@@ -47,6 +47,7 @@ The job starts all the scripts, also after a failure. Then it fails with the nam
 | `coverage-on-main` | `true` | With `coverage: false`, a push to the default branch of a public repository still gives the coverage, not strict. It does not fail the CI (refer to "Coverage"). |
 | `coverage-timeout-minutes` | `30` | The time limit of the job `coverage`. Each step of the job stops 2 minutes before it. |
 | `coverage-scripts` | (empty) | The scripts before the tests in the job `coverage`. The default takes each `build` or `build:*` script before `test` in `scripts`. |
+| `release-window` | `true` | A pull request that changes a workflow or `scripts/release/` fails while a release of its base branch is open (refer to "The release window"). |
 
 ### Coverage
 
@@ -80,6 +81,20 @@ jobs:
 ```
 
 A pull request from a fork gets no secret, so the private patterns are not examined there.
+
+### The release window
+
+GitHub refuses the tag of a release (HTTP 403) when a workflow file changes between the version merge and the tag job (`RELEASING.md`, "A tag that GitHub refuses").
+
+Thus the job `release-window` examines each pull request that changes a file in `.github/workflows/` or `scripts/release/`. While a `release.yml` run of the base branch is queued, waiting or in progress, the job fails at once. The message names the run.
+
+- The job does not wait, so it holds no runner. Start the check again after the tag job of the release.
+- The job reads the files of the change from the merge commit. A token with `contents: read` reads the runs of a public repository, so a caller gives no other permission.
+- In a private repository, the token cannot read the runs with `contents: read`. Then the job gives a warning and passes.
+- A repository with no `release.yml` passes.
+- `release-window: false` turns the job off.
+
+The job stops a merge only while its check is red. A check that passed before the release started stays green. Thus the release train merges the pins of the workflows, and it examines the open releases at the merge.
 
 ### The changeset check
 
