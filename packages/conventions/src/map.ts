@@ -35,9 +35,9 @@ export interface Home {
   readonly note?: string;
 }
 
-/** The rule of the map. Each session and each review applies it. */
-export const MAP_RULE =
-  "Before you write a helper, find its home in this map. If the home does not have the function, add it to the home, in a pull request of the home repository. Do not make a local copy, a new package or a new repository for an area that has a home: that needs the strategist. A home that is not on npm is used with workspace:* inside its own repository. In another repository, a github: specifier pinned to a commit works only for a package that keeps its built files in git. For any other package, wait for its first npm publish (ask the strategist). If no area fits, ask the strategist for a home before you write the code.";
+/** The rule of the map. Each change and each review applies it. */
+export const MAP_RULE: string =
+  "Before you write a helper, find its home in this map. If the home does not have the function, add it to the home, in a pull request of the home repository. Do not make a local copy, a new package or a new repository for an area that has a home: that needs the maintainer. A home that is not on npm is used with workspace:* inside its own repository. In another repository, a github: specifier pinned to a commit works only for a package that keeps its built files in git. For any other package, wait for its first npm publish (ask the maintainer). If no area fits, ask the maintainer for a home before you write the code.";
 
 /** The public homes. Each package that other code can use has one area. */
 export const HOMES: readonly Home[] = [
@@ -456,7 +456,7 @@ export function mapMarkdown(homes: readonly Home[] = HOMES): string {
 
 /** This function writes the homes as plain text for a terminal. */
 export function mapText(homes: readonly Home[]): string {
-  if (homes.length === 0) return "No area matches. Ask the strategist for a home before you write the code.\n";
+  if (homes.length === 0) return "No area matches. Ask the maintainer for a home before you write the code.\n";
   return homes
     .map((home) => {
       const where = home.packages.length > 0 ? home.packages.join(", ") : home.repo;
