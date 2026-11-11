@@ -48,6 +48,7 @@ The job starts all the scripts, also after a failure. Then it fails with the nam
 | `coverage-timeout-minutes` | `30` | The time limit of the job `coverage`. Each step of the job stops 2 minutes before it. |
 | `coverage-scripts` | (empty) | The scripts before the tests in the job `coverage`. The default takes each `build` or `build:*` script before `test` in `scripts`. |
 | `release-check` | `true` | The release check on a pull request (refer to "The release check of a pull request"). `false` turns it off. |
+| `release-check-private` | `false` | The release check also starts in a private repository. A private repository pays for each job start, so the default skips the job there. |
 | `release-build` | (empty) | The input `build` of the `release.yml` of the repository, for the release check. |
 | `release-node-version` | `26` | The input `node-version` of the `release.yml` of the repository, for the release check. |
 
@@ -116,6 +117,7 @@ On a pull request, the job `release-check` starts the release build on the commi
 - The job uses the merge commit of the pull request, not its head. That commit is the `main` of the release after the merge.
 - The job does not compare with the base branch. When `main` already has such a change, each pull request fails until a pull request raises the version.
 - A repository with no published package passes at once, with a notice. The job does no install.
+- In a private repository, the job starts only with `release-check-private: true`. A private repository pays for each job start, also for a job with no published package.
 - In a repository with Changesets (`.changeset/config.json`), a pending changeset raises the version of a package later. Thus a change of that package passes, with a note. A changeset of one member of a `fixed` group raises each member. A shipped change of a different package at a version on npm fails. An empty changeset raises no version.
 - The job uses the dependency cache of the job `checks`. The install still uses the lockfile only.
 - A repository with its own `build` or `node-version` in its `release.yml` gives the same values in `release-build` and `release-node-version`.

@@ -121,6 +121,12 @@ on:
           repository with no published package passes at once. false turns it off.
         type: boolean
         default: true
+      release-check-private:
+        description: >-
+          The job release-check starts in a private repository only when this input is true. A private repository pays
+          for each job start, also for a job that only finds no published package.
+        type: boolean
+        default: false
       release-build:
         description: The input build of the release.yml of the repository (reusable-release-build.yml), for the job release-check.
         type: string
@@ -169,7 +175,8 @@ jobs:
   # The release predicate on the commit of a pull request (CI.md "The release check"). The repository goes to the folder
   # repo, and the template to .release-template next to it, so the pack of the repository does not see the template.
   release-check:
-    if: github.event_name == 'pull_request' && inputs.release-check
+    # github.event.repository.private is in each pull_request payload. In a called workflow, github is the context of the caller.
+    if: github.event_name == 'pull_request' && inputs.release-check && (!github.event.repository.private || inputs.release-check-private)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # The job installs and runs the code of the repository, so it gets only read permissions.
