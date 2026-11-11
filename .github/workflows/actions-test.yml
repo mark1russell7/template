@@ -25,6 +25,9 @@
 #   release-tag     reusable-release-tag.yml examines the plan, the tarballs and the tags with "dry-run".
 #                   Its log shows the flags of each release: --latest for the entry with "latest",
 #                   and --latest=false for the others.
+#   release-check   The action release-check on a test repository of each case (release-check/fixture.ts): a shipped
+#                   change at a version on npm fails and names the package and the file. The same files pass, a greater
+#                   version passes, no published package passes with a notice, and Changesets pass only with a changeset.
 #
 # ci.yml tests reusable-ci.yml on each push to main and each pull request. new-repo.ps1 does not copy this
 # workflow, the actions or the shared workflows: a repository uses them from GitHub.
@@ -440,10 +443,98 @@ jobs:
       published: ""
       dry-run: true
 
+  # The action release-check on a test repository of each case (release-check/fixture.ts). Each case runs the action
+  # with continue-on-error, and the next step asserts its outcome, its message and its outputs. Thus a case with an
+  # expected failure is a green job when the action fails as expected.
+  release-check:
+    name: release-check (${{ matrix.case }})
+    needs: changes
+    if: needs.changes.outputs.match == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      # The runners are shared by all repositories of the account (the rule runner-budget)
+      max-parallel: 3
+      matrix:
+        case: [same, changed, greater, none, changesets-pending, changesets-missing]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # The template goes to a folder of its own, next to the test repository, as in the job release-check of
+      # reusable-ci.yml
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: template
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+          package-manager-cache: false
+      - id: fixture
+        env:
+          CASE: ${{ matrix.case }}
+        run: node template/.github/actions/release-check/fixture.ts "$CASE" fixture
+      # The lockfile of the test repository, with the pnpm of its packageManager
+      - name: The lockfile
+        working-directory: fixture
+        run: npx --yes "$(node -p 'require("./package.json").packageManager')" install --lockfile-only
+      - id: check
+        continue-on-error: true
+        uses: ./template/.github/actions/release-check
+        with:
+          working-directory: fixture
+      - name: The outcome, the message and the outputs
+        env:
+          CASE: ${{ matrix.case }}
+          OUTCOME: ${{ steps.check.outcome }}
+          MESSAGE: ${{ steps.check.outputs.message }}
+          RUN: ${{ steps.check.outputs.run }}
+          PENDING: ${{ steps.check.outputs.pending }}
+          NOTICE: ${{ steps.check.outputs.notice }}
+          NAME: ${{ steps.fixture.outputs.name }}
+          VERSION: ${{ steps.fixture.outputs.version }}
+        run: |
+          printf 'case: %s\noutcome: %s\nrun: %s\npending: %s\nnotice: %s\nmessage:\n%s\n' "$CASE" "$OUTCOME" "$RUN" "$PENDING" "$NOTICE" "$MESSAGE"
+          fail() { echo "::error title=release-check ($CASE)::$1"; exit 1; }
+          case "$CASE" in
+            changed|changesets-missing)
+              [ "$OUTCOME" = failure ] || fail "The expected outcome is failure, but the outcome is $OUTCOME."
+              [[ "$MESSAGE" == *"The release skips a version that is on npm"* ]] || fail "The message does not have the first line of pack.ts."
+              [[ "$MESSAGE" == *"$NAME@$VERSION is on npm"* ]] || fail "The message does not name $NAME@$VERSION."
+              [[ "$MESSAGE" == *"README.md (changed)"* ]] || fail "The message does not name the file README.md."
+              ;;
+            *)
+              [ "$OUTCOME" = success ] || fail "The expected outcome is success, but the outcome is $OUTCOME."
+              [ -z "$MESSAGE" ] || fail "The action passed with a message."
+              ;;
+          esac
+          case "$CASE" in
+            none)
+              [ "$RUN" = false ] || fail "With no published package, the expected run is false."
+              [[ "$NOTICE" == *"no published package"* ]] || fail "The notice does not say that the repository has no published package."
+              ;;
+            changesets-pending)
+              [ "$RUN" = true ] && [ "$PENDING" = "$NAME" ] || fail "The expected pending is $NAME."
+              [[ "$NOTICE" == *"uses Changesets"* ]] || fail "The notice does not name Changesets."
+              ;;
+            changesets-missing)
+              [ "$RUN" = true ] && [ -z "$PENDING" ] || fail "The expected pending is empty."
+              [[ "$NOTICE" == *"no changeset raises a version"* ]] || fail "The notice does not say that no changeset raises a version."
+              ;;
+            *)
+              [ "$RUN" = true ] && [ -z "$PENDING" ] && [ -z "$NOTICE" ] || fail "The expected run is true, with no pending package and no notice."
+              ;;
+          esac
+          echo "The case $CASE gives the expected result."
+
   actions-ok:
     name: Actions OK
     if: ${{ !cancelled() }}
-    needs: [changes, green-main, setup-cue, cue-ci, coverage-deadline, data-stamps, pages, pages-check, site, release-build, release-publish, release-tag]
+    needs: [changes, green-main, setup-cue, cue-ci, coverage-deadline, data-stamps, pages, pages-check, site, release-build, release-publish, release-tag, release-check]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}

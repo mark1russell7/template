@@ -15,6 +15,10 @@
 #       uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<commit> # main
 #
 # The template itself calls it by the local path, so each pull request of the template tests it.
+#
+# On a pull request, the job release-check starts the release build on the commit (actions/release-check, CI.md "The
+# release check"). It fails when the release build fails on the same commit, for example when a shipped file changes and its
+# version is already on npm.
 name: Reusable CI
 
 on:
@@ -110,6 +114,21 @@ on:
           of the input scripts before test whose name is build or starts with build:.
         type: string
         default: ""
+      release-check:
+        description: >-
+          On a pull request, start the release build on the commit (actions/release-check): the install, the build, pack.ts
+          and tags.ts. It fails when the release build fails on the same commit, for example a shipped change at a version on npm. A
+          repository with no published package passes at once. false turns it off.
+        type: boolean
+        default: true
+      release-build:
+        description: The input build of the release.yml of the repository (reusable-release-build.yml), for the job release-check.
+        type: string
+        default: ""
+      release-node-version:
+        description: The input node-version of the release.yml of the repository (reusable-release-build.yml), for the job release-check.
+        type: string
+        default: "26"
     secrets:
       CONVENTIONS_PRIVATE_PATTERNS:
         description: >-
@@ -146,6 +165,35 @@ jobs:
       - uses: ./.shared-actions/.github/actions/changeset-check
         with:
           ignore: ${{ inputs.changeset-ignore }}
+
+  # The release predicate on the commit of a pull request (CI.md "The release check"). The repository goes to the folder
+  # repo, and the template to .release-template next to it, so the pack of the repository does not see the template.
+  release-check:
+    if: github.event_name == 'pull_request' && inputs.release-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # The job installs and runs the code of the repository, so it gets only read permissions.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: repo
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .release-template
+          sparse-checkout: |
+            .github/actions
+            scripts/release
+          persist-credentials: false
+      - uses: ./.release-template/.github/actions/release-check
+        with:
+          working-directory: repo/${{ inputs.working-directory }}
+          build: ${{ inputs.release-build }}
+          node-version: ${{ inputs.release-node-version }}
 
   checks:
     name: checks (${{ matrix.os }}, node ${{ matrix.node }})

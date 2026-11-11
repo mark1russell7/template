@@ -18,6 +18,7 @@ These composite actions are shared by the repositories of mark1russell7. A repos
 | `changeset-check` | Fails a pull request when a published package changes with no changeset, or when a changeset makes a `0.x` package into `1.0.0`. The job `changesets` of `reusable-ci.yml` uses it (`CI.md`). |
 | `coverage` | Starts the tests of each package with Vitest again, with coverage, and writes a table of each package to the summary. An optional floor fails the step. With `deadline`, the step stops the tests in time and names each package that it stopped. The script `deadline.ts` is the one home of the deadline. The job `coverage` of `reusable-ci.yml` uses it (`CI.md`). |
 | `env-json` | Sets the environment variables of a JSON object for the next steps. The jobs `checks` and `coverage` of `reusable-ci.yml` use it with the input `env`. |
+| `release-check` | Starts the release build on the commit of a pull request: the install, the build, `pack.ts` and `tags.ts` of `scripts/release`. It fails when the release build fails on the same commit, for example when a shipped file changes at a version that npm has. A repository with no published package passes at once. In a repository with Changesets, a package that a pending changeset raises passes. The job `release-check` of `reusable-ci.yml` uses it (`CI.md`). |
 
 A browser job uses `setup-playwright` after the install of its dependencies:
 
