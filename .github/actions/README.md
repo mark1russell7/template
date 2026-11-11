@@ -8,7 +8,7 @@ These composite actions are shared by the repositories of mark1russell7. A repos
 | `green-main` | Gives the commit for a scheduled build: the newest commit of `main`, or the newest commit that passed CI when the newest one failed. The site does not get a red commit at any time. It does not step back behind a push deploy at any time. `pending: green` waits for CI in place of the newest commit. With `commit`, it reads the CI state of that commit. |
 | `build-ref` | Decides if `reusable-pages.yml` builds and deploys the commit of the event. The job build checks out that commit with no ref. The action reads the event file and fails closed: it stops the job for an event or a field that it does not know. A `workflow_run` takes only a passed run of a push or of `workflow_dispatch`, on the default branch, of the same repository. Thus a run of a fork does not deploy at any time. |
 | `npm-publish` | Publishes the tarballs of the release build to npm, with trusted publishing (OIDC) and provenance. The publish job of `release.yml` uses it (`RELEASING.md`). |
-| `setup-playwright` | Installs the Playwright browsers and their system packages for a browser job. The browsers and the downloaded `.deb` files come from a cache with a key on the runner image and the Playwright version, so only the first run of a version downloads from the package mirror. apt waits for the dpkg lock and tries a failed download again. Each try has a time limit (12 minutes). A stopped try is cleaned up (a leftover apt-get is stopped and dpkg repaired) before the second try. Use it in place of `playwright install --with-deps`. When a job can run in a container, the Playwright image (`mcr.microsoft.com/playwright:v<version>-noble`) is faster still: it needs no install. |
+| `setup-playwright` | Installs the Playwright browsers first and their system packages second, for a browser job. The browsers and the downloaded `.deb` files come from a cache with a key on the runner image and the Playwright version, so only the first run of a version downloads from the package mirror. apt waits for the dpkg lock and tries a failed download again. Each install has 2 tries, and each try has a time limit (12 minutes). A stopped try is cleaned up (a leftover apt-get is stopped and dpkg repaired) before the next try. The input `packages` tells what a failure of the system packages does (the list below tells its values). The output `packages` is `installed` or `missing`. The step saves the cache only when the output is `installed`. Use it in place of `playwright install --with-deps`. When a job can run in a container, the Playwright image (`mcr.microsoft.com/playwright:v<version>-noble`) is faster still: it needs no install. |
 | `setup-cue` | Installs the cue CLI of one version (the input `version`). The archive comes from a cache, or from the release of `cue-lang/cue`. Each request has 8 more tries, 15 s apart, and each try stops after 60 s. Each run checks the sha256 of the archive, also on a cache hit. The sha256 comes from the input `sha256`, or from the digest of the asset in the API of the release. The summary of the job tells if the archive came from the cache or from a download. The action has no post step. The input `cue-version` of `reusable-ci.yml` uses it. |
 | `changes` | Tells if a pull request changes a file of a gate, with the patterns of `on.pull_request.paths`. A gate workflow starts on each pull request, and its jobs run only on a match (`CI.md`, "A gate with paths"). |
 | `gate-summary` | The step of a summary job `<Name> OK`. It passes when each job passed, or when `changes` found no file of the gate and the gate jobs were skipped. |
@@ -26,6 +26,26 @@ A browser job uses `setup-playwright` after the install of its dependencies:
         with:
           browsers: chromium firefox webkit
           command: pnpm --filter @vex/site exec playwright
+```
+
+The input `packages` has two values:
+
+- `required` (the default): a failure of the system packages fails the step.
+- `best-effort`: the step does not fail for the system packages when each browser starts. On Linux, it first probes the package mirror with `apt-get update` (90 seconds at most, with `APT::Update::Error-Mode=any`, so that a host name that does not resolve fails the probe). When the probe fails, the step does not try the system packages.
+- With `best-effort`, when the probe or the tries fail, the step starts each browser (a screenshot of `about:blank`, 120 seconds at most). When each browser starts, the step writes a warning, sets the output `packages` to `missing` and passes. When a browser does not start, the step fails.
+- On macOS and Windows, `best-effort` has no probe. When the tries fail and each browser starts, the step warns and passes.
+
+The browsers are the requirement of a browser job, and the system packages are a means. With `best-effort`, a package mirror that does not answer does not stop the job, and the step ends in a few minutes. Fonts and other system packages can be missing. A job that needs them (a pixel comparison, a text measure) refuses `missing`:
+
+```yaml
+      - id: playwright
+        uses: mark1russell7/template/.github/actions/setup-playwright@<commit> # main
+        with:
+          packages: best-effort
+      - if: steps.playwright.outputs.packages == 'missing'
+        run: |
+          echo "::error::The fonts are missing, so the pixel comparison cannot run."
+          exit 1
 ```
 
 ## Add the pages to a site

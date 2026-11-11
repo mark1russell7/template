@@ -1,7 +1,8 @@
 name: setup-playwright
 description: >-
   Installs the Playwright browsers and their system packages from a cache, with a time limit and one more try, so
-  that a slow package mirror or a hung download does not hold the job until its timeout.
+  that a slow package mirror or a hung download does not hold the job until its timeout. With packages
+  "best-effort", a package mirror that does not answer does not fail the step when each browser starts.
 inputs:
   browsers:
     description: The browsers, separated by spaces (for example "chromium firefox webkit").
@@ -15,11 +16,18 @@ inputs:
     description: The directory where the command runs.
     default: .
   timeout-minutes:
-    description: The time limit of each try of the install.
+    description: The time limit of each try of an install.
     default: "12"
   attempts:
-    description: The number of tries of the install.
+    description: The number of tries of each install (the browsers, then the system packages).
     default: "2"
+  packages:
+    description: >-
+      "required": a failure of the system packages fails the step. "best-effort": on Linux, the step first probes the
+      package mirror with apt-get update (90 seconds at most). When the probe or the tries fail, the step starts each
+      browser. When each browser starts, the step warns, sets the output packages to "missing" and passes. When a
+      browser does not start, the step fails. On macOS and Windows there is no probe.
+    default: required
 outputs:
   version:
     description: The Playwright version.
@@ -27,6 +35,11 @@ outputs:
   cache-hit:
     description: '"true" when the browsers and the system packages came from the cache.'
     value: ${{ steps.cache.outputs.cache-hit }}
+  packages:
+    description: >-
+      "installed" when the system packages are installed, "missing" when the input packages is "best-effort" and they
+      are not. A job that needs the fonts (a pixel comparison, a text measure) can refuse "missing".
+    value: ${{ steps.install.outputs.packages }}
 runs:
   using: composite
   steps:
@@ -37,7 +50,12 @@ runs:
       env:
         COMMAND: ${{ inputs.command }}
         BROWSERS: ${{ inputs.browsers }}
+        PACKAGES: ${{ inputs.packages }}
       run: |
+        case "$PACKAGES" in
+          required | best-effort) ;;
+          *) echo "::error::The input packages is \"$PACKAGES\". Give \"required\" or \"best-effort\"."; exit 1 ;;
+        esac
         version=$($COMMAND --version | awk '{print $NF}')
         [ -n "$version" ] || { echo "::error::\"$COMMAND --version\" gave no version."; exit 1; }
         # One browser folder on each OS, so that the cache path is the same everywhere.
@@ -59,14 +77,17 @@ runs:
           'DPkg::Lock::Timeout "180";' \
           'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/99-setup-playwright > /dev/null
         sudo rm -f /etc/apt/apt.conf.d/docker-clean
+    # The restore and the save are two steps, so that a run with missing system packages saves no cache. A cache with
+    # the browsers and no .deb files would stay under its key, and each later run would download the packages again.
     - id: cache
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ~/.cache/ms-playwright
           ~/.cache/apt-archives/*.deb
         key: playwright-${{ runner.os }}-${{ steps.version.outputs.image }}-${{ steps.version.outputs.version }}-${{ steps.version.outputs.browsers }}
-    - name: Install the browsers and their system packages
+    - id: install
+      name: Install the browsers, then their system packages
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
@@ -75,38 +96,13 @@ runs:
         HIT: ${{ steps.cache.outputs.cache-hit }}
         MINUTES: ${{ inputs.timeout-minutes }}
         ATTEMPTS: ${{ inputs.attempts }}
-      run: |
-        # With the browsers from the cache, only the system packages are missing (and apt finds them in the cache).
-        if [ "$HIT" = true ]; then step="install-deps $BROWSERS"; else step="install --with-deps $BROWSERS"; fi
-        # A stopped try can leave sudo apt-get running in its own session, with the dpkg lock. Stop it and repair
-        # dpkg before the next try.
-        clean_up() {
-          if [ "$RUNNER_OS" = Linux ]; then
-            sudo pkill -TERM -x apt-get 2>/dev/null || true
-            sudo pkill -TERM -x dpkg 2>/dev/null || true
-            sleep 5
-            sudo pkill -KILL -x apt-get 2>/dev/null || true
-            sudo dpkg --configure -a || true
-          fi
-        }
-        for attempt in $(seq 1 "$ATTEMPTS"); do
-          # setsid (util-linux) gives the try its own process group, so the watchdog stops the whole group. The macOS
-          # runners and Git Bash on Windows have no setsid: there the watchdog stops the process only.
-          if command -v setsid >/dev/null 2>&1; then
-            setsid -w $COMMAND $step &
-            pid=$!
-            target="-$pid"
-          else
-            $COMMAND $step &
-            pid=$!
-            target="$pid"
-          fi
-          ( sleep "$((MINUTES * 60))"; kill -TERM -- "$target" 2>/dev/null; sleep 30; kill -KILL -- "$target" 2>/dev/null ) &
-          watch=$!
-          if wait "$pid"; then pkill -P "$watch" 2>/dev/null || true; kill "$watch" 2>/dev/null || true; exit 0; fi
-          pkill -P "$watch" 2>/dev/null || true; kill "$watch" 2>/dev/null || true
-          echo "::warning::Try $attempt of $ATTEMPTS of \"playwright $step\" failed or took more than $MINUTES minutes."
-          clean_up
-        done
-        echo "::error::\"playwright $step\" failed $ATTEMPTS times."
-        exit 1
+        PACKAGES: ${{ inputs.packages }}
+      run: bash "$GITHUB_ACTION_PATH/install.sh"
+    - name: Save the browsers and the system packages in the cache
+      if: steps.cache.outputs.cache-hit != 'true' && steps.install.outputs.packages == 'installed'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.cache/ms-playwright
+          ~/.cache/apt-archives/*.deb
+        key: ${{ steps.cache.outputs.cache-primary-key }}
