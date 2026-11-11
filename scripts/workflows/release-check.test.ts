@@ -65,7 +65,7 @@ describe("the release check", () => {
     const job = jobText(ci, "release-check");
     assert.match(job, /\n    if: github\.event_name == 'pull_request' && inputs\.release-check\n/u);
     assert.match(job, /uses: \.\/\.release-template\/\.github\/actions\/release-check\n/u);
-    assert.match(job, /working-directory: repo\/\$\{\{ inputs\.working-directory \}\}/u);
+    assert.match(job, /working-directory: \$\{\{ \(inputs\.working-directory == '\.' .*&& 'repo' \|\| format\('repo\/\{0\}', inputs\.working-directory\) \}\}/u);
     assert.match(job, /build: \$\{\{ inputs\.release-build \}\}/u);
   });
 

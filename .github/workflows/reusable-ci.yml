@@ -191,7 +191,8 @@ jobs:
           persist-credentials: false
       - uses: ./.release-template/.github/actions/release-check
         with:
-          working-directory: repo/${{ inputs.working-directory }}
+          # actions/setup-node refuses a path with "." in it, such as repo/./pnpm-lock.yaml
+          working-directory: ${{ (inputs.working-directory == '.' || inputs.working-directory == './' || inputs.working-directory == '') && 'repo' || format('repo/{0}', inputs.working-directory) }}
           build: ${{ inputs.release-build }}
           node-version: ${{ inputs.release-node-version }}
 

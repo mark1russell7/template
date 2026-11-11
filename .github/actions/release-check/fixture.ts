@@ -28,7 +28,7 @@ if (kind === undefined || folder === undefined || !CASES.includes(kind)) {
   process.exit(2);
 }
 
-const registry = `https://registry.npmjs.org/${NAME.replace("/", "%2f")}`;
+const registry = `https://registry.npmjs.org/${NAME.replaceAll("/", "%2f")}`;
 const latest = (await (await fetch(`${registry}/latest`)).json()) as { version: string; dist: { tarball: string } };
 const response = await fetch(latest.dist.tarball);
 if (!response.ok) throw new Error(`The registry gave HTTP ${response.status} for ${latest.dist.tarball}.`);
