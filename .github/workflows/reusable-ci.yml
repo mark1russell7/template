@@ -110,6 +110,19 @@ on:
           of the input scripts before test whose name is build or starts with build:.
         type: string
         default: ""
+      version-check:
+        description: >-
+          On a pull request, pack each published package whose version is on npm, after the build of the scripts, and
+          compare its files with npm (scripts/version-check). A change of the shipped files needs a greater version.
+          The first cell of the matrix does it. false turns it off.
+        type: boolean
+        default: true
+      version-check-fails-from:
+        description: >-
+          The day (YYYY-MM-DD) from which a difference of the version check fails the job. Before it, a difference gives a
+          warning. "" fails at once.
+        type: string
+        default: "2026-12-07"
     secrets:
       CONVENTIONS_PRIVATE_PATTERNS:
         description: >-
@@ -299,6 +312,37 @@ jobs:
         env:
           COMMAND: ${{ inputs.run }}
         run: eval "$COMMAND"
+      # The version check of a pull request (CI.md). The scripts come from the commit of this workflow. They go to
+      # RUNNER_TEMP before the pack, as in reusable-release-build.yml: a package with no field "files" packs each file of
+      # its folder. The check needs the build of the scripts, so a failed script skips it.
+      - if: inputs.version-check && github.event_name == 'pull_request' && matrix.os == fromJSON(inputs.os)[0] && matrix.node == fromJSON(inputs.node-versions)[0]
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .version-check
+          sparse-checkout: |
+            scripts/version-check
+            scripts/release
+          persist-credentials: false
+      - name: Version check
+        if: inputs.version-check && github.event_name == 'pull_request' && matrix.os == fromJSON(inputs.os)[0] && matrix.node == fromJSON(inputs.node-versions)[0]
+        working-directory: .
+        env:
+          FAILS_FROM: ${{ inputs.version-check-fails-from }}
+          SCRIPTS: ${{ inputs.scripts }}
+          VERSION_CHECK_REPO: ${{ inputs.working-directory }}
+        run: |
+          mv .version-check "$RUNNER_TEMP/version-check"
+          if [[ " $SCRIPTS " != *" build "* ]]; then
+            echo "::notice::The input scripts has no build, so the version check packs no package."
+            exit 0
+          fi
+          if ! node -e 'process.exit(process.features.typescript ? 0 : 1)'; then
+            echo "::notice::Node.js $(node --version) cannot start the version check (Node.js 22.18 or later can). The step checks nothing."
+            exit 0
+          fi
+          node "$RUNNER_TEMP/version-check/scripts/version-check/version-check.ts"
 
   # The tests with coverage, in parallel with the job checks and with a time limit of their own. Thus the coverage does
   # not make the job checks slower, and a slow coverage does not stop it. Not strict (coverage on main), the job does not
