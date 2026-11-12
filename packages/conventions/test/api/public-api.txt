@@ -101,6 +101,7 @@ createContext: build/index.d.ts#createContext
 cuePreset: build/index.d.ts#cuePreset
 declaredName: build/index.d.ts#declaredName
 defaultOptions: build/index.d.ts#defaultOptions
+exportsRequire: build/index.d.ts#exportsRequire
 findHomes: build/index.d.ts#findHomes
 firstNameMatch: build/index.d.ts#firstNameMatch
 formatResult: build/index.d.ts#formatResult
@@ -710,6 +711,9 @@ export declare function declaredName(line: string): string | undefined;
 
 ### build/index.d.ts#defaultOptions
 export declare function defaultOptions(rule: Rule): Options;
+
+### build/index.d.ts#exportsRequire
+export declare const exportsRequire: Rule;
 
 ### build/index.d.ts#findHomes
 export declare function findHomes(query: string, homes?: readonly Home[]): readonly Home[];
