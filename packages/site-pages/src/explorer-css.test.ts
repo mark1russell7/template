@@ -76,7 +76,7 @@ describe("the explorer entries", () => {
     expect(pkg.exports["./explorer"]).toBe("./src/explorer/index.ts");
     expect(pkg.exports["./explorer.css"]).toBe("./styles/explorer.css");
     expect(pkg.publishConfig.exports["./explorer.css"]).toBe("./styles/explorer.css");
-    expect(pkg.publishConfig.exports["./explorer"]).toEqual({ types: "./build/explorer/index.d.ts", import: "./build/explorer/index.js" });
+    expect(pkg.publishConfig.exports["./explorer"]).toEqual({ types: "./build/explorer/index.d.ts", import: "./build/explorer/index.js", default: "./build/explorer/index.js" });
     expect(existsSync(new URL("src/explorer/index.ts", root))).toBe(true);
     expect(pkg.dependencies["@mark1russell7/rigor-statistics"]).toBe("^0.1.9");
   });

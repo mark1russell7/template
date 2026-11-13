@@ -7,9 +7,10 @@
 //                                        table, and exits with 1 when a folder has no summary or a value under the floor
 //
 // The folders are relative to the current folder. The floor is a percent, and 0 is no floor.
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 
 /** The four measures of the summary of Vitest (the reporter json-summary of istanbul). */
 export const MEASURES = ["statements", "branches", "functions", "lines"] as const;
@@ -83,4 +84,4 @@ function main(argv: readonly string[]): number {
   throw new Error(`Unknown command "${command ?? ""}". Use "packages" or "summary".`);
 }
 
-if (import.meta.main) process.exitCode = main(process.argv.slice(2));
+if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) process.exitCode = main(process.argv.slice(2));

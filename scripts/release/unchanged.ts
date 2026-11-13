@@ -108,6 +108,21 @@ export function installedManifest(raw: Buffer): string {
   return JSON.stringify(sort(manifest));
 }
 
+/**
+ * This function gives the names of the packages whose version a pending changeset raises later, from the variable
+ * RELEASE_PENDING: names separated by spaces, commas or lines. The release check of a pull request sets it
+ * (check-plan.ts). A release run does not set it, so the set is empty.
+ */
+export function pendingPackages(value: string | undefined): Set<string> {
+  return new Set((value ?? "").split(/[\s,]+/u).filter(Boolean));
+}
+
+/** This function gives the text of one version on npm whose shipped files differ: at most 20 paths, then a count. */
+export function differenceText(id: string, differences: readonly string[]): string {
+  const more = differences.length > 20 ? `\n    and ${differences.length - 20} more` : "";
+  return `${id} is on npm, but these shipped files differ from it:\n    ${differences.slice(0, 20).join("\n    ")}${more}`;
+}
+
 /** The paths that differ between the published and the packed files: added, removed or changed. */
 export function shippedDifferences(published: Map<string, Buffer>, packed: Map<string, Buffer>): string[] {
   const paths = [...new Set([...published.keys(), ...packed.keys()])].sort();

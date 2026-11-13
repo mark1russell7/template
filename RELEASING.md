@@ -92,6 +92,8 @@ The push to `main` starts `release.yml`. The workflow starts the CI gates, build
 
 The rule `unreleased-change` of `@mark1russell7/conventions` fails a pull request that sets a version that npm has. The release skips such a version.
 
+The job `release-check` of the shared CI starts `pack.ts` on each pull request of a public repository (`CI.md`, "The release check of a pull request"). A pull request that changes a shipped file at a version that npm has fails there, before the merge. The error names the package and each file.
+
 When two pull requests set the same version, the second merge changes no version. Then `release.yml` does not start, and the change does not get to npm. In a repository where each pull request sets its version, set the option `versionEachChange` of the rule. Then the CI of that push to `main` fails. Raise the version in a new pull request.
 
 To publish again after a failure, start the workflow by hand: `gh workflow run release.yml --ref main`. It skips each version that is on npm.
