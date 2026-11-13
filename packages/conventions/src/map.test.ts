@@ -82,8 +82,8 @@ describe("the command map", () => {
     expect(cli(["map", "quantile"]).stdout).toMatch(/^Statistics \(statistics\): @mark1russell7\/rigor-statistics\n/);
     expect(cli(["map", "nothing-like-this"]).stdout).toMatch(/^No area matches\./);
     const file = join(temp, "private.json");
-    writeFileSync(file, JSON.stringify({ homes: [{ area: "secret-app", title: "A private app", covers: "x", packages: [], repo: "mark1russell7/private", state: "unpublished", words: ["secret"] }] }));
-    const json = JSON.parse(cli(["map", "secret", "--json", "--overlay", file]).stdout) as Home[];
+    writeFileSync(file, JSON.stringify({ homes: [{ area: "secret-app", title: "A private app", covers: "x", packages: [], repo: "mark1russell7/private", state: "unpublished", words: ["zz-overlay-only"] }] }));
+    const json = JSON.parse(cli(["map", "zz-overlay-only", "--json", "--overlay", file]).stdout) as Home[];
     expect(json.map((home) => home.area)).toEqual(["secret-app"]);
   });
 
