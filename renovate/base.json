@@ -3,7 +3,7 @@
   "description": "The shared Renovate settings of mark1russell7, with no automerge. Extend renovate/default for the automerge rules too.",
   "extends": ["config:recommended", "helpers:pinGitHubActionDigestsToSemver"],
   "timezone": "America/New_York",
-  "schedule": ["before 6am on monday"],
+  "schedule": ["before 6am"],
   "prConcurrentLimit": 5,
   "rebaseWhen": "conflicted",
   "rangeStrategy": "update-lockfile",
@@ -15,14 +15,14 @@
   },
   "packageRules": [
     {
-      "description": "One weekly PR for the patch updates of npm packages.",
+      "description": "One PR for the patch updates of npm packages.",
       "matchManagers": ["npm"],
       "matchUpdateTypes": ["patch"],
       "groupName": "npm patch updates",
       "groupSlug": "npm-patch"
     },
     {
-      "description": "One weekly PR for the minor updates of the runtime dependencies. A person reviews it.",
+      "description": "One PR for the minor updates of the runtime dependencies.",
       "matchManagers": ["npm"],
       "matchDepTypes": ["dependencies", "optionalDependencies"],
       "matchUpdateTypes": ["minor"],
@@ -30,9 +30,17 @@
       "groupSlug": "npm-minor"
     },
     {
-      "description": "One weekly PR for the minor updates of the development dependencies.",
+      "description": "One PR for the minor updates of the development dependencies and of pnpm (also in the field packageManager of package.json).",
       "matchManagers": ["npm"],
       "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["minor"],
+      "groupName": "npm dev dependencies (minor)",
+      "groupSlug": "npm-dev-minor"
+    },
+    {
+      "description": "pnpm is a tool of development. Its minor updates go in the group of the development dependencies, also an update of the field packageManager.",
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["pnpm"],
       "matchUpdateTypes": ["minor"],
       "groupName": "npm dev dependencies (minor)",
       "groupSlug": "npm-dev-minor"
@@ -58,7 +66,7 @@
       "enabled": false
     },
     {
-      "description": "One weekly PR for the minor, patch and digest updates of the GitHub Actions.",
+      "description": "One PR for the minor, patch and digest updates of the GitHub Actions.",
       "matchManagers": ["github-actions"],
       "matchUpdateTypes": ["minor", "patch", "digest", "pinDigest"],
       "groupName": "GitHub Actions",
@@ -101,6 +109,15 @@
       "managerFilePatterns": ["/(^|/)\\.github/workflows/[^/]+\\.ya?ml$/"],
       "matchStrings": ["CLAUDE_CODE_VERSION:\\s*[\"']?(?<currentValue>\\d+\\.\\d+\\.\\d+)[\"']?"],
       "depNameTemplate": "@anthropic-ai/claude-code",
+      "datasourceTemplate": "npm",
+      "versioningTemplate": "npm"
+    },
+    {
+      "customType": "regex",
+      "description": "The version of Renovate that a workflow runs from npm, for the validator of the presets: 'RENOVATE_VERSION: <x.y.z>' (ci.yml of the template).",
+      "managerFilePatterns": ["/(^|/)\\.github/workflows/[^/]+\\.ya?ml$/"],
+      "matchStrings": ["RENOVATE_VERSION:\\s*[\"']?(?<currentValue>\\d+\\.\\d+\\.\\d+)[\"']?"],
+      "depNameTemplate": "renovate",
       "datasourceTemplate": "npm",
       "versioningTemplate": "npm"
     }
