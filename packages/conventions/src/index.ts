@@ -44,6 +44,7 @@ export {
   apiReportScript,
   coverageProvider,
   cuePreset,
+  exportsRequire,
   gateTrigger,
   homePackage,
   licenseFile,
