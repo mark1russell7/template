@@ -7,19 +7,20 @@ These presets hold the shared Renovate settings of the repositories of mark1russ
 | `github>mark1russell7/template//renovate/default` | `base` and `automerge`. Most repositories use it. |
 | `github>mark1russell7/template//renovate/base` | The schedule, the groups and the release-age waits, with no automerge. |
 | `github>mark1russell7/template//renovate/automerge` | Only the automerge rules. |
+| `github>mark1russell7/template//renovate/weekly` | Pull requests only on Monday before 06:00, for a repository that pays for its CI minutes. It goes after `default` or `base`. |
 | `github>mark1russell7/template//renovate/expo` | No major or minor update of a package that an Expo SDK decides, except a security fix. A new SDK shows on the Dependency Dashboard. An Expo repository extends it after `default` and names the owner who moves the SDK. |
 
 ## What the settings do
 
-- Renovate opens pull requests on Monday before 06:00 (New York time), with 5 open pull requests at most.
+- Renovate opens pull requests each day before 06:00 (New York time), with 5 open pull requests at most. A repository that pays for its CI minutes extends `weekly` too, and then gets them only on Monday (refer to "The weekly schedule").
 - `rangeStrategy` is `update-lockfile`: Renovate changes the lockfile, and the ranges of a published package stay the same.
 - Renovate waits 3 days after a release.
 - Renovate does not update the npm packages `@procedures/*` and `@mark1russell7/*`. The release train (mark1russell7/release-train) updates them, with no wait. `pnpm-workspace.yaml` excludes them from the age gate of pnpm.
 - A security update comes at any time, with no wait.
 - The groups:
   - The npm patch updates: one pull request.
-  - The minor updates of the development dependencies: one pull request.
-  - The minor updates of the runtime dependencies: one pull request for a review.
+  - The minor updates of the development dependencies and of pnpm (also the field `packageManager` of `package.json`): one pull request.
+  - The minor updates of the runtime dependencies: one pull request.
   - A minor update before 1.0.0 can break (SemVer). These updates get a group of their own, for a review.
   - The GitHub Actions (minor, patch, digest): one pull request. A major update gets a pull request of its own.
   - The shared workflows and actions of the template: one pull request, "template workflows and actions".
@@ -60,7 +61,13 @@ env:
 
 ## Automerge
 
-With `default`, Renovate merges these groups when CI passes: the npm patch updates and the minor updates of the development dependencies. It does not merge a minor update before 1.0.0, or an update of the Claude Code CLI.
+With `default`, Renovate merges these updates when CI passes:
+
+- the npm patch updates,
+- the minor updates of the runtime and the development dependencies,
+- the minor and patch updates of pnpm, also in the field `packageManager`. The release check of a package ignores this field.
+
+It does not merge a major update, a minor update before 1.0.0, or an update of the Claude Code CLI. With `rangeStrategy` `update-lockfile`, a range that holds the new version stays the same, and only the lockfile changes.
 
 The minor, patch and digest updates of the GitHub Actions, with the pins of the template, get the label `train-merge`. The release train merges them when CI passes and no release of the repository is open. A workflow change during a release makes GitHub refuse its tag (HTTP 403).
 
@@ -75,6 +82,22 @@ Renovate rebases a branch only when the branch has a conflict (`rebaseWhen` is `
 Two updates can merge with no test of the two together. The CI of `main` tests them after the merge.
 
 If up-to-date branches are necessary in a repository, that repository changes this setting to `behind-base-branch`. If it does not, Renovate cannot merge a branch that is behind `main`.
+
+## The weekly schedule
+
+Each day, Renovate can open a pull request that waited for its 3 days of release age. Thus a new version arrives approximately 3 days sooner than with one run on Monday. Each pull request and each merge starts CI, and a public repository gets its Actions minutes free.
+
+A repository that pays for its CI minutes extends `weekly` after `default` or `base`:
+
+```json
+{ "extends": ["github>mark1russell7/template//renovate/default", "github>mark1russell7/template//renovate/weekly"] }
+```
+
+The reason is the cost of CI. When the CI of the repository operates on its own runners, it removes `weekly`. A security update comes at any time, also with `weekly`.
+
+## The validator
+
+The CI of the template starts the validator of Renovate (`renovate-config-validator --strict`) on each file of `renovate/` (the job `renovate-presets` of `ci.yml`). Each repository extends these presets, so a fault in one of them stops Renovate in each repository. A custom manager of `base` updates the version of the validator (`RENOVATE_VERSION` in `ci.yml`).
 
 ## The rules of a repository
 
