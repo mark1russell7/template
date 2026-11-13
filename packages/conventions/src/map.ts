@@ -319,12 +319,12 @@ export const HOMES: readonly Home[] = [
   {
     area: "plain-text",
     title: "Plain text helpers",
-    covers: "escaping for HTML, attributes, regular expressions and Markdown, case conversion, padding and truncation, templates, English word forms (plurals, lists). Escaping comes first",
+    covers: "escaping for HTML, attributes, regular expressions and Markdown, case conversion, padding and truncation, templates, English word forms (plurals, lists), the redaction of known secrets in a text (the raw form, the URL form and the Basic form). Escaping comes first",
     packages: ["@mark1russell7/text"],
     repo: "mark1russell7/text",
     state: "published",
-    words: ["escape", "word search", "count", "html escape", "case", "camel case", "kebab case", "pad", "truncate", "template", "plural", "slug"],
-    signatures: ["escapeHtml", "escapeAttribute", "escapeRegExp", "escapeMarkdown", "kebabCase", "camelCase", "pascalCase", "snakeCase", "pluralize"],
+    words: ["escape", "word search", "count", "html escape", "case", "camel case", "kebab case", "pad", "truncate", "template", "plural", "slug", "redact", "secret", "mask"],
+    signatures: ["escapeHtml", "escapeAttribute", "escapeRegExp", "escapeMarkdown", "kebabCase", "camelCase", "pascalCase", "snakeCase", "pluralize", "redactSecrets"],
   },
   {
     area: "language-kernel",
@@ -422,12 +422,13 @@ export const HOMES: readonly Home[] = [
   },
   {
     area: "web-crawling",
-    title: "Web crawling",
-    covers: "polite fetches with robots.txt and one request per site, a store of fetched pages",
+    title: "Web crawling and API clients",
+    covers: "polite fetches with robots.txt and one request per site, a store of fetched pages, the host schedule and the action for each outcome (succeed, park until, stop for, count a failure), polite calls of documented APIs (each method, a body, no page store), OAuth 2.0 client-credentials tokens (one grant in flight, a margin before the end, a drop after a 401)",
     packages: ["polite-crawler", "polite-crawler-mcp"],
     repo: "mark1russell7/crawler",
     state: "published",
-    words: ["crawl", "scrape", "robots", "fetch page"],
+    words: ["crawl", "scrape", "robots", "fetch page", "api client", "http client", "oauth", "client credentials", "access token", "rate limit", "retry after", "host schedule"],
+    note: "Each package that calls the servers of others uses polite-crawler. The entry polite-crawler/api (calls of documented APIs and the token store) is planned.",
   },
 ];
 
