@@ -83,6 +83,16 @@ Two updates can merge with no test of the two together. The CI of `main` tests t
 
 If up-to-date branches are necessary in a repository, that repository changes this setting to `behind-base-branch`. If it does not, Renovate cannot merge a branch that is behind `main`.
 
+## Lock file maintenance
+
+Each Monday before 06:00 (New York time), Renovate deletes the lockfile and makes it again with the package manager: one pull request, "Lock file maintenance". With `default`, Renovate merges it when CI passes.
+
+- Most security advisories are for an indirect dependency, for example a dependency of a development tool. Renovate does not update an indirect dependency of a pnpm lockfile alone. A new lockfile takes the newest version in each range, and thus the fixed version.
+- The ranges in `package.json` stay the same. Only the lockfile changes.
+- The release-age wait of Renovate does not apply to a new lockfile. The wait of pnpm applies: since pnpm 11, pnpm installs no version newer than 1 day (`minimumReleaseAge`, default 1440 minutes), also for an indirect dependency. Each install of pnpm has this wait, so the maintenance adds no new risk.
+- A dependency can pin an exact version, for example `minimatch: 10.2.3`. Then a new lockfile keeps that version. An `overrides` entry in `pnpm-workspace.yaml` replaces it, with the reason and the end of the override in a comment.
+- A new lockfile can change a build tool, and thus the built files of a package. Then the release check (`scripts/release/unchanged.ts`) names the files, and the package gets a new PATCH version.
+
 ## The weekly schedule
 
 Each day, Renovate can open a pull request that waited for its 3 days of release age. Thus a new version arrives approximately 3 days sooner than with one run on Monday. Each pull request and each merge starts CI, and a public repository gets its Actions minutes free.

@@ -8,6 +8,10 @@
   "rebaseWhen": "conflicted",
   "rangeStrategy": "update-lockfile",
   "minimumReleaseAge": "3 days",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 6am on monday"]
+  },
   "labels": ["dependencies"],
   "vulnerabilityAlerts": {
     "schedule": ["at any time"],
