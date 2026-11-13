@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { Script } from "node:vm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { findBrowser } from "./browser.ts";
-import { cell, checkSite, cutProblems, pageProbes, pageSlug, PHONE_WIDTH, runCheckCli, summary, type CheckOptions } from "./check.ts";
+import { cell, checkSite, cutProblems, pageProbes, pageSlug, PHONE_WIDTH, runCheckCli, scrollGaps, summary, type CheckOptions, type ViewResult } from "./check.ts";
 import { MEASURE, type Cut } from "./measure.ts";
 import { resolveFile, serve } from "./serve.ts";
 
@@ -150,6 +150,32 @@ describe("serve", () => {
     } finally {
       await server.close();
     }
+  });
+});
+
+describe("scrollGaps", () => {
+  const code: Cut = { kind: "code", box: "pre#a", element: "pre#a", scrollWidth: 736, clientWidth: 302, text: "pnpm add" };
+  const table: Cut = { kind: "table", box: "div.card", element: "table.api", scrollWidth: 736, clientWidth: 302, text: "run", deadCue: true };
+  const clip: Cut = { kind: "clip", box: "div.x", element: "p", scrollWidth: 736, clientWidth: 302, text: "cut" };
+  const view = (page: string, width: number, scheme: "light" | "dark", cut: Cut[]): ViewResult => ({
+    page, width, scheme, ok: cut.length === 0, problems: [],
+    measure: { innerWidth: width, scrollWidth: width, height: 900, text: 400, past: [], clipped: [], cut } as ViewResult["measure"],
+  });
+
+  it("gives each block one time, at its smallest width, and keeps the dead cue", () => {
+    const gaps = scrollGaps({ views: [view("/", 400, "light", [code, table]), view("/", 360, "dark", [code]), view("/", 360, "light", [code, table])] });
+    expect(gaps).toEqual([
+      { page: "/", box: "pre#a", element: "pre#a", width: 360, deadCue: false },
+      { page: "/", box: "div.card", element: "table.api", width: 360, deadCue: true },
+    ]);
+  });
+
+  it("counts the same block on two pages two times", () => {
+    expect(scrollGaps({ views: [view("/", 360, "light", [code]), view("/docs/", 360, "light", [code])] })).toHaveLength(2);
+  });
+
+  it("does not count a clip, a desktop view, or a view with no measure", () => {
+    expect(scrollGaps({ views: [view("/", 360, "light", [clip]), view("/", PHONE_WIDTH, "light", [code]), { ...view("/", 360, "light", []), measure: undefined }] })).toEqual([]);
   });
 });
 
