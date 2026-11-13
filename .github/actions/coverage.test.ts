@@ -63,6 +63,26 @@ describe("coverage: the table and the floor", () => {
 });
 
 describe("coverage: the script", () => {
+  it("reads the list of pnpm from a file, and refuses no file", () => {
+    const root = mkdtempSync(join(tmpdir(), "coverage-"));
+    try {
+      mkdirSync(join(root, "packages", "a"), { recursive: true });
+      mkdirSync(join(root, "packages", "b"), { recursive: true });
+      writeFileSync(join(root, "packages", "a", "package.json"), JSON.stringify({ scripts: { test: "vitest run" } }));
+      writeFileSync(join(root, "packages", "b", "package.json"), JSON.stringify({ scripts: { test: "node --test" } }));
+      const list = [root, join(root, "packages", "a"), join(root, "packages", "b")].map((path) => ({ path }));
+      writeFileSync(join(root, "list.json"), JSON.stringify(list));
+      const run = spawnSync(process.execPath, [script, "packages", "list.json"], { cwd: root, encoding: "utf8" });
+      assert.equal(run.status, 0, run.stderr);
+      assert.equal(run.stdout, "packages/a\n");
+      const none = spawnSync(process.execPath, [script, "packages"], { cwd: root, encoding: "utf8" });
+      assert.notEqual(none.status, 0);
+      assert.match(none.stderr, /needs the file/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("reads the summaries of the folders, and exits with 1 under the floor", () => {
     const root = mkdtempSync(join(tmpdir(), "coverage-"));
     try {
