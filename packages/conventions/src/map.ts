@@ -319,12 +319,12 @@ export const HOMES: readonly Home[] = [
   {
     area: "plain-text",
     title: "Plain text helpers",
-    covers: "escaping for HTML, attributes, regular expressions and Markdown, case conversion, padding and truncation, templates, English word forms (plurals, lists), the redaction of known secrets in a text (the raw form, the URL form and the Basic form). Escaping comes first",
+    covers: "escaping for HTML, attributes, regular expressions and Markdown, case conversion, padding and truncation, templates, English word forms (plurals, lists), the text of a thrown value (it never throws), the redaction of known secrets in a text (the raw form, the URL form and the Basic form). Escaping comes first",
     packages: ["@mark1russell7/text"],
     repo: "mark1russell7/text",
     state: "published",
-    words: ["escape", "word search", "count", "html escape", "case", "camel case", "kebab case", "pad", "truncate", "template", "plural", "slug", "redact", "secret", "mask"],
-    signatures: ["escapeHtml", "escapeAttribute", "escapeRegExp", "escapeMarkdown", "kebabCase", "camelCase", "pascalCase", "snakeCase", "pluralize", "redactSecrets"],
+    words: ["escape", "word search", "count", "html escape", "case", "camel case", "kebab case", "pad", "truncate", "template", "plural", "slug", "redact", "secret", "mask", "error message", "thrown value"],
+    signatures: ["escapeHtml", "escapeAttribute", "escapeRegExp", "escapeMarkdown", "kebabCase", "camelCase", "pascalCase", "snakeCase", "pluralize", "redactSecrets", "errorMessage"],
   },
   {
     area: "language-kernel",
