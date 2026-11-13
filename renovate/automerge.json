@@ -2,6 +2,9 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "description": "The automerge rules of mark1russell7: Renovate merges the low-risk groups when CI passes.",
   "platformAutomerge": false,
+  "lockFileMaintenance": {
+    "automerge": true
+  },
   "packageRules": [
     {
       "description": "Renovate merges the npm patch updates when CI passes.",
