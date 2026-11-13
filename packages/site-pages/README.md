@@ -522,6 +522,10 @@ The entry `@mark1russell7/site-pages/chrome` has small helpers for the script of
 | `copyText(button, text, options)` | Copies a text. The button shows "Copied" or "Copy failed" for 1600 ms. |
 | `copyToClipboard(text)` | Copies a text with the Clipboard API, else with `document.execCommand`. It gives `true` after a copy. |
 | `showBuild(element, build, repository)` | Adds "Version 1.2.3, build abc1234 of 2026-11-03" to an element. The commit is a link to GitHub. |
+| `new Segmented(container, choices, current, onChange, axis)` | Makes a radio group with one focus stop. The arrow keys select the next button and move the focus to it. `set(value)` changes the value with no event. |
+| `rovingIndex(key, index, count, axis)` | Gives the index after an arrow key, with a wrap at each end. A tab list or a list of results uses it. |
+
+Put the role and the label of the group on the container, for example `<div role="radiogroup" aria-label="Unit">`. The axis `horizontal` uses only the left and right arrows, and `vertical` uses only the up and down arrows. The default `both` uses the four arrows.
 
 ```ts
 import { byId, copyText, h, setupTheme } from "@mark1russell7/site-pages/chrome";
