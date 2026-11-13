@@ -17,6 +17,7 @@ These presets hold the shared Renovate settings of the repositories of mark1russ
 - Renovate waits 3 days after a release.
 - Renovate does not update the npm packages `@procedures/*` and `@mark1russell7/*`. The release train (mark1russell7/release-train) updates them, with no wait. `pnpm-workspace.yaml` excludes them from the age gate of pnpm.
 - A security update comes at any time, with no wait.
+- The release train can add a commit to a pull request of Renovate, for example the version raise that a release needs. `gitIgnoredAuthors` names the app of the train, so Renovate does not read the pull request as changed by a person. Renovate keeps the pull request current, and the train adds its commit again after a rebase.
 - The groups:
   - The npm patch updates: one pull request.
   - The minor updates of the development dependencies and of pnpm (also the field `packageManager` of `package.json`): one pull request.
