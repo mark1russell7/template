@@ -320,10 +320,10 @@ export const HOMES: readonly Home[] = [
     area: "plain-text",
     title: "Plain text helpers",
     covers: "escaping for HTML, attributes, regular expressions and Markdown, case conversion, padding and truncation, templates, English word forms (plurals, lists). Escaping comes first",
-    packages: [],
+    packages: ["@mark1russell7/text"],
     repo: "mark1russell7/text",
-    state: "planned",
-    words: ["escape", "html escape", "case", "camel case", "kebab case", "pad", "truncate", "template", "plural", "slug"],
+    state: "published",
+    words: ["escape", "word search", "count", "html escape", "case", "camel case", "kebab case", "pad", "truncate", "template", "plural", "slug"],
     signatures: ["escapeHtml", "escapeAttribute", "escapeRegExp", "escapeMarkdown", "kebabCase", "camelCase", "pascalCase", "snakeCase", "pluralize"],
   },
   {
