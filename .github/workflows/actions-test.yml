@@ -779,10 +779,48 @@ jobs:
           esac
           echo "The case $CASE gives the expected result."
 
+  # The input last-result of gate-summary reads the check runs of the commit. A skip reads the passed check "changes" of
+  # this run, a check with no run gives a no read, and a bad token gives a read error.
+  gate-summary-last:
+    needs: changes
+    if: needs.changes.outputs.match == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      checks: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      - name: A skip after a pass passes
+        uses: ./.github/actions/gate-summary
+        with:
+          needs: '{"gate": {"result": "skipped", "outputs": {}}}'
+          last-result: gate=changes
+      - name: A skip with no result is a no read
+        uses: ./.github/actions/gate-summary
+        with:
+          needs: '{"gate": {"result": "skipped", "outputs": {}}}'
+          last-result: gate=a check that no job has
+      - run: grep '^no read gate:' verdict
+      - name: A skip with no read of the checks fails
+        id: error
+        continue-on-error: true
+        uses: ./.github/actions/gate-summary
+        with:
+          needs: '{"gate": {"result": "skipped", "outputs": {}}}'
+          last-result: gate=changes
+          token: not-a-token
+      - if: steps.error.outcome != 'failure'
+        run: |
+          echo "::error title=gate-summary::A read error of the check runs did not fail the summary"
+          exit 1
+
   actions-ok:
     name: Actions OK
     if: ${{ !cancelled() }}
-    needs: [changes, green-main, setup-cue, setup-playwright, setup-playwright-warning, cue-ci, coverage-deadline, data-stamps, pages, pages-check, site, release-build, release-publish, release-tag, release-check]
+    needs: [changes, green-main, setup-cue, setup-playwright, setup-playwright-warning, cue-ci, coverage-deadline, data-stamps, pages, pages-check, site, release-build, release-publish, release-tag, release-check, gate-summary-last]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}
