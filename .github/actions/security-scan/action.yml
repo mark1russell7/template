@@ -116,7 +116,7 @@ runs:
       if: ${{ !cancelled() && steps.osv-scanner_base-checkout.outcome == 'success' }}
       # osv-scanner fails when it finds a vulnerability. The step "Compare" reads the results.
       continue-on-error: true
-      uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
+      uses: google/osv-scanner-action/osv-scanner-action@32d3cd482bdadfb38b186c0ad1b031902d55d932 # v2.7.1
       with:
         scan-args: |-
           --format=json
@@ -134,7 +134,7 @@ runs:
       id: osv-scanner_head
       if: ${{ !cancelled() && steps.osv-scanner_base-checkout.outcome == 'success' && steps.osv-scanner_head-checkout.outcome == 'success' }}
       continue-on-error: true
-      uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
+      uses: google/osv-scanner-action/osv-scanner-action@32d3cd482bdadfb38b186c0ad1b031902d55d932 # v2.7.1
       with:
         scan-args: |-
           --format=json
@@ -240,7 +240,7 @@ runs:
       if: ${{ !cancelled() && github.event_name != 'pull_request' && steps.osv-scanner_args.outcome == 'success' }}
       # osv-scanner fails when it finds a vulnerability. These findings go to the Security tab.
       continue-on-error: true
-      uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
+      uses: google/osv-scanner-action/osv-scanner-action@32d3cd482bdadfb38b186c0ad1b031902d55d932 # v2.7.1
       with:
         scan-args: |-
           --format=sarif
