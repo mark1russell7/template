@@ -55,13 +55,13 @@ export const HOMES: readonly Home[] = [
   {
     area: "random",
     title: "Seeded random and generated inputs",
-    covers: "seeded random numbers, seeds from names, hashes for seeds, draws, input families with dimensions and ranges",
+    covers: "seeded random numbers, seeds from names, hashes for seeds, canonical JSON (RFC 8785) and content hashes (SHA-256), draws, input families with dimensions and ranges",
     packages: ["@mark1russell7/rigor-generators"],
     repo: "mark1russell7/rigor",
     alsoIn: ["mark1russell7/algebra", "mark1russell7/math"],
     state: "published",
-    words: ["seed", "prng", "mulberry32", "fnv", "hash", "shuffle", "sample", "fixture", "generator", "random", "rng", "seeded", "xorshift", "splitmix", "latin", "hypercube", "saltelli", "sobol", "halton", "sampler"],
-    signatures: ["mulberry32", "splitmix[A-Za-z0-9]*", "xorshift[A-Za-z0-9]*", "sfc32", "xoshiro[A-Za-z0-9]*", "fnv1a[A-Za-z0-9]*", "deriveSeed", "seededRandom", "seededRng", "makeRng", "createRng"],
+    words: ["seed", "prng", "mulberry32", "fnv", "hash", "shuffle", "sample", "fixture", "generator", "random", "rng", "seeded", "xorshift", "splitmix", "latin", "hypercube", "saltelli", "sobol", "halton", "sampler", "canonical json", "canonical", "content hash", "sha256", "sha-256", "rfc 8785", "jcs", "stable stringify"],
+    signatures: ["mulberry32", "splitmix[A-Za-z0-9]*", "xorshift[A-Za-z0-9]*", "sfc32", "xoshiro[A-Za-z0-9]*", "fnv1a[A-Za-z0-9]*", "deriveSeed", "seededRandom", "seededRng", "makeRng", "createRng", "canonicalJson", "canonicalHash", "sha256Hex", "stableStringify", "canonicalStringify"],
   },
   {
     area: "bench",
