@@ -200,6 +200,10 @@ A gate that is only about some files (a bench of the core, a corpus) starts on e
 
 - `changes` reads the files of the pull request and gives `match`. It has the patterns of `on.pull_request.paths`: `*` does not match `/`, `**` matches each part of a path, and `!` takes files out. Each event other than a pull request is a match.
 - `gate-summary` is the step of the summary job. It passes when each job passed. When `changes` gives `match: false`, a skipped gate job passes too. A failure, a cancel or another skip fails it.
+- A skip is green only after a pass. Give each job that `allow-skip` names a line `<job id>=<check name>` in `last-result`, and give the summary job `checks: read`. A skip of that job then reads the last result of its check on the commit:
+  - A pass passes, and a failure fails the summary.
+  - With no result on the commit, the line says `no read` and the step writes a warning. A no read is not a pass.
+  - The check of a matrix job is each entry, `<check name> <entry>`. A skip, a cancel or a run in progress decides nothing, so the read goes back to the last run that decided.
 
 ```yaml
 on:

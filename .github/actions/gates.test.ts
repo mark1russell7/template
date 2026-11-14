@@ -19,8 +19,15 @@ function jq(args: readonly string[], input: string): string {
 const match = (files: readonly string[], paths: string, ignore = ""): string =>
   jq(["-R", "-s", "-r", "--arg", "paths", paths, "--arg", "ignore", ignore, "-f", join(here, "changes", "match.jq")], files.join("\n"));
 
-const verdict = (needs: Record<string, unknown>, allow = ""): string =>
-  jq(["-r", "--arg", "changes", "changes", "--arg", "allow", allow, "-f", join(here, "gate-summary", "summary.jq")], JSON.stringify(needs));
+const verdict = (needs: Record<string, unknown>, allow = "", last?: Record<string, unknown>): string =>
+  jq(
+    ["-r", "--arg", "changes", "changes", "--arg", "allow", allow, ...(last === undefined ? [] : ["--argjson", "last", JSON.stringify(last)]), "-f", join(here, "gate-summary", "summary.jq")],
+    JSON.stringify(needs),
+  );
+
+/** This function gives the last result of the check `check` in the check runs `runs` of a commit, from last.jq. */
+const lastOf = (runs: readonly unknown[], check: string): Record<string, unknown> =>
+  JSON.parse(jq(["-c", "--arg", "check", check, "-f", join(here, "gate-summary", "last.jq")], JSON.stringify(runs))) as Record<string, unknown>;
 
 const failed = (out: string): boolean => out.split("\n").some((line) => line.startsWith("FAIL"));
 
@@ -75,4 +82,68 @@ describe("gate-summary: the verdict of the jobs", { skip }, () => {
       assert.equal(failed(verdict(needs, allow)), !pass);
     });
   }
+});
+
+describe("gate-summary: a skip reads the last result of its check on the commit", { skip }, () => {
+  const run = (id: number, name: string, conclusion: string | null, at: string, status = "completed"): unknown => ({
+    name,
+    status,
+    conclusion,
+    completed_at: at,
+    details_url: `https://github.com/o/r/actions/runs/${String(id)}/job/${String(id * 10)}`,
+  });
+
+  it("gives no result for a commit with no check of the job", () => {
+    assert.deepEqual(lastOf([], "Speed gates"), { result: "none" });
+    assert.deepEqual(lastOf([run(1, "Other", "failure", "2026-11-01T00:00:00Z")], "Speed gates"), { result: "none" });
+  });
+
+  it("reads each entry of a matrix in the newest run that decided", () => {
+    const runs = [
+      run(1, "Speed gates 1", "failure", "2026-11-01T00:00:00Z"),
+      run(2, "Speed gates 1", "success", "2026-11-02T00:00:00Z"),
+      run(2, "Speed gates 2", "success", "2026-11-02T00:01:00Z"),
+    ];
+    assert.deepEqual(lastOf(runs, "Speed gates"), { run: "2", at: "2026-11-02T00:01:00Z", checks: 2, result: "success" });
+    const failed = [...runs, run(3, "Speed gates (1)", "success", "2026-11-03T00:00:00Z"), run(3, "Speed gates (2)", "failure", "2026-11-03T00:01:00Z")];
+    assert.equal(lastOf(failed, "Speed gates").result, "failure");
+  });
+
+  it("goes back over a skip, a cancel and a run in progress, because they decide nothing", () => {
+    const runs = [
+      run(1, "Speed gates 1", "failure", "2026-11-01T00:00:00Z"),
+      run(2, "Speed gates ${{ matrix.rep }}", "skipped", "2026-11-02T00:00:00Z"),
+      run(3, "Speed gates 1", "cancelled", "2026-11-03T00:00:00Z"),
+      run(4, "Speed gates 1", null, "2026-11-04T00:00:00Z", "in_progress"),
+    ];
+    assert.deepEqual(lastOf(runs, "Speed gates"), { run: "1", at: "2026-11-01T00:00:00Z", checks: 1, result: "failure" });
+  });
+
+  it("does not read the summary job <check> OK as an entry of the check", () => {
+    const runs = [run(1, "gates", "success", "2026-11-01T00:00:00Z"), run(2, "gates OK", "failure", "2026-11-02T00:00:00Z")];
+    assert.equal(lastOf(runs, "gates").result, "success");
+  });
+
+  const needs = { changes: { result: "success", outputs: { match: "true" } }, gates: { result: "skipped", outputs: {} } };
+  const read = (result: string): Record<string, unknown> => ({ gates: { result, run: "7", sha: "0123456789abcdef", check: "Speed gates", why: "HTTP 403" } });
+  it("passes a skip after a pass, and fails it after a failure or with no read of the checks", () => {
+    assert.equal(failed(verdict(needs, "", read("success"))), false);
+    assert.match(verdict(needs, "", read("success")), /^ok gates: skipped, and the last result of "Speed gates" on 0123456 passed \(run 7\)$/m);
+    assert.equal(failed(verdict(needs, "", read("failure"))), true);
+    assert.equal(failed(verdict(needs, "gates", read("failure"))), true);
+    assert.equal(failed(verdict(needs, "", read("timed_out"))), true);
+    assert.match(verdict(needs, "", read("error")), /^FAIL gates: skipped, and the check runs of 0123456 cannot be read: HTTP 403$/m);
+  });
+
+  it("gives a no read, not a pass, for a skip with no result on the commit", () => {
+    const out = verdict(needs, "", read("none"));
+    assert.equal(failed(out), false);
+    assert.match(out, /^no read gates: skipped, and 0123456 has no result of "Speed gates"$/m);
+    assert.doesNotMatch(out, /^ok gates/m);
+  });
+
+  it("keeps the pass of a pull request that changes no file of the gate", () => {
+    const nomatch = { ...needs, changes: { result: "success", outputs: { match: "false" } } };
+    assert.match(verdict(nomatch, "", read("none")), /^ok gates: skipped, the pull request changes no file of the gate$/m);
+  });
 });
