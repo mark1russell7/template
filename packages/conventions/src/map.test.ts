@@ -60,6 +60,10 @@ describe("the search", () => {
     expect(findHomes("latitude longitude")[0]?.area).toBe("geography");
     expect(findHomes("common alerting protocol")[0]?.area).toBe("alerts");
     expect(findHomes("escalation")[0]?.area).toBe("alerts");
+    expect(findHomes("canonical json")[0]?.area).toBe("random");
+    expect(findHomes("content hash")[0]?.area).toBe("random");
+    expect(findHomes("orientation")[0]?.area).toBe("exact-math");
+    expect(findHomes("sqlite")[0]?.area).toBe("local-database");
     expect(findHomes("nothing-like-this")).toEqual([]);
     expect(findHomes("")).toBe(HOMES);
   });
