@@ -26,8 +26,8 @@ const verdict = (needs: Record<string, unknown>, allow = "", last?: Record<strin
   );
 
 /** This function gives the last result of the check `check` in the check runs `runs` of a commit, from last.jq. */
-const lastOf = (runs: readonly unknown[], check: string): Record<string, unknown> =>
-  JSON.parse(jq(["-c", "--arg", "check", check, "-f", join(here, "gate-summary", "last.jq")], JSON.stringify(runs))) as Record<string, unknown>;
+const lastOf = (runs: readonly unknown[], check: string): { result: string; run?: string; at?: string; checks?: number } =>
+  JSON.parse(jq(["-c", "--arg", "check", check, "-f", join(here, "gate-summary", "last.jq")], JSON.stringify(runs))) as { result: string; run?: string; at?: string; checks?: number };
 
 const failed = (out: string): boolean => out.split("\n").some((line) => line.startsWith("FAIL"));
 
