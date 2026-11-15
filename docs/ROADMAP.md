@@ -1,12 +1,12 @@
 # Roadmap
 
-This file is the plan of the template. The Status page of the site reads it, and the tracker of the strategist mirrors it.
+This file is the plan of the template. The Status page of the site reads it.
 
 | ID | Item | Status | Summary |
 | --- | --- | --- | --- |
 | T1 | Gates fail closed | done, 2026-10-30 | The OK steps of the shared CI fail on a skip that `ALLOW_SKIP` does not name and on an empty `needs` (#85). conventions 0.5.0 adds `typed-files` and `tests-required` (#86). conventions 0.6.0 adds `roadmap-parses` (#87). |
 | T2 | A site with no roadmap fails | done, 2026-10-30 | conventions 0.7.0 (#88): `roadmap-parses` fails on a call of `reusable-pages.yml` with no `roadmap`. Before, the rule skipped it, and the Status page of the site showed no item of the plan. |
-| T3 | Each repository on the newest conventions | in progress | Each repository of the fleet takes the newest `@mark1russell7/conventions` and passes `check:conventions` on `main`. The strategist checks each one on `main`. |
+| T3 | Each repository on the newest conventions | in progress | Each repository that uses the conventions takes the newest `@mark1russell7/conventions` and passes `check:conventions` on `main`. The maintainer checks each one on `main`. |
 | T4 | The runner budget as a rule | done, 2026-11-01 | conventions 0.8.0 adds the rule `runner-budget` (#92). Each matrix has a `max-parallel` of 3 or less, and each workflow has a concurrency group. The minute of each schedule comes from a hash of the repository and the file. Before, each repository copied the weekly scan of `security.yml` at `23 5 * * 1`, so all scans started at the same minute. conventions 0.8.1 (#95) accepts a schedule that starts more than once in each hour, at equal steps from the minute (`18,48`). Next, each repository takes 0.8.1 (T3). |
 | T5 | The site of the template | done, 2026-11-02 | `pages.yml` deploys the site of the template: the home page, the Releases page and the Status page. It uses `reusable-pages.yml` of its own commit. Since 11-02, the home page is the Vite build of `packages/site`. It shows the files of each preset of the CLI and which steps of a shared workflow run. The site check examines it on each pull request. |
 | T6 | The check CI OK is necessary on main | waiting on Mark | The ruleset of `main` needs the summary checks, for example CI OK. Mark starts `scripts/workflows/ruleset-ci-ok.ts --only-summary --apply`, because a ruleset is a setting of the repository. With `--only-summary` (#94), the script also removes the per-job checks that CI OK covers. Then a repository can join or split its CI jobs. |

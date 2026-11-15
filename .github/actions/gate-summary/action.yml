@@ -14,6 +14,18 @@ inputs:
   allow-skip:
     description: The ids of jobs that may be skipped even when the gate runs, separated by spaces (for example a job of one event only).
     default: ""
+  last-result:
+    description: >-
+      One line for each job that may be skipped, "<job id>=<check name>". A skip of such a job reads the last result of
+      its check on the commit: a pass passes, a failure fails, and no result is a no read with a warning. The check of a
+      matrix job is each entry "<check name> <entry>". The job needs the permission "checks: read".
+    default: ""
+  sha:
+    description: The commit of the last results. A pull request reads its head commit, because its checks are there.
+    default: ${{ github.event.pull_request.head.sha || github.sha }}
+  token:
+    description: The token that reads the check runs of the commit.
+    default: ${{ github.token }}
 runs:
   using: composite
   steps:
@@ -23,8 +35,37 @@ runs:
         NEEDS: ${{ inputs.needs }}
         CHANGES: ${{ inputs.changes }}
         ALLOW_SKIP: ${{ inputs.allow-skip }}
+        LAST_RESULT: ${{ inputs.last-result }}
+        SHA: ${{ inputs.sha }}
+        GH_TOKEN: ${{ inputs.token }}
       run: |
-        printf '%s' "$NEEDS" | jq -r --arg changes "$CHANGES" --arg allow "$ALLOW_SKIP" -f "$GITHUB_ACTION_PATH/summary.jq" > verdict
+        # A skip is green only after a pass: each skipped job of last-result reads the last result of its check.
+        last='{}'
+        checks=""
+        read_error=""
+        while IFS= read -r line; do
+          line="${line#"${line%%[![:space:]]*}"}"
+          line="${line%"${line##*[![:space:]]}"}"
+          [ -z "$line" ] && continue
+          id="${line%%=*}"
+          check="${line#*=}"
+          if [ "$(printf '%s' "$NEEDS" | jq -r --arg id "$id" '.[$id].result // "none"')" != skipped ]; then continue; fi
+          if [ -z "$checks" ]; then
+            checks="$RUNNER_TEMP/gate-summary-checks.jsonl"
+            if gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$SHA/check-runs?per_page=100&filter=all" --jq '.check_runs[]' > "$checks" 2> "$checks.err"; then
+              read_error=""
+            else
+              read_error="$(head -n 1 "$checks.err")"
+            fi
+          fi
+          if [ -n "$read_error" ]; then
+            result="$(jq -n --arg why "$read_error" '{result: "error", why: $why}')"
+          else
+            result="$(jq -s --arg check "$check" -f "$GITHUB_ACTION_PATH/last.jq" "$checks")"
+          fi
+          last="$(jq -n --argjson acc "$last" --arg id "$id" --argjson read "$result" --arg sha "$SHA" --arg check "$check" '$acc + {($id): ($read + {sha: $sha, check: $check})}')"
+        done <<< "$LAST_RESULT"
+        printf '%s' "$NEEDS" | jq -r --arg changes "$CHANGES" --arg allow "$ALLOW_SKIP" --argjson last "$last" -f "$GITHUB_ACTION_PATH/summary.jq" > verdict
         cat verdict
         {
           echo "### $GITHUB_WORKFLOW"
@@ -33,6 +74,14 @@ runs:
           cat verdict
           echo '```'
         } >> "$GITHUB_STEP_SUMMARY"
+        # A no read is never a pass: it shows as a warning on the check.
+        title="No read in $GITHUB_WORKFLOW"
+        title="${title//%/%25}"
+        title="${title//:/%3A}"
+        title="${title//,/%2C}"
+        while IFS= read -r line; do
+          echo "::warning title=$title::${line#no read }"
+        done < <(grep '^no read' verdict || true)
         if grep -q '^FAIL' verdict; then
           grep '^FAIL' verdict | sed 's/^FAIL /::error::/'
           exit 1

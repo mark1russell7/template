@@ -35,9 +35,9 @@ export interface Home {
   readonly note?: string;
 }
 
-/** The rule of the map. Each session and each review applies it. */
-export const MAP_RULE =
-  "Before you write a helper, find its home in this map. If the home does not have the function, add it to the home, in a pull request of the home repository. Do not make a local copy, a new package or a new repository for an area that has a home: that needs the strategist. A home that is not on npm is used with workspace:* or a github: specifier pinned to a commit. If no area fits, ask the strategist for a home before you write the code.";
+/** The rule of the map. Each change and each review applies it. */
+export const MAP_RULE: string =
+  "Before you write a helper, find its home in this map. If the home does not have the function, add it to the home, in a pull request of the home repository. Do not make a local copy, a new package or a new repository for an area that has a home: that needs the maintainer. A home that is not on npm is used with workspace:* inside its own repository. In another repository, a github: specifier pinned to a commit works only for a package that keeps its built files in git. For any other package, wait for its first npm publish (ask the maintainer). If no area fits, ask the maintainer for a home before you write the code.";
 
 /** The public homes. Each package that other code can use has one area. */
 export const HOMES: readonly Home[] = [
@@ -55,13 +55,13 @@ export const HOMES: readonly Home[] = [
   {
     area: "random",
     title: "Seeded random and generated inputs",
-    covers: "seeded random numbers, seeds from names, hashes for seeds, draws, input families with dimensions and ranges",
+    covers: "seeded random numbers, seeds from names, hashes for seeds, canonical JSON (RFC 8785) and content hashes (SHA-256), draws, input families with dimensions and ranges",
     packages: ["@mark1russell7/rigor-generators"],
     repo: "mark1russell7/rigor",
     alsoIn: ["mark1russell7/algebra", "mark1russell7/math"],
     state: "published",
-    words: ["seed", "prng", "mulberry32", "fnv", "hash", "shuffle", "sample", "fixture", "generator", "random", "rng", "seeded", "xorshift", "splitmix", "latin", "hypercube", "saltelli", "sobol", "halton", "sampler"],
-    signatures: ["mulberry32", "splitmix[A-Za-z0-9]*", "xorshift[A-Za-z0-9]*", "sfc32", "xoshiro[A-Za-z0-9]*", "fnv1a[A-Za-z0-9]*", "deriveSeed", "seededRandom", "seededRng", "makeRng", "createRng"],
+    words: ["seed", "prng", "mulberry32", "fnv", "hash", "shuffle", "sample", "fixture", "generator", "random", "rng", "seeded", "xorshift", "splitmix", "latin", "hypercube", "saltelli", "sobol", "halton", "sampler", "canonical json", "canonical", "content hash", "sha256", "sha-256", "rfc 8785", "jcs", "stable stringify"],
+    signatures: ["mulberry32", "splitmix[A-Za-z0-9]*", "xorshift[A-Za-z0-9]*", "sfc32", "xoshiro[A-Za-z0-9]*", "fnv1a[A-Za-z0-9]*", "deriveSeed", "seededRandom", "seededRng", "makeRng", "createRng", "canonicalJson", "canonicalHash", "sha256Hex", "stableStringify", "canonicalStringify"],
   },
   {
     area: "bench",
@@ -81,18 +81,18 @@ export const HOMES: readonly Home[] = [
     repo: "mark1russell7/rigor",
     state: "planned",
     words: ["test", "testing", "property", "fast-check", "arbitrary", "pairwise", "metamorphic", "chaos", "load", "fake", "fastcheck", "covering", "combinatorial", "fault", "injection", "soak", "stress", "throughput", "shrink", "capture", "in-memory", "exporter", "testkit"],
-    note: "@mark1russell7/vex-testkit is only for Vex domains. A fake shell for tests is in @procedures/shell. The capture of the OpenTelemetry SDK for tests (captureTelemetry) and the propagation gate are in @mark1russell7/rigor-testkit, entries /otel and /propagation.",
+    note: "@mark1russell7/vex-testkit is only for Vex domains. A fake shell for tests is in @procedures/shell. The capture of the OpenTelemetry SDK for tests (captureTelemetry) and the propagation gate are in @mark1russell7/rigor-testkit, entries /otel and /propagation. Seeded fault plans (delay, cut, reset, split frame, reorder, duplicate, stall) are data in @mark1russell7/rigor-chaos, next to its load schedules. The proxy that applies a plan to TCP, WebSocket and HTTP streams and records each fault is @mark1russell7/rigor-proxy, in mark1russell7/rigor.",
   },
   {
     area: "exact-math",
     title: "Expressions and exact arithmetic",
-    covers: "expression documents, exact rationals, floats with error bounds, intervals, robust geometric predicates (orientation, in-circle)",
-    packages: ["@mark1russell7/expression", "@mark1russell7/rational"],
+    covers: "expression documents, exact rationals, floats with error bounds, intervals, robust geometric predicates (orientation, in-circle, segment intersection)",
+    packages: ["@mark1russell7/predicates", "@mark1russell7/rational", "@mark1russell7/expression"],
     repo: "mark1russell7/algebra",
-    state: "unpublished",
-    words: ["math", "arithmetic", "rational", "bigint", "interval", "error bound", "predicate", "orientation", "symbolic", "exact"],
-    signatures: ["orient2d", "orientation", "inCircle", "incircle"],
-    note: "Statistics go to rigor-statistics, and geometry records go to layout-contract. There is no math package.",
+    state: "published",
+    words: ["math", "arithmetic", "rational", "bigint", "interval", "error bound", "predicate", "orientation", "segment intersection", "symbolic", "exact"],
+    signatures: ["orient2d", "orientation", "inCircle", "incircle", "classifySegments"],
+    note: "@mark1russell7/predicates and @mark1russell7/rational are on npm. @mark1russell7/expression is not on npm yet. Statistics go to rigor-statistics, and geometry records go to layout-contract. There is no math package.",
   },
   {
     area: "units",
@@ -137,16 +137,16 @@ export const HOMES: readonly Home[] = [
     area: "files",
     title: "Paths and files on Node.js",
     covers: "paths, home folder expansion, a path inside a folder, finding a file up the folders, glob matching, file walks with excludes: plain functions on node: modules only, for each general package. @procedures/fs builds on them",
-    packages: [],
+    packages: ["@mark1russell7/files"],
     repo: "mark1russell7/files",
-    state: "planned",
+    state: "published",
     words: ["path", "home folder", "expand home", "find up", "glob", "walk", "inside folder", "posix path"],
     signatures: ["expandHome", "findUp", "isInside", "globToRegExp", "matchesGlob"],
   },
   {
     area: "system-io",
     title: "Files, commands, git, GitHub and npm",
-    covers: "atomic file and JSON writes, globs, safe commands with argv and no shell, git, the GitHub CLI and API, npm registry lookups, HTTP requests, JSON, YAML and CSV, environment variables",
+    covers: "atomic file and JSON writes, globs, safe commands with argv and no shell, git, the GitHub CLI and API, npm registry lookups and the use measures of a package (weekly downloads, dependents from deps.dev, jsDelivr hits, each a pure request builder and extractor with the fetch as a parameter), HTTP requests, JSON, YAML and CSV, environment variables",
     packages: ["@procedures/fs", "@procedures/shell", "@procedures/git", "@procedures/gh", "@procedures/npm", "@procedures/http", "@procedures/json", "@procedures/env"],
     repo: "mark1russell7/client",
     state: "published",
@@ -157,13 +157,35 @@ export const HOMES: readonly Home[] = [
   {
     area: "headless-browser",
     title: "Headless browser runs",
-    covers: "finding the browser of the system, a headless run with argv, a temporary profile, a time limit and a signal, and its output: PDF files, screenshots in PNG or JPEG, page text",
-    packages: [],
+    covers: "finding the browser of the system and its profiles, reading the bookmark files of a profile, a headless run with argv, a temporary profile, a time limit and a signal, and its output: PDF files, screenshots in PNG or JPEG, page text",
+    packages: ["@procedures/browser"],
     repo: "mark1russell7/client",
-    state: "planned",
-    words: ["browser", "chromium", "chrome", "headless", "screenshot", "pdf", "print", "png", "jpeg", "puppeteer", "playwright"],
+    state: "published",
+    words: ["browser", "chromium", "chrome", "headless", "bookmark", "bookmarks", "chrome profile", "screenshot", "pdf", "print", "png", "jpeg", "puppeteer", "playwright"],
     signatures: ["findBrowser", "renderScreenshot"],
-    note: "The home is @procedures/browser (planned). Today findBrowser and renderPdf are in @procedures/pdf, which re-exports them from the new home when it ships.",
+    note: "@procedures/browser is in mark1russell7/client, and @procedures/pdf depends on it.",
+  },
+  {
+    area: "notifications",
+    title: "Push, text and voice notifications",
+    covers: "the request builder and the response extractor of each notification service, with the fetch as a parameter: ntfy, Pushover (the emergency priority with retry and expire, receipts, cancel), Twilio (text messages and voice calls); the send procedure",
+    packages: ["@procedures/notify"],
+    repo: "mark1russell7/client",
+    state: "published",
+    words: ["notify", "notification", "push", "push notification", "pushover", "ntfy", "twilio", "sms", "text message", "voice call", "critical alert"],
+    signatures: ["sendNotification", "sendPushover", "sendSms"],
+    note: "@procedures/notify is in mark1russell7/client. Pushover and Twilio are planned next to ntfy. The rules of who gets what and when (rank, route, escalate) go to the area alerts.",
+  },
+  {
+    area: "desktop",
+    title: "Desktop apps on Electron",
+    covers: "the safe defaults of the main process: the content security policy, window options with sandbox and context isolation, navigation and window-open rules, permission denial, the app:// protocol that serves a folder, Chromium net error codes, typed IPC checks",
+    packages: ["@mark1russell7/desktop"],
+    repo: "mark1russell7/desktop",
+    alsoIn: ["mark1russell7/template", "mark1russell7/pairrank"],
+    state: "published",
+    words: ["electron", "desktop", "csp", "content security policy", "ipc", "preload", "browserwindow", "app protocol"],
+    note: "The electron preset of template-cli still generates these functions in each app. Its next step is to import the package.",
   },
   {
     area: "cli",
@@ -199,13 +221,25 @@ export const HOMES: readonly Home[] = [
   {
     area: "geometry",
     title: "Geometry and layout records",
-    covers: "points, boxes, segments, tolerances, the input and record formats of the layout engines, converters",
+    covers: "points, boxes, segments, tolerances, space-filling curves (Hilbert, Moore, Morton) on a grid, 3D points, boxes and transforms (planned), the input and record formats of the layout engines, converters",
     packages: ["@mark1russell7/layout-contract"],
     repo: "mark1russell7/layout-contract",
     state: "published",
-    words: ["point", "rect", "box", "segment", "polygon", "tolerance", "overlap", "intersection", "bounds"],
-    signatures: ["segmentsIntersect", "segmentsCross", "segmentIntersection", "segmentsIntersection", "boxesOverlap", "rectsOverlap", "rectsIntersect", "pointInPolygon", "distanceToSegment", "pointSegmentDistance"],
+    words: ["point", "rect", "box", "segment", "polygon", "tolerance", "overlap", "intersection", "bounds", "curve", "space-filling", "hilbert", "moore", "morton", "z-order"],
+    signatures: ["segmentsIntersect", "segmentsCross", "segmentIntersection", "segmentsIntersection", "boxesOverlap", "rectsOverlap", "rectsIntersect", "pointInPolygon", "distanceToSegment", "pointSegmentDistance", "hilbertRank", "hilbertIndex", "hilbertCell", "d2xy", "xy2d", "mortonIndex", "mortonCode"],
     note: "Exact predicates go to algebra. @mark1russell7/vex-domains has 2D vectors for Vex formulas only.",
+  },
+  {
+    area: "geography",
+    title: "Places on the Earth",
+    covers: "WGS84 points (latitude and longitude), great-circle distance and bearing, the destination from a point, a point in a polygon on the Earth, polygon overlap, buffers, bounding boxes, geohash, GeoJSON: plain functions with no dependencies",
+    packages: [],
+    repo: "mark1russell7/geo",
+    alsoIn: ["mark1russell7/client"],
+    state: "planned",
+    words: ["geo", "geography", "latitude", "longitude", "lat lon", "wgs84", "great circle", "haversine", "bearing", "geohash", "geojson", "nearby", "radius km"],
+    signatures: ["greatCircleKm", "haversine[A-Za-z0-9]*", "geohash", "encodeGeohash", "decodeGeohash", "initialBearing"],
+    note: "The planned package is @mark1russell7/geo. @procedures/geo wraps it as procedures with the geocoding, the routes and the map tiles, and its greatCircleKm and geohash move to it. Points, boxes and polygons on a plane go to geometry (layout-contract).",
   },
   {
     area: "strategy-space",
@@ -216,6 +250,56 @@ export const HOMES: readonly Home[] = [
     repo: "mark1russell7/strategy-space",
     state: "published",
     words: ["strategy grammar", "strategy combinator", "operator format", "config id", "space enumeration", "distinctness gate", "racing", "seeded config sample"],
+  },
+  {
+    area: "search",
+    title: "Search and optimization over a space",
+    covers: "search over a strategy space: sweeps, genetic algorithms, many objectives and Pareto fronts, hard and soft constraints, a seed for each run, a record of each evaluation",
+    packages: [],
+    repo: "mark1russell7/strategy-space",
+    state: "planned",
+    words: ["optimizer", "optimize", "optimization", "genetic", "evolutionary", "pareto", "multi-objective", "sweep", "search", "annealing", "hill climb", "constraint solver", "tuning"],
+    note: "The planned package is @mark1russell7/strategy-search. It knows no domain. The local sweeps of the layout projects move to it.",
+  },
+  {
+    area: "market",
+    title: "Products, offers and price history",
+    covers: "a live catalog of products with the offers of many sellers, the price of each offer over time, trends, one adapter for each seller (the official API first)",
+    packages: [],
+    repo: "mark1russell7/market",
+    state: "planned",
+    words: ["price", "prices", "offer", "seller", "catalog", "product", "parts", "price history", "trend", "deal", "listing", "sku"],
+    note: "The planned packages are @mark1russell7/market and @mark1russell7/market-sources. Fetches go through polite-crawler, live loops through @mark1russell7/service, trend statistics through rigor-statistics.",
+  },
+  {
+    area: "cluster-design",
+    title: "Computer cluster design",
+    covers: "part classes and fit rules (socket, memory type, power supply), runner capacity, watts, heat, noise, circuit load, as formulas with units over a configuration",
+    packages: [],
+    repo: "mark1russell7/cluster-design",
+    state: "planned",
+    words: ["cluster", "hardware", "pc build", "socket", "psu", "watts", "circuit", "runner capacity", "heat", "noise", "rack", "compatibility"],
+    note: "It has no site facts and no prices: a site and part records are input data. Units come from quantity, roll-ups from Vex.",
+  },
+  {
+    area: "ci-runners",
+    title: "Self-hosted CI runners",
+    covers: "a dispatcher of one-job runners: sources of queued jobs, trust rules as data, a provider that makes one machine for each job (Proxmox first)",
+    packages: ["@mark1russell7/runner-dispatch"],
+    repo: "mark1russell7/runner-dispatch",
+    state: "published",
+    words: ["runner", "self-hosted", "jit", "just-in-time", "ephemeral runner", "workflow_job", "dispatcher", "proxmox", "scale set", "garm", "arc"],
+    note: "Loops go to @mark1russell7/service, the machine state machine to @mark1russell7/algebra. It has no site facts.",
+  },
+  {
+    area: "room-view",
+    title: "3D room viewer",
+    covers: "a three.js viewer of a room model (glTF) with placed objects, outlets and circuits as data",
+    packages: [],
+    repo: "mark1russell7/room-view",
+    state: "planned",
+    words: ["3d", "three.js", "threejs", "gltf", "room", "floor plan", "scene", "outlet", "blender", "viewer"],
+    note: "3D geometry records go to layout-contract.",
   },
   {
     area: "packing",
@@ -248,9 +332,9 @@ export const HOMES: readonly Home[] = [
     area: "text",
     title: "Text measurement and line breaking",
     covers: "Unicode segmentation, text widths from font tables, line breaking, incremental relayout after edits",
-    packages: [],
+    packages: ["@mark1russell7/typeset"],
     repo: "mark1russell7/typeset",
-    state: "planned",
+    state: "published",
     words: ["string", "unicode", "grapheme", "font", "width", "measure text", "line break", "wrap", "hyphen"],
     signatures: ["graphemes", "segmentGraphemes", "wrapText", "breakLines", "measureText", "textWidth", "stringWidth"],
     note: "Plain string helpers (escaping, case, padding, templates, English word forms) go to the area plain-text (mark1russell7/text).",
@@ -258,12 +342,12 @@ export const HOMES: readonly Home[] = [
   {
     area: "plain-text",
     title: "Plain text helpers",
-    covers: "escaping for HTML, attributes, regular expressions and Markdown, case conversion, padding and truncation, templates, English word forms (plurals, lists). Escaping comes first",
-    packages: [],
+    covers: "escaping for HTML, attributes, regular expressions and Markdown, case conversion, padding and truncation, templates, English word forms (plurals, lists), the text of a thrown value (it never throws), the redaction of known secrets in a text (the raw form, the URL form and the Basic form). Escaping comes first",
+    packages: ["@mark1russell7/text"],
     repo: "mark1russell7/text",
-    state: "planned",
-    words: ["escape", "html escape", "case", "camel case", "kebab case", "pad", "truncate", "template", "plural", "slug"],
-    signatures: ["escapeHtml", "escapeAttribute", "escapeRegExp", "escapeMarkdown", "kebabCase", "camelCase", "pascalCase", "snakeCase", "pluralize"],
+    state: "published",
+    words: ["escape", "word search", "count", "html escape", "case", "camel case", "kebab case", "pad", "truncate", "template", "plural", "slug", "redact", "secret", "mask", "error message", "thrown value"],
+    signatures: ["escapeHtml", "escapeAttribute", "escapeRegExp", "escapeMarkdown", "kebabCase", "camelCase", "pascalCase", "snakeCase", "pluralize", "redactSecrets", "errorMessage"],
   },
   {
     area: "language-kernel",
@@ -330,6 +414,18 @@ export const HOMES: readonly Home[] = [
     words: ["memory", "lease", "job", "queue", "load"],
   },
   {
+    area: "local-database",
+    title: "Databases on one computer",
+    covers: "SQLite through node:sqlite: WAL, synchronous and busy-timeout settings, migrations by user_version or by a version for each part of a file, BEGIN IMMEDIATE transactions, typed append-only event logs as grow-only sets, the fault kind and the action of each SQLite error, recovery of a broken or stuck file (integrity check, quarantine, salvage of a log, snapshot), the filter of the experimental warning",
+    packages: ["@mark1russell7/sqlite"],
+    repo: "mark1russell7/sqlite",
+    alsoIn: ["mark1russell7/headroom", "mark1russell7/crawler", "mark1russell7/pairrank"],
+    state: "published",
+    words: ["sqlite", "database", "event log", "migration", "wal", "user_version", "append-only", "transaction", "node:sqlite", "grow-only", "integrity check", "quarantine", "corrupt", "snapshot", "backup"],
+    signatures: ["openEventLog", "salvageEventLog", "sqliteFault", "openOrQuarantine", "quietSqliteWarning"],
+    note: "headroom (packages/core/src/store.ts), polite-crawler (docs.ts, hoststate.ts, vectors.ts and watch.ts in packages/polite-crawler/src) and pairrank (packages/store/src/log.ts) have their own WAL and migration code. They move to @mark1russell7/sqlite. Do not grow a local copy.",
+  },
+  {
     area: "releases",
     title: "Release order of the packages",
     covers: "the npm release and update plan in dependency order, provenance checks",
@@ -341,20 +437,31 @@ export const HOMES: readonly Home[] = [
   {
     area: "duplication",
     title: "The duplication atlas",
-    covers: "function shapes, clone classes, shared names and packages by purpose over all public repositories",
+    covers: "function shapes, clone classes, shared names and packages by purpose over all public repositories, and the static analysis of code for bugs, also in the repositories of others",
     packages: [],
     repo: "mark1russell7/codeatlas",
     state: "unpublished",
-    words: ["duplicate", "clone", "copy"],
+    words: ["duplicate", "clone", "copy", "static analysis", "analyzer"],
   },
   {
     area: "web-crawling",
-    title: "Web crawling",
-    covers: "polite fetches with robots.txt and one request per site, a store of fetched pages",
+    title: "Web crawling and API clients",
+    covers: "polite fetches with robots.txt and one request per site, a store of fetched pages, the host schedule and the action for each outcome (succeed, park until, stop for, count a failure), polite calls of documented APIs (each method, a body, no page store), OAuth 2.0 client-credentials tokens (one grant in flight, a margin before the end, a drop after a 401)",
     packages: ["polite-crawler", "polite-crawler-mcp"],
     repo: "mark1russell7/crawler",
     state: "published",
-    words: ["crawl", "scrape", "robots", "fetch page"],
+    words: ["crawl", "scrape", "robots", "fetch page", "api client", "http client", "oauth", "client credentials", "access token", "rate limit", "retry after", "host schedule"],
+    note: "Each package that calls the servers of others uses polite-crawler. The entry polite-crawler/api has the calls of documented APIs and the token store.",
+  },
+  {
+    area: "alerts",
+    title: "Alerts from many sources",
+    covers: "one event format based on CAP (the Common Alerting Protocol), a source adapter for each feed (describe, fetch, map, check), the merge of duplicate reports into one incident (idempotent and order-free), priority as a calculation, routes over channels with acknowledgement and escalation, the health and coverage of each source, the fault suite of the pipeline",
+    packages: [],
+    repo: "mark1russell7/alerts",
+    state: "planned",
+    words: ["alert", "alerts", "warning", "emergency", "cap", "common alerting protocol", "incident", "escalate", "escalation", "acknowledge", "severity", "urgency", "weather alert", "coverage", "heartbeat"],
+    note: "The planned packages are @mark1russell7/alerts (the core) and one package for each source and each channel. It knows no person and no place: the places and keys of a user are input data. Sending goes through @procedures/notify, fetches through polite-crawler, geography through @mark1russell7/geo, the service loop through @mark1russell7/service, fault tests through rigor-chaos and rigor-proxy.",
   },
 ];
 
@@ -406,7 +513,7 @@ export function mapMarkdown(homes: readonly Home[] = HOMES): string {
 
 /** This function writes the homes as plain text for a terminal. */
 export function mapText(homes: readonly Home[]): string {
-  if (homes.length === 0) return "No area matches. Ask the strategist for a home before you write the code.\n";
+  if (homes.length === 0) return "No area matches. Ask the maintainer for a home before you write the code.\n";
   return homes
     .map((home) => {
       const where = home.packages.length > 0 ? home.packages.join(", ") : home.repo;
