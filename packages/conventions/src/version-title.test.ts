@@ -165,3 +165,59 @@ describe("version-title on a pull request", () => {
     expect(check(root, { env: event("pull_request", {}) }).status).toBe("skipped");
   });
 });
+
+describe("version-title on a dispatched run of a pull request", () => {
+  /** This function writes the file of CONVENTIONS_PULL_REQUEST, and gives the environment of a dispatched run. */
+  function dispatched(pullRequest: unknown): Record<string, string> {
+    const file = join(temp, `pull-request-${String(fixtures++)}.json`);
+    writeFileSync(file, JSON.stringify(pullRequest));
+    return { ...event("workflow_dispatch", { ref: "refs/heads/pr" }), CONVENTIONS_PULL_REQUEST: file };
+  }
+
+  /**
+   * This function makes the checkout of a gate of the queue: main has #212 (0.3.3), and the branch `pr` sets
+   * `branchVersion`. With `merged`, the queue merged main into the branch first. HEAD is the head of the branch, and the
+   * function gives the tip of main.
+   */
+  function branchOf215(branchVersion: string, merged: boolean): { root: string; main: string } {
+    const { root } = repository();
+    git(root, "switch", "-q", "-c", "pr");
+    commit(root, "the lag follows the first parent", { [PACKAGE]: manifest(branchVersion), "packages/site-pages/src/github.ts": "export const lag = 2;\n" });
+    git(root, "switch", "-q", "main");
+    const main = commit(root, TITLE_212, { [PACKAGE]: manifest("0.3.3") });
+    git(root, "switch", "-q", "pr");
+    if (merged) git(root, "merge", "-q", "--no-ff", "-X", "ours", "-m", "merge main", "main");
+    return { root, main };
+  }
+
+  const TITLE = "fix(site-pages): githubReleaseLag follows the first-parent line (0.3.3)";
+
+  it("fails #215 after the queue merged main into the branch: main has 0.3.3 already", () => {
+    const { root, main } = branchOf215("0.3.3", true);
+    const result = check(root, { base: main, env: dispatched({ title: TITLE, body: "", commits: 2 }) });
+    expect(result.status).toBe("break");
+    expect(result.breaks[0]?.message).toBe(
+      `The pull request has the title "${TITLE}", which names 0.3.3, but it sets no version. The release workflow starts only on a change of a version, so the change gets no release.`,
+    );
+  });
+
+  it("fails #215 with no merge of main too: a merge into main would set no version", () => {
+    const { root, main } = branchOf215("0.3.3", false);
+    expect(check(root, { base: main, env: dispatched({ title: TITLE }) }).status).toBe("break");
+  });
+
+  it.each([true, false])("passes when the branch sets the next free version (merge of main: %s)", (merged) => {
+    const { root, main } = branchOf215("0.3.4", merged);
+    expect(check(root, { base: main, env: dispatched({ title: "fix(site-pages): the lag (0.3.4)" }) }).status).toBe("pass");
+    expect(check(root, { base: main, env: dispatched({ title: "fix(site-pages): the lag" }) }).status).toBe("pass");
+  });
+
+  it("skips when the file has no title, and examines the commits when no file names the pull request", () => {
+    const { root, main } = branchOf215("0.3.3", true);
+    expect(check(root, { base: main, env: dispatched({ body: "no title" }) }).status).toBe("skipped");
+    const missing = { ...event("workflow_dispatch", {}), CONVENTIONS_PULL_REQUEST: join(temp, "no-such-file.json") };
+    expect(check(root, { base: main, env: missing }).note).toMatch(/CONVENTIONS_PULL_REQUEST has no title/);
+    // With no file, the rule examines each commit of --base: no commit title names a version
+    expect(check(root, { base: main, env: event("workflow_dispatch", {}) }).status).toBe("pass");
+  });
+});

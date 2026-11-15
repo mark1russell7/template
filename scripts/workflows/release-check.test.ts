@@ -61,15 +61,22 @@ describe("the release check", () => {
     assert.doesNotMatch(build, /RELEASE_PENDING/u);
   });
 
-  it("runs in reusable-ci.yml only on a pull request, and in a private repository only with release-check-private", () => {
+  it("runs in reusable-ci.yml only on a pull request or on the pull request of a dispatched run, and in a private repository only with release-check-private", () => {
     const job = jobText(ci, "release-check");
-    const guard = /\n    if: (.+)\n/u.exec(job)?.[1] ?? "";
-    // A release run (release.yml) starts no pull_request event, so it does not start the job
-    assert.ok(guard.includes("github.event_name == 'pull_request'"), `The guard "${guard}" has the pull_request part.`);
+    // The guard is on one line, or in a folded block of more lines
+    const block = /\n    if: >-\n((?: {6}.*\n)+)/u.exec(job)?.[1];
+    const guard = (block ?? /\n    if: (.+)\n/u.exec(job)?.[1] ?? "").replace(/\s+/gu, " ").trim();
+    // A release run (release.yml) starts no pull_request event and the job pull does not start on the default branch, so
+    // it does not start the job. A dispatched run starts it only for the pull request that the job pull found.
+    assert.ok(guard.includes("github.event_name == 'pull_request' || needs.pull.outputs.found == 'true'"), `The guard "${guard}" has the pull request part.`);
     assert.match(guard, /&& inputs\.release-check(?: |$)/u, `The guard "${guard}" has the input release-check.`);
     // A private repository pays for each job start, so the job starts there only when the caller asks for it
     assert.ok(guard.includes("&& (!github.event.repository.private || inputs.release-check-private)"), `The guard "${guard}" has the private part.`);
-    assert.equal(guard, "github.event_name == 'pull_request' && inputs.release-check && (!github.event.repository.private || inputs.release-check-private)");
+    assert.equal(
+      guard,
+      "${{ !cancelled() && inputs.release-check && (github.event_name == 'pull_request' || needs.pull.outputs.found == 'true') && (!github.event.repository.private || inputs.release-check-private) }}",
+    );
+    assert.match(job, /\n    needs: pull\n/u);
     assert.match(ci, /\n      release-check-private:\n(?: {8}.*\n)+? {8}type: boolean\n {8}default: false\n/u);
     assert.match(job, /uses: \.\/\.release-template\/\.github\/actions\/release-check\n/u);
     assert.match(job, /working-directory: \$\{\{ \(inputs\.working-directory == '\.' .*&& 'repo' \|\| format\('repo\/\{0\}', inputs\.working-directory\) \}\}/u);
