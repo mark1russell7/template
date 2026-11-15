@@ -6,8 +6,13 @@
 # BEHIND (update-branch), and then starts the workflows of the required checks on the new head with workflow_dispatch.
 # An update with GITHUB_TOKEN starts no pull_request run, but GITHUB_TOKEN can start workflow_dispatch.
 #
+# A summary check such as "CI OK" gets its check run only when the jobs that it needs end. When a required check has no
+# check run on the old head, the job reads the workflows that are still in progress on that head, and starts each one that
+# has a job of that name.
+#
 # With strict off, no pull request is BEHIND, and the job changes nothing. The logic is in scripts/workflows/queue.ts of
-# the template commit of this workflow. The job does no checkout of the repository and starts none of its code.
+# the template commit of this workflow. The job does no checkout of the repository and starts none of its code. In a
+# private repository, the job starts only when the input private is true, because a private repository pays for each job.
 #
 # A repository calls it from its queue.yml:
 #
@@ -30,6 +35,12 @@ on:
           job starts the workflows of a pull request only after its head changed.
         type: number
         default: 90
+      private:
+        description: >-
+          The job starts in a private repository only when this input is true. A private repository pays for each job start,
+          and the job starts on each push to main and on each auto-merge, also when no pull request is behind.
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -41,8 +52,12 @@ env:
 jobs:
   queue:
     name: Queue
-    # A pull request from a fork gets a token that cannot write, and the queue takes no pull request from a fork
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # A pull request from a fork gets a token that cannot write, and the queue takes no pull request from a fork.
+    # github.event.repository.private is in each push, pull_request and workflow_dispatch payload. In a called workflow,
+    # github is the context of the caller.
+    if: >-
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+      && (!github.event.repository.private || inputs.private)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # contents and pull-requests: update-branch. actions: workflow_dispatch and the workflow runs. checks: the check runs.

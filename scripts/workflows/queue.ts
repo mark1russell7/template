@@ -8,7 +8,10 @@
 //   1. It reads the required checks of the rules of the default branch, and the open pull requests into that branch.
 //      While GitHub has not computed the merge state of a queued pull request (UNKNOWN), it reads them again, a few times.
 //   2. For each queued pull request (auto-merge on, not a draft, not from a fork) that is BEHIND, it reads the check runs
-//      of the required checks on the head, and the workflow file of the run of each check.
+//      of the required checks on the head, and the workflow file of the run of each check. A summary check such as
+//      "CI OK" gets its check run only when the jobs that it needs end, so a required check can have no check run yet.
+//      For such a check, it reads the workflow runs that are still in progress on the head, and the job names of their
+//      files: a workflow in progress that has a job of that name gives the check.
 //   3. plan() gives the actions: update each such pull request, then start the workflows of its required checks. plan()
 //      is a pure function, so the tests give it states and check runs, and read the actions.
 //   4. execute() merges the default branch into each pull request (update-branch with expected_head_sha). An update with
@@ -61,6 +64,14 @@ export interface NoRead {
   readonly why: string;
 }
 
+/** A workflow with a run in progress on the old head of a pull request, and the check names of the jobs of its file. */
+export interface InflightWorkflow {
+  readonly id: number;
+  readonly path: string;
+  /** The check name of each job of the file (its name, or its id when it has no name), or null when the file cannot be read. */
+  readonly checks: readonly string[] | null;
+}
+
 /** The action of the queue for one queued pull request. */
 export type Action =
   | { readonly kind: "skip"; readonly pull: number; readonly mergeState: string; readonly why: string; readonly noRead: boolean }
@@ -99,18 +110,76 @@ export function requiredChecks(rules: readonly unknown[]): { checks: string[]; s
   return { checks, strict };
 }
 
+/** This function gives the value of a plain, single-quoted or double-quoted YAML scalar on one line, with no comment. */
+function scalar(raw: string): string {
+  const double = /^"((?:[^"\\]|\\.)*)"/.exec(raw);
+  if (double) return (double[1] ?? "").replace(/\\(.)/g, "$1");
+  const single = /^'((?:[^']|'')*)'/.exec(raw);
+  if (single) return (single[1] ?? "").replace(/''/g, "'");
+  return raw.replace(/\s+#.*$/, "").trim();
+}
+
+/**
+ * This function gives the check name of each job of a workflow file: the value of its key `name`, or its id when it has no
+ * name. It reads the block `jobs:` by its indentation, so the names of steps and of the workflow are not in the list. A
+ * name of a matrix job (with `${{ }}`) stays as it is, so it is equal to no check name.
+ */
+export function jobChecks(text: string): string[] {
+  const lines = text.split(/\r?\n/);
+  const start = lines.findIndex((line) => /^jobs:[ \t]*(?:#.*)?$/.test(line));
+  if (start < 0) return [];
+  const checks: string[] = [];
+  let jobIndent = -1;
+  let job: { id: string; name: string | null; indent: number } | null = null;
+  const close = (): void => {
+    if (job !== null) checks.push(job.name ?? job.id);
+  };
+  for (const line of lines.slice(start + 1)) {
+    if (/^\s*(?:#.*)?$/.test(line)) continue;
+    const indent = line.length - line.trimStart().length;
+    if (indent === 0) break;
+    if (jobIndent < 0) jobIndent = indent;
+    if (indent <= jobIndent) {
+      close();
+      const key = /^\s+([A-Za-z_][\w-]*):[ \t]*(?:#.*)?$/.exec(line);
+      job = indent === jobIndent && key ? { id: key[1] ?? "", name: null, indent: -1 } : null;
+      continue;
+    }
+    if (job === null) continue;
+    if (job.indent < 0) job.indent = indent;
+    if (indent !== job.indent || job.name !== null) continue;
+    const name = /^\s+name:[ \t]*(.*)$/.exec(line);
+    if (name) job.name = scalar(name[1] ?? "");
+  }
+  close();
+  return [...new Set(checks)];
+}
+
 /**
  * This function gives the workflows that give the required checks, from the check runs of the old head of a pull request.
- * It joins the checks of one workflow into one dispatch. A required check with no check run of GitHub Actions that has a
- * workflow file of the repository is a no read.
+ * It joins the checks of one workflow into one dispatch. For a required check with no check run, a workflow in progress on
+ * the old head with a job of that name gives the check. A required check with no check run of GitHub Actions that has a
+ * workflow file of the repository, and no such workflow in progress, is a no read.
  */
-export function gateWorkflows(required: readonly string[], runs: readonly GateRun[], oldSha: string): { dispatch: Dispatch[]; noRead: NoRead[] } {
+export function gateWorkflows(required: readonly string[], runs: readonly GateRun[], oldSha: string, inflight: readonly InflightWorkflow[] = []): { dispatch: Dispatch[]; noRead: NoRead[] } {
   const byWorkflow = new Map<number, { path: string; checks: string[] }>();
   const noRead: NoRead[] = [];
+  const add = (file: { readonly id: number; readonly path: string }, check: string): void => {
+    const entry = byWorkflow.get(file.id) ?? { path: file.path, checks: [] };
+    if (!entry.checks.includes(check)) entry.checks.push(check);
+    byWorkflow.set(file.id, entry);
+  };
   for (const check of required) {
     const own = runs.filter((run) => run.check === check);
     if (own.length === 0) {
-      noRead.push({ check, why: `no check run on the old head ${short(oldSha)}` });
+      const givers = inflight.filter((workflow) => workflow.checks?.includes(check) === true);
+      for (const workflow of givers) add(workflow, check);
+      if (givers.length > 0) continue;
+      const unread = inflight.filter((workflow) => workflow.checks === null).map((workflow) => workflow.path);
+      let why = `no check run on the old head ${short(oldSha)}`;
+      if (inflight.length > unread.length) why += ", and no workflow in progress on it has a job of this name";
+      if (unread.length > 0) why += `, and the queue cannot read the file of the workflows in progress ${words(unread)}`;
+      noRead.push({ check, why });
       continue;
     }
     const actions = own.filter((run) => run.appId === ACTIONS_APP);
@@ -124,11 +193,7 @@ export function gateWorkflows(required: readonly string[], runs: readonly GateRu
       noRead.push({ check, why: path === undefined ? "the API gives no workflow run for its check suite" : `its workflow ${path} is not a file of the repository` });
       continue;
     }
-    for (const file of files) {
-      const entry = byWorkflow.get(file.id) ?? { path: file.path, checks: [] };
-      if (!entry.checks.includes(check)) entry.checks.push(check);
-      byWorkflow.set(file.id, entry);
-    }
+    for (const file of files) add(file, check);
   }
   const dispatch = [...byWorkflow.entries()].map(([workflowId, entry]) => ({ workflowId, path: entry.path, checks: entry.checks })).sort((a, b) => a.path.localeCompare(b.path));
   return { dispatch, noRead };
@@ -144,15 +209,15 @@ function skipReason(state: string): { why: string; noRead: boolean } {
 /**
  * This function gives the action of the queue for each queued pull request, in the order of the numbers. A pull request
  * that is BEHIND gets an update, then a dispatch of the workflows of its required checks. `runs` has the check runs of the
- * head of each such pull request, by number.
+ * head of each such pull request, by number, and `inflight` the workflows in progress on that head.
  */
-export function plan(pulls: readonly PullState[], required: readonly string[], runs: ReadonlyMap<number, readonly GateRun[]>): Action[] {
+export function plan(pulls: readonly PullState[], required: readonly string[], runs: ReadonlyMap<number, readonly GateRun[]>, inflight: ReadonlyMap<number, readonly InflightWorkflow[]> = new Map()): Action[] {
   return pulls
     .filter(queued)
     .sort((a, b) => a.number - b.number)
     .map((pull): Action => {
       if (pull.mergeState !== BEHIND) return { kind: "skip", pull: pull.number, mergeState: pull.mergeState, ...skipReason(pull.mergeState) };
-      const { dispatch, noRead } = gateWorkflows(required, runs.get(pull.number) ?? [], pull.headSha);
+      const { dispatch, noRead } = gateWorkflows(required, runs.get(pull.number) ?? [], pull.headSha, inflight.get(pull.number) ?? []);
       return { kind: "update", pull: pull.number, mergeState: pull.mergeState, ref: pull.headRef, expectedHeadSha: pull.headSha, dispatch, noRead };
     });
 }
@@ -327,6 +392,35 @@ export async function readGateRuns(api: Api, repository: string, sha: string, re
   return runs;
 }
 
+/**
+ * This function reads the workflows with a run that is not completed on a commit, and the check name of each job of the
+ * file of each such workflow at that commit. It reads each workflow one time. The list has the runs of each event: a run
+ * that an earlier queue run started is a run of workflow_dispatch. A file that the API does not give has no checks (null),
+ * so the checks that only it could give are a no read. A failed read of the runs throws.
+ */
+export async function readInflight(api: Api, repository: string, sha: string): Promise<InflightWorkflow[]> {
+  const found = new Map<number, InflightWorkflow>();
+  for (let pageNumber = 1; pageNumber <= 10; pageNumber += 1) {
+    const body = (await read(api, `repos/${repository}/actions/runs?head_sha=${sha}&per_page=100&page=${String(pageNumber)}`)) as {
+      total_count?: number;
+      workflow_runs?: readonly { workflow_id?: number; path?: string; status?: string }[];
+    };
+    const list = body.workflow_runs ?? [];
+    for (const run of list) {
+      if (run.status === "completed" || run.workflow_id === undefined || run.path === undefined || found.has(run.workflow_id)) continue;
+      // A path can end with the ref of a called file, and a dynamic workflow such as CodeQL has no file
+      const path = run.path.replace(/@.*$/, "");
+      if (!/^\.github\/workflows\/[^/]+\.ya?ml$/.test(path)) continue;
+      const file = await api.rest("GET", `repos/${repository}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${sha}`);
+      const content = file.body as { content?: unknown; encoding?: unknown } | null;
+      const checks = file.status === 200 && content?.encoding === "base64" && typeof content.content === "string" ? jobChecks(Buffer.from(content.content, "base64").toString("utf8")) : null;
+      found.set(run.workflow_id, { id: run.workflow_id, path, checks });
+    }
+    if (list.length < 100 || pageNumber * 100 >= (body.total_count ?? 0)) return [...found.values()];
+  }
+  throw new Error(`the commit ${short(sha)} has more than 1000 workflow runs`);
+}
+
 /** The result of the queue for one queued pull request. */
 export interface Outcome {
   readonly pull: number;
@@ -469,8 +563,14 @@ export async function runQueue(api: Api, input: QueueInput): Promise<Report> {
   const pulls = await readSettledPulls(api, repository, base, timing);
   const suites = new Map<number, GateRun["workflow"]>();
   const runs = new Map<number, readonly GateRun[]>();
-  for (const pull of pulls.filter((each) => queued(each) && each.mergeState === BEHIND)) runs.set(pull.number, await readGateRuns(api, repository, pull.headSha, checks, suites));
-  const actions = plan(pulls, checks, runs);
+  const inflight = new Map<number, readonly InflightWorkflow[]>();
+  for (const pull of pulls.filter((each) => queued(each) && each.mergeState === BEHIND)) {
+    const own = await readGateRuns(api, repository, pull.headSha, checks, suites);
+    runs.set(pull.number, own);
+    // A summary check gets its check run only when the jobs that it needs end, so it can have no check run yet
+    if (checks.some((check) => !own.some((run) => run.check === check))) inflight.set(pull.number, await readInflight(api, repository, pull.headSha));
+  }
+  const actions = plan(pulls, checks, runs, inflight);
   const outcomes = await execute(api, repository, actions, timing);
   return { base, required: checks, strict, others: pulls.length - actions.length, outcomes };
 }
