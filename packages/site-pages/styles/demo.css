@@ -85,9 +85,10 @@
   margin-top: 0;
 }
 
-/* A field: a label above its input, its text box or its range. */
+/* A field: a label above its input, its text box or its range. A taller field next to it does not move its input down. */
 .sp-field {
   display: grid;
+  align-content: start;
   gap: 0.25rem;
   margin: 0.75rem 0;
   color: var(--sp-demo-muted);

@@ -219,6 +219,10 @@ describe("the style of the parts", () => {
     }
   });
 
+  it("keeps the input of a field below its label when a field next to it is taller", () => {
+    expect(declarations(".sp-field").get("align-content")).toBe("start");
+  });
+
   it("is in the exports of the source and of the package", () => {
     const pkg = JSON.parse(readFileSync(new URL("package.json", root), "utf8")) as {
       exports: Record<string, unknown>;
