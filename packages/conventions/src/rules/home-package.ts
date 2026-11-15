@@ -9,9 +9,10 @@ import { HOMES, type Home } from "../map.ts";
 import type { Break, Rule, RuleContext } from "../rule.ts";
 import { byCode } from "../workspace.ts";
 
-/** The files of code that the rule reads. A declaration file has no functions of its own. */
-const CODE_FILE = /\.(?:[cm]?[jt]s|[jt]sx)$/;
-const SKIPPED = /(?:^|\/)(?:node_modules|build|dist|vendor)\/|\.d\.[cm]?ts$/;
+/** The files of code that the rules of the homes read. */
+export const CODE_FILE: RegExp = /\.(?:[cm]?[jt]s|[jt]sx)$/;
+/** The files that the rules of the homes do not read: dependencies, build output and declaration files. */
+export const SKIPPED_FILE: RegExp = /(?:^|\/)(?:node_modules|build|dist|vendor)\/|\.d\.[cm]?ts$/;
 
 /** A declaration of a function: `function name`, or `const name = (` / `= function` / `= <T>(`, with `export` and `async`. */
 const DECLARATION = /^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s*(?:\*\s*)?([A-Za-z_$][\w$]*)|^\s*(?:export\s+)?(?:const|let)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]+)?=\s*(?:async\s*)?(?:\(|function\b|<[A-Za-z])/;
@@ -47,11 +48,16 @@ export function repoOf(context: RuleContext): string | undefined {
   return env === undefined || env === "" ? undefined : env.toLowerCase();
 }
 
+/** This function gives the use of a home that is not on npm, in parentheses after a space. For a home on npm, it gives an empty text. */
+export function unpublishedNote(home: Home): string {
+  return home.state === "unpublished" ? ` (not on npm: use workspace:* inside ${home.repo}; elsewhere a github: specifier pinned to a commit works only if ${home.repo} keeps its built files in git, else wait for the first npm publish)` : "";
+}
+
 /** This function gives the message of a break: the home, and if the home already exports the name. */
 export function messageOf(file: string, name: string, home: Home): string {
   const exporter = home.packages.find((pkg) => HOME_EXPORTS[pkg]?.names.includes(name) === true);
   const where = home.packages.length === 0 ? home.repo : home.packages.map((pkg) => `\`${pkg}\``).join(", ");
-  const use = home.state === "unpublished" ? ` (not on npm: use workspace:* inside ${home.repo}; elsewhere a github: specifier pinned to a commit works only if ${home.repo} keeps its built files in git, else wait for the first npm publish)` : "";
+  const use = unpublishedNote(home);
   return exporter === undefined
     ? `${file} adds \`${name}\`, a function of the area ${home.title} (${home.area}). Its home is ${where}${use}, which does not export \`${name}\` yet: add it to the home in a pull request of ${home.repo}, then import it.`
     : `${file} adds \`${name}\`, a function of the area ${home.title} (${home.area}). Import \`${name}\` from \`${exporter}\`${use} in place of a local copy.`;
@@ -89,7 +95,7 @@ export const homePackage: Rule = {
       files = tracked;
     }
     const breaks: Break[] = [];
-    for (const file of files.filter((path) => CODE_FILE.test(path) && !SKIPPED.test(path)).sort(byCode)) {
+    for (const file of files.filter((path) => CODE_FILE.test(path) && !SKIPPED_FILE.test(path)).sort(byCode)) {
       let text: string;
       try {
         text = readFileSync(join(context.root, file), "utf8");
