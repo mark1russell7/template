@@ -7,7 +7,9 @@
 // For each package of a published home of the map, the script takes the tarball of its latest version
 // from npm, and reads the names of its exports with packageReport of @mark1russell7/api-report. Thus
 // the index is the published API, not the source of a branch. --check exits 1 when the index is not
-// current: a home has a new version or new exports. Run it again after each release of a home package.
+// current: a home has new exports, lost exports, or is new or gone. A new version with the same names is
+// current, so a release of conventions itself (which is in the index) does not make the index old.
+// Run it again after each release of a home package that changes its exports.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -65,6 +67,20 @@ async function exportsOf(name: string, temp: string): Promise<PackageExports> {
   return { version: meta.version, names: valueNames(packageReport(join(dir, "package"))) };
 }
 
+/** This function gives the names of each package of an index module, keyed by the package, with no version. */
+export function namesOf(text: string): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const match of text.matchAll(/^ {2}("[^"]+"): \{ version: "[^"]*", names: (\[.*\]) \},$/gm)) names.set(JSON.parse(match[1]!) as string, match[2]!);
+  return names;
+}
+
+/** This function gives the packages whose names differ between two index modules, in order: new, gone or changed. */
+export function changedPackages(current: string, next: string): string[] {
+  const before = namesOf(current);
+  const after = namesOf(next);
+  return [...new Set([...before.keys(), ...after.keys()])].filter((name) => before.get(name) !== after.get(name)).sort();
+}
+
 async function main(args: readonly string[]): Promise<number> {
   const check = args.includes("--check");
   const temp = mkdtempSync(join(tmpdir(), "home-exports-"));
@@ -85,8 +101,9 @@ async function main(args: readonly string[]): Promise<number> {
     // No index yet
   }
   if (check) {
-    if (current === next) return 0;
-    process.stderr.write("packages/conventions/src/home-exports.ts is not current. Run node scripts/homes/exports.ts\n");
+    const changed = changedPackages(current, next);
+    if (changed.length === 0) return 0;
+    process.stderr.write(`packages/conventions/src/home-exports.ts is not current: the names of ${changed.length} package(s) changed on npm (${changed.join(", ")}). Run node scripts/homes/exports.ts\n`);
     return 1;
   }
   writeFileSync(INDEX_FILE, next);
