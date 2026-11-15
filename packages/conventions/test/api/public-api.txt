@@ -27,6 +27,7 @@ HOOK_MARKER: build/index.d.ts#HOOK_MARKER
 type Home: build/index.d.ts#Home
 type HomeAnswer: build/index.d.ts#HomeAnswer
 type HomeFetch: build/index.d.ts#HomeFetch
+type HomeModule: build/index.d.ts#HomeModule
 type HomeState: build/index.d.ts#HomeState
 type HookOptions: build/index.d.ts#HookOptions
 IGNORE_AFTER: build/index.d.ts#IGNORE_AFTER
@@ -36,6 +37,7 @@ MAP_RULE: build/index.d.ts#MAP_RULE
 MAX_NOTES: build/index.d.ts#MAX_NOTES
 type Manifest: build/index.d.ts#Manifest
 type Minor: build/index.d.ts#Minor
+type ModuleUse: build/index.d.ts#ModuleUse
 NO_READ_LINE: build/index.d.ts#NO_READ_LINE
 NPM_REGISTRY: build/index.d.ts#NPM_REGISTRY
 type NameHit: build/index.d.ts#NameHit
@@ -116,6 +118,7 @@ globToRegExp: build/workspace.chunk.d.ts#globToRegExp
 hasFile: build/index.d.ts#hasFile
 hasImportMetaMain: build/index.d.ts#hasImportMetaMain
 hasTests: build/index.d.ts#hasTests
+homeModule: build/index.d.ts#homeModule
 homePackage: build/index.d.ts#homePackage
 inFolder: build/index.d.ts#inFolder
 installHook: build/index.d.ts#installHook
@@ -141,6 +144,9 @@ mergeHomes: build/index.d.ts#mergeHomes
 messageOf: build/index.d.ts#messageOf
 minorOf: build/index.d.ts#minorOf
 mitText: build/index.d.ts#mitText
+moduleMessage: build/index.d.ts#moduleMessage
+moduleUses: build/index.d.ts#moduleUses
+modulesOf: build/index.d.ts#modulesOf
 nameMatches: build/index.d.ts#nameMatches
 namedVersions: build/index.d.ts#namedVersions
 noBuildOutput: build/index.d.ts#noBuildOutput
@@ -345,6 +351,7 @@ interface Home {
   readonly state: HomeState;
   readonly words: readonly string[];
   readonly signatures?: readonly string[];
+  readonly modules?: readonly string[];
   readonly note?: string;
 }
 
@@ -357,6 +364,12 @@ type HomeAnswer = {
 
 ### build/index.d.ts#HomeFetch
 type HomeFetch = (urls: readonly string[]) => ReadonlyMap<string, HomeAnswer>;
+
+### build/index.d.ts#HomeModule
+interface HomeModule {
+  readonly home: Home;
+  readonly specifier: string;
+}
 
 ### build/index.d.ts#HomeState
 type HomeState = "published" | "unpublished" | "planned" | "none";
@@ -391,6 +404,12 @@ type Manifest = Readonly<Record<string, unknown>>;
 
 ### build/index.d.ts#Minor
 type Minor = readonly [major: number, minor: number];
+
+### build/index.d.ts#ModuleUse
+interface ModuleUse {
+  readonly specifier: string;
+  readonly line: number;
+}
 
 ### build/index.d.ts#NO_READ_LINE
 export declare const NO_READ_LINE: string;
@@ -766,6 +785,9 @@ export declare function hasImportMetaMain(range: unknown): boolean;
 ### build/index.d.ts#hasTests
 export declare function hasTests(files: readonly string[], folder: string): boolean;
 
+### build/index.d.ts#homeModule
+export declare const homeModule: Rule;
+
 ### build/index.d.ts#homePackage
 export declare const homePackage: Rule;
 
@@ -840,6 +862,15 @@ export declare function minorOf(version: string): Minor | undefined;
 
 ### build/index.d.ts#mitText
 export declare function mitText(year: number, holder: string): string;
+
+### build/index.d.ts#moduleMessage
+export declare function moduleMessage(file: string, specifier: string, home: Home): string;
+
+### build/index.d.ts#moduleUses
+export declare function moduleUses(text: string): ModuleUse[];
+
+### build/index.d.ts#modulesOf
+export declare function modulesOf(homes: readonly Home[]): HomeModule[];
 
 ### build/index.d.ts#nameMatches
 export declare function nameMatches(line: string, names: readonly NameRule[]): NameHit[];

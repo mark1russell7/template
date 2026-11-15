@@ -37,6 +37,11 @@ export interface Home {
    * areas use (for example `parse` or `record`) are not signatures: they give false breaks.
    */
   readonly signatures?: readonly string[];
+  /**
+   * The modules that only the home imports at run time, for example `node:sqlite`. The rule home-module of conventions
+   * breaks on a value import of such a module in another repository. An `import type` does not break.
+   */
+  readonly modules?: readonly string[];
   /** A note: the code that goes to another home, or a known split. */
   readonly note?: string;
 }
@@ -429,6 +434,7 @@ export const HOMES: readonly Home[] = [
     state: "published",
     words: ["sqlite", "database", "event log", "migration", "wal", "user_version", "append-only", "transaction", "node:sqlite", "grow-only", "integrity check", "quarantine", "corrupt", "snapshot", "backup", "read transaction", "query_only"],
     signatures: ["openEventLog", "salvageEventLog", "sqliteFault", "openOrQuarantine", "quietSqliteWarning"],
+    modules: ["node:sqlite"],
   },
   {
     area: "releases",
@@ -499,6 +505,7 @@ export function readOverlay(file: string): readonly Home[] {
     if (typeof home.area !== "string" || typeof home.title !== "string" || typeof home.repo !== "string") throw new Error(`${file}: each home needs area, title and repo`);
     if (home.alsoIn !== undefined && !(Array.isArray(home.alsoIn) && home.alsoIn.every((repo) => typeof repo === "string"))) throw new Error(`${file}: alsoIn of ${home.area} must be an array of owner/name strings`);
     if (home.pending !== undefined && !(Array.isArray(home.pending) && home.pending.every((name) => typeof name === "string"))) throw new Error(`${file}: pending of ${home.area} must be an array of package names`);
+    if (home.modules !== undefined && !(Array.isArray(home.modules) && home.modules.every((name) => typeof name === "string"))) throw new Error(`${file}: modules of ${home.area} must be an array of module specifiers`);
   }
   return data.homes as Home[];
 }
