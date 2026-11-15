@@ -90,6 +90,45 @@ describe("the chunks of a bundler", () => {
     expect(report).not.toContain("E5f6G7h8");
   });
 
+  describe("the option entriesOnly", () => {
+    it("refuses a declaration in a chunk, and names the package, the label of the chunk and the name", () => {
+      const dir = fixture(built("o5bDHjNi"));
+      expect(() => packageReport(dir, { entriesOnly: true })).toThrow(
+        "The report of p has declarations in files that are not the declaration file of an entry (the option entriesOnly): build/html.chunk.d.mts (html). " +
+          "Export each name from an entry of the exports field, or change the config of the bundler.",
+      );
+    });
+
+    it("gives the same report as the default when each declaration is in an entry file", () => {
+      const files = {
+        "package.json": { name: "p", exports: { ".": { types: "./build/index.d.mts" }, "./html": { types: "./build/html.d.mts" } } },
+        "build/index.d.mts": 'export { html } from "./html.mjs";\nexport declare const a: 1;\n',
+        "build/html.d.mts": "declare function html(): void;\nexport { html };\ndeclare global {\n    var b: 2;\n}\n",
+      };
+      const dir = fixture(files);
+      const report = packageReport(dir, { entriesOnly: true });
+      expect(report).toContain("html: build/html.d.mts#html\n");
+      expect(report).toBe(packageReport(dir));
+    });
+
+    it("leaves the report of a chunk as it was when the option is off", () => {
+      const dir = fixture(built("o5bDHjNi"));
+      const report = packageReport(dir);
+      expect(report).toContain("html: build/html.chunk.d.mts#html\n");
+      expect(packageReport(dir, { entriesOnly: false })).toBe(report);
+    });
+
+    it("also refuses a namespace, an ambient declaration and a file of tsc that no entry names, and shortens a long list of names", () => {
+      const dir = fixture({
+        "package.json": { name: "p", types: "./index.d.ts" },
+        "index.d.ts": 'export * from "./util.js";\nexport * as ns from "./space.js";\n',
+        "util.d.ts": "export declare const a: 1;\nexport declare const b: 2;\nexport declare const c: 3;\nexport declare const d: 4;\nexport declare const e: 5;\n",
+        "space.d.ts": "export {};\ndeclare global {\n    var g: 1;\n}\n",
+      });
+      expect(() => packageReport(dir, { entriesOnly: true })).toThrow("entriesOnly): space.d.ts (* as ns, declare global), util.d.ts (a, b, c and 2 more). Export");
+    });
+  });
+
   it("keeps a name with a word in the place of a hash", () => {
     const report = body({
       "package.json": { name: "p", types: "./index.d.ts" },
