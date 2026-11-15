@@ -942,6 +942,14 @@ describe("home-package", () => {
     expect(rule(changed("function medianOf(xs: number[]): number {\n  return xs[0] ?? 0;\n}\n", "mark1russell7/rigor"), "home-package", { base: "base", env: {} }).status).toBe("pass");
   });
 
+  it("passes in a repository of alsoIn, where the code of a home moves", () => {
+    const code = "function medianOf(xs: number[]): number {\n  return xs[0] ?? 0;\n}\nfunction mulberry32(seed: number): number {\n  return seed;\n}\n";
+    expect(rule(changed(code, "mark1russell7/algebra"), "home-package", { base: "base", env: {} }).status).toBe("pass");
+    // The new name of the target repository after its rename.
+    expect(rule(changed(code, "mark1russell7/math"), "home-package", { base: "base", env: {} }).status).toBe("pass");
+    expect(rule(changed(code, "mark1russell7/other"), "home-package", { base: "base", env: {} }).breaks.length).toBe(2);
+  });
+
   it("skips with no change, and examines each line with the option scope all", () => {
     const root = changed("// the end\n");
     expect(rule(root, "home-package", { env: {} }).status).toBe("skipped");
@@ -952,13 +960,13 @@ describe("home-package", () => {
   it("has signatures that compile, and no name that two homes claim", () => {
     const signatures = signaturesOf(HOMES);
     expect(signatures.length).toBeGreaterThan(40);
-    const names = ["quantile", "median", "medianOf", "mulberry32", "fnv1a32", "orient2d", "writeFileAtomic", "topoSort", "segmentsIntersect", "exponentialBackoff"];
+    const names = ["quantile", "median", "medianOf", "mulberry32", "fnv1a32", "orient2d", "writeFileAtomic", "topoSort", "segmentsIntersect", "exponentialBackoff", "graphemes", "classifySegments", "canonicalJson"];
     for (const name of names) expect(new Set(signatures.filter((item) => item.pattern.test(name)).map((item) => item.home.area)).size, name).toBe(1);
     for (const name of ["record", "run", "parse", "mean", "seconds", "connect", "measure"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(false);
     // A word of another area after a statistics prefix: bootstrapRepo is the npm bootstrap of the release scripts (codeatlas, 2026-11-02)
     for (const name of ["bootstrapRepo", "bootstrapApp", "wilsonInterval", "bootstrapMedian", "bootstrap"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(!name.endsWith("Repo") && !name.endsWith("App"));
     // A planned home has no package to import yet, so its signatures do not break
-    for (const name of ["graphemes", "parseArgs"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(false);
+    for (const name of ["greatCircleKm", "parseArgs"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(false);
   });
 });
 

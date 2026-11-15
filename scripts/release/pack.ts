@@ -10,11 +10,16 @@
 // SemVer, or is not greater than the "latest" version on npm (a version that is on npm is skipped).
 // When a version is already on npm, the script compares its tarball with the tarball that npm has
 // (unchanged.ts), and stops when the shipped files differ: the code changed, so the version must.
+//
+// The release check of a pull request (.github/actions/release-check) starts this script too. In a
+// repository with Changesets, it sets RELEASE_PENDING to the packages whose version a pending
+// changeset raises later (check-plan.ts). For these packages, a difference is a note, not a stop.
+// A release run does not set the variable, so it stops for each difference.
 
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { shippedDifferences, tarballFiles } from "./unchanged.ts";
+import { differenceText, pendingPackages, shippedDifferences, tarballFiles } from "./unchanged.ts";
 import { publishedPackages, unpublishableDependencies, versionProblem, type Packument } from "./workspace.ts";
 
 const out = process.argv[2];
@@ -51,8 +56,10 @@ if (problems.length > 0) {
 }
 
 const shell = process.platform === "win32";
+const pending = pendingPackages(process.env["RELEASE_PENDING"]);
 const lines: string[] = [];
 const changed: string[] = [];
+const raisedLater: string[] = [];
 for (const { dir, manifest } of packages) {
   // The new file in the folder is the tarball. The output of pnpm is not used: it also holds the
   // output of the package scripts that pnpm pack starts (prepare, prepack).
@@ -69,10 +76,15 @@ for (const { dir, manifest } of packages) {
     if (!response.ok) throw new Error(`The registry gave HTTP ${response.status} for ${tarball}.`);
     const differences = shippedDifferences(tarballFiles(Buffer.from(await response.arrayBuffer())), tarballFiles(readFileSync(join(out, file))));
     if (differences.length > 0) {
-      changed.push(`${manifest.name}@${manifest.version} is on npm, but these shipped files differ from it:\n    ${differences.slice(0, 20).join("\n    ")}${differences.length > 20 ? `\n    and ${differences.length - 20} more` : ""}`);
+      (pending.has(manifest.name) ? raisedLater : changed).push(differenceText(`${manifest.name}@${manifest.version}`, differences));
     }
   }
   process.stdout.write(`${manifest.name}@${manifest.version}: ${file}\n`);
+}
+if (raisedLater.length > 0) {
+  process.stdout.write(
+    `A pending changeset raises the version of these packages, so these changes ship with the next version:\n  ${raisedLater.join("\n  ")}\n`,
+  );
 }
 if (changed.length > 0) {
   process.stderr.write(
