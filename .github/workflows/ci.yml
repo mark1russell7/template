@@ -83,6 +83,28 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           xvfb-run --auto-servernum pnpm --filter "@template/$PACKAGE" smoke
 
+  # The validator of Renovate reads each preset of renovate/ (renovate/README.md). Each repository of the account
+  # extends these presets, so a fault in one of them stops Renovate in each repository.
+  # Only the template has the presets, so a repository from new-repo.ps1 skips this job.
+  renovate-presets:
+    if: github.repository == 'mark1russell7/template'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      # A custom manager of renovate/base updates this version.
+      RENOVATE_VERSION: 44.225.0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - name: Validate the presets
+        run: npx --yes --package "renovate@${RENOVATE_VERSION}" -- renovate-config-validator --strict renovate/*.json
+
   # A new repository passes its install, conventions check, typecheck, tests, Pages build and site check with no hand edit.
   # Only the template has the stamp (scripts/stamp), so a repository from the stamp skips this job.
   stamp:
@@ -142,7 +164,7 @@ jobs:
   ci-ok:
     name: CI OK
     if: ${{ !cancelled() }}
-    needs: [ci, presets, stamp]
+    needs: [ci, presets, renovate-presets, stamp]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}
@@ -151,7 +173,7 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
           # The jobs that their own if may skip, separated by spaces. Each other job must pass.
-          ALLOW_SKIP: "presets stamp"
+          ALLOW_SKIP: "presets renovate-presets stamp"
         run: |
           echo "$NEEDS" | jq -r 'to_entries[] | "\(.key) \(.value.result)"' > results
           cat results

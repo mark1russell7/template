@@ -264,7 +264,7 @@ describe("the chrome entry", () => {
 
   it("is an entry of the package, in the source and in the build", () => {
     expect(pkg.exports["./chrome"]).toBe("./src/chrome.ts");
-    expect(pkg.publishConfig.exports["./chrome"]).toEqual({ types: "./build/chrome.d.ts", import: "./build/chrome.js" });
+    expect(pkg.publishConfig.exports["./chrome"]).toEqual({ types: "./build/chrome.d.ts", import: "./build/chrome.js", default: "./build/chrome.js" });
   });
 
   it("imports no module, so a site can bundle it for the browser", () => {
