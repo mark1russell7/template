@@ -1,51 +1,57 @@
-// The tests of npm-drift.ts: node --test scripts/homes/
-
+// The tests of npm-drift.ts: the split of the differences by the base map, the report and the read of a map file.
 import assert from "node:assert/strict";
-import { test } from "node:test";
-import { presenceOf, presences, report } from "./npm-drift.ts";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { after, test } from "node:test";
+import type { NpmDrift } from "../../packages/conventions/src/map.ts";
+import { driftKey, homesOf, report, splitByBase } from "./npm-drift.ts";
 
-/** A fetch that answers from a table of URL ends: a status and a body, or an error to throw. */
-function fakeFetch(answers: Record<string, { status: number; body?: unknown } | Error>): typeof fetch {
-  return (async (input: string | URL | Request) => {
-    const url = String(input);
-    const key = Object.keys(answers).find((end) => url.endsWith(end));
-    const answer = key === undefined ? undefined : answers[key];
-    if (answer === undefined) throw new Error(`no answer for ${url}`);
-    if (answer instanceof Error) throw answer;
-    return new Response(JSON.stringify(answer.body ?? {}), { status: answer.status });
-  }) as typeof fetch;
-}
+const temp = mkdtempSync(join(tmpdir(), "npm-drift-"));
+after(() => rmSync(temp, { recursive: true, force: true }));
 
-test("presenceOf: a version is on npm, a 404 and no versions are not, another status and a throw are no read", async () => {
-  const fetchFn = fakeFetch({
-    "/@scope%2fhere": { status: 200, body: { versions: { "1.0.0": {} } } },
-    "/@scope%2fgone": { status: 200, body: { versions: {} } },
-    "/@scope%2fnew": { status: 404 },
-    "/@scope%2fbusy": { status: 503 },
-    "/@scope%2fcut": new Error("socket hang up"),
-  });
-  assert.deepEqual(await presenceOf("@scope/here", fetchFn), { onNpm: true });
-  assert.deepEqual(await presenceOf("@scope/gone", fetchFn), { onNpm: false });
-  assert.deepEqual(await presenceOf("@scope/new", fetchFn), { onNpm: false });
-  assert.deepEqual(await presenceOf("@scope/busy", fetchFn), { error: "HTTP 503" });
-  assert.deepEqual(await presenceOf("@scope/cut", fetchFn), { error: "socket hang up" });
+const stale: NpmDrift = { area: "search", kind: "stale-pending", name: "@s/search", text: "search: @s/search is on npm" };
+const missing: NpmDrift = { area: "labs", kind: "missing", name: "@s/labs", text: "labs: @s/labs is not on npm" };
+const noRead: NpmDrift = { area: "geo", kind: "no-read", name: "@s/geo", text: "geo: no read of @s/geo on npm (HTTP 503)" };
+const unnamed: NpmDrift = { area: "cli", kind: "unnamed", text: "cli: the planned home names no package in pending" };
+
+test("a difference of the base does not fail the pull request, and a new one does", () => {
+  const { added, inherited } = splitByBase([stale, missing], [stale]);
+  assert.deepEqual(added, [missing]);
+  assert.deepEqual(inherited, [stale]);
+  assert.equal(report(added, 3, inherited).code, 1);
+  assert.equal(report([], 3, [stale]).code, 0);
 });
 
-test("presences gives one answer for each name, in more than one group", async () => {
-  const names = Array.from({ length: 14 }, (_, index) => `@scope/p${String(index)}`);
-  const fetchFn = fakeFetch(Object.fromEntries(names.map((name, index) => [`/${name.replaceAll("/", "%2f")}`, { status: index % 2 === 0 ? 404 : 200, body: { versions: { "0.1.0": {} } } }])));
-  const facts = await presences(names, fetchFn);
-  assert.equal(facts.size, 14);
-  assert.deepEqual(facts.get("@scope/p0"), { onNpm: false });
-  assert.deepEqual(facts.get("@scope/p13"), { onNpm: true });
+test("a no read fails also when the base has the same no read", () => {
+  const { added, inherited } = splitByBase([noRead], [noRead]);
+  assert.deepEqual(added, [noRead]);
+  assert.deepEqual(inherited, []);
+  assert.equal(report(added, 1, inherited).code, 1);
 });
 
-test("report: a difference and a failed read fail the check, a planned home with no name is a no read that passes", () => {
-  assert.deepEqual(report([], 3), { code: 0, text: "The map of homes against npm: 3 names asked, 0 differences.\n" });
-  const unnamed = report([{ area: "cli", kind: "unnamed", text: "cli: no name" }], 3);
-  assert.equal(unnamed.code, 0);
-  assert.match(unnamed.text, /No read: the planned homes cli name no package in pending\./);
-  const failing = report([{ area: "geo", kind: "stale-pending", name: "@scope/geo", text: "geo: @scope/geo is on npm" }, { area: "x", kind: "no-read", name: "@scope/x", text: "x: no read" }], 3);
-  assert.equal(failing.code, 1);
-  assert.match(failing.text, /2 differences\.\n- stale-pending: geo: @scope\/geo is on npm\n- no-read: x: no read\n/);
+test("the key tells the kind, the area and the name apart", () => {
+  assert.notEqual(driftKey(stale), driftKey({ ...stale, kind: "stale-state" }));
+  assert.notEqual(driftKey(stale), driftKey({ ...stale, area: "other" }));
+  assert.notEqual(driftKey(stale), driftKey({ ...stale, name: "@s/other" }));
+});
+
+test("the report names the differences of the base apart from the differences of the change", () => {
+  const { text } = report([missing], 4, [stale, unnamed]);
+  assert.match(text, /^The map of homes against npm: 4 names asked, 1 difference\.\n- missing: labs/);
+  assert.match(text, /The base branch has 1 more difference\. They do not fail this pull request.*\n- stale-pending: search/);
+  assert.doesNotMatch(text, /unnamed: cli/);
+});
+
+test("the report with no base is the report of before", () => {
+  assert.equal(report([stale, unnamed], 2).text, "The map of homes against npm: 2 names asked, 1 difference.\n- stale-pending: search: @s/search is on npm\nNo read: the planned homes cli name no package in pending.\n");
+});
+
+test("a map file of another commit gives its homes, and a file with no HOMES is an error", async () => {
+  const good = join(temp, "map.ts");
+  writeFileSync(good, 'export const HOMES = [{ area: "a", title: "A", covers: "x", packages: [], repo: "o/a", state: "planned", words: [] }];\n');
+  assert.deepEqual((await homesOf(good)).map((home) => home.area), ["a"]);
+  const bad = join(temp, "bad.ts");
+  writeFileSync(bad, "export const OTHER = 1;\n");
+  await assert.rejects(homesOf(bad), /exports no HOMES list/);
 });

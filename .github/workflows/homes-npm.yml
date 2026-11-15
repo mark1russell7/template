@@ -2,15 +2,17 @@
 # (packages/conventions/src/map.ts). A package of a published home that is not on npm, a pending name that is on npm,
 # a package of an unpublished home that is on npm, and a name that npm does not answer fail the run: a no read is
 # never a pass. A planned home that names no package shows as a no read in the summary. The run needs no install:
-# the script imports only the map, and Node.js runs TypeScript. It runs each Monday, on each change of the map on
-# main, on each pull request, and by hand.
+# the script imports only the map, and Node.js runs TypeScript. It runs each day, on each change of the map on main,
+# on each pull request, and by hand. On a pull request it also reads the map of the base commit (--base), and fails
+# only on a difference that the base does not have: a package that goes to npm after the base commit is not a fault
+# of the pull request. The run on main fails on it, and the owner of the map moves the name out of pending.
 name: Homes npm
 
 on:
   workflow_dispatch:
-  # Each Monday, so a home that goes to npm leaves the planned state in a week at most
+  # Each day, so a home that goes to npm leaves the planned state in a day at most
   schedule:
-    - cron: "45 6 * * 1"
+    - cron: "45 6 * * *"
   push:
     branches: [main]
     paths:
@@ -41,8 +43,20 @@ jobs:
           sparse-checkout: |
             packages/conventions/src
             scripts/homes
+      - name: The map of the base commit
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --depth=1 --no-tags origin "$BASE_SHA"
+          git show "$BASE_SHA:packages/conventions/src/map.ts" > "$RUNNER_TEMP/base-map.ts"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
       - name: Compare the map with npm
-        run: node scripts/homes/npm-drift.ts --check
+        run: |
+          if [ -f "$RUNNER_TEMP/base-map.ts" ]; then
+            node scripts/homes/npm-drift.ts --check --base "$RUNNER_TEMP/base-map.ts"
+          else
+            node scripts/homes/npm-drift.ts --check
+          fi
