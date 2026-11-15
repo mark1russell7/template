@@ -486,7 +486,7 @@ jobs:
           strict: ${{ inputs.coverage && 'true' || 'false' }}
           working-directory: ${{ inputs.working-directory }}
           deadline: ${{ env.COVERAGE_DEADLINE }}
-      # The time of the job and its limit, for a reader of the run. The weekly audit of the main runs reads the same time.
+      # The time of the job and its limit, for a reader of the run. The daily audit limit-audit.yml reads the warning.
       - name: Time of the job
         if: always()
         working-directory: .

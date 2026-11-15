@@ -15,6 +15,7 @@ The template holds the CI, the release and the Pages workflows of the repositori
 | `.github/actions/pages-build` | Action | Builds the site from the site config, adds the pages of `site-pages`, checks it and uploads the artifacts. |
 | `.github/actions/security-scan` | Action | Scans the dependencies and the code with the dependency review, osv-scanner and CodeQL, in one job. |
 | `.github/workflows/reusable-security.yml` | Workflow | Deprecated. The same scans in three jobs ("Security", "The old workflow"). |
+| `.github/workflows/reusable-queue.yml` | Workflow | Merges `main` into each pull request with auto-merge that is behind, and starts its gates again ("The queue"). |
 | `.github/workflows/reusable-ai-review.yml` | Workflow | Gives a pull request a review by Claude on request (the `ai-review` label), comment only (`AI-REVIEW.md`). |
 | `.github/workflows/reusable-codex-review.yml` | Workflow | Gives a pull request a second review by an OpenAI model, comment only (`CODEX-REVIEW.md`). |
 
@@ -65,6 +66,10 @@ With `coverage: true`, the job `coverage` starts `vitest run` with coverage in e
 - The script `deadline.ts` of the action `coverage` holds the deadline. At the deadline, it sends `TERM` to the processes of the step, and `KILL` 10 seconds later. It works on Linux, macOS and Windows.
 - Node.js starts `deadline.ts` and `coverage.ts` from 22.18. With an older first version in `node-versions`, the steps have no deadline and give a warning. The step `Coverage` measures nothing: strict, it fails, and not strict, it gives a warning.
 - The summary gives the time of the job and its limit. A time above 80 % of the limit gives a warning.
+- The workflow `limit-audit.yml` of the template finds each job of a default branch that stopped at its time limit. It examines the runs of the last 24 hours of each public repository, each day.
+- The audit finds a job that reached its `timeout-minutes`, a step of the job `coverage` that stopped at the deadline, and the warning above 80 %.
+- The scheduled run fails when the audit cannot read a repository. The summary has a table of the jobs, and the artifact `limit-audit` has `limit-audit.json`.
+- Until the day `FAILS_FROM` of the workflow (2026-11-23), a job that stopped at a limit gives a warning. From that day, it fails the run.
 
 - The summary of the job gets a table: the statements, branches, functions and lines of each package.
 - The artifact `coverage` has `coverage-summary.json` and `coverage-final.json` of each package.
@@ -140,6 +145,7 @@ The ruleset names only the summary checks. Thus it does not change when a job is
 - A gate workflow must start on each pull request, with no `paths` filter. Otherwise its summary check does not start, and the ruleset blocks the pull request. To skip the work, use the action `changes` and an `if` on the other jobs ("A gate with paths").
 - Set the ruleset once with `node scripts/workflows/ruleset-ci-ok.ts <owner/repo> --apply`. Without `--apply`, it only prints the changes. It reads the checks of the newest of the last 5 pull requests into the default branch where "CI OK" passed. It adds each check with a name `<Name> OK` that passed there and that no ruleset names. It skips a repository where "CI OK" did not pass on any of the 5. A check that starts only on a push to `main` is not added, because it does not start on a pull request.
 - To make the summary checks the only checks of the ruleset, add `--only-summary`. Then the script also removes each check that started in the same workflow run as that "CI OK", because "CI OK" covers it. It deletes a ruleset with no rule left. Then a repository can join or split the jobs of its CI, and its ruleset stays correct.
+- The workflow `rulesets.yml` runs the script with `--check` each day. The check changes nothing. It fails when a public repository has a summary check that passed and that no ruleset names. Thus a new repository gets its ruleset after its first merged pull request: the summary of the red run gives the command that adds it. A repository with no "CI OK" that passed is a no read, not a pass.
 
 ### One run for each commit
 
@@ -251,6 +257,62 @@ jobs:
 ```
 
 A `push` filter can stay, because the ruleset reads only pull requests. With the patterns of the old filter, the gate runs on the same pull requests as before. `changes` also reads the old name of a moved file, so a move out of the gate paths starts the gate too. A pull request with 3000 files or more always starts the gate, because the API gives no more files. The conventions rule `gate-trigger` finds a pull request trigger with `paths` or `paths-ignore`. `actions-test.yml` of the template is an example.
+
+## The queue
+
+Several writers merge into one `main` with `gh pr merge --auto`. Two pull requests can each pass their gate alone and break `main` together. For example, two pull requests set the same version, or one pull request removes an export that the other starts to use.
+
+Strict status checks in the ruleset stop this. With strict on, GitHub merges a pull request only when its branch has the newest `main`. The checks of the ruleset must also pass on that head. But then a pull request with auto-merge stops each time that a different merge makes it behind. The merge queue of GitHub is not available to a personal account, so the queue does not use `merge_group`.
+
+`reusable-queue.yml` keeps these pull requests up to date. A repository uses it in its `queue.yml`:
+
+```yaml
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [auto_merge_enabled]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: queue
+  cancel-in-progress: false
+
+jobs:
+  queue:
+    uses: mark1russell7/template/.github/workflows/reusable-queue.yml@<commit> # main
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+      checks: read
+```
+
+A run of the queue does these steps (`scripts/workflows/queue.ts`):
+
+1. It reads the checks that the rules of the default branch need (`GET /repos/{owner}/{repo}/rules/branches/{branch}`).
+2. It reads the open pull requests into the default branch. It takes only a pull request with auto-merge on, not a draft, and not from a fork. When GitHub did not compute a merge state (`UNKNOWN`), it reads them again, at most 6 times, 5 s apart.
+3. For each pull request with the merge state `BEHIND`, it reads the results of these checks on the old head. It finds the workflow file that gave each check. It joins the checks of one workflow. A summary check, for example "CI OK", gets its result only when the jobs that it needs end. When a check has no result yet, the queue reads the workflows that are still in progress on the old head (`GET /repos/{owner}/{repo}/actions/runs?head_sha=`). It reads the job names of their files at that head. Each workflow in progress with a job of that name gives the check.
+4. It merges `main` into each of these pull requests with `PUT /repos/{owner}/{repo}/pulls/{number}/update-branch` and `expected_head_sha`.
+5. It waits for the new heads, at most `wait-seconds` (90 s). An update with `GITHUB_TOKEN` starts no `pull_request` run. Thus the queue starts each workflow of these checks with `workflow_dispatch` on the branch of the pull request. These workflows give the checks on the new head.
+
+- A push to `main` makes the other pull requests behind. A pull request can be behind when it gets auto-merge (`auto_merge_enabled`). A person can start a run from the Actions tab. The queue does not use `pull_request_target`.
+- One run at a time operates in a repository (`cancel-in-progress: false`). GitHub keeps only the newest run that waits. Each run reads all the pull requests, so the newest run does the work of a cancelled run.
+- A check of the ruleset can have no result on the old head and no workflow in progress with a job of that name. Then it is a no read in the summary. A workflow file that the queue cannot read gives no job names, so its checks are a no read too. A check of a different app, or of a workflow that is not a file of `.github/workflows`, is a no read too. A no read is not a pass.
+- A refused update (HTTP 422, for example a merge conflict) skips only that pull request, with a warning. Each other pull request gets its turn. A pull request with a merge conflict (`DIRTY`) waits for a person.
+- The job fails for a different failure of an update and for a refused dispatch. It also fails when a head does not change in the wait time. A failed read changes nothing and fails the job.
+- Each workflow of a check of the ruleset must start on `workflow_dispatch`. Otherwise GitHub refuses the dispatch, and the job fails.
+- With strict off, GitHub merges a pull request that is behind. Then no pull request is `BEHIND`, and the queue changes nothing. Set strict in the ruleset to use the queue.
+- In a private repository, the job starts only when the caller gives the input `private: true`. A private repository pays for each job start, and the queue starts on each push to `main`, also when no pull request is behind. When the input is false, the job skips, and a skipped job costs nothing.
+
+The queue does not do these things:
+
+- A workflow that `workflow_dispatch` starts is not a `pull_request` run. Some jobs operate only on a pull request, so they skip: the changeset check, the release check and the version rules of the conventions check. The security scans operate as on a push. These jobs examined only the old head. Thus two pull requests that set the same version can still both merge.
+- `GITHUB_TOKEN` cannot write a workflow file. When the new commits of `main` change a file of `.github/workflows`, GitHub can refuse the update. Then a person updates the branch.
+- When the head does not change in the wait time, the queue starts no workflow. The new head has no checks, and the next run does not see it as `BEHIND`. A person starts the gates on the branch.
+- Each merge updates each other pull request that is behind, and starts its gates again. With N pull requests in the queue, the merge of all of them starts about N × N / 2 runs of each gate.
 
 ## Release
 
@@ -395,7 +457,7 @@ The gates are in the lane file, not in an input. Thus a local run and CI use the
 
 `reusable-pages.yml` has three jobs. The job `ref` decides if the commit of the event builds and deploys. It starts no code of the repository.
 
-The job `build` checks out the commit of the event, with no ref of its own. It installs, builds the site, adds the pages of `site-pages` and uploads the Pages artifact. It gets only read permissions. The job `deploy` deploys the artifact. It starts no code of the repository.
+The job `build` checks out the commit of the event, with no ref of its own. It installs, builds the site, adds the pages of `site-pages` and uploads the Pages artifact. It gets only read permissions. The job `deploy` deploys the artifact. It starts no code of the repository. Its action cancels a deployment after 606 s, before the job limit of 12 minutes.
 
 The job `build` uses two actions. `site-config` reads the site config, and `pages-build` builds the site. The check of a pull request uses the same two actions ("The site config").
 
@@ -634,6 +696,7 @@ The workflows of the template call the shared workflows and actions by a local p
 - The job `pages` of `actions-test.yml` uses `reusable-pages.yml` with no site config. It tests the site inputs of a repository with no `.github/site.json`.
 - `ai-review.yml` tests `reusable-ai-review.yml`, and `codex-review.yml` tests `reusable-codex-review.yml`. Without its API key, a review stops at once with a note.
 - The tests of `scripts/ai-review/` examine the request, the redaction and the post of the second review, with no network.
+- `queue.yml` uses `reusable-queue.yml`, so each push to `main` of the template starts the queue. The tests of `scripts/workflows/queue.test.ts` examine the plan, the calls of the API, the summary and the two workflow files, with a fake API.
 
 The job `publish` of `release.yml` uses the pinned form of `npm-publish`, also in the template. A local action needs a checkout, and that job does no checkout.
 

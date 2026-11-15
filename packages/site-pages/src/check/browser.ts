@@ -60,6 +60,15 @@ export function findBrowser(given?: string, env: NodeJS.ProcessEnv = process.env
   return playwrightChromium(platform, env) ?? systemBrowsers(platform, env).find((file) => existsSync(file));
 }
 
+/**
+ * The default time limit of one call of the DevTools protocol, in milliseconds. A call with no reply in this time fails.
+ * Thus a hung page fails its view, and the job limit does not stop the check.
+ */
+export const CALL_LIMIT_MS = 60_000;
+
+/** This error tells that a call of the DevTools protocol got no reply in its time limit. The page can be hung. */
+export class NoReplyError extends Error {}
+
 /** A message of the DevTools protocol. */
 interface Message {
   id?: number;
@@ -112,9 +121,11 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * This function starts the browser in headless mode with a new profile, and connects to its page.
  * The browser picks a free port, so two checks can run at the same time.
  *
+ * Each call of the page gets no more than `callMs` for its reply (see `CALL_LIMIT_MS`).
+ *
  * @throws Error when the browser does not start in `timeoutMs`
  */
-export async function launch(executable: string, timeoutMs = 30_000): Promise<Browser> {
+export async function launch(executable: string, timeoutMs = 30_000, callMs: number = CALL_LIMIT_MS): Promise<Browser> {
   const profile = mkdtempSync(join(tmpdir(), "site-check-"));
   const args = [
     "--headless=new",
@@ -163,7 +174,7 @@ export async function launch(executable: string, timeoutMs = 30_000): Promise<Br
         await sleep(100);
       }
     }
-    const page = await connect(target.webSocketDebuggerUrl);
+    const page = await connect(target.webSocketDebuggerUrl, callMs);
     return {
       page: page.page,
       close: async () => {
@@ -177,7 +188,7 @@ export async function launch(executable: string, timeoutMs = 30_000): Promise<Br
   }
 }
 
-async function connect(url: string): Promise<{ page: Page; close: () => void }> {
+async function connect(url: string, callMs: number): Promise<{ page: Page; close: () => void }> {
   const socket = new WebSocket(url);
   await new Promise<void>((resolve, reject) => {
     socket.addEventListener("open", () => resolve(), { once: true });
@@ -205,7 +216,15 @@ async function connect(url: string): Promise<{ page: Page; close: () => void }> 
     send: (method, params = {}) =>
       new Promise((resolve, reject) => {
         const id = ++sequence;
-        pending.set(id, { resolve, reject });
+        const timer = setTimeout(() => {
+          pending.delete(id);
+          reject(new NoReplyError(`the browser did not answer ${method} in ${callMs} ms`));
+        }, callMs);
+        const done = () => clearTimeout(timer);
+        pending.set(id, {
+          resolve: (value) => (done(), resolve(value)),
+          reject: (error) => (done(), reject(error)),
+        });
         socket.send(JSON.stringify({ id, method, params }));
       }),
     on: (method, listener) => listeners.set(method, [...(listeners.get(method) ?? []), listener]),
