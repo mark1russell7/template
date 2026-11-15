@@ -208,11 +208,11 @@ export const HOMES: readonly Home[] = [
   {
     area: "data-structures",
     title: "Collections and graphs of dependencies",
-    covers: "lists, deques, maps, trees and heaps; DAGs, cycles, topological order; the typed event emitter that evented collections use. @procedures/collections and @procedures/dag are the same code as procedures: new code goes to @mark1russell7/collections",
+    covers: "lists, deques, maps, trees and heaps; DAGs, cycles, topological order, strongly connected components, the minimum hitting set (the vertex cover of a hypergraph); the typed event emitter that evented collections use. @procedures/collections and @procedures/dag are the same code as procedures: new code goes to @mark1russell7/collections",
     packages: ["@mark1russell7/collections", "@procedures/collections", "@procedures/dag"],
     repo: "mark1russell7/collections",
     state: "published",
-    words: ["list", "queue", "deque", "heap", "tree map", "graph", "dag", "topological", "cycle", "event emitter", "emitter", "listener", "subscribe", "unsubscribe"],
+    words: ["list", "queue", "deque", "heap", "tree map", "graph", "dag", "topological", "cycle", "strongly connected", "hitting set", "vertex cover", "hypergraph", "event emitter", "emitter", "listener", "subscribe", "unsubscribe"],
     signatures: ["topoSort", "topologicalSort", "toposort", "topoOrder", "detectCycles?", "findCycles?"],
   },
   {
