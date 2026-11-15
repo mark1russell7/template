@@ -198,7 +198,7 @@ A run from `workflow_dispatch` on the default branch is the same as a run from a
 - The concurrency group of `ci.yml` is the group of the commit, and `cancel-in-progress` is `false`. A newer push does not cancel the run. A run of the same commit waits for the first run.
 - The jobs `pull`, `changesets` and `release-check` skip, because the run has no pull request. The job `ci` stays green, as on a push to `main`.
 - The steps "Deepen to the merge base" and "Fetch the commit before the push" skip.
-- The action `changes` gives a match, as for each event other than a pull request.
+- The action `changes` gives a match, because the run has no pull request.
 - The rules of `conventions` that read a range of commits skip, because the run has no base.
 - After a CI run of `workflow_dispatch` on `main`, a caller of `reusable-pages.yml` on `workflow_run` of CI deploys only the head of `main`.
 
@@ -219,6 +219,7 @@ Then the run examines that change, as a `pull_request` run does:
 - The job `checks` deepens the checkout to the merge base. It gives the tip of the base branch to `check:conventions` in the variable `CONVENTIONS_BASE`.
 - The job `pull` saves the pull request as the artifact `pull-request-of-run`: its title, its body and its number of commits, in a JSON file. The job `checks` downloads it, and the variable `CONVENTIONS_PULL_REQUEST` gives its path. The job uses a file, not an output: a step gets an output of a job through an environment variable. On Windows, an environment variable takes at most 32,767 characters, and a body can be longer.
 - Thus the rules `release-files`, `unreleased-change`, `home-package`, `version-title` and `no-local-paths` examine the change. The README of `@mark1russell7/conventions` tells how.
+- A gate with paths finds the pull request with the same action. It skips its jobs when no file of the gate changes (refer to "A dispatched run of a gate").
 
 The job `pull` fails when it cannot tell the change, and a failure of the job `pull` fails `CI OK`:
 
@@ -251,7 +252,7 @@ Without the input, a dispatched run in a private repository examines no change, 
 
 A gate that is only about some files (a bench of the core, a corpus) starts on each pull request too. Two shared actions do the rest:
 
-- `changes` reads the files of the pull request and gives `match`. It has the patterns of `on.pull_request.paths`: `*` does not match `/`, `**` matches each part of a path, and `!` takes files out. Each event other than a pull request is a match.
+- `changes` reads the files of the pull request and gives `match`. It has the patterns of `on.pull_request.paths`: `*` does not match `/`, `**` matches each part of a path, and `!` takes files out. A different event is a match, but a run of `workflow_dispatch` can give its pull request (refer to "A dispatched run of a gate").
 - `gate-summary` is the step of the summary job. It passes when each job passed. When `changes` gives `match: false`, a skipped gate job passes too. A failure, a cancel or another skip fails it.
 - A skip is green only after a pass. Give each job that `allow-skip` names a line `<job id>=<check name>` in `last-result`, and give the summary job `checks: read`. A skip of that job then reads the last result of its check on the commit:
   - A pass passes, and a failure fails the summary.
@@ -270,13 +271,24 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       pull-requests: read
     outputs:
       match: ${{ steps.changes.outputs.match }}
     steps:
+      # A dispatched run on the branch of a pull request gives that pull request to changes
+      - if: github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/') && github.ref != format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: actions/setup-node@<commit> # v7.1.0
+        with:
+          node-version: "26"
+      - id: pull
+        if: github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/') && github.ref != format('refs/heads/{0}', github.event.repository.default_branch)
+        continue-on-error: true
+        uses: mark1russell7/template/.github/actions/pull-of-run@<commit> # main
       - id: changes
         uses: mark1russell7/template/.github/actions/changes@<commit> # main
         with:
+          pull-request: ${{ steps.pull.outputs.found == 'true' && steps.pull.outputs.number || '' }}
           paths: |
             packages/core/src/**
             .github/workflows/bench.yml
@@ -301,6 +313,24 @@ jobs:
 ```
 
 A `push` filter can stay, because the ruleset reads only pull requests. With the patterns of the old filter, the gate runs on the same pull requests as before. `changes` also reads the old name of a moved file, so a move out of the gate paths starts the gate too. A pull request with 3000 files or more always starts the gate, because the API gives no more files. The conventions rule `gate-trigger` finds a pull request trigger with `paths` or `paths-ignore`. `actions-test.yml` of the template is an example.
+
+### A dispatched run of a gate
+
+The queue starts the gates of a pull request with `workflow_dispatch` (refer to "The queue"). Such a run has no pull request in its event. Without the input `pull-request`, `changes` gives a match, and each gate job runs. The steps `pull` and `changes` of the example give the pull request of the run to `changes`:
+
+1. The action `pull-of-run` finds the open pull request of the branch of the run (refer to "A dispatched run of a pull request").
+2. Its output `number` goes to the input `pull-request` of `changes`, when its output `found` is `true`.
+3. `changes` reads the head of that pull request. When the head is the commit of the run, it reads the files, as on a `pull_request` run.
+4. After the files, `changes` reads the head again. A push during the read can change the files.
+
+The lookup fails open. Thus a gate skips only after a read of its files:
+
+- A schedule, a run on `main` and a run on a branch with no open pull request give no number. Then the gate runs.
+- A head that is not the commit of the run gives a match. A failed read gives a match too. The log gives the reason.
+- `pull-of-run` fails when it cannot tell the pull request, for example with two open pull requests of one branch. The key `continue-on-error` keeps the job. With no number, the gate runs.
+- A run by hand on the branch of an open pull request also reads the files of that pull request. When no file of the gate changes, the gate jobs skip. A run on `main` starts each gate job.
+
+`pull-of-run` is TypeScript, so it needs Node.js 22.18 or later. Thus the job sets up Node.js before it. A composite action cannot start a different action of its repository with a path that works for a caller outside the repository. Thus the job of the caller has the two steps, and the template has one lookup of the pull request.
 
 ## The queue
 
@@ -351,6 +381,7 @@ A run of the queue does these steps (`scripts/workflows/queue.ts`):
 - With strict off, GitHub merges a pull request that is behind. Then no pull request is `BEHIND`, and the queue changes nothing. Set strict in the ruleset to use the queue.
 - In a private repository, the job starts only when the caller gives the input `private: true`. A private repository pays for each job start, and the queue starts on each push to `main`, also when no pull request is behind. When the input is false, the job skips, and a skipped job costs nothing.
 - A workflow that `workflow_dispatch` starts is not a `pull_request` run. In `reusable-ci.yml`, the job `pull` finds the pull request of the branch. Thus the changeset check, the release check and the rules of the conventions check examine the new head (refer to "A dispatched run of a pull request").
+- A gate with paths that gives the pull request to `changes` skips its jobs when the pull request changes no file of the gate. Without it, each dispatched run of the gate starts each gate job (refer to "A dispatched run of a gate").
 - An example: two pull requests set the same version, and the first one merges. The queue merges `main` into the second one. Then its change sets no version that `main` does not have. Its gate fails when its title names the version (`version-title`). It also fails when npm has the version and the repository sets `versionEachChange` (`unreleased-change`).
 
 The queue does not do these things:
