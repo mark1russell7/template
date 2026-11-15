@@ -293,11 +293,26 @@ describe("required-scripts", () => {
 
 describe("no-build-output", () => {
   it("reports each folder of build output that git keeps, and skips a folder that is not git", () => {
-    const files = { "package.json": { name: "one" }, "packages/a/dist/index.js": "", "packages/a/dist/index.d.ts": "", "build/x.js": "", "src/builder/x.ts": "" };
+    const files = {
+      "package.json": { name: "one" },
+      "packages/a/package.json": { name: "a" },
+      "packages/a/dist/index.js": "",
+      "packages/a/dist/index.d.ts": "",
+      "packages/a/coverage/prettify.js": "",
+      "build/x.js": "",
+      "src/builder/x.ts": "",
+      // A source folder named coverage, away from a package.json, is not a report.
+      "src/coverage/x.ts": "",
+      ".github/actions/coverage/action.yml": "",
+    };
     expect(rule(fixture(files), "no-build-output").status).toBe("skipped");
     const root = fixture(files);
     commitAll(root);
-    expect(rule(root, "no-build-output").breaks.map((item) => item.message)).toEqual(["Git keeps 1 file(s) in build/.", "Git keeps 2 file(s) in packages/a/dist/."]);
+    expect(rule(root, "no-build-output").breaks.map((item) => item.message)).toEqual([
+      "Git keeps 1 file(s) in build/.",
+      "Git keeps 1 file(s) in packages/a/coverage/.",
+      "Git keeps 2 file(s) in packages/a/dist/.",
+    ]);
   });
 
   it("is off with a reason in the configuration", () => {
@@ -967,6 +982,14 @@ describe("home-package", () => {
     expect(rule(changed("function medianOf(xs: number[]): number {\n  return xs[0] ?? 0;\n}\n", "mark1russell7/rigor"), "home-package", { base: "base", env: {} }).status).toBe("pass");
   });
 
+  it("passes in a repository of alsoIn, where the code of a home moves", () => {
+    const code = "function medianOf(xs: number[]): number {\n  return xs[0] ?? 0;\n}\nfunction mulberry32(seed: number): number {\n  return seed;\n}\n";
+    expect(rule(changed(code, "mark1russell7/algebra"), "home-package", { base: "base", env: {} }).status).toBe("pass");
+    // The new name of the target repository after its rename.
+    expect(rule(changed(code, "mark1russell7/math"), "home-package", { base: "base", env: {} }).status).toBe("pass");
+    expect(rule(changed(code, "mark1russell7/other"), "home-package", { base: "base", env: {} }).breaks.length).toBe(2);
+  });
+
   it("skips with no change, and examines each line with the option scope all", () => {
     const root = changed("// the end\n");
     expect(rule(root, "home-package", { env: {} }).status).toBe("skipped");
@@ -977,13 +1000,13 @@ describe("home-package", () => {
   it("has signatures that compile, and no name that two homes claim", () => {
     const signatures = signaturesOf(HOMES);
     expect(signatures.length).toBeGreaterThan(40);
-    const names = ["quantile", "median", "medianOf", "mulberry32", "fnv1a32", "orient2d", "writeFileAtomic", "topoSort", "segmentsIntersect", "exponentialBackoff"];
+    const names = ["quantile", "median", "medianOf", "mulberry32", "fnv1a32", "orient2d", "writeFileAtomic", "topoSort", "segmentsIntersect", "exponentialBackoff", "graphemes", "classifySegments", "canonicalJson"];
     for (const name of names) expect(new Set(signatures.filter((item) => item.pattern.test(name)).map((item) => item.home.area)).size, name).toBe(1);
     for (const name of ["record", "run", "parse", "mean", "seconds", "connect", "measure"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(false);
     // A word of another area after a statistics prefix: bootstrapRepo is the npm bootstrap of the release scripts (codeatlas, 2026-11-02)
     for (const name of ["bootstrapRepo", "bootstrapApp", "wilsonInterval", "bootstrapMedian", "bootstrap"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(!name.endsWith("Repo") && !name.endsWith("App"));
     // A planned home has no package to import yet, so its signatures do not break
-    for (const name of ["graphemes", "parseArgs"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(false);
+    for (const name of ["greatCircleKm", "parseArgs"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(false);
   });
 });
 
@@ -1003,6 +1026,15 @@ describe("api-report-script", () => {
     expect(result.breaks[0]?.message).toContain('no script "check:api"');
     expect(result.breaks[0]?.message).toContain("public package: a.");
     expect(rule(fixture({ "package.json": { name: "one" } }), "api-report-script").status).toBe("break");
+  });
+
+  it("asks a public root with a private workspace for the script", () => {
+    // The form of cue on 2026-11-08: the root is the public package, and the workspace names only a private site
+    const site = { "packages/site/package.json": { name: "site", private: true } };
+    const result = rule(workspace({ name: "@scope/root", private: false, scripts: SCRIPTS }, site), "api-report-script");
+    expect(result.status).toBe("break");
+    expect(result.breaks[0]?.message).toContain("public package: @scope/root.");
+    expect(rule(workspace({ name: "@scope/root", private: false, scripts: { "check:api": "api-report check" } }, site), "api-report-script").status).toBe("pass");
   });
 
   it("adds the script and the dependency, with the form of the file", () => {

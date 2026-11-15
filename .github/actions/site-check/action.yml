@@ -48,7 +48,7 @@ runs:
         VERSION: ${{ inputs.site-check-playwright }}
       run: npm install --prefix "$RUNNER_TEMP/site-check-playwright" --no-save --no-package-lock --no-audit --no-fund "playwright-core@$VERSION"
     # A composite action resolves a local path from the workspace, not from its own folder. So this step names a commit.
-    - uses: mark1russell7/template/.github/actions/setup-playwright@f039d649b66d2d7cb6746ab5927f77b7001ca40d # main
+    - uses: mark1russell7/template/.github/actions/setup-playwright@65c760bd1ce1885b2badf6f92706dd396f50b9f4 # main
       with:
         command: ${{ runner.temp }}/site-check-playwright/node_modules/.bin/playwright-core
         browsers: chromium

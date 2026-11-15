@@ -1,67 +1,11 @@
 /**
- * A page of each export of a package, from its report. A library with many exports keeps each name on this
- * page, and a hand-written page explains the main calls. The report has the names and the declarations, so
- * this page has the same text as the report in each build.
+ * A page of each export of a package, from its report or its model. A library with many exports keeps each
+ * name on this page, and a hand-written page explains the main calls. The report has the names and the
+ * declarations, so this page has the same text as the report in each build. A model can also give the doc
+ * comments.
  */
+import { apiModel, type ApiModel, type ApiName } from "./model.ts";
 import type { FrontmatterValue } from "./page.ts";
-
-/** One line of an entry of a report. */
-interface ReportItem {
-  readonly name: string;
-  readonly key: string;
-  readonly isType: boolean;
-  readonly kind: "declaration" | "namespace" | "external" | "ambient";
-}
-
-/** One entry of a report: its subpath and its lines. */
-interface ReportEntry {
-  readonly subpath: string;
-  readonly items: readonly ReportItem[];
-}
-
-/** This function gives the entries of a report and the text of each declaration. */
-function readReport(report: string): { readonly entries: readonly ReportEntry[]; readonly declarations: ReadonlyMap<string, string> } {
-  const entries: ReportEntry[] = [];
-  const declarations = new Map<string, string>();
-  let items: ReportItem[] | null = null;
-  let key: string | null = null;
-  let body: string[] = [];
-  const close = (): void => {
-    if (key !== null) declarations.set(key, body.join("\n").trimEnd());
-  };
-  let inDeclarations = false;
-  for (const line of report.replace(/\r\n/g, "\n").split("\n")) {
-    if (inDeclarations) {
-      const next = /^### (.+)$/.exec(line)?.[1];
-      if (next === undefined) body.push(line);
-      else {
-        close();
-        key = next;
-        body = [];
-      }
-      continue;
-    }
-    if (line.startsWith("## ")) {
-      inDeclarations = line === "## Declarations";
-      const subpath = /^## (\.\S*?)(?: \(.*\))?: /.exec(line)?.[1];
-      items = null;
-      if (subpath !== undefined) {
-        const lines: ReportItem[] = [];
-        entries.push({ subpath, items: lines });
-        if (line.endsWith(" names")) items = lines;
-      }
-      continue;
-    }
-    if (items === null) continue;
-    const match = /^(type )?(.+?): (\S+)(?: \((namespace|external)\))?$/.exec(line);
-    if (match === null) continue;
-    const name = match[2] ?? "";
-    const kind = name === "ambient" ? "ambient" : ((match[4] as "namespace" | "external" | undefined) ?? "declaration");
-    items.push({ name, key: match[3] ?? "", isType: match[1] !== undefined, kind });
-  }
-  close();
-  return { entries, declarations };
-}
 
 /** This function gives a fenced block of TypeScript. The fence is longer than each run of backticks in the code. */
 function fenced(code: string): string {
@@ -93,16 +37,23 @@ function plain(declaration: string): string {
   return declaration.replace(/^(?:export )?(?:declare (?!global\b|module\b))?/gm, "");
 }
 
+/** This function gives the doc comment of the text `doc`, with a line break at its end. The end mark of a comment in the text does not end the comment. */
+function docComment(doc: string): string {
+  const lines = doc.replaceAll("*/", "*\\/").split("\n");
+  if (lines.length === 1) return `/** ${lines[0] ?? ""} */\n`;
+  return `/**\n${lines.map((line) => (line === "" ? " *" : ` * ${line}`)).join("\n")}\n */\n`;
+}
+
 /** This pattern finds a name that a bundler changed, to keep two declarations apart: `grid$1`. */
 const BUNDLER_NAME = /\$\d+$/;
 
 /** This function gives the name of the declaration of a line of a report. */
-function localName(item: ReportItem): string {
+function localName(item: ApiName): string {
   return item.key.slice(item.key.lastIndexOf("#") + 1);
 }
 
 /** This function puts the name of each export of `items` in `code`, where a bundler changed that name. */
-function withExportNames(code: string, items: readonly ReportItem[]): string {
+function withExportNames(code: string, items: readonly ApiName[]): string {
   let text = code;
   for (const item of items) {
     const local = localName(item);
@@ -119,11 +70,23 @@ function withExportNames(code: string, items: readonly ReportItem[]): string {
  * export when the source gave the declaration a different name. A name from a bundler does not show. A
  * comment also tells the package of an external name.
  *
+ * The first argument is a model, or the text of a report with the name of its package. A model with doc
+ * comments puts the doc comment of each declaration above the declaration. The text of a report has no doc
+ * comments.
+ *
  * The fields of `frontmatter` go into the front matter, after the title and the description. A field `title` or
  * `description` replaces the default.
  */
-export function referencePage(report: string, packageName: string, frontmatter: Readonly<Record<string, FrontmatterValue>> = {}): string {
-  const { entries, declarations } = readReport(report);
+export function referencePage(model: ApiModel, frontmatter?: Readonly<Record<string, FrontmatterValue>>): string;
+export function referencePage(report: string, packageName: string, frontmatter?: Readonly<Record<string, FrontmatterValue>>): string;
+export function referencePage(
+  report: string | ApiModel,
+  second?: string | Readonly<Record<string, FrontmatterValue>>,
+  third: Readonly<Record<string, FrontmatterValue>> = {},
+): string {
+  const model = typeof report === "string" ? apiModel(report, typeof second === "string" ? second : "") : report;
+  const frontmatter = typeof report === "string" ? third : typeof second === "object" ? second : {};
+  const { packageName, entries, declarations } = model;
   const fields: Record<string, FrontmatterValue> = {
     title: `Each export of ${packageName}`,
     description: `Each entry point of ${packageName}, with its exports and their declarations.`,
@@ -141,14 +104,15 @@ export function referencePage(report: string, packageName: string, frontmatter: 
   for (const entry of entries) {
     const path = `${packageName}${entry.subpath.slice(1)}`;
     out.push("", `## \`${path}\``, "");
-    if (entry.items.length === 0) {
+    const items = entry.names;
+    if (items.length === 0) {
       out.push("This entry has no declarations.");
       continue;
     }
-    const top = entry.items.filter((item) => item.kind !== "ambient" && !item.name.includes(".") && !item.name.startsWith("* "));
+    const top = items.filter((item) => item.kind !== "ambient" && !item.name.includes(".") && !item.name.startsWith("* "));
     const blocks = top.length > 0 ? [fenced(importOf(top.map((item) => `${item.isType ? "type " : ""}${item.name === "default" ? "default as defaultExport" : item.name}`), path))] : [];
     const parts: string[] = [];
-    for (const item of entry.items) {
+    for (const item of items) {
       if (seen.has(`${item.name} ${item.key}`)) continue;
       seen.add(`${item.name} ${item.key}`);
       if (item.kind === "external") {
@@ -156,14 +120,14 @@ export function referencePage(report: string, packageName: string, frontmatter: 
         parts.push(`// ${item.name} comes from the package ${from}.`);
         continue;
       }
-      const text = declarations.get(item.key);
-      if (text === undefined || seen.has(item.key)) continue;
+      const declaration = Object.hasOwn(declarations, item.key) ? declarations[item.key] : undefined;
+      if (declaration === undefined || seen.has(item.key)) continue;
       seen.add(item.key);
       const local = localName(item);
       const label = item.kind === "ambient" || local === item.name || BUNDLER_NAME.test(local) ? "" : `// The export ${item.name}:\n`;
-      parts.push(`${label}${plain(text)}`);
+      parts.push(`${label}${declaration.doc === undefined ? "" : docComment(declaration.doc)}${plain(declaration.text)}`);
     }
-    if (parts.length > 0) blocks.push(fenced(withExportNames(parts.join("\n\n"), entry.items)));
+    if (parts.length > 0) blocks.push(fenced(withExportNames(parts.join("\n\n"), items)));
     out.push(blocks.join("\n\n"));
   }
   return `${out.join("\n")}\n`;

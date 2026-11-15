@@ -39,7 +39,10 @@ describe("cliManifest", () => {
 });
 
 describe("devDependencyVersions", () => {
-  const cli = { name: CLI_NAME, devDependencies: { "@mark1russell7/cue": "^1.0.0", "@types/node": "^26.0.0", typescript: "^7.0.0", vitest: "^5.0.0" } };
+  const cli = {
+    name: CLI_NAME,
+    devDependencies: { "@mark1russell7/cue": "^1.0.0", "@types/node": "^26.0.0", "@vitest/coverage-v8": "^5.0.0", typescript: "^7.0.0", vitest: "^5.0.0" },
+  };
 
   it("takes each range from the repository first: the root, then the packages in name order", async () => {
     const dir = repo(
@@ -49,9 +52,18 @@ describe("devDependencyVersions", () => {
     expect(await devDependencyVersions(dir, cli)).toEqual({
       "@mark1russell7/cue": "^1.0.0",
       "@types/node": "^24.0.0",
+      // The repository has no @vitest/coverage-v8: it gets the range of its Vitest, not the range of the CLI.
+      "@vitest/coverage-v8": "^4.0.0",
       typescript: "^6.0.0",
       vitest: "^4.0.0",
     });
+  });
+
+  it("keeps the range of @vitest/coverage-v8 that the repository has, and takes the range of the CLI with no Vitest", async () => {
+    const own = repo({ name: "demo-monorepo", devDependencies: { vitest: "^4.0.0", "@vitest/coverage-v8": "^4.0.2" } });
+    expect((await devDependencyVersions(own, cli))["@vitest/coverage-v8"]).toBe("^4.0.2");
+    const none = repo({ name: "demo-monorepo" });
+    expect(await devDependencyVersions(none, cli)).toMatchObject({ "@vitest/coverage-v8": "^5.0.0", vitest: "^5.0.0" });
   });
 
   it("refuses a dependency that neither the repository nor the CLI has", async () => {

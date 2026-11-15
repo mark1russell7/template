@@ -115,7 +115,9 @@ runs:
         echo "$DIR" >> "$GITHUB_PATH"
         cli="$DIR/cue"
         [ -x "$cli" ] || cli="$DIR/cue.exe"
-        line=$("$cli" version | head -1)
+        # No pipe into head: head can close the pipe early, and with pipefail the SIGPIPE (exit 141) fails the step.
+        line=$("$cli" version)
+        line=${line%%$'\n'*}
         echo "$line"
         [[ "$line" == *"v$VERSION"* ]] || { echo "::error::The CLI gives \"$line\", not the version v$VERSION."; exit 1; }
         echo "version=$VERSION" >> "$GITHUB_OUTPUT"

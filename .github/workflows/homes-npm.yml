@@ -1,0 +1,48 @@
+# The map of homes against npm: scripts/homes/npm-drift.ts --check asks npm for each package name of the map
+# (packages/conventions/src/map.ts). A package of a published home that is not on npm, a pending name that is on npm,
+# a package of an unpublished home that is on npm, and a name that npm does not answer fail the run: a no read is
+# never a pass. A planned home that names no package shows as a no read in the summary. The run needs no install:
+# the script imports only the map, and Node.js runs TypeScript. It runs each Monday, on each change of the map on
+# main, on each pull request, and by hand.
+name: Homes npm
+
+on:
+  workflow_dispatch:
+  # Each Monday, so a home that goes to npm leaves the planned state in a week at most
+  schedule:
+    - cron: "45 6 * * 1"
+  push:
+    branches: [main]
+    paths:
+      - packages/conventions/src/map.ts
+      - scripts/homes/npm-drift.ts
+      - .github/workflows/homes-npm.yml
+  # Each pull request, so the ruleset can ask for the check. The run needs no install and takes seconds.
+  pull_request:
+
+permissions: {}
+
+concurrency:
+  # A newer push cancels only a run of a pull request. A run of main finishes, so each commit of main gets a result.
+  group: homes-npm-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  drift:
+    name: The map of homes against npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            packages/conventions/src
+            scripts/homes
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Compare the map with npm
+        run: node scripts/homes/npm-drift.ts --check

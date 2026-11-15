@@ -7,7 +7,7 @@
  *
  * Use: give the class scroll-cue to the box, and set --scroll-cue-bg to the background color of the box.
  *   <pre class="scroll-cue">...</pre>
- *   .my-code { --scroll-cue-bg: #f6f6f8; }
+ *   .my-code.scroll-cue { --scroll-cue-bg: #f6f6f8; }
  * The box gets overflow-x: auto. A browser with scroll timelines keeps the background of the box, so a code block keeps
  * the color of its theme. In a browser with no scroll timelines, the background color of the box is --scroll-cue-bg.
  */

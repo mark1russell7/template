@@ -72,6 +72,12 @@ interface Message {
 /** An event handler of a page. */
 type Listener = (params: Record<string, unknown>) => void;
 
+/** The reply of `Runtime.evaluate` and `Runtime.callFunctionOn` with `returnByValue`. */
+interface Reply {
+  result?: { value?: unknown };
+  exceptionDetails?: { text?: string; exception?: { description?: string } };
+}
+
 /** One page of a started browser. */
 export interface Page {
   /** This function sends a command of the protocol and returns its result. */
@@ -82,7 +88,16 @@ export interface Page {
   once(method: string, ms: number): Promise<Record<string, unknown>>;
   /** This function evaluates the expression in the page, and waits for a promise. */
   evaluate<T>(expression: string): Promise<T>;
+  /**
+   * This function calls the function `source` in the page with the values `args`, and waits for a promise. The values go
+   * to the page as the arguments of the call (`Runtime.callFunctionOn`), not as text of the code. Thus a value from a URL
+   * or from a page cannot change the code.
+   */
+  call<T>(source: string, ...args: readonly CallValue[]): Promise<T>;
 }
+
+/** A value that {@link Page.call} gives to a function in the page. It goes to the page as JSON. */
+export type CallValue = string | number | boolean | null | readonly CallValue[] | { readonly [key: string]: CallValue };
 
 /** A started browser. */
 export interface Browser {
@@ -209,11 +224,21 @@ async function connect(url: string): Promise<{ page: Page; close: () => void }> 
         page.on(method, listener);
       }),
     evaluate: async <T>(expression: string): Promise<T> => {
-      const reply = (await page.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true })) as {
-        result?: { value?: unknown };
-        exceptionDetails?: { text?: string; exception?: { description?: string } };
-      };
+      const reply = (await page.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true })) as Reply;
       if (reply.exceptionDetails) throw new Error(reply.exceptionDetails.exception?.description ?? reply.exceptionDetails.text ?? "the expression failed");
+      return reply.result?.value as T;
+    },
+    call: async <T>(source: string, ...args: readonly CallValue[]): Promise<T> => {
+      // The global object of the page is the target of the call. A new page after a navigation has a new one.
+      const target = (await page.send("Runtime.evaluate", { expression: "globalThis" })) as { result?: { objectId?: string } };
+      const reply = (await page.send("Runtime.callFunctionOn", {
+        functionDeclaration: source,
+        objectId: target.result?.objectId,
+        arguments: args.map((value) => ({ value })),
+        awaitPromise: true,
+        returnByValue: true,
+      })) as Reply;
+      if (reply.exceptionDetails) throw new Error(reply.exceptionDetails.exception?.description ?? reply.exceptionDetails.text ?? "the function failed");
       return reply.result?.value as T;
     },
   };

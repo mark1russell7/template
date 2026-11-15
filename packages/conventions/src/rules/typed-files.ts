@@ -7,6 +7,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { byCode } from "../workspace.ts";
+import { inheritedOption, optionPath } from "../tsconfig.ts";
 import {
   codePackages,
   inFolder,
@@ -197,57 +198,6 @@ const CONFIG_FILE = /\.config(\.[cm]?ts)$/;
 /** A `rootDir` that is the folder of the tsconfig, so that the config files at the root are in it. */
 const ROOT_DIRS = new Set([".", "./", "${configDir}", "${configDir}/"]);
 
-/** The value of an option that a tsconfig gets from a config that it extends, and the file of that config. */
-interface Inherited {
-  readonly value: unknown;
-  readonly file: string;
-}
-
-/**
- * This function gives the value of the compiler option `name` that a tsconfig gets from the configs it extends. It gives
- * `null` when no config of the chain sets it. It gives `undefined` when it cannot read a config of the chain, for example
- * a package that is not installed.
- */
-function inheritedOption(
-  tsconfig: string,
-  name: string,
-  seen: ReadonlySet<string> = new Set(),
-): Inherited | null | undefined {
-  const json = readJsonc(tsconfig) as { extends?: unknown } | undefined;
-  if (json === undefined || seen.has(tsconfig)) return undefined;
-  const specs = Array.isArray(json.extends)
-    ? json.extends
-    : json.extends === undefined
-      ? []
-      : [json.extends];
-  let found: Inherited | null = null;
-  // A later config of the list wins, as in tsc
-  for (const spec of specs) {
-    if (typeof spec !== "string") return undefined;
-    let file: string;
-    try {
-      file =
-        spec.startsWith(".") || spec.startsWith("/")
-          ? resolve(dirname(tsconfig), spec)
-          : createRequire(tsconfig).resolve(spec);
-    } catch {
-      return undefined;
-    }
-    if (!existsSync(file) && existsSync(`${file}.json`)) file = `${file}.json`;
-    const parent = readJsonc(file) as
-      { compilerOptions?: Record<string, unknown> } | undefined;
-    if (parent === undefined) return undefined;
-    const own = parent.compilerOptions?.[name];
-    const value =
-      own === undefined
-        ? inheritedOption(file, name, new Set([...seen, tsconfig]))
-        : { value: own, file };
-    if (value === undefined) return undefined;
-    if (value !== null) found = value;
-  }
-  return found;
-}
-
 /**
  * This function tells if a tsconfig gets a `rootDir` other than its folder from a config that it extends. It also says
  * yes when it cannot read that config. A `${configDir}` is the folder of the tsconfig, the other paths are relative to
@@ -258,10 +208,7 @@ function inheritsSubfolder(tsconfig: string): boolean {
   if (inherited === null) return false;
   if (inherited === undefined || typeof inherited.value !== "string")
     return true;
-  const own = inherited.value;
-  const rootDir = own.startsWith("${configDir}")
-    ? resolve(dirname(tsconfig), `.${own.slice("${configDir}".length)}`)
-    : resolve(dirname(inherited.file), own);
+  const rootDir = optionPath(tsconfig, { file: inherited.file, value: inherited.value });
   return rootDir !== resolve(dirname(tsconfig));
 }
 

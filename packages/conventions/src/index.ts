@@ -25,6 +25,7 @@ export {
   parseJsonc,
   readJsonc,
   replaceLine,
+  RULE_WARN_DAYS,
   runGit,
   specifiersOf,
   type AuditSource,
@@ -41,13 +42,16 @@ export {
 } from "./rule.ts";
 export {
   apiReportScript,
+  coverageProvider,
   cuePreset,
+  exportsRequire,
   gateTrigger,
   homePackage,
   licenseFile,
   mainCheck,
   noBuildOutput,
   noLocalPaths,
+  packNoBuildinfo,
   pagesAfterRelease,
   pagesSite,
   pinnedGitDeps,
@@ -111,7 +115,7 @@ export { HOOK_MARKER, installHook, NO_READ_LINE, PRE_PUSH_HOOK, prePush, type Ho
 export { hasImportMetaMain, REAL_COMPARE } from "./rules/main-check.ts";
 export { roadmapOfLine } from "./rules/roadmap-parses.ts";
 export { repositoryOfRemote, scheduleMinute } from "./rules/runner-budget.ts";
-export { declaredName, messageOf, repoOf, signaturesOf } from "./rules/home-package.ts";
+export { declaredName, messageOf, repoOf, reposOf, signaturesOf } from "./rules/home-package.ts";
 export { HOME_EXPORTS } from "./home-exports.ts";
 export { authorOf, LICENSE_TEXTS, licenseFileOf, mitText, repositoryIsPublic } from "./rules/license-file.ts";
 export { GITHUB_YAML, yamlFaults, type YamlFault } from "./rules/workflow-parses.ts";
@@ -148,6 +152,6 @@ export {
   type FixResult,
   type RuleResult,
 } from "./run.ts";
-export { findHomes, HOMES, MAP_RULE, mapMarkdown, mapText, mergeHomes, readOverlay, type Home, type HomeState } from "./map.ts";
+export { findHomes, HOMES, MAP_RULE, mapMarkdown, mapText, mergeHomes, npmDrift, npmNames, readOverlay, type Home, type HomeState, type NpmDrift, type NpmDriftKind, type NpmPresence } from "./map.ts";
 export { changelogSection, MAX_NOTES, npmUrl, releaseNotes, tagName } from "./release-text.ts";
 export { globFolders, globToRegExp, packageFolders, workspaceGlobs } from "./workspace.ts";

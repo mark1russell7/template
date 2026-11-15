@@ -237,6 +237,21 @@ export const HEADER_LINES = 5;
  * entry, the bins of the manifest, and then the declaration of each name.
  */
 export function apiReport(packageName: string, root: string, entries: readonly Entry[], options: ReportOptions = {}): string {
+  return documentedReport(packageName, root, entries, options).text;
+}
+
+/** The report of a package, and the doc comments that the report does not have. */
+export interface DocumentedReport {
+  /** The name of the package. */
+  readonly packageName: string;
+  /** The text of the report, as `apiReport` gives it. */
+  readonly text: string;
+  /** The text of the doc comment of each declaration of the report, by its key. A declaration without a doc comment has no item. */
+  readonly docs: ReadonlyMap<string, string>;
+}
+
+/** This function gives the report of `apiReport`, and the doc comment of each declaration of the report. */
+export function documentedReport(packageName: string, root: string, entries: readonly Entry[], options: ReportOptions = {}): DocumentedReport {
   const manifest = options.manifest ?? {};
   const reader = new Reader(root, manifest);
   const entryFiles = entries.flatMap((entry) => (entry.types === undefined ? [] : [resolve(root, entry.types)])).filter((file) => existsSync(file));
@@ -251,6 +266,7 @@ export function apiReport(packageName: string, root: string, entries: readonly E
   const keyOf = (binding: Binding): string =>
     binding.kind === "declaration" ? `${path(binding.file)}#${binding.local}` : binding.kind === "namespace" ? `${path(binding.file)}#*` : `${binding.module}#${binding.name}`;
   const declarations = new Map<string, string>();
+  const docs = new Map<string, string>();
   const lines = header(packageName, options.tool ?? DEFAULT_TOOL);
   if (entries.every((entry) => entry.types === undefined)) {
     lines.push("", "This package has no type declarations: no entry of its package.json gives a .d.ts file.");
@@ -263,7 +279,10 @@ export function apiReport(packageName: string, root: string, entries: readonly E
       const isType = typeOnly || binding.typeOnly;
       lines.push(`${isType ? "type " : ""}${prefix}${name}: ${key}${binding.kind === "declaration" ? "" : ` (${binding.kind})`}`);
       if (binding.kind === "declaration" && !declarations.has(key)) {
-        declarations.set(key, plain((reader.info(binding.file).locals.get(binding.local) ?? []).join("\n")));
+        const info = reader.info(binding.file);
+        declarations.set(key, plain((info.locals.get(binding.local) ?? []).join("\n")));
+        const doc = info.docs.get(binding.local);
+        if (doc !== undefined) docs.set(key, doc);
       }
       // The names of a namespace are part of the API: `ns.name`
       if (binding.kind === "namespace" && !parents.has(binding.file)) {
@@ -305,7 +324,7 @@ export function apiReport(packageName: string, root: string, entries: readonly E
     lines.push("", "## Declarations");
     for (const key of [...declarations.keys()].sort(byCode)) lines.push("", `### ${key}`, declarations.get(key) ?? "");
   }
-  return `${lines.join("\n")}\n`;
+  return { packageName, text: `${lines.join("\n")}\n`, docs };
 }
 
 /** The options of the report of a package folder. */
@@ -318,8 +337,13 @@ export interface PackageReportOptions {
 
 /** This function gives the report of the package in the folder `dir`. */
 export function packageReport(dir: string, options: PackageReportOptions = {}): string {
+  return documentedPackageReport(dir, options).text;
+}
+
+/** This function gives the report of the package in the folder `dir`, and the doc comment of each declaration of the report. */
+export function documentedPackageReport(dir: string, options: PackageReportOptions = {}): DocumentedReport {
   const source = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as Manifest;
   const manifest = options.publishConfig === false ? source : publishedManifest(source);
   const name = typeof manifest.name === "string" ? manifest.name : basename(dir);
-  return apiReport(name, dir, entriesOf(manifest, dir), { manifest, ...(options.tool === undefined ? {} : { tool: options.tool }) });
+  return documentedReport(name, dir, entriesOf(manifest, dir), { manifest, ...(options.tool === undefined ? {} : { tool: options.tool }) });
 }

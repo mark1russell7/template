@@ -1,0 +1,20 @@
+# Makes pnpm-lock.yaml again on a runner, for the branch that the run starts on (reusable-lockfile.yml):
+#
+#   gh workflow run lockfile.yml -R mark1russell7/template --ref <branch>
+name: Lockfile
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+# One run for each branch: a new start cancels the older one
+concurrency:
+  group: lockfile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lockfile:
+    uses: ./.github/workflows/reusable-lockfile.yml
+    permissions:
+      contents: read

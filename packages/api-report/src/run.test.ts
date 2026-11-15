@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import * as home from "@mark1russell7/conventions/workspace";
-import { globFolders, globToRegExp, packageFolders, readConfig, runCli, runReports, summaryMarkdown, workspaceGlobs, type CliIo } from "./index.ts";
+import { globFolders, globToRegExp, packageFolders, readConfig, REPORT_FILE, reportFolders, runCli, runReports, summaryMarkdown, workspaceGlobs, type CliIo } from "./index.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "api-report-run-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -48,7 +48,34 @@ describe("the functions of the workspace", () => {
     expect(globFolders).toBe(home.globFolders);
     expect(globToRegExp).toBe(home.globToRegExp);
     expect(packageFolders).toBe(home.packageFolders);
+    expect(reportFolders).toBe(home.reportFolders);
     expect(workspaceGlobs).toBe(home.workspaceGlobs);
+  });
+});
+
+describe("a public root with a private workspace", () => {
+  // Two repositories on 2026-11-08: the workspace names only a private site, and the root is the public package
+  const repository = (): string =>
+    fixture({
+      "package.json": { name: "lib", types: "./index.d.ts" },
+      "index.d.ts": "export declare const lib: 1;\n",
+      "pnpm-workspace.yaml": 'packages:\n  - "site"\n',
+      "site/package.json": { name: "site", private: true },
+    });
+
+  it("writes and checks the report of the root with no folder named", () => {
+    const root = repository();
+    const before = runReports({ mode: "check", root });
+    expect(before.failed).toBe(true);
+    expect(before.packages.find((item) => item.folder === ".")).toMatchObject({ status: "new" });
+    expect(runReports({ mode: "update", root }).packages.find((item) => item.folder === ".")).toMatchObject({ status: "new" });
+    expect(existsSync(join(root, REPORT_FILE))).toBe(true);
+    const after = runReports({ mode: "check", root });
+    expect(after.failed).toBe(false);
+    expect(after.packages.map((item) => [item.folder, item.status])).toEqual([
+      [".", "same"],
+      ["site", "private"],
+    ]);
   });
 });
 
@@ -281,6 +308,30 @@ describe("check and update", () => {
     expect(read([1])).toThrow("must be an object of fields");
     expect(read({ "a b": 1 })).toThrow("is not a plain name");
     expect(read({ order: null })).toThrow("must be a text, a number or a boolean");
+  });
+
+  it("puts the doc comments on the page of each export only with the field docs, and holds them in the check", () => {
+    const pages = [{ package: "packages/a", pages: [], reference: "each.md", docs: true }];
+    const root = workspace({ apiReport: { pages } });
+    writeFileSync(join(root, "packages/a/index.d.ts"), "/** The value a. */\nexport declare const a: 1;\n");
+    expect(cli(root, ["update"]).code).toBe(0);
+    const page = readFileSync(join(root, "each.md"), "utf8");
+    expect(page).toContain("/** The value a. */\nconst a: 1;");
+    expect(cli(root, ["check"]).code).toBe(0);
+    writeFileSync(join(root, "packages/a/index.d.ts"), "/** The changed value a. */\nexport declare const a: 1;\n");
+    expect(cli(root, ["check"]).stdout).toContain("each.md: the page differs from the report.");
+
+    // Without the field, a doc comment changes neither the report nor the page
+    const plain = workspace({ apiReport: { pages: [{ package: "packages/a", pages: [], reference: "each.md" }] } });
+    writeFileSync(join(plain, "packages/a/index.d.ts"), "/** The value a. */\nexport declare const a: 1;\n");
+    cli(plain, ["update"]);
+    expect(readFileSync(join(plain, "each.md"), "utf8")).not.toContain("The value a.");
+    expect(readFileSync(join(plain, "packages/a", REPORT_FILE), "utf8")).not.toContain("The value a.");
+
+    const read = (docs: unknown) => () => readConfig(workspace({ apiReport: { pages: [{ package: "packages/a", pages: ["a.md"], reference: "each.md", docs }] } }));
+    expect(read(true)).not.toThrow();
+    expect(read("yes")).toThrow("docs must be a boolean");
+    expect(() => readConfig(workspace({ apiReport: { pages: [{ package: "packages/a", pages: ["a.md"], docs: true }] } }))).toThrow("docs needs the field reference");
   });
 
   it("gives exit code 2 and the help for wrong arguments", () => {

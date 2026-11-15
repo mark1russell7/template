@@ -49,7 +49,9 @@ on:
       stop-minutes:
         description: >-
           The time after which Stryker stops, so that the job can still write the summary and upload the report. 0
-          gives timeout-minutes minus 10. A selection that Stryker stops has no score, and it fails.
+          gives stopMinutes of the lane (rigor-mutation minutes, 0.2.4 or later), at most timeout-minutes minus 10.
+          An older rigor-mutation gives timeout-minutes minus 10. A selection that Stryker stops has no score, and it
+          fails.
         type: number
         default: 0
       dry-run:
@@ -104,7 +106,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           package_json_file: ${{ inputs.working-directory }}/package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -116,7 +118,8 @@ jobs:
       # The jobs mutate and gate use scores --alone and --reports of rigor-mutation 0.1.8.
       - name: Version
         run: |
-          if ! pnpm exec rigor-mutation --help | grep -q -- "--reports <dir>"; then
+          help=$(pnpm exec rigor-mutation --help || true)
+          if ! grep -qF -- "--reports <dir>" <<< "$help"; then
             echo "::error::This workflow needs @mark1russell7/rigor-mutation 0.1.8 or later (scores --reports and --alone)."
             exit 1
           fi
@@ -182,7 +185,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           package_json_file: ${{ inputs.working-directory }}/package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -201,7 +204,18 @@ jobs:
           CHANGED: ${{ inputs.changed }}
         run: |
           stop=$STOP_MINUTES
-          if [ "$stop" -eq 0 ]; then stop=$((TIMEOUT_MINUTES - 10)); fi
+          if [ "$stop" -eq 0 ]; then
+            stop=$((TIMEOUT_MINUTES - 10))
+            # rigor-mutation 0.2.4 gives the stop of the lane, so plan-check and the job use one stop.
+            if minutes=$(pnpm exec rigor-mutation minutes --lane "$LANE" 2> /dev/null); then
+              lane_stop=$(sed -n 's/^stop=\([0-9][0-9]*\)$/\1/p' <<< "$minutes")
+              if [ -n "$lane_stop" ] && [ "$lane_stop" -le "$stop" ]; then
+                stop=$lane_stop
+              elif [ -n "$lane_stop" ]; then
+                echo "::notice::$SELECTION: the stop of the lane is $lane_stop minutes. The job stops Stryker after $stop minutes, 10 before timeout-minutes."
+              fi
+            fi
+          fi
           if [ "$stop" -le 0 ]; then
             echo "::error::stop-minutes is $stop. Give a positive stop-minutes, or a timeout-minutes above 10."
             exit 1
@@ -266,7 +280,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           package_json_file: ${{ inputs.working-directory }}/package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0

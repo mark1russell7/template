@@ -1,14 +1,14 @@
 /**
  * The rule `api-report-script`: a repository with a public package has the root script that checks its API reports.
  */
-import { codePackages, DEPENDENCY_FIELDS, lineOf, specifiersOf, type Break, type Edit, type PackageInfo, type Rule } from "../rule.ts";
+import { DEPENDENCY_FIELDS, lineOf, rootAndCodePackages, specifiersOf, type Break, type Edit, type PackageInfo, type Rule } from "../rule.ts";
 import { isPublic } from "./license-file.ts";
 
 /** The package of the reports. */
 const API_REPORT = "@mark1russell7/api-report";
 
 /** The range that the fix adds. The train moves it after that. */
-export const API_REPORT_RANGE = "^0.4.0";
+export const API_REPORT_RANGE = "^0.5.0";
 
 /** The command of the script. */
 const COMMAND = "api-report check";
@@ -17,7 +17,7 @@ const COMMAND = "api-report check";
  * This function gives `text` with one more entry in the block `field` of a `package.json` file. The entry goes in the
  * order of the names when `sorted` is true, else at the end. It gives undefined when the block is not on separate lines.
  */
-function addEntry(text: string, field: string, name: string, value: string, sorted: boolean): string | undefined {
+export function addEntry(text: string, field: string, name: string, value: string, sorted: boolean): string | undefined {
   const eol = text.includes("\r\n") ? "\r\n" : "\n";
   const lines = text.split(/\r?\n/);
   const start = lines.findIndex((line) => line === `  "${field}": {`);
@@ -36,7 +36,7 @@ function addEntry(text: string, field: string, name: string, value: string, sort
 }
 
 /** This function adds a block with one entry after the last block of the root object. */
-function addBlock(text: string, field: string, name: string, value: string): string | undefined {
+export function addBlock(text: string, field: string, name: string, value: string): string | undefined {
   const eol = text.includes("\r\n") ? "\r\n" : "\n";
   const lines = text.split(/\r?\n/);
   const end = lines.lastIndexOf("}");
@@ -72,7 +72,7 @@ export const apiReportScript: Rule = {
   },
   check(context, options) {
     const script = typeof options["script"] === "string" ? options["script"] : "check:api";
-    const published = codePackages(context).filter(isPublic);
+    const published = rootAndCodePackages(context).filter(isPublic);
     if (published.length === 0) return [];
     const root = context.rootPackage;
     const value = root.manifest["scripts"];

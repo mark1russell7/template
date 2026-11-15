@@ -183,6 +183,16 @@ export function navProblems(result: Pick<NavResult, "pages" | "sitemap" | "click
   return [...new Set(problems)];
 }
 
+/**
+ * The function that clicks the first link of the page to the path in its argument, in the same tab. It gives true when
+ * the page has such a link. The path is an argument of the call, so it is not a part of the code.
+ */
+const CLICK_LINK = `function (pathname) {
+  const a = [...document.querySelectorAll("a[href]")].find((el) => new URL(el.getAttribute("href"), location.href).pathname === pathname);
+  if (a) { a.removeAttribute("target"); a.click(); }
+  return Boolean(a);
+}`;
+
 /** The expression that gives the links of the page and the marks of its header. */
 export const NAV_SCAN = `(() => {
   const shown = (el) => {
@@ -348,7 +358,7 @@ export async function crawlSite(options: NavOptions): Promise<NavResult> {
         if (to === from.path) continue;
         await open(page, new URL(from.path, home).href, NAV_DESKTOP_WIDTH, options);
         const landed = page.once("Page.loadEventFired", options.timeoutMs).catch(() => undefined);
-        await page.evaluate(`(() => { const a = [...document.querySelectorAll("a[href]")].find((el) => new URL(el.getAttribute("href"), location.href).pathname === ${JSON.stringify(new URL(to, home).pathname)}); if (a) { a.removeAttribute("target"); a.click(); } return Boolean(a); })()`);
+        await page.call(CLICK_LINK, new URL(to, home).pathname);
         await Promise.race([landed, new Promise((done) => setTimeout(done, 3000))]);
         await new Promise((done) => setTimeout(done, options.settleMs));
         const scan = await page.evaluate<Scan>(NAV_SCAN);
