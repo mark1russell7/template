@@ -77,6 +77,7 @@ export {
 export { releasesLead, renderReleasesPage, RELEASES_SCRIPT } from "./render/releases.ts";
 export { classCounts, openGroups, renderStatusPage, sectionsOf, slugOf, statusLead, STATUS_SCRIPT, type BoardSection, type ItemGroup } from "./render/status.ts";
 export { probeScript, TYPESCRIPT_PROBE } from "./check/probe.ts";
+export { NO_SCRIPT_MIN_CHARS, noScriptProblems, noScriptText, type NoScriptText } from "./check/noscript.ts";
 export {
   checkFreshness,
   cronLines,

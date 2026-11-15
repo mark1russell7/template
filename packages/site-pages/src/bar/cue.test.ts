@@ -168,7 +168,7 @@ describe.skipIf(executable === undefined)("the scroll cue of the step in a brows
     }
     const cued = join(out, "cued", "index.html");
     writeFileSync(cued, injectCue(readFileSync(cued, "utf8"), css).html);
-    const result = await checkSite({ out, pages: ["/cued/", "/plain/"], widths: [360], schemes: ["light"], settleMs: 100, timeoutMs: 30_000 });
+    const result = await checkSite({ out, pages: ["/cued/", "/plain/"], widths: [360], schemes: ["light"], settleMs: 100, timeoutMs: 30_000, noScriptChars: false });
     const at = (path: string) => result.views.find((view) => view.page === path)?.problems ?? [];
     expect(at("/cued/")).toEqual([]);
     expect(at("/plain/").join(" ")).toContain("a code block goes out of view at 360 px: pre in pre");
@@ -214,7 +214,7 @@ describe.skipIf(executable === undefined)("the scroll cue of the step in a brows
     }
     const cued = join(out, "cued", "index.html");
     writeFileSync(cued, injectCue(readFileSync(cued, "utf8"), css).html);
-    const result = await checkSite({ out, pages: ["/cued/", "/plain/"], widths: [360], schemes: ["light"], settleMs: 100, timeoutMs: 30_000 });
+    const result = await checkSite({ out, pages: ["/cued/", "/plain/"], widths: [360], schemes: ["light"], settleMs: 100, timeoutMs: 30_000, noScriptChars: false });
     const at = (path: string) => result.views.find((view) => view.page === path)?.problems ?? [];
     expect(at("/cued/")).toEqual([]);
     expect(at("/plain/").join(" ")).toContain("a code block goes out of view at 360 px: pre#sample in div#sample-scroll");
