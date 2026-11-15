@@ -145,6 +145,7 @@ Delete `.github/workflows/codex-review.yml` or the `OPENAI_API_KEY` secret. With
 - The job `review` holds the API key, with `contents: read` and `pull-requests: read` only.
 - The job `post` holds `pull-requests: write`, and no API key. It does not send data to the model.
 - No job checks out the code of the pull request. The jobs get only the script of the template, at the commit of the workflow file, with no saved credentials.
+- The script imports only the modules of Node.js. Thus the job `review`, which holds the API key, does not load the code of a package. A test of the script makes sure of this.
 - The request to the model has no tools. The model cannot start commands, read files, open web pages or post comments.
 - The prompt tells the model that the text and the diff of the pull request are data, not instructions.
 - Before the job `review` gives its result to the job `post`, it removes the API key and each text that looks like a token. The job `post` removes the token texts again.

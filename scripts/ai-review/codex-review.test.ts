@@ -6,6 +6,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { escapeWorkflowData } from "@mark1russell7/text";
 import {
   MAX_COMMENTS,
   RESPONSES_URL,
@@ -13,6 +14,7 @@ import {
   buildPost,
   buildRequest,
   cost,
+  escapeCommandData,
   formatUsage,
   parseResponse,
   redact,
@@ -338,4 +340,18 @@ test("the post job posts nothing when the review did not finish", async () => {
   assert.equal(await runPost({ RESULT: JSON.stringify({ ok: false, reason: "HTTP 429: quota" }) }, fetchImpl), "skipped");
   assert.equal(await runPost({ RESULT: "{not json" }, fetchImpl), "skipped");
   assert.equal(calls.length, 0);
+});
+
+test("escapeCommandData gives the same text as escapeWorkflowData of @mark1russell7/text", () => {
+  const texts = ["", "plain", "100%", "%0A", "%25", "a\nb", "a\r\nb", "%\r\n%", "x:y,z", "é 🦊", "\n\n%%\r", "line one\nline two: 50%"];
+  for (const text of texts) assert.equal(escapeCommandData(text), escapeWorkflowData(text), JSON.stringify(text));
+});
+
+test("the script imports only the modules of Node.js", () => {
+  const source = readFileSync(new URL("./codex-review.ts", import.meta.url), "utf8");
+  const specifiers = [...source.matchAll(/^import\s[^;]*?\sfrom\s+"([^"]+)"/gm)].map((match) => match[1]);
+  assert.ok(specifiers.length >= 4, `only ${specifiers.length} imports found`);
+  assert.deepEqual(specifiers.filter((specifier) => !specifier?.startsWith("node:")), []);
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.doesNotMatch(code, /\bimport\s*\(|\brequire\s*\(/);
 });
