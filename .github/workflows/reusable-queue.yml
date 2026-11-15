@@ -1,0 +1,68 @@
+# The queue of the pull requests with auto-merge (CI.md, "The queue").
+#
+# Several writers merge into one main with gh pr merge --auto. With strict status checks in the ruleset of main, GitHub
+# merges a pull request only when its branch has the newest main and the required checks passed on that head. This job
+# keeps each such pull request up to date. It merges main into each pull request with auto-merge whose merge state is
+# BEHIND (update-branch), and then starts the workflows of the required checks on the new head with workflow_dispatch.
+# An update with GITHUB_TOKEN starts no pull_request run, but GITHUB_TOKEN can start workflow_dispatch.
+#
+# With strict off, no pull request is BEHIND, and the job changes nothing. The logic is in scripts/workflows/queue.ts of
+# the template commit of this workflow. The job does no checkout of the repository and starts none of its code.
+#
+# A repository calls it from its queue.yml:
+#
+#   jobs:
+#     queue:
+#       uses: mark1russell7/template/.github/workflows/reusable-queue.yml@<commit> # main
+#       permissions:
+#         contents: write
+#         pull-requests: write
+#         actions: write
+#         checks: read
+name: Reusable queue
+
+on:
+  workflow_call:
+    inputs:
+      wait-seconds:
+        description: >-
+          The longest time in seconds (0 to 300) that the job waits for the new heads of the updated pull requests. The
+          job starts the workflows of a pull request only after its head changed.
+        type: number
+        default: 90
+
+permissions: {}
+
+jobs:
+  queue:
+    name: Queue
+    # A pull request from a fork gets a token that cannot write, and the queue takes no pull request from a fork
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # contents and pull-requests: update-branch. actions: workflow_dispatch and the workflow runs. checks: the check runs.
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+      checks: read
+    steps:
+      # The script comes from the commit of this workflow, as the actions of reusable-ci.yml do
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .queue-template
+          sparse-checkout: scripts/workflows
+          persist-credentials: false
+      # The script is TypeScript: Node 24 runs it with its type stripping
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: Update each pull request that is behind, and start its gates
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ github.event.repository.default_branch }}
+          WAIT_SECONDS: ${{ inputs.wait-seconds }}
+        run: node .queue-template/scripts/workflows/queue.ts

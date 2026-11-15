@@ -18,6 +18,7 @@ export const SHARED_WORKFLOWS: readonly string[] = [
   "reusable-lockfile.yml",
   "reusable-mutation.yml",
   "reusable-pages.yml",
+  "reusable-queue.yml",
   "reusable-release-build.yml",
   "reusable-release-tag.yml",
   "reusable-security.yml",
