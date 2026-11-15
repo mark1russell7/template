@@ -516,10 +516,10 @@ export type NpmPresence = { readonly onNpm: boolean } | { readonly error: string
 /**
  * The kind of a difference between the map and npm:
  * - `missing`: a package of a published home is not on npm, and the home does not name it in `pending`.
- * - `stale-pending`: a name in `pending` is on npm now. Remove it from `pending`. When it is the last planned name of a
+ * - `stale-pending`: a name in `pending` is on npm. Remove it from `pending`. When it is the last planned name of a
  *   planned home, the home is published: move the names to `packages`.
  * - `stale-state`: a package of an unpublished home is on npm. The state of the home is published.
- * - `no-read`: npm gave no answer for a name. A no read is never a pass.
+ * - `no-read`: npm gave no answer for a name. A no read is not a pass.
  * - `unnamed`: a planned home names no planned package, so nothing can be read for it.
  */
 export type NpmDriftKind = "missing" | "stale-pending" | "stale-state" | "no-read" | "unnamed";
@@ -538,7 +538,7 @@ export function npmNames(homes: readonly Home[] = HOMES): readonly string[] {
 }
 
 /**
- * This function compares the map with the answers of npm (`facts`, by package name; a name with no answer is a no read).
+ * This function compares the map with the answers of npm (`facts`, by package name). A name with no answer is a no read.
  * It gives each difference, in the order of the homes. An empty list means that each name of the map agrees with npm.
  */
 export function npmDrift(homes: readonly Home[], facts: ReadonlyMap<string, NpmPresence>): readonly NpmDrift[] {
