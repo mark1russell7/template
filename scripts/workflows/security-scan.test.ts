@@ -9,7 +9,7 @@ import { describe, it, mock } from "node:test";
 import { fileURLToPath } from "node:url";
 import { SCANS, type StepResult, evaluate } from "../../.github/actions/security-scan/verdict.ts";
 import { choose, main as choiceMain, readPrivate } from "../../.github/actions/security-scan/choice.ts";
-import { type Fetch, changedLines, main as newAlertsMain, newAlerts, normalizeMessage, readBaseAlerts, sarifResults } from "../../.github/actions/security-scan/new-alerts.ts";
+import { type Fetch, changedLines, main as newAlertsMain, newAlerts, normalizeMessage, readBaseAlerts, sarifResults, summaryText } from "../../.github/actions/security-scan/new-alerts.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const folder = resolve(root, ".github/actions/security-scan");
@@ -255,6 +255,16 @@ describe("security-scan: action.yml", () => {
     assert.ok(block("codeql_analyze").includes("steps.codeql_init.outcome == 'success' || steps.codeql_init-retry.outcome == 'success'"));
   });
 
+  it("both CodeQL inits run the alert suppression query, so a comment codeql[<rule id>] works (the default suites do not run it)", () => {
+    const config = (id: string): string => {
+      const start = action.indexOf(`\n      id: ${id}\n`);
+      const block = action.slice(start, action.indexOf("\n    - ", start));
+      return /\n {8}config: \|\n((?: {10}.*\n)+)/.exec(block + "\n")?.[1] ?? "";
+    };
+    assert.match(config("codeql_init"), /\n {12}javascript: \[codeql\/javascript-queries:AlertSuppression\.ql\]\n/);
+    assert.equal(config("codeql_init-retry"), config("codeql_init"));
+  });
+
   it("STEPS has only the outcome and the conclusion of each step, so a large output does not go in the environment", () => {
     const last = action.slice(action.lastIndexOf("\n    - "));
     assert.doesNotMatch(last, /\n {8}STEPS: \$\{\{/);
@@ -279,12 +289,14 @@ const PLAIN = "Potential cache poisoning in the context of the default branch du
 const KNOWN_LINES = [219, 244, 249, 262];
 
 /** This function gives a SARIF file of CodeQL with a result of each entry. */
-function sarif(entries: readonly { rule: string; line: number; text?: string }[]): unknown {
+function sarif(entries: readonly { rule: string; line: number; text?: string; suppressed?: boolean }[]): unknown {
   const rules = [...new Set(entries.map((entry) => entry.rule))].map((id) => ({ id, properties: { "security-severity": "9.0" } }));
   const results = entries.map((entry) => ({
     ruleId: entry.rule,
     message: { text: entry.text ?? LINKED },
     locations: [{ physicalLocation: { artifactLocation: { uri: WORKFLOW }, region: { startLine: entry.line, endLine: entry.line + 4 } } }],
+    // The form that the CLI writes for a result under a comment codeql[<rule id>]
+    ...(entry.suppressed === true ? { suppressions: [{ kind: "inSource" }] } : {}),
   }));
   return { runs: [{ tool: { driver: { name: "CodeQL", rules } }, results }] };
 }
@@ -356,6 +368,26 @@ describe("security-scan: the new CodeQL alerts", () => {
   it("an alert on a line that the pull request does not change is not new", () => {
     const { results } = sarifResults([sarif([{ rule: POISON, line: 10 }])], 7, changedLines(DIFF));
     assert.deepEqual(newAlerts(results, []), []);
+  });
+
+  it("green: a comment codeql[<rule id>] removes an alert, and the step names it in a warning and in the summary", async () => {
+    const entries = [...KNOWN_LINES.map((line) => ({ rule: POISON, line })), { rule: "actions/code-injection/critical", line: 230, text: "Code injection", suppressed: true }];
+    const { status, out } = await newAlertsStep(sarif(entries), answer(200, known));
+    assert.equal(status, 0, out);
+    assert.doesNotMatch(out, /::error/);
+    assert.match(out, /::warning file=\.github\/workflows\/reusable-pages\.yml,line=230,title=CodeQL%3A a comment removes actions\/code-injection\/critical/);
+    const { results, suppressed } = sarifResults([sarif(entries)], 7, changedLines(DIFF));
+    assert.equal(results.length, KNOWN_LINES.length);
+    assert.deepEqual(
+      suppressed.map((each) => each.line),
+      [230],
+    );
+    assert.match(summaryText([], 5, 4, "high", suppressed), /A comment `codeql\[<rule id>\]` removes 1 results on changed lines\.[^]*\| actions\/code-injection\/critical \| 9\.0 \|/);
+  });
+
+  it("a removed alert on a line that the pull request does not change is not in the warnings", () => {
+    const { results, suppressed } = sarifResults([sarif([{ rule: POISON, line: 10, suppressed: true }])], 7, changedLines(DIFF));
+    assert.deepEqual([results, suppressed], [[], []]);
   });
 
   it("reads each page of the alerts, with the ref, the state and the tool", async () => {

@@ -357,6 +357,19 @@ runs:
       with:
         languages: ${{ steps.codeql_languages.outputs.languages }}
         build-mode: ${{ inputs.codeql-build-mode }}
+        # The alert suppression query of each language. The default suites do not run it. A comment `codeql[<rule id>]`
+        # on its own line marks the result on the next line, and the step "Fail on new alerts" skips it. CodeQL ignores the
+        # packs of a language that the run does not analyze. Rust and actions have no such query.
+        config: |
+          packs:
+            javascript: [codeql/javascript-queries:AlertSuppression.ql]
+            python: [codeql/python-queries:AlertSuppression.ql]
+            go: [codeql/go-queries:AlertSuppression.ql]
+            ruby: [codeql/ruby-queries:AlertSuppression.ql]
+            java: [codeql/java-queries:AlertSuppression.ql]
+            csharp: [codeql/csharp-queries:AlertSuppression.ql]
+            cpp: [codeql/cpp-queries:AlertSuppression.ql]
+            swift: [codeql/swift-queries:AlertSuppression.ql]
 
     - name: Wait before the second CodeQL start
       if: ${{ !cancelled() && steps.codeql_init.outcome == 'failure' }}
@@ -370,6 +383,19 @@ runs:
       with:
         languages: ${{ steps.codeql_languages.outputs.languages }}
         build-mode: ${{ inputs.codeql-build-mode }}
+        # The alert suppression query of each language. The default suites do not run it. A comment `codeql[<rule id>]`
+        # on its own line marks the result on the next line, and the step "Fail on new alerts" skips it. CodeQL ignores the
+        # packs of a language that the run does not analyze. Rust and actions have no such query.
+        config: |
+          packs:
+            javascript: [codeql/javascript-queries:AlertSuppression.ql]
+            python: [codeql/python-queries:AlertSuppression.ql]
+            go: [codeql/go-queries:AlertSuppression.ql]
+            ruby: [codeql/ruby-queries:AlertSuppression.ql]
+            java: [codeql/java-queries:AlertSuppression.ql]
+            csharp: [codeql/csharp-queries:AlertSuppression.ql]
+            cpp: [codeql/cpp-queries:AlertSuppression.ql]
+            swift: [codeql/swift-queries:AlertSuppression.ql]
 
     - name: Name the CodeQL bundle
       if: ${{ !cancelled() && (steps.codeql_init.outcome == 'success' || steps.codeql_init-retry.outcome == 'success') }}

@@ -553,6 +553,16 @@ CodeQL first downloads the bundle of the version of `codeql-action`. If that dow
 
 An alert of CodeQL that is already open on the base branch is not new. The step groups the alerts by rule, file and message. A group is new only when the pull request has more alerts of it than the base branch has open. Thus a second alert of a known group fails. The step reads the open alerts of the base branch from the code-scanning API, with `security-events: read`. If it cannot read them, the step fails.
 
+A comment `codeql[<rule id>]` on its own line removes the alert of that rule on the next line. Write the reason in the comment or above it.
+
+```ts
+// The probe examines a certificate that is not valid, and it sends no data on the session.
+// codeql[js/disabling-certificate-validation]
+rejectUnauthorized: false,
+```
+
+The default suites of CodeQL do not run the alert suppression query. Thus both CodeQL starts add it for each language that has one. The step "Fail on new alerts" writes a warning for each removed alert on a changed line, and the step summary lists them. Thus the reviewer of the pull request reads each reason.
+
 ### A private repository
 
 In a private repository, the dependency review and the code-scanning API need GitHub Advanced Security. A personal account cannot buy it. Thus the inputs `dependency-review`, `codeql` and `osv-upload` have the default `auto`:

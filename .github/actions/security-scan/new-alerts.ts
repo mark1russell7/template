@@ -86,11 +86,17 @@ function decode(uri: string): string {
 /* eslint-disable @typescript-eslint/no-explicit-any -- SARIF is external JSON */
 /**
  * This function gives the results of the SARIF files at or above the score `min`, with the results that a suppression
- * removes taken out. `total` is the number of results of each severity.
+ * removes taken out. `total` is the number of results of each severity. `suppressed` has the removed results at or
+ * above `min` on a changed line. A comment `codeql[<rule id>]` removed each of them, so a reviewer reads its reason.
  */
-export function sarifResults(sarifs: readonly unknown[], min: number, changed: ReadonlyMap<string, readonly Range[]>): { results: Result[]; total: number } {
+export function sarifResults(
+  sarifs: readonly unknown[],
+  min: number,
+  changed: ReadonlyMap<string, readonly Range[]>,
+): { results: Result[]; suppressed: Result[]; total: number } {
   const touches = (loc: { file: string; start: number; end: number }) => (changed.get(loc.file) ?? []).some(([first, last]) => first <= loc.end && last >= loc.start);
   const results: Result[] = [];
+  const suppressed: Result[] = [];
   let total = 0;
   for (const sarif of sarifs as any[]) {
     for (const run of sarif?.runs ?? []) {
@@ -104,7 +110,6 @@ export function sarifResults(sarifs: readonly unknown[], min: number, changed: R
       }
       for (const result of run.results ?? []) {
         total += 1;
-        if ((result.suppressions ?? []).length > 0) continue;
         const rule = String(result.ruleId ?? result.rule?.id ?? "");
         const score = severity.get(rule);
         if (score === undefined || score < min) continue;
@@ -118,11 +123,13 @@ export function sarifResults(sarifs: readonly unknown[], min: number, changed: R
           .map((loc: any) => ({ file: decode(loc.artifactLocation.uri), start: loc.region?.startLine ?? 1, end: loc.region?.endLine ?? loc.region?.startLine ?? 1 }));
         const first = locations[0];
         if (first === undefined) continue;
-        results.push({ rule, score, file: first.file, line: first.start, message: normalizeMessage(String(result.message?.text ?? "")), touches: locations.some(touches) });
+        const entry: Result = { rule, score, file: first.file, line: first.start, message: normalizeMessage(String(result.message?.text ?? "")), touches: locations.some(touches) };
+        if ((result.suppressions ?? []).length === 0) results.push(entry);
+        else if (entry.touches) suppressed.push(entry);
       }
     }
   }
-  return { results, total };
+  return { results, suppressed, total };
 }
 
 /** This function gives the open alerts of a page of the code-scanning alerts API. */
@@ -181,7 +188,7 @@ function data(text: string): string {
 }
 
 /** This function gives the text of the step summary. */
-export function summaryText(found: readonly Result[], total: number, known: number, severity: string): string {
+export function summaryText(found: readonly Result[], total: number, known: number, severity: string, suppressed: readonly Result[] = []): string {
   const lines = ["### CodeQL: new alerts of this pull request", ""];
   if (found.length === 0) {
     lines.push(`CodeQL found ${String(total)} results in the repository. None is a new alert at or above ${severity} on a line that the pull request changes.`);
@@ -190,6 +197,11 @@ export function summaryText(found: readonly Result[], total: number, known: numb
     for (const alert of found) lines.push(`| ${alert.rule} | ${alert.score.toFixed(1)} | \`${alert.file}\` | ${String(alert.line)} |`);
   }
   if (known > 0) lines.push("", `${String(known)} results on changed lines are alerts that are already open on the base branch. They are not new.`);
+  if (suppressed.length > 0) {
+    lines.push("", `A comment \`codeql[<rule id>]\` removes ${String(suppressed.length)} results on changed lines. Read the reason of each comment:`, "");
+    lines.push("| Rule | Security-severity | File | Line |", "|---|---|---|---|");
+    for (const alert of suppressed) lines.push(`| ${alert.rule} | ${alert.score.toFixed(1)} | \`${alert.file}\` | ${String(alert.line)} |`);
+  }
   return lines.join("\n") + "\n";
 }
 
@@ -206,7 +218,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env, fetcher: Fetch 
     .filter((entry) => entry.endsWith(".sarif"))
     .map((name) => JSON.parse(readFileSync(join(folder, name), "utf8")) as unknown);
   const changed = changedLines(readFileSync(env["DIFF"] ?? "", "utf8"));
-  const { results, total } = sarifResults(sarifs, min, changed);
+  const { results, suppressed, total } = sarifResults(sarifs, min, changed);
   let base: BaseAlert[];
   try {
     base = await readBaseAlerts(fetcher, { api: env["GITHUB_API_URL"] ?? "https://api.github.com", repository: env["GITHUB_REPOSITORY"] ?? "", ref: `refs/heads/${env["BASE_REF"] ?? ""}`, token: env["GH_TOKEN"] ?? "" });
@@ -220,7 +232,11 @@ export async function main(env: NodeJS.ProcessEnv = process.env, fetcher: Fetch 
     const title = `CodeQL: ${alert.rule} (security-severity ${alert.score.toFixed(1)})`;
     console.log(`::error file=${property(alert.file)},line=${String(alert.line)},title=${property(title)}::${data(alert.message)}`);
   }
-  if (env["GITHUB_STEP_SUMMARY"]) appendFileSync(env["GITHUB_STEP_SUMMARY"], summaryText(found, total, known, severity));
+  for (const alert of suppressed) {
+    const title = `CodeQL: a comment removes ${alert.rule} (security-severity ${alert.score.toFixed(1)})`;
+    console.log(`::warning file=${property(alert.file)},line=${String(alert.line)},title=${property(title)}::${data(alert.message)}`);
+  }
+  if (env["GITHUB_STEP_SUMMARY"]) appendFileSync(env["GITHUB_STEP_SUMMARY"], summaryText(found, total, known, severity, suppressed));
   if (found.length > 0) {
     console.log(`::error::The pull request adds ${String(found.length)} CodeQL alerts at or above ${severity}.`);
     return 1;
