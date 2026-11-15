@@ -244,7 +244,7 @@ function readJsonAt(ref: string, path: string): Record<string, unknown> | undefi
 export function main(env: Readonly<Record<string, string | undefined>> = process.env): number {
   const base = env["BASE_SHA"];
   const head = env["HEAD_SHA"];
-  if (!base || !head) throw new Error("BASE_SHA and HEAD_SHA are needed (the check runs on pull requests).");
+  if (!base || !head) throw new Error("BASE_SHA and HEAD_SHA are needed (the check runs on a pull request, or on the pull request of a dispatched run).");
   const dir = env["CHANGESET_DIR"] || ".changeset";
   // Everything is read at the head commit of the pull request, not from the working tree.
   const config = readJsonAt(head, `${dir}/config.json`);

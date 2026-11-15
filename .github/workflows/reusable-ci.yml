@@ -19,6 +19,10 @@
 # On a pull request, the job release-check starts the release build on the commit (actions/release-check, CI.md "The
 # release check"). It fails when the release build fails on the same commit, for example when a shipped file changes and its
 # version is already on npm.
+#
+# A run that workflow_dispatch starts on a branch has no pull request in its event, for example a gate of the queue. For
+# such a run, the job pull finds the open pull request of the branch (actions/pull-of-run). The jobs changesets and
+# release-check then examine its change, and the job checks gives its base and its text to check:conventions.
 name: Reusable CI
 
 on:
@@ -76,6 +80,7 @@ on:
         description: >-
           On a pull request, check that each published package that changes has a changeset, and that no changeset
           makes a 0.x package into 1.0.0 (actions/changeset-check). A repository with no .changeset/config.json passes.
+          A run that workflow_dispatch starts on the branch of an open pull request examines that pull request.
         type: boolean
         default: true
       changeset-ignore:
@@ -118,7 +123,8 @@ on:
         description: >-
           On a pull request, start the release build on the commit (actions/release-check): the install, the build, pack.ts
           and tags.ts. It fails when the release build fails on the same commit, for example a shipped change at a version on npm. A
-          repository with no published package passes at once. false turns it off.
+          repository with no published package passes at once. A run that workflow_dispatch starts on the branch of an
+          open pull request also starts it. false turns it off.
         type: boolean
         default: true
       release-check-private:
@@ -135,6 +141,14 @@ on:
         description: The input node-version of the release.yml of the repository (reusable-release-build.yml), for the job release-check.
         type: string
         default: "26"
+      pull-request-private:
+        description: >-
+          In a private repository, the job pull finds the pull request of a dispatched run only when this input is true.
+          The job that calls this workflow then gives "pull-requests: read" (CI.md, "A dispatched run of a pull
+          request"). With false, a dispatched run in a private repository examines no change, and a private repository
+          pays for no start of the job pull.
+        type: boolean
+        default: false
     secrets:
       CONVENTIONS_PRIVATE_PATTERNS:
         description: >-
@@ -144,8 +158,67 @@ on:
         required: false
 
 jobs:
+  # A run that workflow_dispatch starts has no pull request in its event, for example a gate of the queue (CI.md "The
+  # queue"). This job finds the open pull request of the branch, and gives its base, its head, its labels and its text to
+  # the other jobs. A failure of this job fails the CI: the other jobs do not pass a change that they cannot read. A run on
+  # the default branch, for example the gate of release.yml, has no pull request, so the job does not start. In a private
+  # repository, the job starts only with the input pull-request-private, because only then can the token of the job read
+  # the pull requests.
+  pull:
+    if: >-
+      github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/')
+      && github.ref != format('refs/heads/{0}', github.event.repository.default_branch)
+      && (!github.event.repository.private || inputs.pull-request-private)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The job has no permissions key, so it gets the permissions of the caller. A job of a called workflow cannot ask for
+    # more than the caller gives: "pull-requests: read" here would stop each caller that gives only "contents: read", also
+    # when the job does not start. In a public repository, each token can read the pull requests. A private repository
+    # gives "pull-requests: read" to the job that calls this workflow, with the input pull-request-private. The job runs
+    # only code of the template, and its one write is the artifact pull-request-of-run of this run.
+    outputs:
+      found: ${{ steps.pull.outputs.found }}
+      base-ref: ${{ steps.pull.outputs.base-ref }}
+      base-sha: ${{ steps.pull.outputs.base-sha }}
+      head-ref: ${{ steps.pull.outputs.head-ref }}
+      head-sha: ${{ steps.pull.outputs.head-sha }}
+      labels: ${{ steps.pull.outputs.labels }}
+    steps:
+      # The action comes from the commit of this workflow, as in the job changesets. The job does not check out the
+      # repository.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .shared-actions
+          sparse-checkout: .github/actions
+          persist-credentials: false
+      # The step is TypeScript: Node runs it with its type stripping, not the Node of the runner image
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+      - id: pull
+        uses: ./.shared-actions/.github/actions/pull-of-run
+        with:
+          file: ${{ runner.temp }}/pull-request-of-run/pull-request.json
+      # The job checks reads the title, the body and the number of commits from this file. A file, not an output of the
+      # job: a step gets an output of a job through an environment variable, which takes at most 32 767 characters on
+      # Windows, and a body can be longer. A run again of the whole workflow uploads the file again (overwrite).
+      - name: Save the pull request of the run
+        if: steps.pull.outputs.found == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pull-request-of-run
+          path: ${{ runner.temp }}/pull-request-of-run/pull-request.json
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+
   changesets:
-    if: github.event_name == 'pull_request' && inputs.changesets
+    needs: pull
+    # On a run that workflow_dispatch starts, the job examines the pull request of the job pull. A failure of the job pull
+    # fails the CI, so this job does not start then.
+    if: ${{ !cancelled() && inputs.changesets && (github.event_name == 'pull_request' || needs.pull.outputs.found == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -168,15 +241,24 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "26"
+      # On a pull request, the job pull does not start, so its outputs are empty and the event gives the values
       - uses: ./.shared-actions/.github/actions/changeset-check
         with:
           ignore: ${{ inputs.changeset-ignore }}
+          base-sha: ${{ needs.pull.outputs.base-sha || github.event.pull_request.base.sha }}
+          head-sha: ${{ needs.pull.outputs.head-sha || github.event.pull_request.head.sha }}
+          head-ref: ${{ needs.pull.outputs.head-ref || github.event.pull_request.head.ref }}
+          labels: ${{ needs.pull.outputs.labels || toJSON(github.event.pull_request.labels.*.name) }}
 
   # The release predicate on the commit of a pull request (CI.md "The release check"). The repository goes to the folder
   # repo, and the template to .release-template next to it, so the pack of the repository does not see the template.
   release-check:
-    # github.event.repository.private is in each pull_request payload. In a called workflow, github is the context of the caller.
-    if: github.event_name == 'pull_request' && inputs.release-check && (!github.event.repository.private || inputs.release-check-private)
+    needs: pull
+    # github.event.repository.private is in each pull_request and workflow_dispatch payload. In a called workflow, github is
+    # the context of the caller. On a run that workflow_dispatch starts, the checkout is the head of the pull request.
+    if: >-
+      ${{ !cancelled() && inputs.release-check && (github.event_name == 'pull_request' || needs.pull.outputs.found == 'true')
+      && (!github.event.repository.private || inputs.release-check-private) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # The job installs and runs the code of the repository, so it gets only read permissions.
@@ -205,6 +287,9 @@ jobs:
 
   checks:
     name: checks (${{ matrix.os }}, node ${{ matrix.node }})
+    # The job also runs when the job pull is skipped or fails. A failure of the job pull fails the CI anyway.
+    needs: pull
+    if: ${{ !cancelled() }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     # The job installs and runs the code of the repository, so it gets only read permissions.
@@ -229,14 +314,22 @@ jobs:
       # The checkout of a pull request of more than one commit ends inside the change. The rule release-files of
       # check:conventions reads each commit of the change, so this step deepens the checkout to the merge base. The rule
       # unreleased-change reads the version at the merge base, which a pull request of one commit also needs when main
-      # moved after the start of its branch. When the checkout has the merge base, the step ends at once.
+      # moved after the start of its branch. When the checkout has the merge base, the step ends at once. On a run that
+      # workflow_dispatch starts, the checkout is the head of the branch, not a merge commit. The base is then the tip of
+      # the base branch from the job pull, and the step fetches it first.
       - name: Deepen to the merge base
-        if: inputs.fetch-depth != 0 && github.event.pull_request.commits > 0
+        if: inputs.fetch-depth != 0 && (github.event.pull_request.commits > 0 || needs.pull.outputs.found == 'true')
         env:
           TOKEN: ${{ github.token }}
+          PULL_BASE: ${{ needs.pull.outputs.base-sha }}
         run: |
-          base=$(git rev-parse HEAD^1) && head=$(git rev-parse HEAD^2) || exit 0
           auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+          if [ -n "$PULL_BASE" ]; then
+            base=$PULL_BASE && head=$(git rev-parse HEAD) || exit 1
+            git cat-file -e "$base^{commit}" 2> /dev/null || git -c "http.extraheader=$auth" fetch --quiet --no-tags --depth=1 origin "$base"
+          else
+            base=$(git rev-parse HEAD^1) && head=$(git rev-parse HEAD^2) || exit 0
+          fi
           for depth in 16 128 1024; do
             git merge-base "$base" "$head" > /dev/null && exit 0
             git -c "http.extraheader=$auth" fetch --quiet --no-tags --deepen="$depth" origin "$base" "$head"
@@ -303,8 +396,21 @@ jobs:
             [ -n "${line// /}" ] && echo "::add-mask::$line"
           done <<< "$PATTERNS"
           exit 0
+      # On a run that workflow_dispatch starts, the event file has no pull request. check:conventions reads the pull
+      # request of the job pull from the file that the job saved (CONVENTIONS_PULL_REQUEST): its title, its body and its
+      # number of commits. No expression and no environment variable has the text, so its length and its characters do
+      # not matter.
+      - name: Pull request of the run
+        if: needs.pull.outputs.found == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: pull-request-of-run
+          path: ${{ runner.temp }}/pull-request-of-run
+      # CONVENTIONS_BASE and CONVENTIONS_PULL_REQUEST are empty, except on a run of the job pull that found a pull request
       - name: Scripts
         env:
+          CONVENTIONS_BASE: ${{ needs.pull.outputs.base-sha }}
+          CONVENTIONS_PULL_REQUEST: ${{ needs.pull.outputs.found == 'true' && format('{0}/pull-request-of-run/pull-request.json', runner.temp) || '' }}
           CONVENTIONS_PRIVATE_PATTERNS: ${{ secrets.CONVENTIONS_PRIVATE_PATTERNS }}
           SCRIPTS: ${{ inputs.scripts }}
           RECURSIVE: ${{ inputs.recursive-scripts }}

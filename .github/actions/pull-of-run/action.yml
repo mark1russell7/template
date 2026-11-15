@@ -1,0 +1,65 @@
+name: pull-of-run
+description: >-
+  Finds the open pull request of the branch of a run that workflow_dispatch starts, for example a gate of the queue. It
+  gives the tip of the base branch, the head and the labels of the pull request, and the pull request as JSON. It fails
+  closed: a lookup that cannot decide stops the job with its reason. pull.ts tells the rules.
+inputs:
+  token:
+    description: >-
+      A GitHub token that can read the pull requests of the repository. In a public repository, each token can. A
+      private repository gives "pull-requests: read" to the job.
+    default: ${{ github.token }}
+  file:
+    description: >-
+      A path. When the branch has the pull request, the step writes it there as JSON, the same value as the output
+      pull-request. A job that gives the text of the pull request to another job uses the file, not the output: one
+      environment variable takes at most 32 767 characters on Windows and 128 KiB on Linux, and a body can be longer.
+    default: ""
+outputs:
+  found:
+    description: true when the branch of the run has one open pull request, and its head is the commit of the run.
+    value: ${{ steps.pull.outputs.found }}
+  number:
+    description: The number of the pull request.
+    value: ${{ steps.pull.outputs.number }}
+  base-ref:
+    description: The base branch of the pull request.
+    value: ${{ steps.pull.outputs.base-ref }}
+  base-sha:
+    description: The commit at the tip of the base branch. The change is from this commit to the commit of the run.
+    value: ${{ steps.pull.outputs.base-sha }}
+  head-ref:
+    description: The head branch of the pull request.
+    value: ${{ steps.pull.outputs.head-ref }}
+  head-sha:
+    description: The head commit of the pull request. It is the commit of the run.
+    value: ${{ steps.pull.outputs.head-sha }}
+  labels:
+    description: The names of the labels of the pull request, as a JSON array.
+    value: ${{ steps.pull.outputs.labels }}
+  pull-request:
+    description: >-
+      The pull request as JSON on one line: number, title, body, labels, commits, base (ref and the commit at its tip)
+      and head (ref and sha).
+    value: ${{ steps.pull.outputs.pull-request }}
+runs:
+  using: composite
+  steps:
+    # The script imports the escapes of Markdown and of workflow commands from @mark1russell7/text. The version is the
+    # version that pnpm-lock.yaml of the template resolves, and a test of .github/actions/pull-of-run.test.ts fails when
+    # the two differ. The folder of the action has no package.json, so the install goes there, and Node finds that
+    # node_modules first. No install script starts.
+    - name: Install the package of the script
+      shell: bash
+      env:
+        TEXT_VERSION: "0.0.6"
+      run: npm install --no-save --no-package-lock --ignore-scripts --prefix "$GITHUB_ACTION_PATH" "@mark1russell7/text@${TEXT_VERSION}"
+    - id: pull
+      name: Pull request of the run
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        PULL_REQUEST_FILE: ${{ inputs.file }}
+        PULL: ${{ github.action_path }}/pull.ts
+      # Node 22.18 and later run TypeScript with no build. The job sets up Node 26.
+      run: node "$PULL"

@@ -11,16 +11,30 @@ inputs:
   changeset-dir:
     description: The folder of the changesets.
     default: .changeset
+  base-sha:
+    description: >-
+      The base commit of the change. The default is the base of the pull request of the event. On a run that
+      workflow_dispatch starts, the job changesets gives the tip of the base branch (actions/pull-of-run).
+    default: ${{ github.event.pull_request.base.sha }}
+  head-sha:
+    description: The head commit of the change. The default is the head of the pull request of the event.
+    default: ${{ github.event.pull_request.head.sha }}
+  head-ref:
+    description: The head branch of the change. The check skips a release branch of Changesets.
+    default: ${{ github.event.pull_request.head.ref }}
+  labels:
+    description: The names of the labels of the pull request, as a JSON array.
+    default: ${{ toJSON(github.event.pull_request.labels.*.name) }}
 runs:
   using: composite
   steps:
     - name: Changesets
       shell: bash
       env:
-        BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        HEAD_REF: ${{ github.event.pull_request.head.ref }}
-        LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        BASE_SHA: ${{ inputs.base-sha }}
+        HEAD_SHA: ${{ inputs.head-sha }}
+        HEAD_REF: ${{ inputs.head-ref }}
+        LABELS: ${{ inputs.labels }}
         IGNORE: ${{ inputs.ignore }}
         CHANGESET_DIR: ${{ inputs.changeset-dir }}
         CHECK: ${{ github.action_path }}/check.ts
