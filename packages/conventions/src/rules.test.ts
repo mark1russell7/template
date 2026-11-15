@@ -292,11 +292,26 @@ describe("required-scripts", () => {
 
 describe("no-build-output", () => {
   it("reports each folder of build output that git keeps, and skips a folder that is not git", () => {
-    const files = { "package.json": { name: "one" }, "packages/a/dist/index.js": "", "packages/a/dist/index.d.ts": "", "build/x.js": "", "src/builder/x.ts": "" };
+    const files = {
+      "package.json": { name: "one" },
+      "packages/a/package.json": { name: "a" },
+      "packages/a/dist/index.js": "",
+      "packages/a/dist/index.d.ts": "",
+      "packages/a/coverage/prettify.js": "",
+      "build/x.js": "",
+      "src/builder/x.ts": "",
+      // A source folder named coverage, away from a package.json, is not a report.
+      "src/coverage/x.ts": "",
+      ".github/actions/coverage/action.yml": "",
+    };
     expect(rule(fixture(files), "no-build-output").status).toBe("skipped");
     const root = fixture(files);
     commitAll(root);
-    expect(rule(root, "no-build-output").breaks.map((item) => item.message)).toEqual(["Git keeps 1 file(s) in build/.", "Git keeps 2 file(s) in packages/a/dist/."]);
+    expect(rule(root, "no-build-output").breaks.map((item) => item.message)).toEqual([
+      "Git keeps 1 file(s) in build/.",
+      "Git keeps 1 file(s) in packages/a/coverage/.",
+      "Git keeps 2 file(s) in packages/a/dist/.",
+    ]);
   });
 
   it("is off with a reason in the configuration", () => {
@@ -960,13 +975,13 @@ describe("home-package", () => {
   it("has signatures that compile, and no name that two homes claim", () => {
     const signatures = signaturesOf(HOMES);
     expect(signatures.length).toBeGreaterThan(40);
-    const names = ["quantile", "median", "medianOf", "mulberry32", "fnv1a32", "orient2d", "writeFileAtomic", "topoSort", "segmentsIntersect", "exponentialBackoff"];
+    const names = ["quantile", "median", "medianOf", "mulberry32", "fnv1a32", "orient2d", "writeFileAtomic", "topoSort", "segmentsIntersect", "exponentialBackoff", "graphemes", "classifySegments", "canonicalJson"];
     for (const name of names) expect(new Set(signatures.filter((item) => item.pattern.test(name)).map((item) => item.home.area)).size, name).toBe(1);
     for (const name of ["record", "run", "parse", "mean", "seconds", "connect", "measure"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(false);
     // A word of another area after a statistics prefix: bootstrapRepo is the npm bootstrap of the release scripts (codeatlas, 2026-11-02)
     for (const name of ["bootstrapRepo", "bootstrapApp", "wilsonInterval", "bootstrapMedian", "bootstrap"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(!name.endsWith("Repo") && !name.endsWith("App"));
     // A planned home has no package to import yet, so its signatures do not break
-    for (const name of ["graphemes", "parseArgs"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(false);
+    for (const name of ["greatCircleKm", "parseArgs"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(false);
   });
 });
 

@@ -40,6 +40,9 @@ NO_READ_LINE: build/index.d.ts#NO_READ_LINE
 NPM_REGISTRY: build/index.d.ts#NPM_REGISTRY
 type NameHit: build/index.d.ts#NameHit
 type NameRule: build/index.d.ts#NameRule
+type NpmDrift: build/index.d.ts#NpmDrift
+type NpmDriftKind: build/index.d.ts#NpmDriftKind
+type NpmPresence: build/index.d.ts#NpmPresence
 type OptionSpec: build/index.d.ts#OptionSpec
 type OptionValue: build/index.d.ts#OptionValue
 type Options: build/index.d.ts#Options
@@ -101,6 +104,7 @@ createContext: build/index.d.ts#createContext
 cuePreset: build/index.d.ts#cuePreset
 declaredName: build/index.d.ts#declaredName
 defaultOptions: build/index.d.ts#defaultOptions
+exportsRequire: build/index.d.ts#exportsRequire
 findHomes: build/index.d.ts#findHomes
 firstNameMatch: build/index.d.ts#firstNameMatch
 formatResult: build/index.d.ts#formatResult
@@ -141,7 +145,9 @@ nameMatches: build/index.d.ts#nameMatches
 namedVersions: build/index.d.ts#namedVersions
 noBuildOutput: build/index.d.ts#noBuildOutput
 noLocalPaths: build/index.d.ts#noLocalPaths
+npmDrift: build/index.d.ts#npmDrift
 npmLookup: build/index.d.ts#npmLookup
+npmNames: build/index.d.ts#npmNames
 npmUrl: build/index.d.ts#npmUrl
 packNoBuildinfo: build/index.d.ts#packNoBuildinfo
 packageFolders: build/workspace.chunk.d.ts#packageFolders
@@ -335,6 +341,7 @@ interface Home {
   readonly packages: readonly string[];
   readonly repo: string;
   readonly alsoIn?: readonly string[];
+  readonly pending?: readonly string[];
   readonly state: HomeState;
   readonly words: readonly string[];
   readonly signatures?: readonly string[];
@@ -374,7 +381,7 @@ interface LinePlace {
 }
 
 ### build/index.d.ts#MAP_RULE
-export declare const MAP_RULE = "Before you write a helper, find its home in this map. If the home does not have the function, add it to the home, in a pull request of the home repository. Do not make a local copy, a new package or a new repository for an area that has a home: that needs the strategist. A home that is not on npm is used with workspace:* or a github: specifier pinned to a commit. If no area fits, ask the strategist for a home before you write the code.";
+export declare const MAP_RULE: string;
 
 ### build/index.d.ts#MAX_NOTES
 export declare const MAX_NOTES: number;
@@ -407,6 +414,24 @@ interface NameRule {
   readonly word?: string;
   readonly commonAfter?: readonly string[];
 }
+
+### build/index.d.ts#NpmDrift
+interface NpmDrift {
+  readonly area: string;
+  readonly kind: NpmDriftKind;
+  readonly name?: string;
+  readonly text: string;
+}
+
+### build/index.d.ts#NpmDriftKind
+type NpmDriftKind = "missing" | "stale-pending" | "stale-state" | "no-read" | "unnamed";
+
+### build/index.d.ts#NpmPresence
+type NpmPresence = {
+  readonly onNpm: boolean;
+} | {
+  readonly error: string;
+};
 
 ### build/index.d.ts#OptionSpec
 interface OptionSpec {
@@ -711,6 +736,9 @@ export declare function declaredName(line: string): string | undefined;
 ### build/index.d.ts#defaultOptions
 export declare function defaultOptions(rule: Rule): Options;
 
+### build/index.d.ts#exportsRequire
+export declare const exportsRequire: Rule;
+
 ### build/index.d.ts#findHomes
 export declare function findHomes(query: string, homes?: readonly Home[]): readonly Home[];
 
@@ -825,8 +853,14 @@ export declare const noBuildOutput: Rule;
 ### build/index.d.ts#noLocalPaths
 export declare const noLocalPaths: Rule;
 
+### build/index.d.ts#npmDrift
+export declare function npmDrift(homes: readonly Home[], facts: ReadonlyMap<string, NpmPresence>): readonly NpmDrift[];
+
 ### build/index.d.ts#npmLookup
 export declare const npmLookup: RegistryLookup;
+
+### build/index.d.ts#npmNames
+export declare function npmNames(homes?: readonly Home[]): readonly string[];
 
 ### build/index.d.ts#npmUrl
 export declare function npmUrl(name: string, version: string): string;
