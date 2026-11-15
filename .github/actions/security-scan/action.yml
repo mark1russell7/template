@@ -303,6 +303,7 @@ runs:
       shell: bash
       env:
         LANGUAGES: ${{ inputs.codeql-languages }}
+        CODEQL_CONFIG: ${{ github.action_path }}/codeql-config.ts
       run: |
         # CodeQL analyzes the commit of the run. A failed step of osv-scanner can leave the base in the checkout.
         if [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
@@ -337,6 +338,8 @@ runs:
         joined=$(IFS=,; echo "${keep[*]}")
         echo "CodeQL languages: ${joined:-none}" >> "$GITHUB_STEP_SUMMARY"
         echo "languages=$joined" >> "$GITHUB_OUTPUT"
+        # The output config adds the query of the suppression comments of each language (codeql-config.ts)
+        KEPT="$joined" node "$CODEQL_CONFIG"
         # The category of the job codeql of reusable-security.yml ("<workflow file>:codeql"), so the alerts of the
         # Security tab stay with the same analysis
         workflow=${GITHUB_WORKFLOW_REF#"$GITHUB_REPOSITORY/"}
@@ -357,6 +360,7 @@ runs:
       with:
         languages: ${{ steps.codeql_languages.outputs.languages }}
         build-mode: ${{ inputs.codeql-build-mode }}
+        config: ${{ steps.codeql_languages.outputs.config }}
 
     - name: Wait before the second CodeQL start
       if: ${{ !cancelled() && steps.codeql_init.outcome == 'failure' }}
@@ -370,6 +374,7 @@ runs:
       with:
         languages: ${{ steps.codeql_languages.outputs.languages }}
         build-mode: ${{ inputs.codeql-build-mode }}
+        config: ${{ steps.codeql_languages.outputs.config }}
 
     - name: Name the CodeQL bundle
       if: ${{ !cancelled() && (steps.codeql_init.outcome == 'success' || steps.codeql_init-retry.outcome == 'success') }}

@@ -543,6 +543,49 @@ The theme `auto` removes `data-theme`, and the CSS of the site then obeys `prefe
 </script>
 ```
 
+## The parts of a live demo
+
+A home page shows the package at work: a visitor types or clicks, and the page shows the result of the real functions. The entry `@mark1russell7/site-pages/demo` has the parts that each demo uses. Like `./chrome`, it imports no Node.js module. The file `@mark1russell7/site-pages/demo.css` has their style.
+
+| Function | Operation |
+| --- | --- |
+| `examples(row, items, pick)` | Fills a row with one button for each example `[label, value]`. A click starts `pick` with the value. |
+| `verdict(pass, title, ...reason)` | Makes the line of a verdict: a check or a cross, a title in bold and a reason. The mark has the label "Pass" or "Fail". |
+| `setField(field, value)` | Sets the value of a field and sends an `input` event, as typing does. |
+| `partsAt(text, ranges)` | Divides a text into parts at ranges `[start, end)`. Ranges that overlap become one part. |
+| `partsOf(text, find)` | Divides a text into parts at each copy of `find`. |
+| `markedText(parts, label)` | Shows a text in a box, with a `mark` element on each part with `hit`. |
+
+The style gives these classes:
+
+| Class | Element |
+| --- | --- |
+| `sp-demo` | A section of the page with one demo. |
+| `sp-field` | A label with its input, its text box or its range. Put the text of the label in a `span`. |
+| `sp-pair` | Two or three fields side by side. On a phone, they are in one column. |
+| `sp-examples` | The row of `examples`. A button with `aria-pressed="true"` shows as chosen. |
+| `sp-choices` | A row of choices, for example a radio group. The button with `aria-checked="true"` shows as chosen. |
+| `sp-cards`, `sp-card` | One card for each version of a result. |
+
+```ts
+import "@mark1russell7/site-pages/demo.css";
+import { byId } from "@mark1russell7/site-pages/chrome";
+import { examples, markedText, partsOf, setField, verdict } from "@mark1russell7/site-pages/demo";
+
+const input = byId<HTMLInputElement>("find");
+const result = byId("result");
+const show = (): void => {
+  const parts = partsOf("Is 1+1=2? Yes.", input.value);
+  const found = parts.some((part) => part.hit);
+  result.replaceChildren(verdict(found, found ? "Found:" : "Not found:", `the text has "${input.value}".`), markedText(parts, "The text"));
+};
+input.addEventListener("input", show);
+examples(byId("find-examples"), [["A question", "1+1=2?"], ["A word", "Yes"]], (value) => setField(input, value));
+show();
+```
+
+The style reads the tokens of a site when they exist, for example `--surface`, `--ink`, `--muted` and `--rule` of `shell.css`. Without them, it uses its own colors, in light and in dark. The tokens `--sp-pass`, `--sp-pass-bg`, `--sp-fail`, `--sp-fail-bg` and `--sp-hit` set the colors of a verdict and of a mark.
+
 ## The measures of a site
 
 The file `kpi.json` at the root of a site holds the measures of the project, in the format `kpi/1`. A reader outside the site takes the numbers from this file.

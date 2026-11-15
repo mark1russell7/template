@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { navProblems, navSummary, navUnread, navUnreadText, repositoryOfUrl, runNavCli, sitemapPaths, sitePath, type NavLink, type NavPage } from "./nav.ts";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it, vi } from "vitest";
+import { crawlSite, navProblems, navSummary, navUnread, navUnreadText, repositoryOfUrl, runNavCli, sitemapPaths, sitePath, type NavLink, type NavPage } from "./nav.ts";
 
 const home = new URL("https://owner.github.io/repo/");
 
@@ -160,6 +163,23 @@ describe("runNavCli", () => {
       const run = io();
       expect(await runNavCli(argv, run.io), argv.join(" ")).toBe(2);
       expect(run.err.join("")).toContain("site-pages nav:");
+    }
+  });
+});
+
+describe("crawlSite", () => {
+  it("closes its server when the browser does not start", async () => {
+    const out = mkdtempSync(join(tmpdir(), "nav-out-"));
+    writeFileSync(join(out, "index.html"), "<!doctype html><title>Home</title>");
+    const servers = (): number => process.getActiveResourcesInfo().filter((name) => name === "TCPServerWrap").length;
+    const before = servers();
+    try {
+      const options = { out, browser: join(out, "no-such-browser"), maxClicks: 3, maxPages: 1, requireBar: false, shotPages: [], settleMs: 0, timeoutMs: 2000 };
+      await expect(crawlSite(options)).rejects.toThrow(/no-such-browser/);
+      // The event `close` of a server comes before the event loop frees its handle. Thus the test waits for a short time.
+      await vi.waitFor(() => expect(servers()).toBe(before), { timeout: 1000 });
+    } finally {
+      rmSync(out, { recursive: true, force: true });
     }
   });
 });

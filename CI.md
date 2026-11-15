@@ -42,19 +42,20 @@ The job starts all the scripts, also after a failure. Then it fails with the nam
 | `run` | (empty) | A command after the scripts. |
 | `env` | `{}` | The environment variables of the job, as a JSON object. |
 | `working-directory` | `.` | The folder of `package.json`. |
-| `fetch-depth` | `2` | The commits of the checkout. `0` gets the whole history. With `2`, the checkout of a pull request has the parents of its merge commit. On a pull request, the job then deepens the checkout to the merge base, so `check:conventions` reads each commit of the change and the versions at the merge base. On a push to the default branch, the job fetches the commit before the push, for the rule `unreleased-change`. |
+| `fetch-depth` | `2` | The commits of the checkout. `0` gets the whole history. With `2`, the checkout of a pull request has the parents of its merge commit. On a pull request, and on a dispatched run of a pull request, the job then deepens the checkout to the merge base, so `check:conventions` reads each commit of the change and the versions at the merge base. On a push to the default branch, the job fetches the commit before the push, for the rule `unreleased-change`. |
 | `timeout-minutes` | `15` | The time limit of each job of the matrix. The job `coverage` has its own limit. |
-| `changesets` | `true` | The changeset check on a pull request (refer to the next section). |
+| `changesets` | `true` | The changeset check on a pull request, and on a dispatched run of a pull request (refer to "The changeset check"). |
 | `changeset-ignore` | (empty) | More globs of files that need no changeset. |
 | `coverage` | `false` | The job `coverage` starts the tests of each package with Vitest again, with coverage. A failure fails the CI (refer to "Coverage"). |
 | `coverage-floor` | `0` | The lowest percent of each measure of each package. `0` is no floor. |
 | `coverage-on-main` | `true` | With `coverage: false`, a push to the default branch of a public repository still gives the coverage, not strict. It does not fail the CI (refer to "Coverage"). |
 | `coverage-timeout-minutes` | `30` | The time limit of the job `coverage`. Each step of the job stops 2 minutes before it. |
 | `coverage-scripts` | (empty) | The scripts before the tests in the job `coverage`. The default takes each `build` or `build:*` script before `test` in `scripts`. |
-| `release-check` | `true` | The release check on a pull request (refer to "The release check of a pull request"). `false` turns it off. |
+| `release-check` | `true` | The release check on a pull request, and on a dispatched run of a pull request (refer to "The release check of a pull request"). `false` turns it off. |
 | `release-check-private` | `false` | The release check also starts in a private repository. A private repository pays for each job start, so the default skips the job there. |
 | `release-build` | (empty) | The input `build` of the `release.yml` of the repository, for the release check. |
 | `release-node-version` | `26` | The input `node-version` of the `release.yml` of the repository, for the release check. |
+| `pull-request-private` | `false` | In a private repository, the job `pull` finds the pull request of a dispatched run. The caller also gives `pull-requests: read` (refer to "A dispatched run of a pull request"). |
 
 ### Coverage
 
@@ -95,7 +96,7 @@ A pull request from a fork gets no secret, so the private patterns are not exami
 
 ### The changeset check
 
-On a pull request, the job `changesets` examines the changesets (`.github/actions/changeset-check`). A repository with no `.changeset/config.json` passes. The job fails in these cases:
+On a pull request, the job `changesets` examines the changesets (`.github/actions/changeset-check`). On a dispatched run of a pull request, it examines the change of that pull request (refer to "A dispatched run of a pull request"). A repository with no `.changeset/config.json` passes. The job fails in these cases:
 
 - A published package changes, and no changeset names it. Markdown, tests, fixtures and a change of only `devDependencies` or `scripts` in `package.json` need no changeset.
 - A changeset names a package that the repository does not have, or it does not parse.
@@ -123,6 +124,7 @@ jobs:
 On a pull request, the job `release-check` starts the release build on the commit (`.github/actions/release-check`). It does the same steps as the build job of `reusable-release-build.yml`: the install with the lockfile, the build, `scripts/release/pack.ts` and `scripts/release/tags.ts`. Thus a pull request fails when its merge makes the release on `main` fail. An example: a shipped file of a package changes, and the version of that package is already on npm. The error names the package, its version and each file that differs.
 
 - The job uses the merge commit of the pull request, not its head. That commit is the `main` of the release after the merge.
+- On a dispatched run of a pull request, the job uses the commit of the run, that is the head of the pull request. After the queue merges `main` into the branch, that head has the newest `main` (refer to "The queue").
 - The job does not compare with the base branch. When `main` already has such a change, each pull request fails until a pull request raises the version.
 - A repository with no published package passes at once, with a notice. The job does no install.
 - In a private repository, the job starts only with `release-check-private: true`. A private repository pays for each job start, also for a job with no published package.
@@ -194,14 +196,59 @@ The limit has these results:
 - A tag push no longer starts a CI that does not read the tag.
 - The checks of a pull request do not change. `CI OK` and `Security OK` come from the run for `pull_request`, and the ruleset stays as it is.
 
-A run from `workflow_dispatch` is the same as a run from a push to `main`, with these points:
+A run from `workflow_dispatch` on the default branch is the same as a run from a push to `main`, with these points:
 
 - The concurrency group of `ci.yml` is the group of the commit, and `cancel-in-progress` is `false`. A newer push does not cancel the run. A run of the same commit waits for the first run.
-- The job `changesets` skips, because its `if` asks for `pull_request`. The job `ci` stays green, as on a push to `main`.
+- The jobs `pull`, `changesets` and `release-check` skip, because the run has no pull request. The job `ci` stays green, as on a push to `main`.
 - The steps "Deepen to the merge base" and "Fetch the commit before the push" skip.
 - The action `changes` gives a match, as for each event other than a pull request.
-- The rules of `conventions` that read a range of commits skip, because a run of `workflow_dispatch` has no base.
+- The rules of `conventions` that read a range of commits skip, because the run has no base.
 - After a CI run of `workflow_dispatch` on `main`, a caller of `reusable-pages.yml` on `workflow_run` of CI deploys only the head of `main`.
+
+A run from `workflow_dispatch` on another branch examines the open pull request of that branch (refer to the next section). A branch with no open pull request gives a notice. Then the run examines no change, as a run on the default branch.
+
+### A dispatched run of a pull request
+
+A run from `workflow_dispatch` on a branch has no pull request in its event. The queue starts the gates of a pull request in this way (refer to "The queue"). The owner can also start `ci.yml` on the branch of the pull request (`workflow_dispatch`, from the Actions tab of the repository). The job `pull` of `reusable-ci.yml` finds the pull request of the run (`.github/actions/pull-of-run`):
+
+1. It lists the open pull requests whose head is the branch of the run. It keeps only those of the same repository.
+2. It reads the pull request again until its head is the commit of the run, at most 3 more times, 10 s apart. GitHub can update the head some seconds after a push.
+3. It reads the tip of the base branch. The change is from the merge base of that tip to the commit of the run.
+
+Then the run examines that change, as a `pull_request` run does:
+
+- The job `changesets` examines the changesets of the change, with the labels of the pull request.
+- The job `release-check` starts the release build on the commit of the run.
+- The job `checks` deepens the checkout to the merge base. It gives the tip of the base branch to `check:conventions` in the variable `CONVENTIONS_BASE`.
+- The job `pull` saves the pull request as the artifact `pull-request-of-run`: its title, its body and its number of commits, in a JSON file. The job `checks` downloads it, and the variable `CONVENTIONS_PULL_REQUEST` gives its path. The job uses a file, not an output: a step gets an output of a job through an environment variable. On Windows, an environment variable takes at most 32,767 characters, and a body can be longer.
+- Thus the rules `release-files`, `unreleased-change`, `home-package`, `version-title` and `no-local-paths` examine the change. The README of `@mark1russell7/conventions` tells how.
+
+The job `pull` fails when it cannot tell the change, and a failure of the job `pull` fails `CI OK`:
+
+- Two open pull requests have the branch as their head. The job cannot tell the base.
+- The head stays different from the commit of the run. If the branch has a newer commit, the `pull_request` run of that commit examines it. Else start the run again.
+- A read of the API is refused (HTTP 403 or 404), or the rate limit of the API stops it. The error tells which, and what to do.
+- A read of the API fails for a time (HTTP 429 or 5xx, or no answer) after 3 more reads, 10 s apart. This limit is for all reads of the run together.
+- The base branch of the pull request is not in the repository: it was deleted or renamed.
+
+The job `checks` starts also after a failure of the job `pull`, so the run still shows its results. A run on the default branch does not start the job `pull`, for example the gate of `release.yml`.
+
+The job `pull` has no `permissions` key, so it gets the permissions of the caller. A job of a called workflow cannot ask for more than its caller gives. A `permissions` key on the job stops each caller that gives only `contents: read`. In a public repository, each token can read the pull requests.
+
+In a private repository, the job `pull` starts only with the input `pull-request-private: true`. A private repository pays for each job start. The job that calls `reusable-ci.yml` gives the input and `pull-requests: read`:
+
+```yaml
+jobs:
+  ci:
+    uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<commit> # main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      pull-request-private: true
+```
+
+Without the input, a dispatched run in a private repository examines no change, as a run on the default branch. The changeset check and the release check do not start. With the input and without the permission, the job `pull` fails, and its error names the permission.
 
 ### A gate with paths
 
@@ -306,10 +353,12 @@ A run of the queue does these steps (`scripts/workflows/queue.ts`):
 - Each workflow of a check of the ruleset must start on `workflow_dispatch`. Otherwise GitHub refuses the dispatch, and the job fails.
 - With strict off, GitHub merges a pull request that is behind. Then no pull request is `BEHIND`, and the queue changes nothing. Set strict in the ruleset to use the queue.
 - In a private repository, the job starts only when the caller gives the input `private: true`. A private repository pays for each job start, and the queue starts on each push to `main`, also when no pull request is behind. When the input is false, the job skips, and a skipped job costs nothing.
+- A workflow that `workflow_dispatch` starts is not a `pull_request` run. In `reusable-ci.yml`, the job `pull` finds the pull request of the branch. Thus the changeset check, the release check and the rules of the conventions check examine the new head (refer to "A dispatched run of a pull request").
+- An example: two pull requests set the same version, and the first one merges. The queue merges `main` into the second one. Then its change sets no version that `main` does not have. Its gate fails when its title names the version (`version-title`). It also fails when npm has the version and the repository sets `versionEachChange` (`unreleased-change`).
 
 The queue does not do these things:
 
-- A workflow that `workflow_dispatch` starts is not a `pull_request` run. Some jobs operate only on a pull request, so they skip: the changeset check, the release check and the version rules of the conventions check. The security scans operate as on a push. These jobs examined only the old head. Thus two pull requests that set the same version can still both merge.
+- A gate with its own jobs that operate only on a `pull_request` run skips these jobs on a dispatched run. The security scans operate as on a push.
 - `GITHUB_TOKEN` cannot write a workflow file. When the new commits of `main` change a file of `.github/workflows`, GitHub can refuse the update. Then a person updates the branch.
 - When the head does not change in the wait time, the queue starts no workflow. The new head has no checks, and the next run does not see it as `BEHIND`. A person starts the gates on the branch.
 - Each merge updates each other pull request that is behind, and starts its gates again. With N pull requests in the queue, the merge of all of them starts about N × N / 2 runs of each gate.
@@ -598,6 +647,15 @@ CodeQL first downloads the bundle of the version of `codeql-action`. If that dow
 
 An alert of CodeQL that is already open on the base branch is not new. The step groups the alerts by rule, file and message. A group is new only when the pull request has more alerts of it than the base branch has open. Thus a second alert of a known group fails. The step reads the open alerts of the base branch from the code-scanning API, with `security-events: read`. If it cannot read them, the step fails.
 
+To accept one alert of CodeQL, write the comment `codeql[<rule id>]` on the line above the alert. Write the reason in the same comment:
+
+```ts
+// codeql[js/disabling-certificate-validation] The probe reads the certificate and does not send data.
+const socket = connect({ host, port, rejectUnauthorized: false });
+```
+
+The step `Languages` gives CodeQL the query `AlertSuppression.ql` of each language that has one (`codeql-config.ts`). Then the SARIF result of the alert has `suppressions`, and the step skips it. The languages `actions` and `rust` have no such query. Thus a comment in a workflow file changes nothing.
+
 ### A private repository
 
 In a private repository, the dependency review and the code-scanning API need GitHub Advanced Security. A personal account cannot buy it. Thus the inputs `dependency-review`, `codeql` and `osv-upload` have the default `auto`:
@@ -687,7 +745,7 @@ uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<full commit SHA>
 The workflows of the template call the shared workflows and actions by a local path, for example `./.github/workflows/reusable-ci.yml`. Thus each pull request of the template tests them:
 
 - `ci.yml` tests `reusable-ci.yml`.
-- `security.yml` tests the action `security-scan`. The tests of `scripts/workflows/security-scan.test.ts` start no scan. They examine the choice of the scans, the last step and the step that finds the new CodeQL alerts.
+- `security.yml` tests the action `security-scan`. The tests of `scripts/workflows/security-scan.test.ts` start no scan. They examine the choice of the scans, the last step, the step that finds the new CodeQL alerts and the query of the suppression comments.
 - Before the action, `security.yml` checks out the folder `.github/actions` of the template. This step operates only in the template. In a private repository, its partial clone makes the checkout of the base fail.
 - `actions-test.yml` tests the actions, `reusable-pages.yml` and the release workflows, with `dry-run`. It publishes nothing. On a pull request, it sets the input `require-main` of the release build to `false`.
 - On each pull request, the job `site` of `ci.yml` uses `reusable-pages-check.yml`. It builds the site of the template and starts its probe, with no deploy.

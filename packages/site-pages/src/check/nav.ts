@@ -14,7 +14,7 @@ import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { barHtml, injectBar, parsePages, type BarOptions } from "../bar/bar.ts";
-import { findBrowser, launch, type Page } from "./browser.ts";
+import { findBrowser, launch, type Browser, type Page } from "./browser.ts";
 import { cell, PHONE_WIDTH, pageSlug, type CheckIo } from "./check.ts";
 import { serve } from "./serve.ts";
 
@@ -314,12 +314,13 @@ export async function crawlSite(options: NavOptions): Promise<NavResult> {
   const start = server?.url ?? options.url;
   if (start === undefined) throw new Error("give out or url");
   const home = new URL(start.endsWith("/") ? start : `${start}/`);
-  const browser = await launch(executable, options.timeoutMs);
+  let browser: Browser | undefined;
   const pages: NavPage[] = [];
   const clicks: NavClick[] = [];
   let sitemap: string[] = [];
   let left: string[] = [];
   try {
+    browser = await launch(executable, options.timeoutMs);
     const { page } = browser;
     await Promise.all([page.send("Page.enable"), page.send("Runtime.enable")]);
     if (options.previewBar !== undefined) await previewBar(page, home, options.previewBar);
@@ -377,7 +378,8 @@ export async function crawlSite(options: NavOptions): Promise<NavResult> {
       }
     }
   } finally {
-    await browser.close();
+    // A browser that does not start throws in the try. The server then also closes, so the process can exit.
+    await browser?.close();
     await server?.close();
   }
   const unread = navUnread(left, pages, sitemap);

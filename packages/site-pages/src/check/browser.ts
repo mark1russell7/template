@@ -153,7 +153,13 @@ export async function launch(executable: string, timeoutMs = 30_000, callMs: num
       child.kill();
       await Promise.race([new Promise((resolve) => child.once("exit", resolve)), sleep(5000)]);
     }
-    rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    try {
+      rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    } catch (error) {
+      // On Windows, a child process of the browser can keep a file of the profile open for some seconds after the stop.
+      // A profile that stays in the temporary folder does not change the result, so the check continues with a warning.
+      process.stderr.write(`site-pages check: the browser profile ${profile} stays in the temporary folder: ${error instanceof Error ? error.message : String(error)}\n`);
+    }
   };
   try {
     const portFile = join(profile, "DevToolsActivePort");

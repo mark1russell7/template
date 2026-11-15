@@ -27,6 +27,11 @@ export interface ApiReportConfig {
   readonly publishConfig?: boolean;
   /** The command that the header of each report names. The default is `api-report`. */
   readonly tool?: string;
+  /**
+   * When true, the commands fail for a package with a declaration outside the declaration files of its
+   * entries. A chunk of a bundler is such a file. The default is false.
+   */
+  readonly entriesOnly?: boolean;
   /** The pages of an API. The command `check` holds their names against the report of each package. */
   readonly pages?: readonly ApiPage[];
 }
@@ -98,7 +103,7 @@ export function readConfig(root: string): ApiReportConfig {
     if (typeof item !== "string" || item === "") throw new Error(`apiReport.${key} must be a string.`);
     result[key] = item;
   }
-  for (const key of ["includePrivate", "publishConfig"] as const) {
+  for (const key of ["includePrivate", "publishConfig", "entriesOnly"] as const) {
     const item = config[key];
     if (item === undefined) continue;
     if (typeof item !== "boolean") throw new Error(`apiReport.${key} must be true or false.`);
@@ -106,7 +111,7 @@ export function readConfig(root: string): ApiReportConfig {
   }
   const pages = config["pages"];
   if (pages !== undefined) result.pages = readPages(pages);
-  const unknown = Object.keys(config).filter((key) => !["packages", "report", "tool", "includePrivate", "publishConfig", "pages"].includes(key));
+  const unknown = Object.keys(config).filter((key) => !["packages", "report", "tool", "includePrivate", "publishConfig", "entriesOnly", "pages"].includes(key));
   if (unknown.length > 0) throw new Error(`apiReport has unknown fields: ${unknown.join(", ")}.`);
   return result;
 }
@@ -257,6 +262,7 @@ export function runReports(options: RunOptions): RunResult {
       documented = documentedPackageReport(folder, {
         tool: options.tool ?? DEFAULT_TOOL,
         ...(options.publishConfig === undefined ? {} : { publishConfig: options.publishConfig }),
+        ...(options.entriesOnly === undefined ? {} : { entriesOnly: options.entriesOnly }),
       });
     } catch (error) {
       results.push({ folder: shown, file: shownFile, status: "error", error: error instanceof Error ? error.message : String(error) });
@@ -377,9 +383,12 @@ export const USAGE: string = `Usage: api-report <check | update> [options] [<pac
   --report <path>        The path of the report in each package folder. The default is ${REPORT_FILE}.
   --include-private      Also make a report for each private package.
   --no-publish-config    Read the fields of package.json without publishConfig.
+  --entries-only         Fail for a package with a declaration in a file that is not the declaration file of an entry,
+                         for example a chunk of a bundler.
   -h, --help             Show this text.
 
-The field "apiReport" of the root package.json can set packages, report, includePrivate, publishConfig, tool and pages.
+The field "apiReport" of the root package.json can set packages, report, includePrivate, publishConfig, entriesOnly, tool
+and pages.
 `;
 
 /** An error of the arguments: exit code 2 and the help text. */
@@ -391,7 +400,7 @@ export function runCli(args: readonly string[], io: CliIo): number {
   let root = io.cwd;
   const packages: string[] = [];
   const folders: string[] = [];
-  const flags: { report?: string; includePrivate?: boolean; publishConfig?: boolean } = {};
+  const flags: { report?: string; includePrivate?: boolean; publishConfig?: boolean; entriesOnly?: boolean } = {};
   for (let index = 0; index < args.length; index++) {
     const arg = args[index] ?? "";
     const value = (): string => {
@@ -407,6 +416,7 @@ export function runCli(args: readonly string[], io: CliIo): number {
       else if (arg === "--report") flags.report = value();
       else if (arg === "--include-private") flags.includePrivate = true;
       else if (arg === "--no-publish-config") flags.publishConfig = false;
+      else if (arg === "--entries-only") flags.entriesOnly = true;
       else if (arg === "--help" || arg === "-h") {
         io.stdout(USAGE);
         return 0;
