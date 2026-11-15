@@ -171,6 +171,8 @@ site-pages cue --out dist
 - A code block that is wider than its box shows a fade at the edge with more content. A block that is not wider shows no cue.
 - A block with `data-overflow-ok` or with the class `scroll-cue` stays as it is. The text of `script`, `style` and `textarea` does not change.
 - In a browser with no scroll timelines, a small script gives `--scroll-cue-bg` the background color of the block. Thus the block keeps the color of its theme.
+- A script of a page can make a code block in the browser, for example from Markdown. Thus a page with a script of its own also gets the style and a small script. That script gives the cue to each code block that the page makes, by the same rules.
+- A page can put a code block in a box of its own that scrolls, and give the block the width of its text. When that box holds only the block and the text is wider than the box, the script gives the box the cue.
 - The command can start two times on one folder. The second start gives the same pages.
 
 In `reusable-pages.yml`, the input `scroll-cue` (default `true`) starts the command before the site check and the upload.
@@ -486,10 +488,12 @@ import "@mark1russell7/site-pages/scroll-cue.css";
 The class sets `overflow-x: auto`. A browser with scroll timelines keeps the background of the box, so a code block keeps the color of its theme. A browser with no scroll timelines gets the background color `--scroll-cue-bg` and a shade of the color `--scroll-cue-shade`. Set `--scroll-cue-bg` to the background color of the box:
 
 ```css
-.code {
+.code.scroll-cue {
   --scroll-cue-bg: var(--code-bg);
 }
 ```
+
+The rule that sets `--scroll-cue-bg` must be more specific than `.scroll-cue`, which sets the default `Canvas`. The command `site-pages cue` puts its style last in `<head>`. Thus a rule with only `pre` or `.code` loses, and the fade gets the wrong color.
 
 The fades run on a scroll timeline (`animation-timeline: scroll(self inline)`). In Chromium, `document.getAnimations()` gives each fade as a running animation with one iteration, and the fade does not end. A test that waits for the end of each animation, for example before an axe check of the contrast, then stops at its time limit. Such a test must skip each animation whose timeline is not `document.timeline`:
 
@@ -542,6 +546,49 @@ The theme `auto` removes `data-theme`, and the CSS of the site then obeys `prefe
   } catch {}
 </script>
 ```
+
+## The parts of a live demo
+
+A home page shows the package at work: a visitor types or clicks, and the page shows the result of the real functions. The entry `@mark1russell7/site-pages/demo` has the parts that each demo uses. Like `./chrome`, it imports no Node.js module. The file `@mark1russell7/site-pages/demo.css` has their style.
+
+| Function | Operation |
+| --- | --- |
+| `examples(row, items, pick)` | Fills a row with one button for each example `[label, value]`. A click starts `pick` with the value. |
+| `verdict(pass, title, ...reason)` | Makes the line of a verdict: a check or a cross, a title in bold and a reason. The mark has the label "Pass" or "Fail". |
+| `setField(field, value)` | Sets the value of a field and sends an `input` event, as typing does. |
+| `partsAt(text, ranges)` | Divides a text into parts at ranges `[start, end)`. Ranges that overlap become one part. |
+| `partsOf(text, find)` | Divides a text into parts at each copy of `find`. |
+| `markedText(parts, label)` | Shows a text in a box, with a `mark` element on each part with `hit`. |
+
+The style gives these classes:
+
+| Class | Element |
+| --- | --- |
+| `sp-demo` | A section of the page with one demo. |
+| `sp-field` | A label with its input, its text box or its range. Put the text of the label in a `span`. |
+| `sp-pair` | Two or three fields side by side. On a phone, they are in one column. |
+| `sp-examples` | The row of `examples`. A button with `aria-pressed="true"` shows as chosen. |
+| `sp-choices` | A row of choices, for example a radio group. The button with `aria-checked="true"` shows as chosen. |
+| `sp-cards`, `sp-card` | One card for each version of a result. |
+
+```ts
+import "@mark1russell7/site-pages/demo.css";
+import { byId } from "@mark1russell7/site-pages/chrome";
+import { examples, markedText, partsOf, setField, verdict } from "@mark1russell7/site-pages/demo";
+
+const input = byId<HTMLInputElement>("find");
+const result = byId("result");
+const show = (): void => {
+  const parts = partsOf("Is 1+1=2? Yes.", input.value);
+  const found = parts.some((part) => part.hit);
+  result.replaceChildren(verdict(found, found ? "Found:" : "Not found:", `the text has "${input.value}".`), markedText(parts, "The text"));
+};
+input.addEventListener("input", show);
+examples(byId("find-examples"), [["A question", "1+1=2?"], ["A word", "Yes"]], (value) => setField(input, value));
+show();
+```
+
+The style reads the tokens of a site when they exist, for example `--surface`, `--ink`, `--muted` and `--rule` of `shell.css`. Without them, it uses its own colors, in light and in dark. The tokens `--sp-pass`, `--sp-pass-bg`, `--sp-fail`, `--sp-fail-bg` and `--sp-hit` set the colors of a verdict and of a mark.
 
 ## The measures of a site
 

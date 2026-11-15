@@ -1,8 +1,8 @@
 /**
  * The rule `version-title`: a merge whose title names a version sets that version in a `package.json`.
  */
-import { existsSync, readFileSync } from "node:fs";
 import { rangeOf } from "../change.ts";
+import { namesPullRequestFile, pullRequestOfRun } from "../pull-request.ts";
 import type { Break, Rule, RuleContext } from "../rule.ts";
 
 /** A version of SemVer, with an optional pre-release. */
@@ -50,16 +50,21 @@ export function setVersions(context: RuleContext, from: string, to: string): str
   return versions;
 }
 
-/** This function gives the title of the pull request of the event file, or undefined. */
-function pullRequestTitle(context: RuleContext): string | undefined {
-  const file = context.env["GITHUB_EVENT_PATH"];
-  if (file === undefined || file === "" || !existsSync(file)) return undefined;
-  try {
-    const title = (JSON.parse(readFileSync(file, "utf8")) as { pull_request?: { title?: unknown } }).pull_request?.title;
-    return typeof title === "string" ? title : undefined;
-  } catch {
-    return undefined;
+/**
+ * This function gives the versions that a merge of HEAD into `base` sets, with `fork` as the merge base. They are the
+ * versions of each `package.json` that the change (from `fork` to HEAD) changes, less each version that `base` has
+ * already. Thus, when the base branch has the version of the change, the merge sets no version.
+ */
+function mergeSetVersions(context: RuleContext, base: string, fork: string): string[] | undefined {
+  const out = context.git(["diff", "--name-only", "--no-renames", fork, "HEAD", "--", "package.json", "**/package.json"]);
+  if (out === undefined) return undefined;
+  const versions: string[] = [];
+  for (const file of out.split(/\r?\n/).filter((line) => line !== "")) {
+    const after = versionAt(context, "HEAD", file);
+    if (after === undefined || versions.includes(after)) continue;
+    if (after !== versionAt(context, fork, file) && after !== versionAt(context, base, file)) versions.push(after);
   }
+  return versions;
 }
 
 /**
@@ -92,11 +97,26 @@ export const versionTitle: Rule = {
     const event = context.env["GITHUB_EVENT_NAME"];
     if (context.base === undefined && (event === "pull_request" || event === "pull_request_target")) {
       // The checkout of a pull request is its merge with the base: HEAD^1 is the base, and the title is in the event file
-      const title = pullRequestTitle(context);
+      const title = pullRequestOfRun(context.env)?.title;
       if (title === undefined) return { skipped: "the event file has no title of the pull request" };
       const range = rangeOf(context);
       if ("skipped" in range) return range;
       const set = setVersions(context, range.ends[0], "HEAD");
+      if (set === undefined) return { skipped: "git cannot give the changed files of the pull request" };
+      const found = breakOf(title, set, "package.json", "The pull request");
+      return found === undefined ? [] : [found];
+    }
+    if (context.base !== undefined && namesPullRequestFile(context.env)) {
+      // A run that workflow_dispatch starts, for example a gate of the merge queue. The checkout is the head of the branch,
+      // not a merge commit. The shared CI gives the pull request in the file of CONVENTIONS_PULL_REQUEST, and the tip of
+      // its base branch as the base. The rule examines the versions that a merge of HEAD into the base sets.
+      const title = pullRequestOfRun(context.env)?.title;
+      if (title === undefined) return { skipped: "the file of CONVENTIONS_PULL_REQUEST has no title of the pull request" };
+      const range = rangeOf(context);
+      if ("skipped" in range) return range;
+      const fork = context.git(["merge-base", ...range.ends])?.trim();
+      if (fork === undefined || fork === "") return { skipped: `the checkout does not have the merge base of ${range.ends.join(" and ")}` };
+      const set = mergeSetVersions(context, range.ends[0], fork);
       if (set === undefined) return { skipped: "git cannot give the changed files of the pull request" };
       const found = breakOf(title, set, "package.json", "The pull request");
       return found === undefined ? [] : [found];

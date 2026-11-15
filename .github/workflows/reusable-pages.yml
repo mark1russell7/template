@@ -236,7 +236,7 @@ jobs:
           fetch-depth: ${{ inputs.fetch-depth }}
           persist-credentials: false
       # The pnpm version comes from "packageManager" in package.json
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ inputs.node-version-file == '' && inputs.node-version || '' }}
@@ -355,7 +355,9 @@ jobs:
     needs: [ref, build]
     if: inputs.deploy && needs.ref.outputs.deploy == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # The limit of the job is above the timeout of deploy-pages. Thus the action itself cancels a deployment that GitHub does
+    # not finish, and the job does not stop during the poll. In 25 deploys of 2026-11-08 and 09 the slowest took 307 s.
+    timeout-minutes: 12
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -366,6 +368,7 @@ jobs:
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
         with:
           artifact_name: ${{ inputs.artifact-prefix }}github-pages
+          timeout: 606000
 
   # Tell the search engines of IndexNow (Bing and others) about the pages of the new deploy. A failure here does not
   # fail the deploy. A scheduled deploy changes only the Status page, so it sends nothing.

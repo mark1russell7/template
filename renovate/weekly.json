@@ -1,0 +1,5 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "For a repository that pays for its CI minutes (a private repository): Renovate opens pull requests only on Monday before 06:00 (New York time). Extend it after default or base. A security update still comes at any time.",
+  "schedule": ["before 6am on monday"]
+}

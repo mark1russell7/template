@@ -5,7 +5,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { rangeOf } from "../change.ts";
-import { cleanPath, codePackages, hasFile, lineOf, matchesAny, type Break, type Manifest, type PackageInfo, type Rule, type RuleContext } from "../rule.ts";
+import { cleanPath, hasFile, lineOf, matchesAny, versionedPackages, type Break, type Manifest, type PackageInfo, type Rule, type RuleContext } from "../rule.ts";
 
 /**
  * The answer of the registry for one package, or an error. The answer has each version that npm has or had (none for a
@@ -106,14 +106,6 @@ function parseManifest(text: string | undefined): Manifest | undefined {
 /** This function tells if a version is a placeholder before the first release: `0.0.0` or `0.0.0-<stage>`. */
 const isPlaceholder = (version: string): boolean => /^0\.0\.0(?:[-+].*)?$/.test(version);
 
-/** The published packages of the repository: the root package and the code packages that are not private and have a name and a version. */
-function publishedOf(context: RuleContext): readonly PackageInfo[] {
-  const all = [context.rootPackage, ...codePackages(context)];
-  return all
-    .filter((pkg, index) => all.findIndex((other) => other.file === pkg.file) === index)
-    .filter((pkg) => pkg.manifest["private"] !== true && typeof pkg.manifest["name"] === "string" && typeof pkg.manifest["version"] === "string");
-}
-
 /** A published package of the change: its versions, and the shipped files that the change changes. */
 interface Candidate {
   readonly pkg: PackageInfo;
@@ -195,7 +187,7 @@ export function unreleasedChangeRule(lookup: RegistryLookup = npmLookup): Rule {
     },
     check(context, options) {
       if (hasFile(context.root, ".changeset/config.json")) return { skipped: "the repository uses Changesets: the changesets raise the versions, and the changeset check examines them" };
-      const published = publishedOf(context).filter((pkg) => !isPlaceholder(String(pkg.manifest["version"])));
+      const published = versionedPackages(context).filter((pkg) => !isPlaceholder(String(pkg.manifest["version"])));
       if (published.length === 0) return { skipped: "the repository has no published package with a release version" };
       const range = rangeOf(context, { push: true });
       if ("skipped" in range) return range;

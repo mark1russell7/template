@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { apiReport, binsOf, entriesOf, HEADER_LINES, packageReport, parseDeclarations, publishedManifest, statementsOf, targetOf } from "./index.ts";
+import { apiReport, binsOf, entriesOf, HEADER_LINES, packageModel, packageReport, parseDeclarations, publishedManifest, statementsOf, targetOf } from "./index.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "api-report-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -88,6 +88,45 @@ describe("the chunks of a bundler", () => {
     });
     expect(report).toContain("./two.chunk.mjs");
     expect(report).not.toContain("E5f6G7h8");
+  });
+
+  describe("the option entriesOnly", () => {
+    it("refuses a declaration in a chunk, and names the package, the label of the chunk and the name", () => {
+      const dir = fixture(built("o5bDHjNi"));
+      expect(() => packageReport(dir, { entriesOnly: true })).toThrow(
+        "The report of p has declarations in files that are not the declaration file of an entry (the option entriesOnly): build/html.chunk.d.mts (html). " +
+          "Export each name from an entry of the exports field, or change the config of the bundler.",
+      );
+    });
+
+    it("gives the same report as the default when each declaration is in an entry file", () => {
+      const files = {
+        "package.json": { name: "p", exports: { ".": { types: "./build/index.d.mts" }, "./html": { types: "./build/html.d.mts" } } },
+        "build/index.d.mts": 'export { html } from "./html.mjs";\nexport declare const a: 1;\n',
+        "build/html.d.mts": "declare function html(): void;\nexport { html };\ndeclare global {\n    var b: 2;\n}\n",
+      };
+      const dir = fixture(files);
+      const report = packageReport(dir, { entriesOnly: true });
+      expect(report).toContain("html: build/html.d.mts#html\n");
+      expect(report).toBe(packageReport(dir));
+    });
+
+    it("leaves the report of a chunk as it was when the option is off", () => {
+      const dir = fixture(built("o5bDHjNi"));
+      const report = packageReport(dir);
+      expect(report).toContain("html: build/html.chunk.d.mts#html\n");
+      expect(packageReport(dir, { entriesOnly: false })).toBe(report);
+    });
+
+    it("also refuses a namespace, an ambient declaration and a file of tsc that no entry names, and shortens a long list of names", () => {
+      const dir = fixture({
+        "package.json": { name: "p", types: "./index.d.ts" },
+        "index.d.ts": 'export * from "./util.js";\nexport * as ns from "./space.js";\n',
+        "util.d.ts": "export declare const a: 1;\nexport declare const b: 2;\nexport declare const c: 3;\nexport declare const d: 4;\nexport declare const e: 5;\n",
+        "space.d.ts": "export {};\ndeclare global {\n    var g: 1;\n}\n",
+      });
+      expect(() => packageReport(dir, { entriesOnly: true })).toThrow("entriesOnly): space.d.ts (* as ns, declare global), util.d.ts (a, b, c and 2 more). Export");
+    });
   });
 
   it("keeps a name with a word in the place of a hash", () => {
@@ -482,5 +521,85 @@ describe("the report of a package", () => {
     const files = (end: string): Record<string, unknown> => ({ "package.json": { name: "p", types: "./index.d.ts" }, "index.d.ts": ["export interface A {", "    b: 1;", "}", ""].join(end) });
     expect(body(files("\r\n"))).toBe(body(files("\n")));
     expect(apiReport("p", fixture({}), []).includes("\r")).toBe(false);
+  });
+});
+
+describe("the doc comments", () => {
+  it("gives the doc comment of each declaration by name, without the comment marks", () => {
+    const info = parseDeclarations(
+      [
+        "/**",
+        " * The sum of two numbers.",
+        " *",
+        " * @param a - The first number.",
+        " */",
+        "export declare function add(a: number, b: number): number;",
+        "/** The first overload wins. */",
+        "export declare function many(a: string): string;",
+        "/** The second overload. */",
+        "export declare function many(a: number): number;",
+        "/* A plain comment. */",
+        "export declare const plain: 1;",
+        "/**/",
+        "export declare const empty: 1;",
+        "/** A doc comment before an export list. */",
+        "export { add as sum };",
+        "export declare const after: 1;",
+        "export interface Shape {",
+        "    /** A member. */",
+        "    readonly size: number;",
+        "}",
+        "/** Two names. */",
+        "export declare const left: 1, right: 2;",
+        "/** *Bold* first.",
+        " * @example",
+        " *   indented(1);",
+        " */",
+        "export declare function marked(): void;",
+        "/**",
+        "    Lines without a mark.",
+        "",
+        "      indented(2);",
+        "    */",
+        "export declare function bare(): void;",
+      ].join("\n"),
+    );
+    expect(info.docs.get("marked")).toBe("*Bold* first.\n@example\n  indented(1);");
+    expect(info.docs.get("bare")).toBe("Lines without a mark.\n\n  indented(2);");
+    expect(info.docs.get("add")).toBe("The sum of two numbers.\n\n@param a - The first number.");
+    expect(info.docs.get("many")).toBe("The first overload wins.");
+    expect(info.docs.has("plain")).toBe(false);
+    expect(info.docs.has("empty")).toBe(false);
+    expect(info.docs.has("after")).toBe(false);
+    expect(info.docs.has("Shape")).toBe(false);
+    expect(info.docs.get("left")).toBe("Two names.");
+    expect(info.docs.get("right")).toBe("Two names.");
+  });
+
+  it("changes neither the statements nor the report", () => {
+    const bare = "export declare function f(): void;\n";
+    const documented = `/** The function f. */\n${bare}`;
+    expect(statementsOf(documented)).toEqual(statementsOf(bare));
+    const files = (text: string): Record<string, unknown> => ({ "package.json": { name: "p", types: "./index.d.ts" }, "index.d.ts": text });
+    expect(body(files(documented))).toBe(body(files(bare)));
+  });
+
+  it("gives a model with the names of each entry and the doc comment of each declaration", () => {
+    const model = packageModel(
+      fixture({
+        "package.json": { name: "p", exports: { ".": { types: "./index.d.ts" }, "./more": { types: "./more.d.ts" } } },
+        "index.d.ts": '/** The value a. */\nexport declare const a: 1;\nexport type { B } from "./more.js";\n',
+        "more.d.ts": "/** The type B. */\nexport interface B {\n    c: 1;\n}\nexport declare const d: 2;\n",
+      }),
+    );
+    expect(model.packageName).toBe("p");
+    expect(model.entries.map((entry) => entry.subpath)).toEqual([".", "./more"]);
+    expect(model.entries[0]?.names).toEqual([
+      { name: "B", key: "more.d.ts#B", isType: true, kind: "declaration" },
+      { name: "a", key: "index.d.ts#a", isType: false, kind: "declaration" },
+    ]);
+    expect(model.declarations["index.d.ts#a"]).toEqual({ text: "export declare const a: 1;", doc: "The value a." });
+    expect(model.declarations["more.d.ts#B"]?.doc).toBe("The type B.");
+    expect(model.declarations["more.d.ts#d"]).toEqual({ text: "export declare const d: 2;" });
   });
 });

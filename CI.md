@@ -12,6 +12,7 @@ The template holds the CI, the release and the Pages workflows of the repositori
 | `.github/workflows/reusable-pages.yml` | Workflow | Builds a site, adds the Releases page and the Status page, and deploys it to GitHub Pages. |
 | `.github/actions/security-scan` | Action | Scans the dependencies and the code with the dependency review, osv-scanner and CodeQL, in one job. |
 | `.github/workflows/reusable-security.yml` | Workflow | Deprecated. The same scans in three jobs ("Security", "The old workflow"). |
+| `.github/workflows/reusable-queue.yml` | Workflow | Merges `main` into each pull request with auto-merge that is behind, and starts its gates again ("The queue"). |
 | `.github/workflows/reusable-ai-review.yml` | Workflow | Gives a pull request a review by Claude on request (the `ai-review` label), comment only (`AI-REVIEW.md`). |
 | `.github/workflows/reusable-codex-review.yml` | Workflow | Gives a pull request a second review by an OpenAI model, comment only (`CODEX-REVIEW.md`). |
 
@@ -38,17 +39,35 @@ The job starts all the scripts, also after a failure. Then it fails with the nam
 | `run` | (empty) | A command after the scripts. |
 | `env` | `{}` | The environment variables of the job, as a JSON object. |
 | `working-directory` | `.` | The folder of `package.json`. |
-| `fetch-depth` | `2` | The commits of the checkout. `0` gets the whole history. With `2`, the checkout of a pull request has the parents of its merge commit. On a pull request, the job then deepens the checkout to the merge base, so `check:conventions` reads each commit of the change and the versions at the merge base. On a push to the default branch, the job fetches the commit before the push, for the rule `unreleased-change`. |
-| `timeout-minutes` | `15` | The time limit of each job of the matrix. |
-| `changesets` | `true` | The changeset check on a pull request (refer to the next section). |
+| `fetch-depth` | `2` | The commits of the checkout. `0` gets the whole history. With `2`, the checkout of a pull request has the parents of its merge commit. On a pull request, and on a dispatched run of a pull request, the job then deepens the checkout to the merge base, so `check:conventions` reads each commit of the change and the versions at the merge base. On a push to the default branch, the job fetches the commit before the push, for the rule `unreleased-change`. |
+| `timeout-minutes` | `15` | The time limit of each job of the matrix. The job `coverage` has its own limit. |
+| `changesets` | `true` | The changeset check on a pull request, and on a dispatched run of a pull request (refer to "The changeset check"). |
 | `changeset-ignore` | (empty) | More globs of files that need no changeset. |
-| `coverage` | `false` | After the scripts, the first cell of the matrix starts the tests of each package with Vitest again, with coverage (refer to "Coverage"). |
+| `coverage` | `false` | The job `coverage` starts the tests of each package with Vitest again, with coverage. A failure fails the CI (refer to "Coverage"). |
 | `coverage-floor` | `0` | The lowest percent of each measure of each package. `0` is no floor. |
-| `coverage-on-main` | `true` | With `coverage: false`, a push to the default branch of a public repository still gives the coverage, not strict (refer to "Coverage"). |
+| `coverage-on-main` | `true` | With `coverage: false`, a push to the default branch of a public repository still gives the coverage, not strict. It does not fail the CI (refer to "Coverage"). |
+| `coverage-timeout-minutes` | `30` | The time limit of the job `coverage`. Each step of the job stops 2 minutes before it. |
+| `coverage-scripts` | (empty) | The scripts before the tests in the job `coverage`. The default takes each `build` or `build:*` script before `test` in `scripts`. |
+| `release-check` | `true` | The release check on a pull request, and on a dispatched run of a pull request (refer to "The release check of a pull request"). `false` turns it off. |
+| `release-check-private` | `false` | The release check also starts in a private repository. A private repository pays for each job start, so the default skips the job there. |
+| `release-build` | (empty) | The input `build` of the `release.yml` of the repository, for the release check. |
+| `release-node-version` | `26` | The input `node-version` of the `release.yml` of the repository, for the release check. |
+| `pull-request-private` | `false` | In a private repository, the job `pull` finds the pull request of a dispatched run. The caller also gives `pull-requests: read` (refer to "A dispatched run of a pull request"). |
 
 ### Coverage
 
-With `coverage: true`, the action `coverage` starts `vitest run` with coverage in each package whose `test` script starts Vitest. Only the first cell of the matrix does it.
+With `coverage: true`, the job `coverage` starts `vitest run` with coverage in each package whose `test` script starts Vitest. The job has the first runner and the first Node.js version of the matrix. It starts at the same time as the job `checks`, so the coverage does not make the checks slower.
+
+- Before the tests, the job installs, starts the command `setup` and the build scripts. These are each `build` or `build:*` script before `test` in `scripts`, or the scripts of `coverage-scripts`.
+- The job has its own time limit, `coverage-timeout-minutes` (30). The install, the command `setup`, the scripts and the tests stop at a deadline 2 minutes before that limit. Each package that the deadline stopped fails the step, and the message names it.
+- A job that reaches its time limit gets the result `cancelled`, also with `continue-on-error`, and the CI fails. A step that stops at the deadline fails only the step. Thus the job ends with its summary and its artifact.
+- The script `deadline.ts` of the action `coverage` holds the deadline. At the deadline, it sends `TERM` to the processes of the step, and `KILL` 10 seconds later. It works on Linux, macOS and Windows.
+- Node.js starts `deadline.ts` and `coverage.ts` from 22.18. With an older first version in `node-versions`, the steps have no deadline and give a warning. The step `Coverage` measures nothing: strict, it fails, and not strict, it gives a warning.
+- The summary gives the time of the job and its limit. A time above 80 % of the limit gives a warning.
+- The workflow `limit-audit.yml` of the template finds each job of a default branch that stopped at its time limit. It examines the runs of the last 24 hours of each public repository, each day.
+- The audit finds a job that reached its `timeout-minutes`, a step of the job `coverage` that stopped at the deadline, and the warning above 80 %.
+- The scheduled run fails when the audit cannot read a repository. The summary has a table of the jobs, and the artifact `limit-audit` has `limit-audit.json`.
+- Until the day `FAILS_FROM` of the workflow (2026-11-23), a job that stopped at a limit gives a warning. From that day, it fails the run.
 
 - The summary of the job gets a table: the statements, branches, functions and lines of each package.
 - The artifact `coverage` has `coverage-summary.json` and `coverage-final.json` of each package.
@@ -56,7 +75,7 @@ With `coverage: true`, the action `coverage` starts `vitest run` with coverage i
 - A package whose tests fail also fails the step, after the summary. The thresholds of its Vitest config can cause this. The message names the package and the exit code.
 - With `coverage-floor`, a package with a measure under the floor fails the step. The message names the package and the measure.
 
-With `coverage: false` and `coverage-on-main: true` (the default), a push to the default branch of a public repository also starts the action, not strict (a private repository pays for its minutes, so it uses `coverage: true`). It skips a package with no `@vitest/coverage-v8`, and it gives a warning for a failure. It does not fail the job. So each repository has the artifact `coverage` on main, and a tool can read which exported functions no test starts.
+With `coverage: false` and `coverage-on-main: true` (the default), a push to the default branch of a public repository also starts the job, not strict (a private repository pays for its minutes, so it uses `coverage: true`). It skips a package with no `@vitest/coverage-v8`, and it gives a warning for a failure. The job has `continue-on-error`, so a failure or a stop at the deadline does not fail the CI. The gate of `release.yml` does not start it, so a release does not wait for the coverage. So each repository has the artifact `coverage` on main, and a tool can read which exported functions no test starts.
 
 Each package with Vitest needs `@vitest/coverage-v8` in its `devDependencies`, with the version of its Vitest. The configuration of the coverage in `vitest.config.ts` (for example `include` and `exclude`) stays. The action sets only the reporters and the folder `coverage`.
 
@@ -74,7 +93,7 @@ A pull request from a fork gets no secret, so the private patterns are not exami
 
 ### The changeset check
 
-On a pull request, the job `changesets` examines the changesets (`.github/actions/changeset-check`). A repository with no `.changeset/config.json` passes. The job fails in these cases:
+On a pull request, the job `changesets` examines the changesets (`.github/actions/changeset-check`). On a dispatched run of a pull request, it examines the change of that pull request (refer to "A dispatched run of a pull request"). A repository with no `.changeset/config.json` passes. The job fails in these cases:
 
 - A published package changes, and no changeset names it. Markdown, tests, fixtures and a change of only `devDependencies` or `scripts` in `package.json` need no changeset.
 - A changeset names a package that the repository does not have, or it does not parse.
@@ -97,6 +116,21 @@ jobs:
       run: npm pack --dry-run
 ```
 
+### The release check of a pull request
+
+On a pull request, the job `release-check` starts the release build on the commit (`.github/actions/release-check`). It does the same steps as the build job of `reusable-release-build.yml`: the install with the lockfile, the build, `scripts/release/pack.ts` and `scripts/release/tags.ts`. Thus a pull request fails when its merge makes the release on `main` fail. An example: a shipped file of a package changes, and the version of that package is already on npm. The error names the package, its version and each file that differs.
+
+- The job uses the merge commit of the pull request, not its head. That commit is the `main` of the release after the merge.
+- On a dispatched run of a pull request, the job uses the commit of the run, that is the head of the pull request. After the queue merges `main` into the branch, that head has the newest `main` (refer to "The queue").
+- The job does not compare with the base branch. When `main` already has such a change, each pull request fails until a pull request raises the version.
+- A repository with no published package passes at once, with a notice. The job does no install.
+- In a private repository, the job starts only with `release-check-private: true`. A private repository pays for each job start, also for a job with no published package.
+- In a repository with Changesets (`.changeset/config.json`), a pending changeset raises the version of a package later. Thus a change of that package passes, with a note. A changeset of one member of a `fixed` group raises each member. A shipped change of a different package at a version on npm fails. An empty changeset raises no version.
+- The job uses the dependency cache of the job `checks`. The install still uses the lockfile only.
+- A repository with its own `build` or `node-version` in its `release.yml` gives the same values in `release-build` and `release-node-version`.
+
+The job is in `reusable-ci.yml`, so `CI OK` covers it. A repository needs no change other than the usual move of its pin.
+
 ### The check of the ruleset
 
 Each workflow of the merge gate has one summary job, with the name `<Name> OK`. The template has two: `ci-ok` (name `CI OK`) of `ci.yml` and `security-ok` (name `Security OK`) of `security.yml`. A summary job needs each other job of its file (`Security OK` has no other job, and does the scans itself, as "Security" tells). It starts also after a failure (`if: ${{ !cancelled() }}`). After a cancel it does not ask for a runner. It concludes `cancelled`, which does not pass the ruleset, and the next run does not wait behind it.
@@ -110,6 +144,7 @@ The ruleset names only the summary checks. Thus it does not change when a job is
 - A gate workflow must start on each pull request, with no `paths` filter. Otherwise its summary check does not start, and the ruleset blocks the pull request. To skip the work, use the action `changes` and an `if` on the other jobs ("A gate with paths").
 - Set the ruleset once with `node scripts/workflows/ruleset-ci-ok.ts <owner/repo> --apply`. Without `--apply`, it only prints the changes. It reads the checks of the newest of the last 5 pull requests into the default branch where "CI OK" passed. It adds each check with a name `<Name> OK` that passed there and that no ruleset names. It skips a repository where "CI OK" did not pass on any of the 5. A check that starts only on a push to `main` is not added, because it does not start on a pull request.
 - To make the summary checks the only checks of the ruleset, add `--only-summary`. Then the script also removes each check that started in the same workflow run as that "CI OK", because "CI OK" covers it. It deletes a ruleset with no rule left. Then a repository can join or split the jobs of its CI, and its ruleset stays correct.
+- The workflow `rulesets.yml` runs the script with `--check` each day. The check changes nothing. It fails when a public repository has a summary check that passed and that no ruleset names. Thus a new repository gets its ruleset after its first merged pull request: the summary of the red run gives the command that adds it. A repository with no "CI OK" that passed is a no read, not a pass.
 
 ### One run for each commit
 
@@ -158,14 +193,59 @@ The limit has these results:
 - A tag push no longer starts a CI that does not read the tag.
 - The checks of a pull request do not change. `CI OK` and `Security OK` come from the run for `pull_request`, and the ruleset stays as it is.
 
-A run from `workflow_dispatch` is the same as a run from a push to `main`, with these points:
+A run from `workflow_dispatch` on the default branch is the same as a run from a push to `main`, with these points:
 
 - The concurrency group of `ci.yml` is the group of the commit, and `cancel-in-progress` is `false`. A newer push does not cancel the run. A run of the same commit waits for the first run.
-- The job `changesets` skips, because its `if` asks for `pull_request`. The job `ci` stays green, as on a push to `main`.
+- The jobs `pull`, `changesets` and `release-check` skip, because the run has no pull request. The job `ci` stays green, as on a push to `main`.
 - The steps "Deepen to the merge base" and "Fetch the commit before the push" skip.
 - The action `changes` gives a match, as for each event other than a pull request.
-- The rules of `conventions` that read a range of commits skip, because a run of `workflow_dispatch` has no base.
+- The rules of `conventions` that read a range of commits skip, because the run has no base.
 - After a CI run of `workflow_dispatch` on `main`, a caller of `reusable-pages.yml` on `workflow_run` of CI deploys only the head of `main`.
+
+A run from `workflow_dispatch` on another branch examines the open pull request of that branch (refer to the next section). A branch with no open pull request gives a notice. Then the run examines no change, as a run on the default branch.
+
+### A dispatched run of a pull request
+
+A run from `workflow_dispatch` on a branch has no pull request in its event. The queue starts the gates of a pull request in this way (refer to "The queue"). The owner can also start `ci.yml` on the branch of the pull request (`workflow_dispatch`, from the Actions tab of the repository). The job `pull` of `reusable-ci.yml` finds the pull request of the run (`.github/actions/pull-of-run`):
+
+1. It lists the open pull requests whose head is the branch of the run. It keeps only those of the same repository.
+2. It reads the pull request again until its head is the commit of the run, at most 3 more times, 10 s apart. GitHub can update the head some seconds after a push.
+3. It reads the tip of the base branch. The change is from the merge base of that tip to the commit of the run.
+
+Then the run examines that change, as a `pull_request` run does:
+
+- The job `changesets` examines the changesets of the change, with the labels of the pull request.
+- The job `release-check` starts the release build on the commit of the run.
+- The job `checks` deepens the checkout to the merge base. It gives the tip of the base branch to `check:conventions` in the variable `CONVENTIONS_BASE`.
+- The job `pull` saves the pull request as the artifact `pull-request-of-run`: its title, its body and its number of commits, in a JSON file. The job `checks` downloads it, and the variable `CONVENTIONS_PULL_REQUEST` gives its path. The job uses a file, not an output: a step gets an output of a job through an environment variable. On Windows, an environment variable takes at most 32,767 characters, and a body can be longer.
+- Thus the rules `release-files`, `unreleased-change`, `home-package`, `version-title` and `no-local-paths` examine the change. The README of `@mark1russell7/conventions` tells how.
+
+The job `pull` fails when it cannot tell the change, and a failure of the job `pull` fails `CI OK`:
+
+- Two open pull requests have the branch as their head. The job cannot tell the base.
+- The head stays different from the commit of the run. If the branch has a newer commit, the `pull_request` run of that commit examines it. Else start the run again.
+- A read of the API is refused (HTTP 403 or 404), or the rate limit of the API stops it. The error tells which, and what to do.
+- A read of the API fails for a time (HTTP 429 or 5xx, or no answer) after 3 more reads, 10 s apart. This limit is for all reads of the run together.
+- The base branch of the pull request is not in the repository: it was deleted or renamed.
+
+The job `checks` starts also after a failure of the job `pull`, so the run still shows its results. A run on the default branch does not start the job `pull`, for example the gate of `release.yml`.
+
+The job `pull` has no `permissions` key, so it gets the permissions of the caller. A job of a called workflow cannot ask for more than its caller gives. A `permissions` key on the job stops each caller that gives only `contents: read`. In a public repository, each token can read the pull requests.
+
+In a private repository, the job `pull` starts only with the input `pull-request-private: true`. A private repository pays for each job start. The job that calls `reusable-ci.yml` gives the input and `pull-requests: read`:
+
+```yaml
+jobs:
+  ci:
+    uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<commit> # main
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      pull-request-private: true
+```
+
+Without the input, a dispatched run in a private repository examines no change, as a run on the default branch. The changeset check and the release check do not start. With the input and without the permission, the job `pull` fails, and its error names the permission.
 
 ### A gate with paths
 
@@ -173,6 +253,10 @@ A gate that is only about some files (a bench of the core, a corpus) starts on e
 
 - `changes` reads the files of the pull request and gives `match`. It has the patterns of `on.pull_request.paths`: `*` does not match `/`, `**` matches each part of a path, and `!` takes files out. Each event other than a pull request is a match.
 - `gate-summary` is the step of the summary job. It passes when each job passed. When `changes` gives `match: false`, a skipped gate job passes too. A failure, a cancel or another skip fails it.
+- A skip is green only after a pass. Give each job that `allow-skip` names a line `<job id>=<check name>` in `last-result`, and give the summary job `checks: read`. A skip of that job then reads the last result of its check on the commit:
+  - A pass passes, and a failure fails the summary.
+  - With no result on the commit, the line says `no read` and the step writes a warning. A no read is not a pass.
+  - The check of a matrix job is each entry, `<check name> <entry>`. A skip, a cancel or a run in progress decides nothing, so the read goes back to the last run that decided.
 
 ```yaml
 on:
@@ -217,6 +301,64 @@ jobs:
 ```
 
 A `push` filter can stay, because the ruleset reads only pull requests. With the patterns of the old filter, the gate runs on the same pull requests as before. `changes` also reads the old name of a moved file, so a move out of the gate paths starts the gate too. A pull request with 3000 files or more always starts the gate, because the API gives no more files. The conventions rule `gate-trigger` finds a pull request trigger with `paths` or `paths-ignore`. `actions-test.yml` of the template is an example.
+
+## The queue
+
+Several writers merge into one `main` with `gh pr merge --auto`. Two pull requests can each pass their gate alone and break `main` together. For example, two pull requests set the same version, or one pull request removes an export that the other starts to use.
+
+Strict status checks in the ruleset stop this. With strict on, GitHub merges a pull request only when its branch has the newest `main`. The checks of the ruleset must also pass on that head. But then a pull request with auto-merge stops each time that a different merge makes it behind. The merge queue of GitHub is not available to a personal account, so the queue does not use `merge_group`.
+
+`reusable-queue.yml` keeps these pull requests up to date. A repository uses it in its `queue.yml`:
+
+```yaml
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [auto_merge_enabled]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: queue
+  cancel-in-progress: false
+
+jobs:
+  queue:
+    uses: mark1russell7/template/.github/workflows/reusable-queue.yml@<commit> # main
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+      checks: read
+```
+
+A run of the queue does these steps (`scripts/workflows/queue.ts`):
+
+1. It reads the checks that the rules of the default branch need (`GET /repos/{owner}/{repo}/rules/branches/{branch}`).
+2. It reads the open pull requests into the default branch. It takes only a pull request with auto-merge on, not a draft, and not from a fork. When GitHub did not compute a merge state (`UNKNOWN`), it reads them again, at most 6 times, 5 s apart.
+3. For each pull request with the merge state `BEHIND`, it reads the results of these checks on the old head. It finds the workflow file that gave each check. It joins the checks of one workflow. A summary check, for example "CI OK", gets its result only when the jobs that it needs end. When a check has no result yet, the queue reads the workflows that are still in progress on the old head (`GET /repos/{owner}/{repo}/actions/runs?head_sha=`). It reads the job names of their files at that head. Each workflow in progress with a job of that name gives the check.
+4. It merges `main` into each of these pull requests with `PUT /repos/{owner}/{repo}/pulls/{number}/update-branch` and `expected_head_sha`.
+5. It waits for the new heads, at most `wait-seconds` (90 s). An update with `GITHUB_TOKEN` starts no `pull_request` run. Thus the queue starts each workflow of these checks with `workflow_dispatch` on the branch of the pull request. These workflows give the checks on the new head.
+
+- A push to `main` makes the other pull requests behind. A pull request can be behind when it gets auto-merge (`auto_merge_enabled`). A person can start a run from the Actions tab. The queue does not use `pull_request_target`.
+- One run at a time operates in a repository (`cancel-in-progress: false`). GitHub keeps only the newest run that waits. Each run reads all the pull requests, so the newest run does the work of a cancelled run.
+- A check of the ruleset can have no result on the old head and no workflow in progress with a job of that name. Then it is a no read in the summary. A workflow file that the queue cannot read gives no job names, so its checks are a no read too. A check of a different app, or of a workflow that is not a file of `.github/workflows`, is a no read too. A no read is not a pass.
+- A refused update (HTTP 422, for example a merge conflict) skips only that pull request, with a warning. Each other pull request gets its turn. A pull request with a merge conflict (`DIRTY`) waits for a person.
+- The job fails for a different failure of an update and for a refused dispatch. It also fails when a head does not change in the wait time. A failed read changes nothing and fails the job.
+- Each workflow of a check of the ruleset must start on `workflow_dispatch`. Otherwise GitHub refuses the dispatch, and the job fails.
+- With strict off, GitHub merges a pull request that is behind. Then no pull request is `BEHIND`, and the queue changes nothing. Set strict in the ruleset to use the queue.
+- In a private repository, the job starts only when the caller gives the input `private: true`. A private repository pays for each job start, and the queue starts on each push to `main`, also when no pull request is behind. When the input is false, the job skips, and a skipped job costs nothing.
+- A workflow that `workflow_dispatch` starts is not a `pull_request` run. In `reusable-ci.yml`, the job `pull` finds the pull request of the branch. Thus the changeset check, the release check and the rules of the conventions check examine the new head (refer to "A dispatched run of a pull request").
+- An example: two pull requests set the same version, and the first one merges. The queue merges `main` into the second one. Then its change sets no version that `main` does not have. Its gate fails when its title names the version (`version-title`). It also fails when npm has the version and the repository sets `versionEachChange` (`unreleased-change`).
+
+The queue does not do these things:
+
+- A gate with its own jobs that operate only on a `pull_request` run skips these jobs on a dispatched run. The security scans operate as on a push.
+- `GITHUB_TOKEN` cannot write a workflow file. When the new commits of `main` change a file of `.github/workflows`, GitHub can refuse the update. Then a person updates the branch.
+- When the head does not change in the wait time, the queue starts no workflow. The new head has no checks, and the next run does not see it as `BEHIND`. A person starts the gates on the branch.
+- Each merge updates each other pull request that is behind, and starts its gates again. With N pull requests in the queue, the merge of all of them starts about N × N / 2 runs of each gate.
 
 ## Release
 
@@ -361,7 +503,7 @@ The gates are in the lane file, not in an input. Thus a local run and CI use the
 
 `reusable-pages.yml` has three jobs. The job `ref` decides if the commit of the event builds and deploys. It starts no code of the repository.
 
-The job `build` checks out the commit of the event, with no ref of its own. It installs, builds the site, adds the pages of `site-pages` and uploads the Pages artifact. It gets only read permissions. The job `deploy` deploys the artifact. It starts no code of the repository.
+The job `build` checks out the commit of the event, with no ref of its own. It installs, builds the site, adds the pages of `site-pages` and uploads the Pages artifact. It gets only read permissions. The job `deploy` deploys the artifact. It starts no code of the repository. Its action cancels a deployment after 606 s, before the job limit of 12 minutes.
 
 ```yaml
 on:
@@ -462,6 +604,15 @@ CodeQL first downloads the bundle of the version of `codeql-action`. If that dow
 
 An alert of CodeQL that is already open on the base branch is not new. The step groups the alerts by rule, file and message. A group is new only when the pull request has more alerts of it than the base branch has open. Thus a second alert of a known group fails. The step reads the open alerts of the base branch from the code-scanning API, with `security-events: read`. If it cannot read them, the step fails.
 
+To accept one alert of CodeQL, write the comment `codeql[<rule id>]` on the line above the alert. Write the reason in the same comment:
+
+```ts
+// codeql[js/disabling-certificate-validation] The probe reads the certificate and does not send data.
+const socket = connect({ host, port, rejectUnauthorized: false });
+```
+
+The step `Languages` gives CodeQL the query `AlertSuppression.ql` of each language that has one (`codeql-config.ts`). Then the SARIF result of the alert has `suppressions`, and the step skips it. The languages `actions` and `rust` have no such query. Thus a comment in a workflow file changes nothing.
+
 ### A private repository
 
 In a private repository, the dependency review and the code-scanning API need GitHub Advanced Security. A personal account cannot buy it. Thus the inputs `dependency-review`, `codeql` and `osv-upload` have the default `auto`:
@@ -540,7 +691,7 @@ uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<full commit SHA>
 ```
 
 - Renovate reads the comment `# main` and moves the pin to the newest commit of `main` (the preset of `renovate/`). The manager `github-actions` does this since Renovate 43.84.0.
-- These updates come in one group, "template workflows and actions", with no wait. Renovate merges them when CI passes.
+- These updates come in one group, "template workflows and actions", with no wait. The pull request gets the label `train-merge`. The release train merges it when CI passes and no release of the repository is open.
 - The group comes on Monday before 06:00 (New York time). A workflow change during a release makes the tag job fail with HTTP 403 (`RELEASING.md`).
 - Renovate does not change `release.yml`. The release session moves the pins of `release.yml` with `scripts/release/bump-pins.ts` (`RELEASING.md`).
 - A change of the template that must not wait for Renovate goes out with `bump-pins.ts --file <workflow>` (`RELEASING.md`).
@@ -551,7 +702,7 @@ uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<full commit SHA>
 The workflows of the template call the shared workflows and actions by a local path, for example `./.github/workflows/reusable-ci.yml`. Thus each pull request of the template tests them:
 
 - `ci.yml` tests `reusable-ci.yml`.
-- `security.yml` tests the action `security-scan`. The tests of `scripts/workflows/security-scan.test.ts` start no scan. They examine the choice of the scans, the last step and the step that finds the new CodeQL alerts.
+- `security.yml` tests the action `security-scan`. The tests of `scripts/workflows/security-scan.test.ts` start no scan. They examine the choice of the scans, the last step, the step that finds the new CodeQL alerts and the query of the suppression comments.
 - Before the action, `security.yml` checks out the folder `.github/actions` of the template. This step operates only in the template. In a private repository, its partial clone makes the checkout of the base fail.
 - `actions-test.yml` tests the actions, `reusable-pages.yml` and the release workflows, with `dry-run`. It publishes nothing. On a pull request, it sets the input `require-main` of the release build to `false`.
 - On each pull request, the job `site` of `actions-test.yml` calls `pages.yml`. It builds the site of the template and starts its probe, with no deploy.
@@ -559,6 +710,7 @@ The workflows of the template call the shared workflows and actions by a local p
 - `ci.yml` cannot call `pages.yml`, because `release.yml` calls `ci.yml` with only `contents: read`.
 - `ai-review.yml` tests `reusable-ai-review.yml`, and `codex-review.yml` tests `reusable-codex-review.yml`. Without its API key, a review stops at once with a note.
 - The tests of `scripts/ai-review/` examine the request, the redaction and the post of the second review, with no network.
+- `queue.yml` uses `reusable-queue.yml`, so each push to `main` of the template starts the queue. The tests of `scripts/workflows/queue.test.ts` examine the plan, the calls of the API, the summary and the two workflow files, with a fake API.
 
 The job `publish` of `release.yml` uses the pinned form of `npm-publish`, also in the template. A local action needs a checkout, and that job does no checkout.
 

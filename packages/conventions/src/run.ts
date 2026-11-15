@@ -18,8 +18,11 @@ export interface RuleResult {
   readonly id: string;
   readonly title: string;
   readonly fix: string;
-  /** `pass`: no break. `break`: one or more breaks. `off`: the configuration turns the rule off. `skipped`: the rule did not start. `error`: the rule threw. */
-  readonly status: "pass" | "break" | "off" | "skipped" | "error";
+  /**
+   * `pass`: no break. `break`: one or more breaks. `warn`: one or more breaks before the day `failsFrom` of the rule, so the
+   * check passes. `off`: the configuration turns the rule off. `skipped`: the rule did not start. `error`: the rule threw.
+   */
+  readonly status: "pass" | "break" | "warn" | "off" | "skipped" | "error";
   readonly breaks: readonly Break[];
   /** The number of breaks in the files of `ignore`. */
   readonly ignored: number;
@@ -45,6 +48,8 @@ export interface CheckOptions {
   readonly env?: Readonly<Record<string, string | undefined>>;
   /** The rules. The default is `RULES`. */
   readonly rules?: readonly Rule[];
+  /** The day of the check (`YYYY-MM-DD`, UTC), for `failsFrom`. The default is the day of the clock. */
+  readonly today?: string;
 }
 
 /** This function reads a `package.json` file. */
@@ -95,6 +100,7 @@ export function runChecks(options: CheckOptions): CheckResult {
   if (unknown.length > 0) throw new Error(`Unknown rule: ${unknown.join(", ")}. The rules are: ${rules.map((rule) => rule.id).join(", ")}.`);
   const config = readConfig(root, rules);
   const context = createContext(root, config, options);
+  const today = options.today ?? new Date().toISOString().slice(0, 10);
   const results: RuleResult[] = [];
   for (const rule of rules) {
     if (options.only !== undefined && options.only.length > 0 && !options.only.includes(rule.id)) continue;
@@ -137,8 +143,11 @@ export function runChecks(options: CheckOptions): CheckResult {
         }
       }
     }
-    const note = ruleConfig.reason === undefined ? {} : { note: ruleConfig.reason };
-    results.push({ ...base, status: breaks.length > 0 ? "break" : "pass", breaks, ignored, ...note });
+    // A new rule warns until its day `failsFrom`. The owners fix the breaks in that time, and the update pull requests merge.
+    const warns = breaks.length > 0 && rule.failsFrom !== undefined && today < rule.failsFrom;
+    const reason = warns ? [ruleConfig.reason, `The rule fails from ${rule.failsFrom ?? ""}.`].filter((text) => text !== undefined).join(" ") : ruleConfig.reason;
+    const note = reason === undefined ? {} : { note: reason };
+    results.push({ ...base, status: breaks.length === 0 ? "pass" : warns ? "warn" : "break", breaks, ignored, ...note });
   }
   return { rules: results, failed: results.some((result) => result.status === "break" || result.status === "error") };
 }
@@ -204,12 +213,12 @@ const placeOf = (item: Break): string => (item.line === undefined ? item.file : 
 /** This function gives the text of a result for a terminal or a CI log. */
 export function formatResult(result: CheckResult): string {
   const count = (status: RuleResult["status"]): number => result.rules.filter((rule) => rule.status === status).length;
-  const breaks = result.rules.reduce((sum, rule) => sum + rule.breaks.length, 0);
+  const breaks = result.rules.filter((rule) => rule.status === "break").reduce((sum, rule) => sum + rule.breaks.length, 0);
   const out: string[] = [
-    `conventions: ${result.rules.length} rules: ${count("pass")} pass, ${count("break")} with ${breaks} break(s), ${count("off")} off, ${count("skipped")} skipped, ${count("error")} error(s).`,
+    `conventions: ${result.rules.length} rules: ${count("pass")} pass, ${count("break")} with ${breaks} break(s), ${count("warn")} warn, ${count("off")} off, ${count("skipped")} skipped, ${count("error")} error(s).`,
     "",
   ];
-  const label: Record<RuleResult["status"], string> = { pass: "pass ", break: "BREAK", off: "off  ", skipped: "skip ", error: "ERROR" };
+  const label: Record<RuleResult["status"], string> = { pass: "pass ", break: "BREAK", warn: "warn ", off: "off  ", skipped: "skip ", error: "ERROR" };
   for (const rule of result.rules) {
     const extra = rule.ignored > 0 ? ` (${rule.ignored} ignored: ${rule.note ?? ""})` : rule.note !== undefined && rule.status !== "pass" ? ` (${rule.note})` : "";
     out.push(`${label[rule.status]}  ${rule.id}${rule.breaks.length > 0 ? `: ${rule.breaks.length} break(s)` : ""}${extra}`);
@@ -231,7 +240,7 @@ const cell = (text: string): string => text.replace(/\\/g, "\\\\").replace(/\|/g
 export function summaryMarkdown(result: CheckResult): string {
   const out = ["### Conventions", "", "| Rule | Result | Note |", "|---|---|---|"];
   for (const rule of result.rules) {
-    const shown = rule.status === "break" ? `${rule.breaks.length} break(s)` : rule.status;
+    const shown = rule.status === "break" ? `${rule.breaks.length} break(s)` : rule.status === "warn" ? `warn: ${rule.breaks.length} break(s)` : rule.status;
     const note = rule.ignored > 0 ? `${rule.ignored} ignored: ${rule.note ?? ""}` : (rule.note ?? "");
     out.push(`| \`${rule.id}\` | ${shown} | ${cell(note)} |`);
   }
@@ -249,13 +258,16 @@ export function summaryMarkdown(result: CheckResult): string {
 const escapeData = (text: string): string => text.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
 const escapeProperty = (text: string): string => escapeData(text).replace(/:/g, "%3A").replace(/,/g, "%2C");
 
-/** This function gives an `::error` workflow command for each break, so that GitHub shows each break on its line in the pull request. */
+/**
+ * This function gives an `::error` workflow command for each break, so that GitHub shows each break on its line in the pull request.
+ * A break of a rule that only warns gives a `::warning` command.
+ */
 export function annotations(result: CheckResult): string {
   const out: string[] = [];
   for (const rule of result.rules) {
     for (const item of rule.breaks) {
       const line = item.line === undefined ? "" : `,line=${item.line}`;
-      out.push(`::error file=${escapeProperty(item.file)}${line},title=${escapeProperty(`conventions ${rule.id}`)}::${escapeData(`${item.message} Fix: ${item.fix ?? rule.fix}`)}`);
+      out.push(`::${rule.status === "warn" ? "warning" : "error"} file=${escapeProperty(item.file)}${line},title=${escapeProperty(`conventions ${rule.id}`)}::${escapeData(`${item.message} Fix: ${item.fix ?? rule.fix}`)}`);
     }
   }
   return out.length === 0 ? "" : `${out.join("\n")}\n`;
@@ -312,11 +324,15 @@ export const USAGE: string = `Usage: conventions check [options]
 
   --root <folder>       The root of the repository. The default is the current folder.
   --rule <id>           Only this rule. Use it again for more rules.
-  --base <ref>          The base commit of the change, for the rules that examine a change. On a pull request, the
-                        rules find it. Outside CI, the default is the default branch of origin.
-  --no-base             Do not use the default base.
+  --base <ref>          The base commit of the change, for the rules that examine a change. The first default is the
+                        variable CONVENTIONS_BASE, when it is not empty. Outside CI, the next default is the default
+                        branch of origin. With no base, the rules find the base in the merge commit of a pull request.
+  --no-base             Do not use a default base.
   --json                Write the result as JSON.
   -h, --help            Show this text.
+
+The variable CONVENTIONS_PULL_REQUEST names a JSON file with the pull request of the run (title, body,
+commits). The rules then read that file, not the event file. The shared CI writes it on a dispatched run.
 
 The field "conventions" of the root package.json turns a rule off with a reason, keeps an exception
 with a reason, and sets the options of a rule with a reason:
@@ -338,6 +354,16 @@ export function localBase(root: string, env: Readonly<Record<string, string | un
     if (ref !== undefined && ref !== "" && runGit(root, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]) !== undefined) return ref;
   }
   return undefined;
+}
+
+/**
+ * This function gives the base of the variable CONVENTIONS_BASE, or undefined when it is empty or not set. The event of a
+ * run that `workflow_dispatch` starts gives no base. For such a run of a pull request, the shared CI sets the variable to
+ * the tip of the base branch.
+ */
+function environmentBase(env: Readonly<Record<string, string | undefined>>): string | undefined {
+  const base = env["CONVENTIONS_BASE"]?.trim();
+  return base === undefined || base === "" ? undefined : base;
 }
 
 /** An error of the arguments: exit code 2 and the help text. */
@@ -397,7 +423,7 @@ export function runCli(args: readonly string[], io: CliIo): number {
   let result: CheckResult;
   let fixed: FixResult | undefined;
   try {
-    const change = noBase ? undefined : (base ?? localBase(root, io.env));
+    const change = noBase ? undefined : (base ?? environmentBase(io.env) ?? localBase(root, io.env));
     const options = { root, only, env: io.env, ...(change === undefined ? {} : { base: change }) };
     if (fix) {
       fixed = runFix(options);

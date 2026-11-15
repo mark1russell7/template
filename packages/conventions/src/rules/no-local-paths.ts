@@ -7,10 +7,11 @@
  * The module also has the core of the command `conventions pre-push`. The core has the setting of the private name list,
  * the private patterns and the breaks of one text.
  */
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { extname, join } from "node:path";
 import { rangeOf } from "../change.ts";
 import { lineNameHit, pathNameHit, PRIVATE_NAME_LIST, type PrivateNameList } from "../private-names.ts";
+import { pullRequestOfRun } from "../pull-request.ts";
 import type { Break, Rule, RuleContext } from "../rule.ts";
 
 /** The extensions of files that are not text. The rule does not read them. */
@@ -230,7 +231,8 @@ export interface ChangeText {
 
 /**
  * This function gives the texts of the change that are not files. They are each commit message of a pull request (or of the
- * range of `--base`). They are also the title and the body of the pull request, from the event file of GitHub Actions.
+ * range of `--base`). They are also the title and the body of the pull request, from the event file of GitHub Actions or
+ * from the file of CONVENTIONS_PULL_REQUEST.
  */
 export function changeTexts(context: RuleContext): ChangeText[] {
   const texts: ChangeText[] = [];
@@ -242,18 +244,11 @@ export function changeTexts(context: RuleContext): ChangeText[] {
       if (sha !== undefined && sha !== "" && message !== undefined) texts.push({ name: `commit ${sha.slice(0, 12)}`, text: message });
     }
   }
-  const file = context.env["GITHUB_EVENT_PATH"];
-  if (file !== undefined && file !== "" && existsSync(file)) {
-    try {
-      const event = JSON.parse(readFileSync(file, "utf8")) as { pull_request?: { title?: unknown; body?: unknown } };
-      const title = event.pull_request?.title;
-      const body = event.pull_request?.body;
-      if (typeof title === "string") texts.push({ name: "pull request title", text: title });
-      if (typeof body === "string") texts.push({ name: "pull request body", text: body });
-    } catch {
-      // An event file that does not parse has no pull request to examine
-    }
-  }
+  // The pull request of the run: the event file, or the file of CONVENTIONS_PULL_REQUEST on a dispatched run. A file
+  // that does not parse has no pull request to examine.
+  const pullRequest = pullRequestOfRun(context.env);
+  if (pullRequest?.title !== undefined) texts.push({ name: "pull request title", text: pullRequest.title });
+  if (pullRequest?.body !== undefined) texts.push({ name: "pull request body", text: pullRequest.body });
   return texts;
 }
 
