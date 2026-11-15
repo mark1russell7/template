@@ -7,6 +7,9 @@
 # A failed site does not fail the run: the audit is a report. A run that cannot check a site fails.
 # Each pull request starts the workflow, so its check "Site audit OK" is always there. The job changes skips
 # the other jobs when the pull request changes no file of the crawl. Such a pull request starts only the job nav.
+# A run that workflow_dispatch starts on the branch of an open pull request (a run of the queue, or a run by hand)
+# also skips them when that pull request changes no file of the crawl. A schedule, and a run on a branch with no
+# open pull request, for example main, examine the sites.
 name: Site audit
 
 on:
@@ -53,9 +56,21 @@ jobs:
         with:
           sparse-checkout: .github/actions
           persist-credentials: false
+      # A run that workflow_dispatch starts on the branch of a pull request, for example a run of the queue, reads the
+      # files of that pull request (CI.md, "A dispatched run of a gate"). pull-of-run is TypeScript, so it needs Node 22.18
+      # or later. A lookup that fails does not stop the job: with no number, the gate runs.
+      - if: github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/') && github.ref != format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+      - id: pull
+        if: github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/') && github.ref != format('refs/heads/{0}', github.event.repository.default_branch)
+        continue-on-error: true
+        uses: ./.github/actions/pull-of-run
       - id: changes
         uses: ./.github/actions/changes
         with:
+          pull-request: ${{ steps.pull.outputs.found == 'true' && steps.pull.outputs.number || '' }}
           paths: |
             .github/workflows/site-audit.yml
             packages/site-pages/src/bar/bar.ts
