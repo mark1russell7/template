@@ -63,6 +63,7 @@ export const siteCheckInCi: Rule = {
     checks: { type: "strings", default: CHECK_WORKFLOWS, description: "The workflows that check a site on a pull request, without the ref after `@`." },
     gate: { type: "string", default: "CI OK", description: "The name of the job that the ruleset requires. It needs the job of the check." },
   },
+  failsFrom: "2026-12-01",
   check(context, options) {
     const files = context.gitFiles();
     if (files === undefined) return { skipped: "the root is not in a git repository" };
