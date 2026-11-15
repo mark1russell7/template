@@ -195,6 +195,17 @@ nextTheme: build/chrome.d.ts#nextTheme
 setupTheme: build/chrome.d.ts#setupTheme
 showBuild: build/chrome.d.ts#showBuild
 
+## ./demo (build/demo.d.ts): names
+
+Example: build/demo.d.ts#Example
+TextPart: build/demo.d.ts#TextPart
+examples: build/demo.d.ts#examples
+markedText: build/demo.d.ts#markedText
+partsAt: build/demo.d.ts#partsAt
+partsOf: build/demo.d.ts#partsOf
+setField: build/demo.d.ts#setField
+verdict: build/demo.d.ts#verdict
+
 ## ./explorer (build/explorer/index.d.ts): names
 
 type AxisSlot: build/explorer/index.d.ts#AxisSlot
@@ -271,6 +282,10 @@ file ./shell.css: styles/shell.css
 ## ./explorer.css: no declaration file for ./styles/explorer.css
 
 file ./explorer.css: styles/explorer.css
+
+## ./demo.css: no declaration file for ./styles/demo.css
+
+file ./demo.css: styles/demo.css
 
 ## bin: 1 commands
 
@@ -660,6 +675,33 @@ declare function readKpi(text: string, now?: number): KpiFile;
 
 ### build/chunks/freshness.d.ts#writeKpi
 declare function writeKpi(out: string, input: KpiInput, now?: number): string;
+
+### build/demo.d.ts#Example
+export type Example = readonly [label: string, value: string];
+
+### build/demo.d.ts#TextPart
+export interface TextPart {
+  readonly text: string;
+  readonly hit: boolean;
+}
+
+### build/demo.d.ts#examples
+export declare function examples(row: HTMLElement, items: readonly Example[], pick: (value: string) => void): HTMLButtonElement[];
+
+### build/demo.d.ts#markedText
+export declare function markedText(parts: readonly TextPart[], label: string): HTMLPreElement;
+
+### build/demo.d.ts#partsAt
+export declare function partsAt(text: string, ranges: readonly (readonly [start: number, end: number])[]): TextPart[];
+
+### build/demo.d.ts#partsOf
+export declare function partsOf(text: string, find: string): TextPart[];
+
+### build/demo.d.ts#setField
+export declare function setField(field: HTMLInputElement | HTMLTextAreaElement, value: string): void;
+
+### build/demo.d.ts#verdict
+export declare function verdict(pass: boolean, title: Child, ...reason: readonly Child[]): HTMLDivElement;
 
 ### build/explorer/index.d.ts#AxisSlot
 type AxisSlot = "x" | "y";

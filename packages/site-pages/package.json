@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package",
   "name": "@mark1russell7/site-pages",
-  "version": "0.4.8",
+  "version": "0.4.12",
   "description": "A release timeline page and a live status page for the site of a GitHub repository: JSON data and standalone HTML, made at deploy time.",
   "keywords": [
     "github-pages",
@@ -29,11 +29,13 @@
   "exports": {
     ".": "./src/index.ts",
     "./chrome": "./src/chrome.ts",
+    "./demo": "./src/demo.ts",
     "./explorer": "./src/explorer/index.ts",
     "./vite": "./src/vite.ts",
     "./scroll-cue.css": "./styles/scroll-cue.css",
     "./shell.css": "./styles/shell.css",
     "./explorer.css": "./styles/explorer.css",
+    "./demo.css": "./styles/demo.css",
     "./package.json": "./package.json"
   },
   "bin": {
@@ -58,6 +60,11 @@
         "import": "./build/chrome.js",
         "default": "./build/chrome.js"
       },
+      "./demo": {
+        "types": "./build/demo.d.ts",
+        "import": "./build/demo.js",
+        "default": "./build/demo.js"
+      },
       "./explorer": {
         "types": "./build/explorer/index.d.ts",
         "import": "./build/explorer/index.js",
@@ -71,6 +78,7 @@
       "./scroll-cue.css": "./styles/scroll-cue.css",
       "./shell.css": "./styles/shell.css",
       "./explorer.css": "./styles/explorer.css",
+      "./demo.css": "./styles/demo.css",
       "./package.json": "./package.json"
     },
     "bin": {

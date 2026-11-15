@@ -25,6 +25,23 @@ The label is for the report only: it is not a file of the package. Two limits ap
 - A hash of small letters and hyphens only reads as a word, so it stays in the report until the next build. This occurs in approximately 1 of 1,000 builds of a chunk.
 - A bundler can add a number to a local name, for example `Options$1`. The report keeps that name, so a change of that number changes the report.
 
+### A report with no chunk
+
+The label stops the change of a hash. But the bundler decides which chunk gets a declaration. When a declaration moves from one chunk to a different chunk, the report changes, and the API does not. The field `entriesOnly` removes this coupling.
+
+With `entriesOnly`, `check` and `update` fail for a package when a declaration of its report is not in the declaration file of an entry. The error names the package, each such file (its label) and the names that the file declares. The command `update` then does not write the report of that package.
+
+```text
+packages/lib: The report of lib has declarations in files that are not the declaration file of an entry (the option entriesOnly): build/html.chunk.d.mts (html). Export each name from an entry of the exports field, or change the config of the bundler.
+```
+
+To correct the error, do one of these steps:
+
+- Export the name from an entry: add its module to the `exports` field. The bundler then puts the declaration in the declaration file of that entry.
+- Change the config of the bundler, so that it puts each declaration in the declaration file of an entry.
+
+The check also examines a namespace export (`export * as ns`) and the ambient declarations. The field applies to each package of the run. A package that `tsc` builds has a declaration file for each module, so it fails when an entry exports a name from a different module. The default is `false`, and the report does not change.
+
 ## Use
 
 Install the package:
@@ -61,6 +78,7 @@ In GitHub Actions, `check` also writes the diff to the summary of the run (`GITH
 | `--report <path>` | The path of the report in each package folder. |
 | `--include-private` | Each private package also gets a report. |
 | `--no-publish-config` | The tool reads the fields of `package.json` without `publishConfig`. |
+| `--entries-only` | A declaration that is not in the declaration file of an entry is an error. Refer to [A report with no chunk](#a-report-with-no-chunk). |
 | `<package folder>` | Only these packages. A named private package also gets a report. |
 
 ## Configuration
@@ -73,6 +91,7 @@ The field `apiReport` of the root `package.json` sets the defaults. The options 
 | `report` | `test/api/public-api.txt` | The path of the report in each package folder. |
 | `includePrivate` | `false` | Each private package also gets a report. |
 | `publishConfig` | `true` | The fields of `publishConfig` replace the fields of the source. |
+| `entriesOnly` | `false` | A declaration that is not in the declaration file of an entry, for example a declaration in a chunk, is an error. Refer to [A report with no chunk](#a-report-with-no-chunk). |
 | `tool` | `api-report` | The command that the header of each report names. |
 | `pages` | none | The pages of an API. See [A page of the API](#a-page-of-the-api). |
 

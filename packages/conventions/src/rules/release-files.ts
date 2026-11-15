@@ -2,31 +2,9 @@
  * The rule `release-files`: a pull request changes a file of the release flow only with a reason
  * that everyone can see.
  */
-import { existsSync, readFileSync } from "node:fs";
 import { rangeOf } from "../change.ts";
-import { matchesAny, type Break, type Rule, type RuleContext } from "../rule.ts";
-
-/** The facts of the pull request in the event file of GitHub Actions. */
-interface PullRequest {
-  /** The body, or an empty string. */
-  readonly body: string;
-  /** The number of commits, if the event file gives it. */
-  readonly commits?: number;
-}
-
-/** This function gives the pull request of the event file of GitHub Actions. With no event file, the body is empty. */
-function pullRequestOf(context: RuleContext): PullRequest {
-  const file = context.env["GITHUB_EVENT_PATH"];
-  if (file === undefined || file === "" || !existsSync(file)) return { body: "" };
-  try {
-    const event = JSON.parse(readFileSync(file, "utf8")) as { pull_request?: { body?: unknown; commits?: unknown } };
-    const body = typeof event.pull_request?.body === "string" ? event.pull_request.body : "";
-    const commits = event.pull_request?.commits;
-    return typeof commits === "number" ? { body, commits } : { body };
-  } catch {
-    return { body: "" };
-  }
-}
+import { pullRequestOfRun } from "../pull-request.ts";
+import { matchesAny, type Break, type Rule } from "../rule.ts";
 
 /** This function escapes the special characters of a regular expression. */
 const escape = (text: string): string => text.replace(/[\\^$.|?*+()[\]{}]/g, "\\$&");
@@ -64,8 +42,9 @@ export const releaseFiles: Rule = {
     if (changed.length === 0) return [];
     const trailer = typeof options["trailer"] === "string" ? options["trailer"] : "Release-Edit";
     const line = new RegExp(`^${escape(trailer)}:[ \\t]*\\S`, "im");
-    const pullRequest = pullRequestOf(context);
-    if (line.test(pullRequest.body)) return [];
+    // The pull request of the run: the event file, or the file of CONVENTIONS_PULL_REQUEST on a dispatched run
+    const pullRequest = pullRequestOfRun(context.env) ?? {};
+    if (line.test(pullRequest.body ?? "")) return [];
     // A shallow checkout can end inside the change: a commit at its end looks like a first commit, so it seems to change
     // each file, and the commits under it are not there. Then the authors and the messages are not those of the change.
     // A pull request of one commit is complete at depth 2, because its commit is the whole change.

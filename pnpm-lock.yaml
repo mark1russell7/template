@@ -190,6 +190,9 @@ importers:
       '@mark1russell7/ste-lint':
         specifier: ^0.3.0
         version: 0.3.1
+      '@mark1russell7/text':
+        specifier: ^0.0.6
+        version: 0.0.6
       '@swc/core':
         specifier: ^1.15.0
         version: 1.16.22
@@ -721,6 +724,10 @@ packages:
 
   '@mark1russell7/text@0.0.2':
     resolution: {integrity: sha512-m1aIB8X+PDekktzr1fYOp1/7gvlh9iL/2M7ktj/GnmPmVrWin0rTADgTm00dKFdWFRzXraCUYkjyCl3jQZHEVg==}
+    engines: {node: '>=22.12'}
+
+  '@mark1russell7/text@0.0.6':
+    resolution: {integrity: sha512-IwKQHx9U+k5AbEzZ8q4CxImQCuYXSFhvzMOSgy5UGYrZRIBO9RES7SYrXDrKqQFtMl5qD2QbibffevUPsrUW+A==}
     engines: {node: '>=22.12'}
 
   '@mark1russell7/typeset@0.1.5':
@@ -2099,6 +2106,8 @@ snapshots:
       typescript: 6.0.3
 
   '@mark1russell7/text@0.0.2': {}
+
+  '@mark1russell7/text@0.0.6': {}
 
   '@mark1russell7/typeset@0.1.5':
     dependencies:

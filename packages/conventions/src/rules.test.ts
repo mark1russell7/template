@@ -292,11 +292,26 @@ describe("required-scripts", () => {
 
 describe("no-build-output", () => {
   it("reports each folder of build output that git keeps, and skips a folder that is not git", () => {
-    const files = { "package.json": { name: "one" }, "packages/a/dist/index.js": "", "packages/a/dist/index.d.ts": "", "build/x.js": "", "src/builder/x.ts": "" };
+    const files = {
+      "package.json": { name: "one" },
+      "packages/a/package.json": { name: "a" },
+      "packages/a/dist/index.js": "",
+      "packages/a/dist/index.d.ts": "",
+      "packages/a/coverage/prettify.js": "",
+      "build/x.js": "",
+      "src/builder/x.ts": "",
+      // A source folder named coverage, away from a package.json, is not a report.
+      "src/coverage/x.ts": "",
+      ".github/actions/coverage/action.yml": "",
+    };
     expect(rule(fixture(files), "no-build-output").status).toBe("skipped");
     const root = fixture(files);
     commitAll(root);
-    expect(rule(root, "no-build-output").breaks.map((item) => item.message)).toEqual(["Git keeps 1 file(s) in build/.", "Git keeps 2 file(s) in packages/a/dist/."]);
+    expect(rule(root, "no-build-output").breaks.map((item) => item.message)).toEqual([
+      "Git keeps 1 file(s) in build/.",
+      "Git keeps 1 file(s) in packages/a/coverage/.",
+      "Git keeps 2 file(s) in packages/a/dist/.",
+    ]);
   });
 
   it("is off with a reason in the configuration", () => {
@@ -362,6 +377,21 @@ describe("no-local-paths", () => {
     // With no base and no pull request, the rule reads only the files: the first commit message is not a break
     expect(rule(root, "no-local-paths", { env: { CONVENTIONS_PRIVATE_PATTERNS: "hidden-name" } }).breaks).toEqual([]);
   });
+
+  it("reads the pull request of a dispatched run from the file of CONVENTIONS_PULL_REQUEST, not from the event file", () => {
+    const root = fixture({ "package.json": { name: "one" }, "notes.md": "1\n" });
+    commitAll(root);
+    git(root, "tag", "base");
+    const event = join(root, "..", `event-${String(fixtures++)}.json`);
+    writeFileSync(event, JSON.stringify({ ref: "refs/heads/topic", pull_request: { title: "a hidden-name title in the event file" } }));
+    const file = join(root, "..", `pull-request-${String(fixtures++)}.json`);
+    writeFileSync(file, JSON.stringify({ number: 7, title: "a plain title", body: `line one\nthe hidden-name\n`, commits: 1 }));
+    const env = { CONVENTIONS_PRIVATE_PATTERNS: "hidden-name", GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_EVENT_PATH: event, CONVENTIONS_PULL_REQUEST: file };
+    expect(rule(root, "no-local-paths", { env, base: "base" }).breaks.map((item) => `${item.file}:${String(item.line)}`)).toEqual(["pull request body:2"]);
+    // A file that does not parse has no pull request, and the rule does not read the event file then
+    writeFileSync(file, "{ not json");
+    expect(rule(root, "no-local-paths", { env, base: "base" }).breaks).toEqual([]);
+  });
 });
 
 describe("release-files", () => {
@@ -392,6 +422,15 @@ describe("release-files", () => {
     const event = join(root, "..", `event-${fixtures++}.json`);
     writeFileSync(event, JSON.stringify({ pull_request: { body: "Text\n\nRelease-Edit: the release session asked for it\n" } }));
     expect(rule(root, "release-files", { base: "base", env: { GITHUB_EVENT_PATH: event } }).status).toBe("pass");
+  });
+
+  it("reads the body of the pull request of a dispatched run from the file of CONVENTIONS_PULL_REQUEST", () => {
+    const root = changed("scripts/release/x.mjs", "change");
+    const file = join(root, "..", `pull-request-${fixtures++}.json`);
+    writeFileSync(file, JSON.stringify({ number: 3, title: "a change", body: "Text\n\nRelease-Edit: the owner asked for it\n", commits: 1 }));
+    expect(rule(root, "release-files", { base: "base", env: { GITHUB_EVENT_NAME: "workflow_dispatch", CONVENTIONS_PULL_REQUEST: file } }).status).toBe("pass");
+    writeFileSync(file, JSON.stringify({ number: 3, title: "a change", body: null, commits: 1 }));
+    expect(rule(root, "release-files", { base: "base", env: { GITHUB_EVENT_NAME: "workflow_dispatch", CONVENTIONS_PULL_REQUEST: file } }).breaks.map((item) => item.file)).toEqual(["scripts/release/x.mjs"]);
   });
 
   it("finds the base in the merge commit of a pull request", () => {
@@ -915,6 +954,18 @@ describe("home-package", () => {
     expect(localBase(fixture({ "package.json": { name: "two" } }), {})).toBeUndefined();
   });
 
+  it("takes the base of CONVENTIONS_BASE in CI, and --base and --no-base have priority", () => {
+    const root = changed("function medianOf(xs: number[]): number {\n  return xs[0] ?? 0;\n}\n");
+    const base = git(root, "rev-parse", "base").trim();
+    const code = (args: string[], env: Record<string, string>): number =>
+      runCli(["check", "--rule", "home-package", ...args], { cwd: root, env: { CI: "true", ...env }, stdout: () => undefined, stderr: () => undefined });
+    expect(code([], { CONVENTIONS_BASE: base })).toBe(1);
+    expect(code([], { CONVENTIONS_BASE: ` ${base}\n` })).toBe(1);
+    expect(code([], { CONVENTIONS_BASE: "" })).toBe(0);
+    expect(code(["--no-base"], { CONVENTIONS_BASE: base })).toBe(0);
+    expect(code(["--base", "HEAD"], { CONVENTIONS_BASE: base })).toBe(0);
+  });
+
   it("knows the forms of a declaration", () => {
     expect(declaredName("export async function quantile(xs: number[], q: number) {")).toBe("quantile");
     expect(declaredName("function* draws(seed: number) {")).toBe("draws");
@@ -966,7 +1017,9 @@ describe("home-package", () => {
     // A word of another area after a statistics prefix: bootstrapRepo is the npm bootstrap of the release scripts (codeatlas, 2026-11-02)
     for (const name of ["bootstrapRepo", "bootstrapApp", "wilsonInterval", "bootstrapMedian", "bootstrap"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(!name.endsWith("Repo") && !name.endsWith("App"));
     // A planned home has no package to import yet, so its signatures do not break
-    for (const name of ["greatCircleKm", "parseArgs"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(false);
+    expect(signatures.some((item) => item.pattern.test("parseArgs")), "parseArgs").toBe(false);
+    // geography is on npm since @mark1russell7/geo 0.1.0, so its signatures break, in one home only
+    expect(signatures.filter((item) => item.pattern.test("greatCircleKm")).map((item) => item.home.area)).toEqual(["geography"]);
   });
 });
 
