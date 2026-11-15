@@ -1,8 +1,9 @@
 // The script install.ts of the action setup-playwright. It installs the Playwright browsers first and their system
 // packages second:
 //
-//   node install.ts check     checks the inputs and installs nothing
-//   node install.ts install   installs, and writes the outputs packages and packages-cause to GITHUB_OUTPUT
+//   node install.ts check            checks the inputs and installs nothing
+//   node install.ts host <version>   fails when the Playwright <version> cannot install browsers on this runner image
+//   node install.ts install          installs, and writes the outputs packages and packages-cause to GITHUB_OUTPUT
 //
 // The inputs come from the environment: COMMAND, BROWSERS, HIT, MINUTES, ATTEMPTS, PACKAGES and BEST_EFFORT_MINUTES
 // (action.yml tells each one).
@@ -15,7 +16,7 @@
 // The function install takes the process work (the runner, the repair, the start check, the log, the platform) as
 // arguments, so that the tests give fakes and start no process.
 import { spawnSync } from "node:child_process";
-import { appendFileSync, realpathSync, rmSync, statSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
@@ -30,6 +31,47 @@ export const REPAIR_MINUTES = 5;
 
 /** The time limit of the start of each browser, in seconds. */
 export const START_SECONDS = 120;
+
+/**
+ * The first Playwright version that installs browsers on each runner image that older versions refuse. The key is the
+ * host of {@link hostOf}. An older version stops with "Playwright does not support chromium on ubuntu26.04-x64", and
+ * a second try cannot change that.
+ */
+export const FIRST_VERSION_OF_HOST: Readonly<Record<string, string>> = { "ubuntu26.04": "1.61.0" };
+
+/** This function gives the host of Playwright from the text of `/etc/os-release`: the fields ID and VERSION_ID. */
+export function hostOf(osRelease: string): string | undefined {
+  const fields = new Map<string, string>();
+  for (const line of osRelease.split(/\r?\n/)) {
+    const match = /^([A-Z_]+)=(.*)$/.exec(line.trim());
+    if (match !== null) fields.set(match[1]!, match[2]!.replace(/^(["'])(.*)\1$/, "$2"));
+  }
+  const id = fields.get("ID") ?? "";
+  const version = fields.get("VERSION_ID") ?? "";
+  return id === "" || version === "" ? undefined : `${id}${version}`;
+}
+
+/** This function gives true when the version `a` is older than the version `b`. It compares major, minor and patch. */
+function older(a: string, b: string): boolean {
+  const parts = (version: string): number[] => (/^(\d+)\.(\d+)\.(\d+)/.exec(version) ?? []).slice(1).map(Number);
+  const [x, y] = [parts(a), parts(b)];
+  if (x.length !== 3 || y.length !== 3) return false;
+  for (let i = 0; i < 3; i += 1) if (x[i] !== y[i]) return x[i]! < y[i]!;
+  return false;
+}
+
+/**
+ * This function gives the error text when the Playwright `version` cannot install browsers on the host `host`. It
+ * gives `undefined` when the version can, and when the table {@link FIRST_VERSION_OF_HOST} does not know the host.
+ */
+export function hostProblem(version: string, host: string | undefined): string | undefined {
+  const first = host === undefined ? undefined : FIRST_VERSION_OF_HOST[host];
+  if (first === undefined || !older(version, first)) return undefined;
+  return (
+    `Playwright ${version} does not know the runner image ${host}, so it cannot install browsers on it. ` +
+    `Raise playwright and @playwright/test to ${first} or later in the repository.`
+  );
+}
 
 /** The two values of the input packages. */
 export type Mode = "required" | "best-effort";
@@ -377,11 +419,20 @@ if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathS
   const mode = process.argv[2];
   let inputs: Inputs | undefined;
   try {
-    if (mode !== "check" && mode !== "install") throw new Error("Give the mode: node install.ts check|install.");
+    if (mode !== "check" && mode !== "host" && mode !== "install") throw new Error("Give the mode: node install.ts check|host|install.");
     inputs = readInputs(process.env);
   } catch (error) {
     process.stdout.write(`::error::${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;
+  }
+  if (inputs !== undefined && mode === "host") {
+    const osRelease = existsSync("/etc/os-release") ? readFileSync("/etc/os-release", "utf8") : "";
+    const problem = hostProblem(process.argv[3] ?? "", hostOf(osRelease));
+    if (problem !== undefined) {
+      process.stdout.write(`::error::${problem}
+`);
+      process.exitCode = 1;
+    }
   }
   if (inputs !== undefined && mode === "install") {
     const outcome = await install(inputs, realWork(inputs));

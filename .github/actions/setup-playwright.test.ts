@@ -6,6 +6,9 @@ import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import {
   browserArguments,
+  FIRST_VERSION_OF_HOST,
+  hostOf,
+  hostProblem,
   install,
   parseProcesses,
   processTree,
@@ -117,8 +120,8 @@ describe("setup-playwright: the inputs", () => {
 
 describe("setup-playwright: the command line", () => {
   const script = fileURLToPath(new URL("./setup-playwright/install.ts", import.meta.url));
-  const start = (mode: string, change: Record<string, string>) =>
-    spawnSync(process.execPath, [script, mode], { encoding: "utf8", env: { ...process.env, ...env(change) } });
+  const start = (mode: string, change: Record<string, string>, ...rest: string[]) =>
+    spawnSync(process.execPath, [script, mode, ...rest], { encoding: "utf8", env: { ...process.env, ...env(change) } });
 
   it("checks the inputs and exits 0 with correct inputs", () => {
     const result = start("check", {});
@@ -129,6 +132,18 @@ describe("setup-playwright: the command line", () => {
     const result = start("check", { PACKAGES: "maybe" });
     assert.equal(result.status, 1);
     assert.match(result.stdout, /^::error::The input packages is "maybe"/m);
+  });
+
+  it("passes the host check with a version that knows each runner image", () => {
+    const result = start("host", {}, "1.65.1");
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(result.stdout, "");
+  });
+
+  it("checks the inputs in the host mode too", () => {
+    const result = start("host", { BROWSERS: "" }, "1.65.1");
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /^::error::The input browsers is empty/m);
   });
 
   it("refuses an unknown mode", () => {
@@ -260,6 +275,44 @@ describe("setup-playwright: best-effort", () => {
     const f = fake({ "install-deps": [failed] });
     await install(inputs({ PACKAGES: "best-effort", BROWSERS: "chromium ffmpeg" }), f.work);
     assert.deepEqual(f.starts, ["chromium: --browser chromium"]);
+  });
+});
+
+describe("setup-playwright: the runner image", () => {
+  const ubuntu26 = ['PRETTY_NAME="Ubuntu 26.04 LTS"', 'NAME="Ubuntu"', 'VERSION_ID="26.04"', "ID=ubuntu", "ID_LIKE=debian", ""].join("\n");
+
+  it("reads the host of Playwright from /etc/os-release", () => {
+    assert.equal(hostOf(ubuntu26), "ubuntu26.04");
+    assert.equal(hostOf(['ID="ubuntu"', "VERSION_ID=24.04", ""].join("\r\n")), "ubuntu24.04");
+    assert.equal(hostOf(["ID=debian", "VERSION_ID='12'"].join("\n")), "debian12");
+    assert.equal(hostOf("ID=arch\n"), undefined);
+    assert.equal(hostOf(""), undefined);
+  });
+
+  it("refuses a version before the first version of the host, with the fix", () => {
+    const text = hostProblem("1.58.2", "ubuntu26.04");
+    assert.ok(text !== undefined);
+    assert.match(text, /^Playwright 1\.58\.2 does not know the runner image ubuntu26\.04, so it cannot install browsers on it\./);
+    assert.match(text, /Raise playwright and @playwright\/test to 1\.61\.0 or later in the repository\.$/);
+    assert.notEqual(hostProblem("1.60.9", "ubuntu26.04"), undefined);
+    assert.notEqual(hostProblem("0.99.0", "ubuntu26.04"), undefined);
+  });
+
+  it("passes the first version of the host and each later version", () => {
+    for (const version of ["1.61.0", "1.61.0-beta-1", "1.65.1", "2.0.0", "1.100.0"]) {
+      assert.equal(hostProblem(version, "ubuntu26.04"), undefined, version);
+    }
+  });
+
+  it("passes a host that the table does not name, and a version that it cannot read", () => {
+    assert.equal(hostProblem("1.58.2", "ubuntu24.04"), undefined);
+    assert.equal(hostProblem("1.58.2", undefined), undefined);
+    assert.equal(hostProblem("", "ubuntu26.04"), undefined);
+    assert.equal(hostProblem("next", "ubuntu26.04"), undefined);
+  });
+
+  it("gives a version of three numbers for each host of the table", () => {
+    for (const [host, first] of Object.entries(FIRST_VERSION_OF_HOST)) assert.match(first, /^\d+\.\d+\.\d+$/, host);
   });
 });
 
