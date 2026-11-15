@@ -3,6 +3,7 @@
 // ruleset"). The owner starts it, because a ruleset is a setting of the repository.
 //
 //   node scripts/workflows/ruleset-ci-ok.ts [<owner/repo> ...] [--only-summary] [--apply]
+//   node scripts/workflows/ruleset-ci-ok.ts [<owner/repo> ...] --check
 //
 // Without --apply, the script only prints what it would do. For each repository:
 //   1. It reads the check runs of the head commits of the last 5 pull requests that merged into the default
@@ -23,8 +24,16 @@
 //      A rule with no check left goes out of its ruleset, and a ruleset with no rule left is deleted. A check of
 //      another workflow stays. A repository can then join or split the jobs of its CI and keep its ruleset.
 //
+// --check changes nothing and exits 1 when a repository has a summary check that passed in step 1 and that no ruleset
+// names: then that repository has no ruleset yet (a new repository), or it lost one. A repository with no "CI OK"
+// that passed is a no read, never a pass: a new repository has no merged pull request yet. The workflow rulesets.yml
+// runs the check each day, so each new repository gets its ruleset after its first merged pull request. --check does
+// not read the checks that --only-summary removes. With GITHUB_STEP_SUMMARY, it also writes a table there.
+//
 // With no repository, the script uses each public repository of mark1russell7 that is not archived.
 import { execFileSync } from "node:child_process";
+import { appendFileSync, realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 const CHECK = "CI OK";
 // The name of a summary job: one word or more, the first with a capital letter, then " OK" ("Joint bench OK").
@@ -135,10 +144,80 @@ function dropCovered(repo: string, covered: ReadonlySet<string>, apply: boolean)
   return changed;
 }
 
-function main(argv: readonly string[]): void {
+/** The summary checks that the ruleset must name ("CI OK" first), and the ones that no rule of the branch names. */
+export function missingChecks(passed: ReadonlySet<string>, required: readonly string[]): { wanted: string[]; missing: string[] } {
+  const wanted = [...passed].sort((a, b) => (a === CHECK ? -1 : b === CHECK ? 1 : a.localeCompare(b)));
+  return { wanted, missing: wanted.filter((c) => !required.includes(c)) };
+}
+
+/** The result of the check of one repository. */
+export type CheckState =
+  | { readonly repo: string; readonly state: "have"; readonly checks: readonly string[] }
+  | { readonly repo: string; readonly state: "missing"; readonly missing: readonly string[] }
+  | { readonly repo: string; readonly state: "no read"; readonly reason: string };
+
+/** The report of --check: a Markdown table, and the exit code (1 when a repository misses a check). */
+export function checkReport(states: readonly CheckState[]): { text: string; code: number } {
+  const order = { missing: 0, "no read": 1, have: 2 } as const;
+  const sorted = [...states].sort((a, b) => order[a.state] - order[b.state] || a.repo.localeCompare(b.repo));
+  const count = (state: CheckState["state"]): number => states.filter((s) => s.state === state).length;
+  const lines = [
+    "## The ruleset of each public repository",
+    "",
+    `${count("missing")} miss a check, ${count("no read")} no read, ${count("have")} have each check.`,
+    "",
+    "| Repository | State | Checks |",
+    "| --- | --- | --- |",
+  ];
+  for (const s of sorted) {
+    const detail = s.state === "have" ? s.checks.join(", ") : s.state === "missing" ? `no ruleset names ${s.missing.join(", ")}` : s.reason;
+    lines.push(`| ${s.repo} | ${s.state} | ${detail} |`);
+  }
+  const missing = sorted.filter((s) => s.state === "missing");
+  if (missing.length > 0) {
+    lines.push("", "Add the rulesets: `node scripts/workflows/ruleset-ci-ok.ts " + missing.map((s) => s.repo).join(" ") + " --only-summary --apply`");
+  }
+  return { text: `${lines.join("\n")}\n`, code: missing.length > 0 ? 1 : 0 };
+}
+
+function check(repos: readonly string[]): number {
+  const states: CheckState[] = [];
+  for (const repo of repos) {
+    try {
+      const branch = json<{ default_branch: string }>(["api", `repos/${repo}`]).default_branch;
+      const { passed } = passedSummaries(repo, branch);
+      if (!passed.has(CHECK)) {
+        states.push({ repo, state: "no read", reason: `no "${CHECK}" that passed on the last 5 pull requests into ${branch}` });
+        continue;
+      }
+      const rules = json<BranchRule[]>(["api", `repos/${repo}/rules/branches/${encodeURIComponent(branch)}`]);
+      const required = rules.filter((r) => r.type === "required_status_checks").flatMap((r) => r.parameters?.required_status_checks ?? []).map((c) => c.context);
+      const { wanted, missing } = missingChecks(passed, required);
+      states.push(missing.length === 0 ? { repo, state: "have", checks: wanted } : { repo, state: "missing", missing });
+    } catch (error) {
+      // The details go to the log only: the table has fixed text.
+      process.stderr.write(`${repo}: ${error instanceof Error ? error.message : String(error)}\n`);
+      states.push({ repo, state: "no read", reason: "the GitHub API gave an error (see the log)" });
+    }
+  }
+  const { text, code } = checkReport(states);
+  process.stdout.write(text);
+  const summary = process.env["GITHUB_STEP_SUMMARY"];
+  if (summary !== undefined && summary !== "") appendFileSync(summary, text);
+  return code;
+}
+
+function main(argv: readonly string[]): number {
+  const named = argv.filter((a) => !a.startsWith("--"));
+  if (argv.includes("--check")) {
+    if (argv.includes("--apply")) {
+      process.stderr.write("--check changes nothing, so it does not go with --apply.\n");
+      return 2;
+    }
+    return check(repositories(named));
+  }
   const apply = argv.includes("--apply");
   const onlySummary = argv.includes("--only-summary");
-  const named = argv.filter((a) => !a.startsWith("--"));
   let added = 0;
   let changed = 0;
   for (const repo of repositories(named)) {
@@ -151,8 +230,7 @@ function main(argv: readonly string[]): void {
     // The rules that apply to the branch, from each ruleset of any name.
     const rules = json<BranchRule[]>(["api", `repos/${repo}/rules/branches/${encodeURIComponent(branch)}`]);
     const checks = rules.filter((r) => r.type === "required_status_checks").flatMap((r) => r.parameters?.required_status_checks ?? []).map((c) => c.context);
-    const wanted = [...passed].sort((a, b) => (a === CHECK ? -1 : b === CHECK ? 1 : a.localeCompare(b)));
-    const missing = wanted.filter((c) => !checks.includes(c));
+    const { wanted, missing } = missingChecks(passed, checks);
     if (missing.length === 0) {
       console.log(`have   ${repo}: a ruleset names ${wanted.map((c) => `"${c}"`).join(" and ")} on ${branch}.`);
       if (onlySummary) changed += dropCovered(repo, covered, apply);
@@ -178,6 +256,9 @@ function main(argv: readonly string[]): void {
   }
   const counts = onlySummary ? `${added} rulesets added, ${changed} rulesets with fewer checks.` : `${added} rulesets added.`;
   console.log(apply ? counts : "Nothing changed. Start again with --apply to change the rulesets.");
+  return 0;
 }
 
-main(process.argv.slice(2));
+if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
+  process.exitCode = main(process.argv.slice(2));
+}
