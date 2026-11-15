@@ -1017,7 +1017,9 @@ describe("home-package", () => {
     // A word of another area after a statistics prefix: bootstrapRepo is the npm bootstrap of the release scripts (codeatlas, 2026-11-02)
     for (const name of ["bootstrapRepo", "bootstrapApp", "wilsonInterval", "bootstrapMedian", "bootstrap"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(!name.endsWith("Repo") && !name.endsWith("App"));
     // A planned home has no package to import yet, so its signatures do not break
-    for (const name of ["greatCircleKm", "parseArgs"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(false);
+    expect(signatures.some((item) => item.pattern.test("parseArgs")), "parseArgs").toBe(false);
+    // geography is on npm since @mark1russell7/geo 0.1.0, so its signatures break, in one home only
+    expect(signatures.filter((item) => item.pattern.test("greatCircleKm")).map((item) => item.home.area)).toEqual(["geography"]);
   });
 });
 
