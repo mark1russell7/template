@@ -292,11 +292,26 @@ describe("required-scripts", () => {
 
 describe("no-build-output", () => {
   it("reports each folder of build output that git keeps, and skips a folder that is not git", () => {
-    const files = { "package.json": { name: "one" }, "packages/a/dist/index.js": "", "packages/a/dist/index.d.ts": "", "build/x.js": "", "src/builder/x.ts": "" };
+    const files = {
+      "package.json": { name: "one" },
+      "packages/a/package.json": { name: "a" },
+      "packages/a/dist/index.js": "",
+      "packages/a/dist/index.d.ts": "",
+      "packages/a/coverage/prettify.js": "",
+      "build/x.js": "",
+      "src/builder/x.ts": "",
+      // A source folder named coverage, away from a package.json, is not a report.
+      "src/coverage/x.ts": "",
+      ".github/actions/coverage/action.yml": "",
+    };
     expect(rule(fixture(files), "no-build-output").status).toBe("skipped");
     const root = fixture(files);
     commitAll(root);
-    expect(rule(root, "no-build-output").breaks.map((item) => item.message)).toEqual(["Git keeps 1 file(s) in build/.", "Git keeps 2 file(s) in packages/a/dist/."]);
+    expect(rule(root, "no-build-output").breaks.map((item) => item.message)).toEqual([
+      "Git keeps 1 file(s) in build/.",
+      "Git keeps 1 file(s) in packages/a/coverage/.",
+      "Git keeps 2 file(s) in packages/a/dist/.",
+    ]);
   });
 
   it("is off with a reason in the configuration", () => {
