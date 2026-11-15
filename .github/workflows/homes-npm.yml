@@ -5,7 +5,8 @@
 # the script imports only the map, and Node.js runs TypeScript. It runs each day, on each change of the map on main,
 # on each pull request, and by hand. On a pull request it also reads the map of the base commit (--base), and fails
 # only on a difference that the base does not have: a package that goes to npm after the base commit is not a fault
-# of the pull request. The run on main fails on it, and the owner of the map moves the name out of pending.
+# of the pull request. The run on main fails on it, and the owner of the map moves the name out of pending. The job
+# exports compares the index of the exports of the homes with npm, each day and by hand.
 name: Homes npm
 
 on:
@@ -19,6 +20,8 @@ on:
       - packages/conventions/src/map.ts
       - scripts/homes/npm-drift.ts
       - .github/workflows/homes-npm.yml
+      - packages/conventions/src/home-exports.ts
+      - scripts/homes/exports.ts
   # Each pull request, so the ruleset can ask for the check. The run needs no install and takes seconds.
   pull_request:
 
@@ -60,3 +63,28 @@ jobs:
           else
             node scripts/homes/npm-drift.ts --check
           fi
+
+  # The index of the exports of the home packages (packages/conventions/src/home-exports.ts) against npm. The rule
+  # home-package reads it to say "import the name from the home" or "add the name to the home". A release of a home
+  # with new exports makes the index old. On 2026-11-15 it named conventions 0.32.0 (npm: 0.41.10), and 18 home packages
+  # were not in it. This job runs each day and by hand, not on a pull request: a release of a home is not a fault of a
+  # pull request. A red run on main goes to the owner of the map, who runs pnpm homes:exports and releases conventions.
+  exports:
+    name: The index of the exports of the homes against npm
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Compare the index with npm
+        run: node scripts/homes/exports.ts --check
