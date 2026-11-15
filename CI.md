@@ -291,17 +291,18 @@ A run of the queue does these steps (`scripts/workflows/queue.ts`):
 
 1. It reads the checks that the rules of the default branch need (`GET /repos/{owner}/{repo}/rules/branches/{branch}`).
 2. It reads the open pull requests into the default branch. It takes only a pull request with auto-merge on, not a draft, and not from a fork. When GitHub did not compute a merge state (`UNKNOWN`), it reads them again, at most 6 times, 5 s apart.
-3. For each pull request with the merge state `BEHIND`, it reads the results of these checks on the old head. It finds the workflow file that gave each check. It joins the checks of one workflow.
+3. For each pull request with the merge state `BEHIND`, it reads the results of these checks on the old head. It finds the workflow file that gave each check. It joins the checks of one workflow. A summary check, for example "CI OK", gets its result only when the jobs that it needs end. When a check has no result yet, the queue reads the workflows that are still in progress on the old head (`GET /repos/{owner}/{repo}/actions/runs?head_sha=`). It reads the job names of their files at that head. Each workflow in progress with a job of that name gives the check.
 4. It merges `main` into each of these pull requests with `PUT /repos/{owner}/{repo}/pulls/{number}/update-branch` and `expected_head_sha`.
 5. It waits for the new heads, at most `wait-seconds` (90 s). An update with `GITHUB_TOKEN` starts no `pull_request` run. Thus the queue starts each workflow of these checks with `workflow_dispatch` on the branch of the pull request. These workflows give the checks on the new head.
 
 - A push to `main` makes the other pull requests behind. A pull request can be behind when it gets auto-merge (`auto_merge_enabled`). A person can start a run from the Actions tab. The queue does not use `pull_request_target`.
 - One run at a time operates in a repository (`cancel-in-progress: false`). GitHub keeps only the newest run that waits. Each run reads all the pull requests, so the newest run does the work of a cancelled run.
-- A check of the ruleset with no result on the old head is a no read in the summary. A check of a different app, or of a workflow that is not a file of `.github/workflows`, is a no read too. A no read is not a pass.
+- A check of the ruleset can have no result on the old head and no workflow in progress with a job of that name. Then it is a no read in the summary. A workflow file that the queue cannot read gives no job names, so its checks are a no read too. A check of a different app, or of a workflow that is not a file of `.github/workflows`, is a no read too. A no read is not a pass.
 - A refused update (HTTP 422, for example a merge conflict) skips only that pull request, with a warning. Each other pull request gets its turn. A pull request with a merge conflict (`DIRTY`) waits for a person.
 - The job fails for a different failure of an update and for a refused dispatch. It also fails when a head does not change in the wait time. A failed read changes nothing and fails the job.
 - Each workflow of a check of the ruleset must start on `workflow_dispatch`. Otherwise GitHub refuses the dispatch, and the job fails.
 - With strict off, GitHub merges a pull request that is behind. Then no pull request is `BEHIND`, and the queue changes nothing. Set strict in the ruleset to use the queue.
+- In a private repository, the job starts only when the caller gives the input `private: true`. A private repository pays for each job start, and the queue starts on each push to `main`, also when no pull request is behind. When the input is false, the job skips, and a skipped job costs nothing.
 
 The queue does not do these things:
 
