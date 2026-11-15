@@ -555,6 +555,15 @@ CodeQL first downloads the bundle of the version of `codeql-action`. If that dow
 
 An alert of CodeQL that is already open on the base branch is not new. The step groups the alerts by rule, file and message. A group is new only when the pull request has more alerts of it than the base branch has open. Thus a second alert of a known group fails. The step reads the open alerts of the base branch from the code-scanning API, with `security-events: read`. If it cannot read them, the step fails.
 
+To accept one alert of CodeQL, write the comment `codeql[<rule id>]` on the line above the alert. Write the reason in the same comment:
+
+```ts
+// codeql[js/disabling-certificate-validation] The probe reads the certificate and does not send data.
+const socket = connect({ host, port, rejectUnauthorized: false });
+```
+
+The step `Languages` gives CodeQL the query `AlertSuppression.ql` of each language that has one (`codeql-config.ts`). Then the SARIF result of the alert has `suppressions`, and the step skips it. The languages `actions` and `rust` have no such query. Thus a comment in a workflow file changes nothing.
+
 ### A private repository
 
 In a private repository, the dependency review and the code-scanning API need GitHub Advanced Security. A personal account cannot buy it. Thus the inputs `dependency-review`, `codeql` and `osv-upload` have the default `auto`:
@@ -644,7 +653,7 @@ uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<full commit SHA>
 The workflows of the template call the shared workflows and actions by a local path, for example `./.github/workflows/reusable-ci.yml`. Thus each pull request of the template tests them:
 
 - `ci.yml` tests `reusable-ci.yml`.
-- `security.yml` tests the action `security-scan`. The tests of `scripts/workflows/security-scan.test.ts` start no scan. They examine the choice of the scans, the last step and the step that finds the new CodeQL alerts.
+- `security.yml` tests the action `security-scan`. The tests of `scripts/workflows/security-scan.test.ts` start no scan. They examine the choice of the scans, the last step, the step that finds the new CodeQL alerts and the query of the suppression comments.
 - Before the action, `security.yml` checks out the folder `.github/actions` of the template. This step operates only in the template. In a private repository, its partial clone makes the checkout of the base fail.
 - `actions-test.yml` tests the actions, `reusable-pages.yml` and the release workflows, with `dry-run`. It publishes nothing. On a pull request, it sets the input `require-main` of the release build to `false`.
 - On each pull request, the job `site` of `actions-test.yml` calls `pages.yml`. It builds the site of the template and starts its probe, with no deploy.
