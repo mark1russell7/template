@@ -68,6 +68,13 @@ describe("the search", () => {
     expect(findHomes("content hash")[0]?.area).toBe("random");
     expect(findHomes("orientation")[0]?.area).toBe("exact-math");
     expect(findHomes("sqlite")[0]?.area).toBe("local-database");
+    expect(findHomes("toxiproxy")[0]?.area).toBe("network-labs");
+    expect(findHomes("iptables dead peer")[0]?.area).toBe("network-labs");
+    expect(findHomes("kind cluster")[0]?.area).toBe("network-labs");
+    expect(findHomes("network fault injection")[0]?.area).toBe("network-labs");
+    expect(findHomes("docker compose")[0]?.area).toBe("network-labs");
+    expect(findHomes("traceroute")[0]?.area).toBe("network-diagnosis");
+    expect(findHomes("dns lookup jitter")[0]?.area).toBe("network-diagnosis");
     expect(findHomes("nothing-like-this")).toEqual([]);
     expect(findHomes("")).toBe(HOMES);
   });

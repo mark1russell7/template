@@ -474,6 +474,27 @@ export const HOMES: readonly Home[] = [
     words: ["alert", "alerts", "warning", "emergency", "cap", "common alerting protocol", "incident", "escalate", "escalation", "acknowledge", "severity", "urgency", "weather alert", "coverage", "heartbeat"],
     note: "The planned packages are @mark1russell7/alerts (the core) and one package for each source and each channel. It knows no person and no place: the places and keys of a user are input data. Sending goes through @procedures/notify, fetches through polite-crawler, geography through @mark1russell7/geo, the service loop through @mark1russell7/service, fault tests through rigor-chaos and rigor-proxy.",
   },
+  {
+    area: "network-labs",
+    title: "Network labs and fault injection",
+    covers: "labs of real software on false networks: Docker topologies of clients, routers and proxies as data, faults at layers 3 and 4 in the network namespace of a container (iptables rules and tc netem from a sidecar with NET_ADMIN, the toxics of Toxiproxy), replicated groups, kind clusters with faults in the namespaces of pods, observations on one monotonic clock; planned tiers: routed fabrics in containerlab, VMs with a kernel for each node, k3s",
+    packages: ["@mark1russell7/harness", "@mark1russell7/kind"],
+    repo: "mark1russell7/systems",
+    state: "published",
+    words: ["network lab", "toxiproxy", "toxic", "netem", "tc qdisc", "iptables", "net_admin", "sidecar", "dead peer", "black hole", "latency injection", "docker compose", "testcontainers", "kind cluster", "k3s", "k3d", "containerlab", "vrnetlab", "frr", "bgp", "bfd", "qemu"],
+    note: "The labs need Docker, so they run in CI. Fault plans are data in rigor-chaos: the harness applies them at layers 3 and 4, and rigor-proxy applies them to TCP, WebSocket and HTTP streams. A repository that tests a client against a faulty network uses these labs: do not grow a local compose file with a Toxiproxy or an iptables sidecar. The containerlab, VM and k3s tiers, and with them a simulated homelab, are planned in the program S7 of mark1russell7/systems.",
+  },
+  {
+    area: "network-diagnosis",
+    title: "Network diagnosis",
+    covers: "the cause of a network fault at each layer (link, Wi-Fi, IP and routes, DNS, TCP, TLS, HTTP, the path through providers) and the next step: probes as adapters that give typed facts, a catalog of faults as data, the probability of each cause from the facts, the next probe by its expected information gain, the estimators of jitter, loss, delay variation, retransmission time-out and bandwidth",
+    packages: [],
+    pending: ["@mark1russell7/netdiag"],
+    repo: "mark1russell7/netdiag",
+    state: "planned",
+    words: ["network diagnosis", "diagnose", "troubleshoot", "connectivity", "reachability", "unreachable", "ping", "traceroute", "mtr", "dns lookup", "nslookup", "dig", "jitter", "packet loss", "rtt", "mtu", "tls handshake", "wifi", "wi-fi", "iperf", "netdiag"],
+    note: "The planned package is @mark1russell7/netdiag. Commands go through @procedures/shell, statistics through rigor-statistics, timers and backoff through @mark1russell7/algebra, scheduled checks through @mark1russell7/service. Its ground truth comes from the network labs: a lab injects each fault class, and a gate holds the hit rate of each class. It checks only the networks that its user owns or names.",
+  },
 ];
 
 /** A file of more homes, for example the private repositories, in the shape `{ "homes": Home[] }`. */
