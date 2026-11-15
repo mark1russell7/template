@@ -21,7 +21,7 @@ const PARALLEL = 6;
 /** This function asks the registry for one name. A 404 is "not on npm". Another error is a no read. */
 export async function presenceOf(name: string, fetchFn: typeof fetch = fetch): Promise<NpmPresence> {
   try {
-    const response = await fetchFn(`${REGISTRY}/${name.replace("/", "%2f")}`, { headers: { accept: "application/vnd.npm.install-v1+json" }, signal: AbortSignal.timeout(20_000) });
+    const response = await fetchFn(`${REGISTRY}/${name.replaceAll("/", "%2f")}`, { headers: { accept: "application/vnd.npm.install-v1+json" }, signal: AbortSignal.timeout(20_000) });
     if (response.status === 404) return { onNpm: false };
     if (!response.ok) return { error: `HTTP ${response.status}` };
     const data = (await response.json()) as { versions?: Record<string, unknown> };

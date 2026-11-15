@@ -33,7 +33,7 @@ test("presenceOf: a version is on npm, a 404 and no versions are not, another st
 
 test("presences gives one answer for each name, in more than one group", async () => {
   const names = Array.from({ length: 14 }, (_, index) => `@scope/p${String(index)}`);
-  const fetchFn = fakeFetch(Object.fromEntries(names.map((name, index) => [`/${name.replace("/", "%2f")}`, { status: index % 2 === 0 ? 404 : 200, body: { versions: { "0.1.0": {} } } }])));
+  const fetchFn = fakeFetch(Object.fromEntries(names.map((name, index) => [`/${name.replaceAll("/", "%2f")}`, { status: index % 2 === 0 ? 404 : 200, body: { versions: { "0.1.0": {} } } }])));
   const facts = await presences(names, fetchFn);
   assert.equal(facts.size, 14);
   assert.deepEqual(facts.get("@scope/p0"), { onNpm: false });
