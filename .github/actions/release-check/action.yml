@@ -1,0 +1,123 @@
+name: release-check
+description: >-
+  Starts the release build on the commit of a pull request: the install, the build, scripts/release/pack.ts and
+  scripts/release/tags.ts, as the build job of reusable-release-build.yml. It fails when the release build fails on the same commit.
+  For example, a shipped file changes and the version of its package is already on npm. A repository with no published
+  package passes at once. In a repository with Changesets, a package whose version a pending changeset raises passes.
+inputs:
+  working-directory:
+    description: The folder of the package.json of the repository, relative to the workspace.
+    default: "."
+  build:
+    description: >-
+      A bash command that builds the packages, as the input build of reusable-release-build.yml. Empty runs the build
+      script of the root package.json, or else the build script of each published package and its dependencies.
+    default: ""
+  node-version:
+    description: The Node.js version of the install and the build, as the input node-version of reusable-release-build.yml.
+    default: "26"
+outputs:
+  run:
+    description: false when the repository has no published package. Then the check starts no install.
+    value: ${{ steps.plan.outputs.run }}
+  pending:
+    description: The packages whose version a pending changeset raises, separated by spaces.
+    value: ${{ steps.plan.outputs.pending }}
+  notice:
+    description: The notice of the plan, or empty.
+    value: ${{ steps.plan.outputs.notice }}
+  message:
+    description: The error text of pack.ts when it fails, or empty.
+    value: ${{ steps.pack.outputs.message }}
+runs:
+  using: composite
+  steps:
+    # The scripts are TypeScript: Node runs them with its type stripping
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: "26"
+        package-manager-cache: false
+    # The scripts go to a folder of RUNNER_TEMP, outside the repository, as in reusable-release-build.yml: a package at
+    # the root with no "files" field packs each file that .gitignore does not name.
+    - name: Copy the release scripts
+      shell: bash
+      env:
+        TEMPLATE: ${{ github.action_path }}/../../..
+      run: |
+        dir=$(mktemp -d "$RUNNER_TEMP/release-check.XXXXXX")
+        mkdir -p "$dir/template/scripts" "$dir/template/.github/actions"
+        cp -R "$TEMPLATE/scripts/release" "$dir/template/scripts/release"
+        cp -R "$TEMPLATE/.github/actions/changeset-check" "$dir/template/.github/actions/changeset-check"
+        echo "RELEASE_CHECK_DIR=$dir" >> "$GITHUB_ENV"
+    - name: Plan
+      id: plan
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: RELEASE_REPO="$PWD" node "$RELEASE_CHECK_DIR/template/scripts/release/check-plan.ts"
+    # The pnpm version comes from "packageManager" in package.json
+    - if: steps.plan.outputs.run == 'true'
+      uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      with:
+        package_json_file: ${{ inputs.working-directory }}/package.json
+    # The dependency cache of the job checks (the same key). The install still uses the lockfile only.
+    - if: steps.plan.outputs.run == 'true'
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: pnpm
+        cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
+    - if: steps.plan.outputs.run == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: pnpm install --frozen-lockfile
+    # The same text as the step Build of reusable-release-build.yml (scripts/workflows/release-check.test.ts)
+    - name: Build
+      if: steps.plan.outputs.run == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        COMMAND: ${{ inputs.build }}
+      run: |
+        if [ -n "$COMMAND" ]; then
+          eval "$COMMAND"
+        elif node -e 'process.exit(require("./package.json").scripts?.build ? 0 : 1)'; then
+          pnpm run build
+        else
+          pnpm -r ls --depth -1 --json > "$RUNNER_TEMP/workspace.json"
+          filters=$(node -e 'const all = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); console.log(all.filter((p) => !p.private && p.name).map((p) => `--filter=${p.name}...`).join(" "))' "$RUNNER_TEMP/workspace.json")
+          # shellcheck disable=SC2086
+          pnpm -r $filters --if-present run build
+        fi
+    - if: steps.plan.outputs.run == 'true' && inputs.node-version != '26'
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: "26"
+        package-manager-cache: false
+    # pack.ts of the release. Its error text goes to the log, to an annotation, to the summary and to the output message.
+    - name: Pack and compare with npm
+      id: pack
+      if: steps.plan.outputs.run == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        RELEASE_PENDING: ${{ steps.plan.outputs.pending }}
+      run: |
+        status=0
+        RELEASE_REPO="$PWD" node "$RELEASE_CHECK_DIR/template/scripts/release/pack.ts" "$RELEASE_CHECK_DIR/release" 2> "$RELEASE_CHECK_DIR/pack.err" || status=$?
+        cat "$RELEASE_CHECK_DIR/pack.err" >&2
+        if [ "$status" -ne 0 ]; then
+          text=$(cat "$RELEASE_CHECK_DIR/pack.err")
+          escaped=${text//'%'/'%25'}
+          escaped=${escaped//$'\r'/'%0D'}
+          escaped=${escaped//$'\n'/'%0A'}
+          echo "::error title=Release check::$escaped"
+          delimiter="RELEASE_CHECK_$(openssl rand -hex 8)"
+          { echo "message<<$delimiter"; printf '%s\n' "$text"; echo "$delimiter"; } >> "$GITHUB_OUTPUT"
+          { echo "### Release check"; echo; echo "The release build fails on this commit:"; echo; echo '```'; printf '%s\n' "$text"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+        fi
+        exit "$status"
+    - name: Plan the tags
+      if: steps.plan.outputs.run == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: RELEASE_REPO="$PWD" node "$RELEASE_CHECK_DIR/template/scripts/release/tags.ts" "$RELEASE_CHECK_DIR/tags.json"

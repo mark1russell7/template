@@ -22,6 +22,11 @@ interface Signature {
   readonly pattern: RegExp;
 }
 
+/** This function gives the repositories, in lower case, that hold code of a home: its repository and each of `alsoIn`. */
+export function reposOf(home: Home): readonly string[] {
+  return [home.repo, ...(home.alsoIn ?? [])].map((repo) => repo.toLowerCase());
+}
+
 /** This function gives the signatures of the homes that a repository can use: on npm, or in a repository with a pin. */
 export function signaturesOf(homes: readonly Home[]): Signature[] {
   return homes.filter((home) => home.state === "published" || home.state === "unpublished").flatMap((home) => (home.signatures ?? []).map((source) => ({ home, pattern: new RegExp(`^(?:${source})$`) })));
@@ -46,7 +51,7 @@ export function repoOf(context: RuleContext): string | undefined {
 export function messageOf(file: string, name: string, home: Home): string {
   const exporter = home.packages.find((pkg) => HOME_EXPORTS[pkg]?.names.includes(name) === true);
   const where = home.packages.length === 0 ? home.repo : home.packages.map((pkg) => `\`${pkg}\``).join(", ");
-  const use = home.state === "unpublished" ? ` (not on npm: use a github: specifier pinned to a commit of ${home.repo})` : "";
+  const use = home.state === "unpublished" ? ` (not on npm: use workspace:* inside ${home.repo}; elsewhere a github: specifier pinned to a commit works only if ${home.repo} keeps its built files in git, else wait for the first npm publish)` : "";
   return exporter === undefined
     ? `${file} adds \`${name}\`, a function of the area ${home.title} (${home.area}). Its home is ${where}${use}, which does not export \`${name}\` yet: add it to the home in a pull request of ${home.repo}, then import it.`
     : `${file} adds \`${name}\`, a function of the area ${home.title} (${home.area}). Import \`${name}\` from \`${exporter}\`${use} in place of a local copy.`;
@@ -70,7 +75,7 @@ export const homePackage: Rule = {
     const scope = options["scope"];
     if (scope !== "change" && scope !== "all") throw new Error(`The option scope is "change" or "all", not ${JSON.stringify(scope)}.`);
     const repo = repoOf(context);
-    const signatures = signaturesOf(HOMES).filter((signature) => signature.home.repo.toLowerCase() !== repo);
+    const signatures = signaturesOf(HOMES).filter((signature) => !reposOf(signature.home).includes(repo ?? ""));
     if (signatures.length === 0) return [];
     let files: readonly string[];
     let added: ReadonlyMap<string, ReadonlySet<number>> | undefined;
