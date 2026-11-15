@@ -48,7 +48,7 @@ export function repoOf(context: RuleContext): string | undefined {
   return env === undefined || env === "" ? undefined : env.toLowerCase();
 }
 
-/** This function gives how to use a home that is not on npm, in parentheses after a space, or an empty text for a home on npm. */
+/** This function gives the use of a home that is not on npm, in parentheses after a space. For a home on npm, it gives an empty text. */
 export function unpublishedNote(home: Home): string {
   return home.state === "unpublished" ? ` (not on npm: use workspace:* inside ${home.repo}; elsewhere a github: specifier pinned to a commit works only if ${home.repo} keeps its built files in git, else wait for the first npm publish)` : "";
 }

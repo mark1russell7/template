@@ -1,7 +1,7 @@
 /**
- * The rule `home-module`: a change does not add a value import of a module that only a home of the map of homes
- * imports, for example `node:sqlite` out of `@mark1russell7/sqlite`. An `import type` does not load the module, so it
- * does not break.
+ * The rule `home-module` examines the imports of the modules of the homes. Only a home of the map of homes imports
+ * such a module, for example `node:sqlite` in `@mark1russell7/sqlite`. A change does not add a value import of it in a
+ * different repository. An `import type` does not load the module, so it does not break.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
