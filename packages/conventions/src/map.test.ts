@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { findHomes, HOMES, mapMarkdown, mergeHomes, runCli, type CliIo, type Home } from "./index.ts";
+import { findHomes, HOMES, mapMarkdown, mapText, mergeHomes, npmDrift, npmNames, runCli, type CliIo, type Home, type NpmPresence } from "./index.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-map-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -24,6 +24,8 @@ describe("the homes", () => {
       expect(home.repo).toMatch(/^mark1russell7\/[A-Za-z0-9._-]+$/);
       if (home.state === "published") expect(home.packages.length, home.area).toBeGreaterThan(0);
       if (home.state === "planned" || home.state === "none") expect(home.packages, home.area).toEqual([]);
+      if (home.state === "published" || home.state === "unpublished") for (const name of home.pending ?? []) expect(home.packages, `${home.area} ${name}`).toContain(name);
+      if (home.state === "published") expect(home.pending?.length ?? 0, home.area).toBeLessThan(home.packages.length);
     }
   });
 
@@ -87,7 +89,8 @@ describe("the command map", () => {
     expect(stdout).toBe(mapMarkdown());
     expect(stdout).toMatch(/^Before you write a helper, find its home in this map\./);
     expect(stdout).toContain("| Statistics | `@mark1russell7/rigor-statistics` |");
-    expect(stdout).toContain("| Benchmarks and speed gates | `mark1russell7/rigor` (planned) |");
+    expect(stdout).toContain("| Benchmarks and speed gates | `@mark1russell7/rigor-bench` |");
+    expect(stdout).toContain("`@mark1russell7/rational`, `@mark1russell7/expression` (not on npm) |");
   });
 
   it("finds the areas of words, and reads an overlay", () => {
@@ -105,5 +108,44 @@ describe("the command map", () => {
     const file = join(temp, "bad.json");
     writeFileSync(file, "{}");
     expect(cli(["map", "--overlay", file]).code).toBe(1);
+  });
+});
+
+describe("the map against npm", () => {
+  const home = (area: string, state: Home["state"], packages: string[], pending?: string[]): Home => ({ area, title: area, covers: "x", packages, repo: `mark1russell7/${area}`, state, words: [], ...(pending === undefined ? {} : { pending }) });
+  const on: NpmPresence = { onNpm: true };
+  const off: NpmPresence = { onNpm: false };
+
+  it("asks npm for each package and each pending name once", () => {
+    expect(npmNames([home("a", "published", ["@s/a", "@s/b"], ["@s/b"]), home("c", "planned", [], ["@s/c"])])).toEqual(["@s/a", "@s/b", "@s/c"]);
+    expect(npmNames()).toContain("@mark1russell7/geo");
+  });
+
+  it("finds no difference when each name agrees with npm", () => {
+    const homes = [home("a", "published", ["@s/a", "@s/b"], ["@s/b"]), home("u", "unpublished", ["@s/u"]), home("p", "planned", [], ["@s/p"])];
+    expect(npmDrift(homes, new Map([["@s/a", on], ["@s/b", off], ["@s/u", off], ["@s/p", off]]))).toEqual([]);
+  });
+
+  it("finds each kind of difference", () => {
+    const homes = [home("a", "published", ["@s/a", "@s/b"], ["@s/b"]), home("u", "unpublished", ["@s/u"]), home("p", "planned", [], ["@s/p"]), home("q", "planned", [])];
+    const found = npmDrift(homes, new Map<string, NpmPresence>([["@s/a", off], ["@s/b", on], ["@s/u", on], ["@s/p", { error: "HTTP 503" }]]));
+    expect(found.map((drift) => [drift.area, drift.kind, drift.name])).toEqual([
+      ["a", "missing", "@s/a"],
+      ["a", "stale-pending", "@s/b"],
+      ["u", "stale-state", "@s/u"],
+      ["p", "no-read", "@s/p"],
+      ["q", "unnamed", undefined],
+    ]);
+    expect(found[3]?.text).toContain("HTTP 503");
+  });
+
+  it("reads a name with no answer as no read, never as a pass", () => {
+    expect(npmDrift([home("a", "published", ["@s/a"])], new Map()).map((drift) => drift.kind)).toEqual(["no-read"]);
+  });
+
+  it("marks a pending package of a published home as not on npm in the table and the text", () => {
+    const homes = [home("a", "published", ["@s/a", "@s/b"], ["@s/b"])];
+    expect(mapMarkdown(homes)).toContain("| a | `@s/a`, `@s/b` (not on npm) | x |");
+    expect(mapText(homes)).toContain("a (a): @s/a, @s/b (not on npm)");
   });
 });

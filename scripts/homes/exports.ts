@@ -72,7 +72,7 @@ async function main(args: readonly string[]): Promise<number> {
   try {
     for (const home of HOMES) {
       if (home.state !== "published") continue;
-      for (const name of home.packages) index[name] = await exportsOf(name, temp);
+      for (const name of home.packages) if (!(home.pending ?? []).includes(name)) index[name] = await exportsOf(name, temp);
     }
   } finally {
     rmSync(temp, { recursive: true, force: true });
