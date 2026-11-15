@@ -4,7 +4,7 @@
  * rule and each number, and this module connects the core to the page.
  */
 
-import { h, type Child } from "../chrome.ts";
+import { h, svg as s, type Child } from "../chrome.ts";
 import {
   axisChoices,
   axisTicks,
@@ -67,7 +67,6 @@ export interface ExplorerHandle {
   destroy(): void;
 }
 
-const SVG = "http://www.w3.org/2000/svg";
 /** The most faults that the view lists. */
 const MAX_FAULTS = 20;
 /** The width of a chart with no layout, for example in a test. */
@@ -77,14 +76,6 @@ const MARGIN = { top: 10, right: 14, bottom: 42, left: 50 };
 const CHAR_WIDTH = 6.4;
 
 let mounts = 0;
-
-/** This function makes an SVG element with attributes and children. */
-function s(tag: string, attrs: Readonly<Record<string, string | number>>, ...children: readonly (Node | string)[]): SVGElement {
-  const el = document.createElementNS(SVG, tag);
-  for (const [name, value] of Object.entries(attrs)) el.setAttribute(name, String(value));
-  el.append(...children);
-  return el;
-}
 
 /** The plot of a chart: the pixels of its area and of its axes. */
 interface Plot {
@@ -306,7 +297,7 @@ function surfaceChart(view: ExplorerView, panel: SurfacePanel, width: number, te
       const upper = plot.bottom - (yEdges[j + 1] as number) * height;
       const box = { x: left + gap / 2, y: upper + gap / 2, width: Math.max(0.5, right - left - gap + (gap === 0 ? 0.6 : 0)), height: Math.max(0.5, lower - upper - gap + (gap === 0 ? 0.6 : 0)) };
       const step = heatStep(band.value, range, view.log);
-      const parts = [s("rect", { ...box, class: `rx-h${step}` })];
+      const parts: SVGElement[] = [s("rect", { ...box, class: `rx-h${step}` })];
       const veil = veilOf(band.nearest);
       if (veil > 0.02) parts.push(s("rect", { ...box, class: "rx-veil", "fill-opacity": veil.toFixed(3) }));
       if (panel.cells && box.width > 34 && box.height > 18) parts.push(s("text", { class: `rx-cell-text ${step > HEAT_STEPS / 2 ? "rx-on-dark" : "rx-on-light"}`, x: box.x + box.width / 2, y: box.y + box.height / 2 + 4, "text-anchor": "middle" }, formatValue(band.value)));

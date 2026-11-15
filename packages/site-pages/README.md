@@ -516,6 +516,7 @@ The entry `@mark1russell7/site-pages/chrome` has small helpers for the script of
 | Function | Operation |
 | --- | --- |
 | `h(tag, attrs, ...children)` | Makes an element. The attribute `class` sets the class name. `false`, `null` and `undefined` give no attribute and no child. |
+| `svg(tag, attrs, ...children)` | Makes an SVG element, with the rules of `h`. The attribute `class` sets the attribute `class`. |
 | `byId(id)` | Gives the element with the ID. It throws when the page has no such element. |
 | `setupTheme(button, storageKey)` | Makes a theme button: auto, light, dark, in turn. It sets `data-theme` on the `html` element and keeps the choice in `localStorage`. |
 | `currentTheme()`, `nextTheme(storageKey)`, `applyTheme(theme, storageKey)` | Read the theme, set the next theme, or set one theme. A site with its own button, for example a React component, uses them. |

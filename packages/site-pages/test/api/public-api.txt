@@ -194,6 +194,7 @@ h: build/chrome.d.ts#h
 nextTheme: build/chrome.d.ts#nextTheme
 setupTheme: build/chrome.d.ts#setupTheme
 showBuild: build/chrome.d.ts#showBuild
+svg: build/chrome.d.ts#svg
 
 ## ./explorer (build/explorer/index.d.ts): names
 
@@ -330,6 +331,9 @@ export declare function setupTheme(button: HTMLButtonElement, storageKey: string
 
 ### build/chrome.d.ts#showBuild
 export declare function showBuild(element: HTMLElement, build: BuildInfo, repository: string): void;
+
+### build/chrome.d.ts#svg
+export declare function svg<K extends keyof SVGElementTagNameMap>(tag: K, attrs?: Readonly<Record<string, AttributeValue>>, ...children: readonly (Child | readonly Child[])[]): SVGElementTagNameMap[K];
 
 ### build/chunks/freshness.d.ts#BoardIssue
 interface BoardIssue {
