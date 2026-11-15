@@ -2,7 +2,9 @@ name: changes
 description: >-
   Tells if a pull request changes a file that a gate is about. A gate workflow starts on each pull request (no
   on.pull_request.paths), so its summary check "<Name> OK" is always there for the ruleset. This action decides
-  if the gate jobs run. Each event other than a pull request is a match.
+  if the gate jobs run. A run of a different event is a match, except when the input pull-request gives the pull request
+  of the run, for example a run that workflow_dispatch starts on the branch of a pull request. Then the action reads the
+  files of that pull request. When it cannot tell the files of the commit of the run, the gate runs.
 inputs:
   paths:
     description: >-
@@ -12,6 +14,13 @@ inputs:
     default: "**"
   paths-ignore:
     description: The patterns of the files that the gate is not about, with the meaning of on.pull_request.paths-ignore.
+    default: ""
+  pull-request:
+    description: >-
+      The number of the pull request of a run of an event that is not a pull request, for example the output number of
+      the action pull-of-run when its output found is "true". The action reads the files of that pull request only when
+      its head is the commit of the run (GITHUB_SHA), before and after the read of the files. Empty, a different head or
+      a failed read gives a match. A pull_request run reads the pull request of its event, not this input.
     default: ""
   token:
     description: A GitHub token that can read the files of the pull request (permission "pull-requests read").
@@ -23,6 +32,7 @@ outputs:
 runs:
   using: composite
   steps:
+    # .github/actions/changes.test.ts starts this script with a fake gh.
     - id: match
       name: The files of the gate
       shell: bash
@@ -30,22 +40,45 @@ runs:
         GH_TOKEN: ${{ inputs.token }}
         EVENT: ${{ github.event_name }}
         NUMBER: ${{ github.event.pull_request.number }}
+        PULL: ${{ inputs.pull-request }}
         PATHS: ${{ inputs.paths }}
         IGNORE: ${{ inputs.paths-ignore }}
       run: |
-        if [ "$EVENT" != pull_request ] && [ "$EVENT" != pull_request_target ]; then
-          echo "The event is $EVENT, not a pull request, so the gate runs."
+        # The gate runs, and the log gives the reason.
+        gate_runs() {
+          echo "$1 So the gate runs."
           echo "match=true" >> "$GITHUB_OUTPUT"
           exit 0
+        }
+        head_of() { gh api "repos/$GITHUB_REPOSITORY/pulls/$1" --jq '.head.sha'; }
+        # A run of a different event reads the files of the pull request of the input only on the head of that pull
+        # request. Each other case fails open: the gate runs.
+        dispatched=false
+        if [ "$EVENT" != pull_request ] && [ "$EVENT" != pull_request_target ]; then
+          [ -n "$PULL" ] || gate_runs "The event is $EVENT, not a pull request, and the input pull-request is empty."
+          [[ "$PULL" =~ ^[1-9][0-9]{0,9}$ ]] || gate_runs "The input pull-request is \"$PULL\", not the number of a pull request."
+          head=$(head_of "$PULL") || gate_runs "The read of the head of #$PULL failed."
+          [ "$head" = "$GITHUB_SHA" ] || gate_runs "The head of #$PULL is ${head:-(none)}, not $GITHUB_SHA, the commit of the run."
+          echo "The event is $EVENT, and the run is on the head of #$PULL. The action reads the files of #$PULL."
+          NUMBER=$PULL
+          dispatched=true
         fi
         # The new and the old name of each file. GitHub gives at most 3000 files of a pull request.
-        gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$NUMBER/files?per_page=100" \
-          --jq '.[] | .filename, (.previous_filename // empty)' > files
+        if ! gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$NUMBER/files?per_page=100" \
+          --jq '.[] | .filename, (.previous_filename // empty)' > files; then
+          # A pull_request run fails, so a person starts it again. A run of a different event runs the gate.
+          [ "$dispatched" = false ] || gate_runs "The read of the files of #$NUMBER failed."
+          exit 1
+        fi
         count=$(wc -l < files)
         if [ "$count" -ge 3000 ]; then
-          echo "The pull request has $count files or more, the limit of the API, so the gate runs."
-          echo "match=true" >> "$GITHUB_OUTPUT"
-          exit 0
+          gate_runs "The pull request has $count files or more, the limit of the API."
+        fi
+        if [ "$dispatched" = true ]; then
+          # A push during the read can change the files. They are the files of the commit of the run only when the head
+          # did not move.
+          head=$(head_of "$NUMBER") || gate_runs "The second read of the head of #$NUMBER failed."
+          [ "$head" = "$GITHUB_SHA" ] || gate_runs "The head of #$NUMBER moved to ${head:-(none)} during the read of its files."
         fi
         match=$(jq -R -s -r --arg paths "$PATHS" --arg ignore "$IGNORE" -f "$GITHUB_ACTION_PATH/match.jq" files)
         echo "$count files. Match: $match."
