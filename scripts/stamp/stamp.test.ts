@@ -64,6 +64,21 @@ describe("the stamp", () => {
     assert.equal(root.devDependencies["@mark1russell7/template-cli"], "^9.8.7");
   });
 
+  it("with link, gives each package of the template from its folder in the clone, and each other package from npm", async () => {
+    const out = join(mkdtempSync(join(tmpdir(), "stamp-")), "demo-repo");
+    await stamp({ name: "demo-repo", description: "x", template, out, ref: "HEAD", latest: () => "9.8.7", link: true });
+    const root = JSON.parse(read(out, "package.json")) as { devDependencies: Record<string, string> };
+    const site = JSON.parse(read(out, "packages/site/package.json")) as { devDependencies: Record<string, string> };
+    const folder = (path: string): string => `link:${resolve(template, path).replace(/\\/g, "/")}`;
+    assert.equal(root.devDependencies["@mark1russell7/conventions"], folder("packages/conventions"));
+    assert.equal(root.devDependencies["@mark1russell7/template-cli"], folder("packages/cli"));
+    assert.equal(site.devDependencies["@mark1russell7/site-pages"], folder("packages/site-pages"));
+    assert.equal(site.devDependencies["vite"], "^9.8.7");
+    for (const range of [...Object.values(root.devDependencies), ...Object.values(site.devDependencies)]) {
+      if (range.startsWith("link:")) assert.ok(existsSync(join(range.slice("link:".length), "package.json")), range);
+    }
+  });
+
   it("gives a roadmap that the Status page reads", async () => {
     const { out } = await stamped();
     assert.equal(parseRoadmap(read(out, "docs/ROADMAP.md")).length, 1);
