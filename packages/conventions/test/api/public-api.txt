@@ -96,10 +96,12 @@ cleanPath: build/index.d.ts#cleanPath
 codePackages: build/index.d.ts#codePackages
 configsOfScript: build/index.d.ts#configsOfScript
 convertGate: build/index.d.ts#convertGate
+coverageProvider: build/index.d.ts#coverageProvider
 createContext: build/index.d.ts#createContext
 cuePreset: build/index.d.ts#cuePreset
 declaredName: build/index.d.ts#declaredName
 defaultOptions: build/index.d.ts#defaultOptions
+exportsRequire: build/index.d.ts#exportsRequire
 findHomes: build/index.d.ts#findHomes
 firstNameMatch: build/index.d.ts#firstNameMatch
 formatResult: build/index.d.ts#formatResult
@@ -172,6 +174,7 @@ releaseFiles: build/index.d.ts#releaseFiles
 releaseNotes: build/index.d.ts#releaseNotes
 replaceLine: build/index.d.ts#replaceLine
 repoOf: build/index.d.ts#repoOf
+reposOf: build/index.d.ts#reposOf
 repositoryIsPublic: build/index.d.ts#repositoryIsPublic
 repositoryOfRemote: build/index.d.ts#repositoryOfRemote
 requiredScripts: build/index.d.ts#requiredScripts
@@ -332,6 +335,7 @@ interface Home {
   readonly covers: string;
   readonly packages: readonly string[];
   readonly repo: string;
+  readonly alsoIn?: readonly string[];
   readonly state: HomeState;
   readonly words: readonly string[];
   readonly signatures?: readonly string[];
@@ -371,7 +375,7 @@ interface LinePlace {
 }
 
 ### build/index.d.ts#MAP_RULE
-export declare const MAP_RULE = "Before you write a helper, find its home in this map. If the home does not have the function, add it to the home, in a pull request of the home repository. Do not make a local copy, a new package or a new repository for an area that has a home: that needs the strategist. A home that is not on npm is used with workspace:* or a github: specifier pinned to a commit. If no area fits, ask the strategist for a home before you write the code.";
+export declare const MAP_RULE: string;
 
 ### build/index.d.ts#MAX_NOTES
 export declare const MAX_NOTES: number;
@@ -693,6 +697,9 @@ export declare function convertGate(text: string, file: string, commit?: string)
   reason: string;
 };
 
+### build/index.d.ts#coverageProvider
+export declare const coverageProvider: Rule;
+
 ### build/index.d.ts#createContext
 export declare function createContext(root: string, config: ConventionsConfig, options?: Pick<CheckOptions, "base" | "env">): RuleContext;
 
@@ -704,6 +711,9 @@ export declare function declaredName(line: string): string | undefined;
 
 ### build/index.d.ts#defaultOptions
 export declare function defaultOptions(rule: Rule): Options;
+
+### build/index.d.ts#exportsRequire
+export declare const exportsRequire: Rule;
 
 ### build/index.d.ts#findHomes
 export declare function findHomes(query: string, homes?: readonly Home[]): readonly Home[];
@@ -911,6 +921,9 @@ export declare function replaceLine(text: string, line: number, lines: readonly 
 
 ### build/index.d.ts#repoOf
 export declare function repoOf(context: RuleContext): string | undefined;
+
+### build/index.d.ts#reposOf
+export declare function reposOf(home: Home): readonly string[];
 
 ### build/index.d.ts#repositoryIsPublic
 export declare function repositoryIsPublic(context: RuleContext): boolean | undefined;

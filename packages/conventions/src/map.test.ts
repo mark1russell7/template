@@ -54,6 +54,18 @@ describe("the search", () => {
     expect(findHomes("telemetry capture")[0]?.area).toBe("test-generation");
     expect(findHomes("in-memory exporter")[0]?.area).toBe("test-generation");
     expect(findHomes("otel capture")[0]?.area).toBe("test-generation");
+    expect(findHomes("pushover")[0]?.area).toBe("notifications");
+    expect(findHomes("text message")[0]?.area).toBe("notifications");
+    expect(findHomes("geohash")[0]?.area).toBe("geography");
+    expect(findHomes("latitude longitude")[0]?.area).toBe("geography");
+    expect(findHomes("common alerting protocol")[0]?.area).toBe("alerts");
+    expect(findHomes("sqlite quarantine")[0]?.area).toBe("local-database");
+    expect(findHomes("corrupt database")[0]?.area).toBe("local-database");
+    expect(findHomes("escalation")[0]?.area).toBe("alerts");
+    expect(findHomes("canonical json")[0]?.area).toBe("random");
+    expect(findHomes("content hash")[0]?.area).toBe("random");
+    expect(findHomes("orientation")[0]?.area).toBe("exact-math");
+    expect(findHomes("sqlite")[0]?.area).toBe("local-database");
     expect(findHomes("nothing-like-this")).toEqual([]);
     expect(findHomes("")).toBe(HOMES);
   });
@@ -82,8 +94,8 @@ describe("the command map", () => {
     expect(cli(["map", "quantile"]).stdout).toMatch(/^Statistics \(statistics\): @mark1russell7\/rigor-statistics\n/);
     expect(cli(["map", "nothing-like-this"]).stdout).toMatch(/^No area matches\./);
     const file = join(temp, "private.json");
-    writeFileSync(file, JSON.stringify({ homes: [{ area: "secret-app", title: "A private app", covers: "x", packages: [], repo: "mark1russell7/private", state: "unpublished", words: ["secret"] }] }));
-    const json = JSON.parse(cli(["map", "secret", "--json", "--overlay", file]).stdout) as Home[];
+    writeFileSync(file, JSON.stringify({ homes: [{ area: "secret-app", title: "A private app", covers: "x", packages: [], repo: "mark1russell7/private", state: "unpublished", words: ["zz-overlay-only"] }] }));
+    const json = JSON.parse(cli(["map", "zz-overlay-only", "--json", "--overlay", file]).stdout) as Home[];
     expect(json.map((home) => home.area)).toEqual(["secret-app"]);
   });
 

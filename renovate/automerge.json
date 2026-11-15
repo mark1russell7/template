@@ -2,6 +2,9 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "description": "The automerge rules of mark1russell7: Renovate merges the low-risk groups when CI passes.",
   "platformAutomerge": false,
+  "lockFileMaintenance": {
+    "automerge": true
+  },
   "packageRules": [
     {
       "description": "Renovate merges the npm patch updates when CI passes.",
@@ -10,10 +13,17 @@
       "automerge": true
     },
     {
-      "description": "Renovate merges the minor updates of the development dependencies when CI passes.",
+      "description": "Renovate merges the minor updates of the runtime and development dependencies when CI passes. A range that holds the new version stays the same (rangeStrategy update-lockfile): only the lockfile changes.",
       "matchManagers": ["npm"],
-      "matchDepTypes": ["devDependencies"],
+      "matchDepTypes": ["dependencies", "optionalDependencies", "devDependencies"],
       "matchUpdateTypes": ["minor"],
+      "automerge": true
+    },
+    {
+      "description": "Renovate merges a minor or patch update of pnpm when CI passes, also an update of the field packageManager. The release check ignores packageManager.",
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["pnpm"],
+      "matchUpdateTypes": ["minor", "patch"],
       "automerge": true
     },
     {
