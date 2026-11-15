@@ -62,6 +62,10 @@ With `coverage: true`, the job `coverage` starts `vitest run` with coverage in e
 - The script `deadline.ts` of the action `coverage` holds the deadline. At the deadline, it sends `TERM` to the processes of the step, and `KILL` 10 seconds later. It works on Linux, macOS and Windows.
 - Node.js starts `deadline.ts` and `coverage.ts` from 22.18. With an older first version in `node-versions`, the steps have no deadline and give a warning. The step `Coverage` measures nothing: strict, it fails, and not strict, it gives a warning.
 - The summary gives the time of the job and its limit. A time above 80 % of the limit gives a warning.
+- The workflow `limit-audit.yml` of the template finds each job of a default branch that stopped at its time limit. It examines the runs of the last 24 hours of each public repository, each day.
+- The audit finds a job that reached its `timeout-minutes`, a step of the job `coverage` that stopped at the deadline, and the warning above 80 %.
+- The scheduled run fails when the audit cannot read a repository. The summary has a table of the jobs, and the artifact `limit-audit` has `limit-audit.json`.
+- Until the day `FAILS_FROM` of the workflow (2026-11-23), a job that stopped at a limit gives a warning. From that day, it fails the run.
 
 - The summary of the job gets a table: the statements, branches, functions and lines of each package.
 - The artifact `coverage` has `coverage-summary.json` and `coverage-final.json` of each package.
