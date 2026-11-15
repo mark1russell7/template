@@ -78,6 +78,8 @@ runs:
         node "$SCRIPT" check
         version=$($COMMAND --version | awk '{print $NF}')
         [ -n "$version" ] || { echo "::error::\"$COMMAND --version\" gave no version."; exit 1; }
+        # A Playwright version that does not know the runner image stops at once with the fix, not after each try.
+        node "$SCRIPT" host "$version"
         # One browser folder on each OS, so that the cache path is the same everywhere.
         echo "PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/ms-playwright" >> "$GITHUB_ENV"
         echo "version=$version" >> "$GITHUB_OUTPUT"
