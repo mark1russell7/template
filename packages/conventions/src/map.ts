@@ -180,8 +180,8 @@ export const HOMES: readonly Home[] = [
     repo: "mark1russell7/client",
     state: "published",
     words: ["notify", "notification", "push", "push notification", "pushover", "ntfy", "twilio", "sms", "text message", "voice call", "critical alert"],
-    signatures: ["sendNotification", "sendPushover", "sendSms"],
-    note: "@procedures/notify is in mark1russell7/client. Pushover and Twilio are planned next to ntfy. The rules of who gets what and when (rank, route, escalate) go to the area alerts.",
+    signatures: ["sendNotification", "callPushover", "pushoverSendRequest", "extractPushoverReceipt"],
+    note: "@procedures/notify is in mark1russell7/client. ntfy and Pushover are on npm (Pushover since 0.56.0, entry /pushover). Twilio is planned. The rules of who gets what and when (rank, route, escalate) go to the area alerts.",
   },
   {
     area: "desktop",
