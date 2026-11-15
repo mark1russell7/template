@@ -46,6 +46,7 @@ export {
   cuePreset,
   exportsRequire,
   gateTrigger,
+  homeModule,
   homePackage,
   licenseFile,
   mainCheck,
@@ -116,6 +117,7 @@ export { hasImportMetaMain, REAL_COMPARE } from "./rules/main-check.ts";
 export { roadmapOfLine } from "./rules/roadmap-parses.ts";
 export { repositoryOfRemote, scheduleMinute } from "./rules/runner-budget.ts";
 export { declaredName, messageOf, repoOf, reposOf, signaturesOf } from "./rules/home-package.ts";
+export { moduleMessage, modulesOf, moduleUses, type HomeModule, type ModuleUse } from "./rules/home-module.ts";
 export { HOME_EXPORTS } from "./home-exports.ts";
 export { authorOf, LICENSE_TEXTS, licenseFileOf, mitText, repositoryIsPublic } from "./rules/license-file.ts";
 export { GITHUB_YAML, yamlFaults, type YamlFault } from "./rules/workflow-parses.ts";
