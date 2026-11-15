@@ -63,6 +63,7 @@ describe("the search", () => {
     expect(findHomes("common alerting protocol")[0]?.area).toBe("alerts");
     expect(findHomes("sqlite quarantine")[0]?.area).toBe("local-database");
     expect(findHomes("corrupt database")[0]?.area).toBe("local-database");
+    expect(findHomes("sqlite read transaction")[0]?.area).toBe("local-database");
     expect(findHomes("escalation")[0]?.area).toBe("alerts");
     expect(findHomes("canonical json")[0]?.area).toBe("random");
     expect(findHomes("content hash")[0]?.area).toBe("random");

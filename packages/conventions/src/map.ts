@@ -425,14 +425,12 @@ export const HOMES: readonly Home[] = [
   {
     area: "local-database",
     title: "Databases on one computer",
-    covers: "SQLite through node:sqlite: WAL, synchronous and busy-timeout settings, migrations by user_version or by a version for each part of a file, BEGIN IMMEDIATE transactions, typed append-only event logs as grow-only sets, the fault kind and the action of each SQLite error, recovery of a broken or stuck file (integrity check, quarantine, salvage of a log, snapshot), the filter of the experimental warning",
+    covers: "SQLite through node:sqlite: WAL, synchronous and busy-timeout settings, migrations by user_version or by a version for each part of a file, BEGIN IMMEDIATE transactions, read transactions on one snapshot, typed append-only event logs as grow-only sets, the fault kind and the action of each SQLite error, recovery of a broken or stuck file (integrity check, quarantine, salvage of a log, snapshot), the filter of the experimental warning",
     packages: ["@mark1russell7/sqlite"],
     repo: "mark1russell7/sqlite",
-    alsoIn: ["mark1russell7/headroom", "mark1russell7/crawler", "mark1russell7/pairrank"],
     state: "published",
-    words: ["sqlite", "database", "event log", "migration", "wal", "user_version", "append-only", "transaction", "node:sqlite", "grow-only", "integrity check", "quarantine", "corrupt", "snapshot", "backup"],
+    words: ["sqlite", "database", "event log", "migration", "wal", "user_version", "append-only", "transaction", "node:sqlite", "grow-only", "integrity check", "quarantine", "corrupt", "snapshot", "backup", "read transaction", "query_only"],
     signatures: ["openEventLog", "salvageEventLog", "sqliteFault", "openOrQuarantine", "quietSqliteWarning"],
-    note: "headroom (packages/core/src/store.ts), polite-crawler (docs.ts, hoststate.ts, vectors.ts and watch.ts in packages/polite-crawler/src) and pairrank (packages/store/src/log.ts) have their own WAL and migration code. They move to @mark1russell7/sqlite. Do not grow a local copy.",
   },
   {
     area: "releases",
