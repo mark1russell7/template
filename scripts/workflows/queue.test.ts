@@ -15,6 +15,7 @@ import {
   type Outcome,
   type PullState,
   type Timing,
+  annotations,
   execute,
   exitCode,
   gateWorkflows,
@@ -315,12 +316,51 @@ describe("queue: the summary", () => {
         { pull: 2, mergeState: "DIRTY", result: "skipped", detail: "a merge | conflict", started: [], failed: [], noRead: [] },
       ],
     });
-    assert.match(text, /The rules of `main` name the required checks `CI OK` and `Security OK`\. Strict \(a branch with the newest `main`\): on\./);
+    assert.ok(text.includes("The rules of main name the required checks CI OK and Security OK. Strict (a branch with the newest main): on."));
     assert.match(text, /2 pull requests with auto-merge\. 4 other open pull requests/);
-    assert.match(text, /\| #1 \| BEHIND \| updated: updated from 1111111 to fffffff \| `\.github\/workflows\/ci\.yml`, refused: `x\.yml \(HTTP 422\)` \|/);
-    assert.match(text, /\| #2 \| DIRTY \| skipped: a merge \\\| conflict \| none \|/);
-    assert.match(text, /No read \(never a pass\):\n\n- #1 `Faults OK`: no check run on the old head 1111111\n/);
+    assert.ok(text.includes(String.raw`| #1 | BEHIND | updated: updated from 1111111 to fffffff | \.github\/workflows\/ci\.yml, refused: x\.yml \(HTTP 422\) |`));
+    assert.ok(text.includes(String.raw`| #2 | DIRTY | skipped: a merge \| conflict | none |`));
+    assert.ok(text.includes("No read (never a pass):\n\n- #1 Faults OK: no check run on the old head 1111111\n"));
     assert.doesNotMatch(text, /strict off/);
+  });
+
+  /** The cells of a row of a GitHub Markdown table: a backslash escapes the next character, and each other pipe ends a cell. */
+  function cells(row: string): string[] {
+    const parts: string[] = [];
+    let part = "";
+    for (let index = 0; index < row.length; index += 1) {
+      const char = row[index] ?? "";
+      if (char === "\\") {
+        part += char + (row[index + 1] ?? "");
+        index += 1;
+      } else if (char === "|") {
+        parts.push(part.trim());
+        part = "";
+      } else part += char;
+    }
+    parts.push(part.trim());
+    return parts.slice(1, -1).map((cell) => cell.replace(/\\(.)/g, "$1"));
+  }
+
+  it("keeps 4 cells in each row and the text of each part, when a part ends in a backslash or has a pipe or Markdown", () => {
+    const outcome = (pull: number, detail: string, failed: string[] = []): Outcome => ({ pull, mergeState: "BEHIND", result: "error", detail, started: [], failed, noRead: [{ check: "Odd `|` *check*", why: `why ${detail}` }] });
+    const details = ["a path C:\\work\\", "a | b", "a \\| b", "**bold** `code` <b>x</b> [link](y)\nnext line"];
+    const text = summaryText({ base: "release/v1", required: ["Odd `|` *check*"], strict: true, others: 0, outcomes: details.map((detail, index) => outcome(index + 1, detail, [`x.yml (HTTP 422: ${detail})`])) });
+    const rows = text.split("\n").filter((line) => /^\| #\d/.test(line));
+    assert.equal(rows.length, details.length);
+    for (const [index, row] of rows.entries()) {
+      const detail = (details[index] ?? "").replace(/\n/g, " ");
+      assert.deepEqual(cells(row), [`#${String(index + 1)}`, "BEHIND", `error: ${detail}`, `refused: x.yml (HTTP 422: ${detail})`], row);
+    }
+    // Each no read is one line of the list, and its parts start no Markdown
+    assert.ok(text.includes(String.raw`- #1 Odd \`\|\` \*check\*: why a path C\:\\work\\` + "\n"));
+    assert.ok(text.includes(String.raw`The rules of release\/v1 name the required checks Odd \`\|\` \*check\*.`));
+    assert.doesNotMatch(text, /\n {0,3}next line/);
+  });
+
+  it("encodes each annotation as one workflow command", () => {
+    const lines = annotations([{ pull: 1, mergeState: "BEHIND", result: "error", detail: "100% failed\r\n::error::x", started: [], failed: ["a.yml (50%)"], noRead: [{ check: "C\nD", why: "w" }] }]);
+    assert.deepEqual(lines, ["::error title=Queue::#1: 100%25 failed%0D%0A::error::x", "::error title=Queue::#1: workflow_dispatch refused a.yml (50%25)", "::warning title=Queue no read::#1 C%0AD: w"]);
   });
 
   it("tells that the queue changes nothing with strict off", () => {
@@ -362,7 +402,7 @@ describe("queue: the step", () => {
       assert.ok(requests.includes("POST https://api.example/repos/owner/repo/actions/workflows/10/dispatches"));
       assert.ok(requests.includes("POST https://api.example/graphql"));
       const text = readFileSync(summary, "utf8");
-      assert.match(text, /\| #5 \| BEHIND \| updated: updated from 5555555 to eeeeeee \| `\.github\/workflows\/ci\.yml` \|/);
+      assert.ok(text.includes(String.raw`| #5 | BEHIND | updated: updated from 5555555 to eeeeeee | \.github\/workflows\/ci\.yml |`));
       assert.match(text, /1 other open pull requests/);
     } finally {
       rmSync(folder, { recursive: true, force: true });
@@ -411,5 +451,19 @@ describe("queue: the workflows", () => {
     for (const use of uses) assert.match(use, /^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/);
     assert.match(shared, /run: node \.queue-template\/scripts\/workflows\/queue\.ts\n/);
     assert.match(shared, /node-version: "24"/);
+  });
+
+  it("installs the version of @mark1russell7/text that pnpm-lock.yaml of the template resolves, so a bump of the lockfile cannot leave the workflow behind", () => {
+    const lock = readFileSync(join(root, "pnpm-lock.yaml"), "utf8");
+    // pnpm 12 writes two documents: the root importer of the second one has the devDependencies
+    const locked = [...lock.matchAll(/\nimporters:\n\n {2}\.:\n([\s\S]*?)(?:\n\n|$)/g)]
+      .map((match) => /\n {6}'@mark1russell7\/text':\n {8}specifier: \S+\n {8}version: ([^\s(]+)/.exec(`\n${match[1] ?? ""}`)?.[1])
+      .find((version) => version !== undefined);
+    assert.ok(locked !== undefined, "pnpm-lock.yaml resolves no @mark1russell7/text for the root package");
+    assert.equal(/\n {2}TEXT_VERSION: "([^"]+)"\n/.exec(shared)?.[1], locked);
+    // The install goes to the folder of the script: the sparse checkout also has the root package.json of the template
+    const install = shared.indexOf(`run: npm install --no-save --no-package-lock --ignore-scripts --prefix .queue-template/scripts/workflows "@mark1russell7/text@\${TEXT_VERSION}"\n`);
+    assert.ok(install > 0);
+    assert.ok(install < shared.indexOf("run: node .queue-template/scripts/workflows/queue.ts"));
   });
 });

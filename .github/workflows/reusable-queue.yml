@@ -33,6 +33,11 @@ on:
 
 permissions: {}
 
+env:
+  # The version of @mark1russell7/text that the script imports. It is the version that pnpm-lock.yaml of the template
+  # resolves, and a test of scripts/workflows/queue.test.ts fails when the two differ.
+  TEXT_VERSION: "0.0.6"
+
 jobs:
   queue:
     name: Queue
@@ -59,6 +64,12 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
+      # The script imports the escapes of Markdown and of workflow commands from @mark1russell7/text. The sparse checkout
+      # also has the root package.json of the template, so the install goes to the folder of the script, which has no
+      # package.json. Node finds that node_modules first. No install script starts.
+      - name: Install the package of the script
+        shell: bash
+        run: npm install --no-save --no-package-lock --ignore-scripts --prefix .queue-template/scripts/workflows "@mark1russell7/text@${TEXT_VERSION}"
       - name: Update each pull request that is behind, and start its gates
         shell: bash
         env:

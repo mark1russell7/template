@@ -18,6 +18,7 @@
 // example a merge conflict) skips that pull request, and each other pull request still gets its turn.
 import { appendFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { escapeMarkdown, escapeWorkflowData } from "@mark1russell7/text";
 
 /** The id of the GitHub App "GitHub Actions". Only a check run of this app has a workflow that the queue can start. */
 export const ACTIONS_APP = 15368;
@@ -404,9 +405,6 @@ export function exitCode(outcomes: readonly Outcome[]): number {
   return outcomes.some((outcome) => outcome.result === "error" || outcome.result === "timeout" || outcome.failed.length > 0) ? 1 : 0;
 }
 
-/** The text of a cell of a Markdown table. */
-const cell = (text: string): string => text.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
-
 /** This function gives a list in words: "a", "a and b", "a, b and c". */
 const words = (items: readonly string[]): string => (items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1] ?? ""}`);
 
@@ -420,28 +418,28 @@ export interface Report {
   readonly outcomes: readonly Outcome[];
 }
 
-/** This function gives the step summary of a run of the queue. */
+/**
+ * This function gives the step summary of a run of the queue. Each part that comes from the API or from the repository
+ * (a branch, a check, a merge state, a path, a detail) goes through `escapeMarkdown`, also in a table cell, so it cannot
+ * end a cell or start Markdown. A backslash escape does not operate in a code span, so these parts are plain text.
+ */
 export function summaryText(report: Report): string {
   const lines = ["### The queue", ""];
-  const checks = report.required.length === 0 ? "no required check" : `the required checks ${words(report.required.map((check) => `\`${check}\``))}`;
-  lines.push(`The rules of \`${report.base}\` name ${checks}. Strict (a branch with the newest \`${report.base}\`): ${report.strict ? "on" : "off"}.`);
+  const base = escapeMarkdown(report.base);
+  const checks = report.required.length === 0 ? "no required check" : `the required checks ${words(report.required.map(escapeMarkdown))}`;
+  lines.push(`The rules of ${base} name ${checks}. Strict (a branch with the newest ${base}): ${report.strict ? "on" : "off"}.`);
   if (!report.strict) lines.push("", `With strict off, GitHub merges a pull request that is behind, so no pull request is ${BEHIND} and the queue changes nothing.`);
   lines.push("", `${String(report.outcomes.length)} pull requests with auto-merge. ${String(report.others)} other open pull requests have no auto-merge, are drafts or come from a fork.`);
   if (report.outcomes.length > 0) {
     lines.push("", "| Pull request | Merge state | Result | Workflows started |", "|---|---|---|---|");
     for (const outcome of report.outcomes) {
-      const started = [...outcome.started.map((path) => `\`${path}\``), ...outcome.failed.map((text) => `refused: \`${text}\``)];
-      lines.push(`| #${String(outcome.pull)} | ${outcome.mergeState} | ${cell(`${outcome.result}: ${outcome.detail}`)} | ${cell(started.length === 0 ? "none" : started.join(", "))} |`);
+      const started = [...outcome.started.map(escapeMarkdown), ...outcome.failed.map((text) => `refused: ${escapeMarkdown(text)}`)];
+      lines.push(`| #${String(outcome.pull)} | ${escapeMarkdown(outcome.mergeState)} | ${outcome.result}: ${escapeMarkdown(outcome.detail)} | ${started.length === 0 ? "none" : started.join(", ")} |`);
     }
   }
-  const noReads = report.outcomes.flatMap((outcome) => outcome.noRead.map((item) => `#${String(outcome.pull)} \`${item.check}\`: ${item.why}`));
-  if (noReads.length > 0) lines.push("", "No read (never a pass):", "", ...noReads.map((text) => `- ${cell(text)}`));
+  const noReads = report.outcomes.flatMap((outcome) => outcome.noRead.map((item) => `- #${String(outcome.pull)} ${escapeMarkdown(item.check)}: ${escapeMarkdown(item.why)}`));
+  if (noReads.length > 0) lines.push("", "No read (never a pass):", "", ...noReads);
   return `${lines.join("\n")}\n`;
-}
-
-/** This function gives a text for the data of a workflow command. */
-function data(text: string): string {
-  return text.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
 }
 
 /** This function gives the workflow commands (annotations) of the outcomes. */
@@ -449,10 +447,10 @@ export function annotations(outcomes: readonly Outcome[]): string[] {
   const lines: string[] = [];
   for (const outcome of outcomes) {
     const pull = `#${String(outcome.pull)}`;
-    if (outcome.result === "error" || outcome.result === "timeout") lines.push(`::error title=Queue::${data(`${pull}: ${outcome.detail}`)}`);
-    if (outcome.result === "refused") lines.push(`::warning title=Queue::${data(`${pull}: ${outcome.detail}`)}`);
-    for (const text of outcome.failed) lines.push(`::error title=Queue::${data(`${pull}: workflow_dispatch refused ${text}`)}`);
-    for (const item of outcome.noRead) lines.push(`::warning title=Queue no read::${data(`${pull} ${item.check}: ${item.why}`)}`);
+    if (outcome.result === "error" || outcome.result === "timeout") lines.push(`::error title=Queue::${escapeWorkflowData(`${pull}: ${outcome.detail}`)}`);
+    if (outcome.result === "refused") lines.push(`::warning title=Queue::${escapeWorkflowData(`${pull}: ${outcome.detail}`)}`);
+    for (const text of outcome.failed) lines.push(`::error title=Queue::${escapeWorkflowData(`${pull}: workflow_dispatch refused ${text}`)}`);
+    for (const item of outcome.noRead) lines.push(`::warning title=Queue no read::${escapeWorkflowData(`${pull} ${item.check}: ${item.why}`)}`);
   }
   return lines;
 }
@@ -481,12 +479,12 @@ export async function runQueue(api: Api, input: QueueInput): Promise<Report> {
 export async function main(env: NodeJS.ProcessEnv = process.env, fetcher: Fetch = fetch, sleep: (ms: number) => Promise<void> = (ms) => new Promise((done) => setTimeout(done, ms))): Promise<number> {
   const repository = env["GITHUB_REPOSITORY"] ?? "";
   if (!/^[^/\s]+\/[^/\s]+$/.test(repository)) {
-    console.log(`::error::GITHUB_REPOSITORY is "${repository}", not <owner>/<name>.`);
+    console.log(`::error::${escapeWorkflowData(`GITHUB_REPOSITORY is "${repository}", not <owner>/<name>.`)}`);
     return 1;
   }
   const wait = Number(env["WAIT_SECONDS"] ?? "90");
   if (!Number.isFinite(wait) || wait < 0 || wait > 300) {
-    console.log(`::error::WAIT_SECONDS is "${env["WAIT_SECONDS"] ?? ""}". Give a number of seconds from 0 to 300.`);
+    console.log(`::error::${escapeWorkflowData(`WAIT_SECONDS is "${env["WAIT_SECONDS"] ?? ""}". Give a number of seconds from 0 to 300.`)}`);
     return 1;
   }
   const apiUrl = env["GITHUB_API_URL"] ?? "https://api.github.com";
@@ -499,7 +497,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env, fetcher: Fetch 
     if (base === "") throw new Error(`the API gives no default branch of ${repository}`);
     report = await runQueue(api, { repository, base, timing });
   } catch (error) {
-    console.log(`::error title=Queue::${data(`The queue cannot read the state of the pull requests, so it changes nothing: ${error instanceof Error ? error.message : String(error)}`)}`);
+    console.log(`::error title=Queue::${escapeWorkflowData(`The queue cannot read the state of the pull requests, so it changes nothing: ${error instanceof Error ? error.message : String(error)}`)}`);
     return 1;
   }
   const text = summaryText(report);
