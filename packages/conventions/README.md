@@ -239,6 +239,8 @@ conventions map --overlay homes.json --markdown   # with more homes from a JSON 
 
 Each home can give `signatures`: the names of functions that only the home has, as regular expressions of a whole name. The rule `home-package` breaks on a new function with such a name in another repository. Its message says if the home already exports the name. The index of the exports is `src/home-exports.ts`. The script `scripts/homes/exports.ts` of the template writes it from the latest version of each home on npm.
 
+A home can give `pending`: the names of its packages that are not on npm yet. The table marks such a package "(not on npm)". A planned home has no packages, so its `pending` names are its planned packages. The function `npmDrift(homes, facts)` compares the map with the answers of npm. It finds a package of a published home that is not on npm, a pending name that is on npm, a package of an unpublished home that is on npm, and a name that npm did not answer. A planned home with no pending name is a no read. In the template repository, `node scripts/homes/npm-drift.ts --check` asks npm for each name of the map and exits 1 on a difference. A workflow runs it each week and on each change of the map.
+
 An overlay file has the shape `{ "homes": [...] }`. A home of the overlay takes the place of the home with the same area. The private repositories use an overlay, because the public map names only public packages.
 
 ## Add a rule
