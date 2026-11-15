@@ -1,4 +1,5 @@
-// The step of the action pull-of-run (action.yml), in the job pull of reusable-ci.yml. A run that workflow_dispatch
+// The step of the action pull-of-run (action.yml), in the job pull of reusable-ci.yml and in the job changes of a gate
+// with paths (CI.md, "A dispatched run of a gate"). A run that workflow_dispatch
 // starts has no pull request in its event file, for example a gate that the queue starts (CI.md, "The queue"). This step
 // finds the open pull request of the branch of the run. It gives the base, the head, the labels and the text of the pull
 // request to the jobs changesets, release-check and checks:
