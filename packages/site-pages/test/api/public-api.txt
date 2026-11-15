@@ -205,8 +205,6 @@ Example: build/demo.d.ts#Example
 TextPart: build/demo.d.ts#TextPart
 examples: build/demo.d.ts#examples
 markedText: build/demo.d.ts#markedText
-partsAt: build/demo.d.ts#partsAt
-partsOf: build/demo.d.ts#partsOf
 setField: build/demo.d.ts#setField
 verdict: build/demo.d.ts#verdict
 
@@ -714,12 +712,6 @@ export declare function examples(row: HTMLElement, items: readonly Example[], pi
 
 ### build/demo.d.ts#markedText
 export declare function markedText(parts: readonly TextPart[], label: string): HTMLPreElement;
-
-### build/demo.d.ts#partsAt
-export declare function partsAt(text: string, ranges: readonly (readonly [start: number, end: number])[]): TextPart[];
-
-### build/demo.d.ts#partsOf
-export declare function partsOf(text: string, find: string): TextPart[];
 
 ### build/demo.d.ts#setField
 export declare function setField(field: HTMLInputElement | HTMLTextAreaElement, value: string): void;
