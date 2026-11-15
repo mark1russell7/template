@@ -4,8 +4,8 @@
  */
 
 import { OPEN_CLASSES } from "../data/status.ts";
-import type { BoardItem, CheckState, StatusBoardData, StatusClass } from "../data/types.ts";
-import { longDate } from "./dates.ts";
+import type { BoardItem, CheckState, KpiMeasure, StatusBoardData, StatusClass } from "../data/types.ts";
+import { longDate, shortDate } from "./dates.ts";
 import { escapeHtml, inlineMarkdown, link, listText, plural } from "./html.ts";
 import { pageShell, type PageOptions } from "./theme.ts";
 
@@ -206,14 +206,30 @@ function openWork(data: StatusBoardData): string {
  * This function renders the measures of `kpi.json`: their values, the date of the data and the engines that made it.
  * A measure with its own date shows that date in a column, so that the line above the table stays true.
  * A measure that names what it does not count shows that text under the table.
+ * A measure with targets shows its next target with its unit: the first target on or after the date of its data.
+ * Without such a target, the cell shows the last target with the word "(past)".
  */
 function measures(data: StatusBoardData): string {
   const { kpi } = data;
   if (kpi === undefined) return "";
   const ownDates = kpi.measures.some((measure) => measure.at !== undefined);
+  const anyTargets = kpi.measures.some((measure) => measure.targets !== undefined);
   const dateCell = (at: string): string => (ownDates ? `<td><time datetime="${escapeHtml(at)}">${escapeHtml(longDate(at))}</time></td>` : "");
+  const targetCell = (measure: KpiMeasure, at: string): string => {
+    if (!anyTargets) return "";
+    const targets = measure.targets ?? [];
+    const next = targets.find((target) => target.by >= at.slice(0, 10)) ?? targets.at(-1);
+    if (next === undefined) return "<td></td>";
+    const day = `${shortDate(next.by)}, ${next.by.slice(0, 4)}`;
+    const unit = measure.unit === undefined ? "" : ` ${escapeHtml(measure.unit)}`;
+    const past = next.by < at.slice(0, 10) ? " (past)" : "";
+    return `<td>${next.value}${unit} by <time datetime="${escapeHtml(next.by)}">${escapeHtml(day)}</time>${past}</td>`;
+  };
   const rows = kpi.measures
-    .map((measure) => `<tr><th scope="row">${escapeHtml(measure.id)}</th><td>${measure.value}${measure.unit === undefined ? "" : ` ${escapeHtml(measure.unit)}`}</td>${dateCell(measure.at ?? kpi.at)}</tr>`)
+    .map((measure) => {
+      const at = measure.at ?? kpi.at;
+      return `<tr><th scope="row">${escapeHtml(measure.id)}</th><td>${measure.value}${measure.unit === undefined ? "" : ` ${escapeHtml(measure.unit)}`}</td>${targetCell(measure, at)}${dateCell(at)}</tr>`;
+    })
     .join("");
   const limits = kpi.measures
     .filter((measure) => measure.notCounted !== undefined)
@@ -225,7 +241,7 @@ function measures(data: StatusBoardData): string {
     `<section class="sp-section" aria-labelledby="measures"><h2 id="measures">Measures</h2>` +
     `<p>${ownDates ? "The data date of the file is" : "The data of these numbers is from"} <time datetime="${escapeHtml(kpi.at)}" data-sp-data-date>${escapeHtml(longDate(kpi.at))}</time>. The build of ${commit} published them.</p>` +
     (engines.length > 0 ? `<p>The engines of the data: ${listText(engines.map((engine) => `<code>${escapeHtml(engine.name)}</code> ${escapeHtml(engine.version)}`))}.</p>` : "") +
-    `<div class="sp-table-box" tabindex="0" role="region" aria-label="Measures"><table class="sp-table"><thead><tr><th scope="col">Measure</th><th scope="col">Value</th>${ownDates ? '<th scope="col">Data date</th>' : ""}</tr></thead><tbody>${rows}</tbody></table></div>` +
+    `<div class="sp-table-box" tabindex="0" role="region" aria-label="Measures"><table class="sp-table"><thead><tr><th scope="col">Measure</th><th scope="col">Value</th>${anyTargets ? '<th scope="col">Next target</th>' : ""}${ownDates ? '<th scope="col">Data date</th>' : ""}</tr></thead><tbody>${rows}</tbody></table></div>` +
     limits +
     "</section>"
   );

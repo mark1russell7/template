@@ -30,7 +30,7 @@ export interface ScaffoldData {
   readonly presets: readonly ScaffoldPreset[];
 }
 
-/** The shared workflows of the repository, as the reader of `@mark1russell7/conventions` gives them. */
+/** The shared workflows and the composite actions of the repository, as the readers of `@mark1russell7/conventions` give them. */
 import type { Workflow } from "@mark1russell7/conventions";
 
 export type { Workflow, WorkflowInput, WorkflowJob, WorkflowStep } from "@mark1russell7/conventions";

@@ -1,15 +1,16 @@
 // The script of the action coverage. It has two commands:
 //
-//   node coverage.ts packages            reads the JSON of "pnpm ls -r --json --depth -1" from stdin and gives the
+//   node coverage.ts packages <file>     reads the JSON of "pnpm ls -r --json --depth -1" from the file and gives the
 //                                        folder of each package whose test script starts Vitest, one on each line
 //   node coverage.ts summary <floor> <dir>...
 //                                        reads <dir>/coverage/coverage-summary.json of each folder, gives a Markdown
 //                                        table, and exits with 1 when a folder has no summary or a value under the floor
 //
 // The folders are relative to the current folder. The floor is a percent, and 0 is no floor.
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 
 /** The four measures of the summary of Vitest (the reporter json-summary of istanbul). */
 export const MEASURES = ["statements", "branches", "functions", "lines"] as const;
@@ -59,7 +60,10 @@ export function coverageTable(rows: readonly Row[], floor: number): { markdown: 
 function main(argv: readonly string[]): number {
   const [command, ...rest] = argv;
   if (command === "packages") {
-    const list: unknown = JSON.parse(readFileSync(0, "utf8"));
+    // The list comes from a file, not from stdin. A read of a pipe that is not blocking fails with EAGAIN on the runners.
+    const [file] = rest;
+    if (file === undefined) throw new Error('The command "packages" needs the file of the JSON of "pnpm ls".');
+    const list: unknown = JSON.parse(readFileSync(file, "utf8"));
     const testScriptOf = (dir: string): string | undefined => {
       const file = resolve(dir, "package.json");
       return existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as { scripts?: { test?: string } }).scripts?.test : undefined;
@@ -83,4 +87,4 @@ function main(argv: readonly string[]): number {
   throw new Error(`Unknown command "${command ?? ""}". Use "packages" or "summary".`);
 }
 
-if (import.meta.main) process.exitCode = main(process.argv.slice(2));
+if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) process.exitCode = main(process.argv.slice(2));

@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
-import { globFolders, globToRegExp, packageFolders, readConfig, runCli, runReports, summaryMarkdown, workspaceGlobs, type CliIo } from "./index.ts";
+import * as home from "@mark1russell7/conventions/workspace";
+import { globFolders, globToRegExp, packageFolders, readConfig, REPORT_FILE, reportFolders, runCli, runReports, summaryMarkdown, workspaceGlobs, type CliIo } from "./index.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "api-report-run-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -42,43 +43,39 @@ function cli(cwd: string, args: string[], env: Record<string, string> = {}): { c
   return { code, stdout, stderr };
 }
 
-describe("the globs", () => {
-  it("escapes the special characters, and knows *, ?, ** and braces", () => {
-    expect(globToRegExp("packages/*").test("packages/a")).toBe(true);
-    expect(globToRegExp("packages/*").test("packages/a/b")).toBe(false);
-    expect(globToRegExp("packages/**").test("packages/a/b")).toBe(true);
-    expect(globToRegExp("a/**/z").test("a/z")).toBe(true);
-    expect(globToRegExp("a/**/z").test("a/b/c/z")).toBe(true);
-    expect(globToRegExp("a.b/?").test("a.b/c")).toBe(true);
-    expect(globToRegExp("a.b/?").test("axb/c")).toBe(false);
-    expect(globToRegExp("{apps,libs}/*").test("libs/x")).toBe(true);
-    expect(globToRegExp("(x)+[y]$").test("(x)+[y]$")).toBe(true);
-    expect(() => globToRegExp("{a,b")).toThrow(/no "}"/);
+describe("the functions of the workspace", () => {
+  it("are the functions of @mark1russell7/conventions/workspace, not a copy", () => {
+    expect(globFolders).toBe(home.globFolders);
+    expect(globToRegExp).toBe(home.globToRegExp);
+    expect(packageFolders).toBe(home.packageFolders);
+    expect(reportFolders).toBe(home.reportFolders);
+    expect(workspaceGlobs).toBe(home.workspaceGlobs);
   });
+});
 
-  it("finds the folders of a glob, without node_modules and dot folders", () => {
-    const root = fixture({ "apps/x/y/f": "", "apps/x/node_modules/m/f": "", "apps/.cache/f": "", "libs/z/f": "" });
-    expect(globFolders(root, "apps/*")).toEqual(["apps/x"]);
-    expect(globFolders(root, "apps/**")).toEqual(["apps", "apps/x", "apps/x/y"]);
-    expect(globFolders(root, "{apps,libs}/*")).toEqual(["apps/x", "libs/z"]);
-    expect(globFolders(root, "./libs/z/")).toEqual(["libs/z"]);
-    expect(globFolders(root, "none/*")).toEqual([]);
-  });
+describe("a public root with a private workspace", () => {
+  // Two repositories on 2026-11-08: the workspace names only a private site, and the root is the public package
+  const repository = (): string =>
+    fixture({
+      "package.json": { name: "lib", types: "./index.d.ts" },
+      "index.d.ts": "export declare const lib: 1;\n",
+      "pnpm-workspace.yaml": 'packages:\n  - "site"\n',
+      "site/package.json": { name: "site", private: true },
+    });
 
-  it("reads the globs of pnpm-workspace.yaml and of the workspaces field", () => {
-    expect(workspaceGlobs(workspace())).toEqual(["packages/*", "!packages/ignored"]);
-    expect(workspaceGlobs(fixture({ "pnpm-workspace.yaml": "packages: ['a/*', \"b\"]\n" }))).toEqual(["a/*", "b"]);
-    expect(workspaceGlobs(fixture({ "package.json": { workspaces: ["x/*"] } }))).toEqual(["x/*"]);
-    expect(workspaceGlobs(fixture({ "package.json": { workspaces: { packages: ["y/*"] } } }))).toEqual(["y/*"]);
-    expect(workspaceGlobs(fixture({ "package.json": {} }))).toBeUndefined();
-  });
-
-  it("finds the package folders, and a repository with no workspace is one package", () => {
-    const root = workspace();
-    expect(packageFolders(root)).toEqual(["a", "b", "hidden"].map((name) => join(root, "packages", name)));
-    expect(packageFolders(root, ["!packages/a", "packages/*"])).toEqual(["b", "hidden", "ignored"].map((name) => join(root, "packages", name)));
-    const single = fixture({ "package.json": { name: "solo" } });
-    expect(packageFolders(single)).toEqual([single]);
+  it("writes and checks the report of the root with no folder named", () => {
+    const root = repository();
+    const before = runReports({ mode: "check", root });
+    expect(before.failed).toBe(true);
+    expect(before.packages.find((item) => item.folder === ".")).toMatchObject({ status: "new" });
+    expect(runReports({ mode: "update", root }).packages.find((item) => item.folder === ".")).toMatchObject({ status: "new" });
+    expect(existsSync(join(root, REPORT_FILE))).toBe(true);
+    const after = runReports({ mode: "check", root });
+    expect(after.failed).toBe(false);
+    expect(after.packages.map((item) => [item.folder, item.status])).toEqual([
+      [".", "same"],
+      ["site", "private"],
+    ]);
   });
 });
 
@@ -92,6 +89,14 @@ describe("the configuration", () => {
     });
     expect(() => readConfig(fixture({ "package.json": { apiReport: { packages: "libs/*" } } }))).toThrow(/array of globs/);
     expect(() => readConfig(fixture({ "package.json": { apiReport: { reports: "x" } } }))).toThrow(/unknown fields: reports/);
+  });
+
+  it("reads the field entriesOnly, and refuses a value that is not a boolean", () => {
+    expect(readConfig(fixture({ "package.json": { apiReport: { entriesOnly: true } } }))).toEqual({ entriesOnly: true });
+    expect(readConfig(fixture({ "package.json": { apiReport: { entriesOnly: false } } }))).toEqual({ entriesOnly: false });
+    for (const value of ["true", 1, null, []]) {
+      expect(() => readConfig(fixture({ "package.json": { apiReport: { entriesOnly: value } } })), JSON.stringify(value)).toThrow("apiReport.entriesOnly must be true or false.");
+    }
   });
 
   it("refuses a report path outside the package folder", () => {
@@ -313,11 +318,113 @@ describe("check and update", () => {
     expect(read({ order: null })).toThrow("must be a text, a number or a boolean");
   });
 
+  it("puts the doc comments on the page of each export only with the field docs, and holds them in the check", () => {
+    const pages = [{ package: "packages/a", pages: [], reference: "each.md", docs: true }];
+    const root = workspace({ apiReport: { pages } });
+    writeFileSync(join(root, "packages/a/index.d.ts"), "/** The value a. */\nexport declare const a: 1;\n");
+    expect(cli(root, ["update"]).code).toBe(0);
+    const page = readFileSync(join(root, "each.md"), "utf8");
+    expect(page).toContain("/** The value a. */\nconst a: 1;");
+    expect(cli(root, ["check"]).code).toBe(0);
+    writeFileSync(join(root, "packages/a/index.d.ts"), "/** The changed value a. */\nexport declare const a: 1;\n");
+    expect(cli(root, ["check"]).stdout).toContain("each.md: the page differs from the report.");
+
+    // Without the field, a doc comment changes neither the report nor the page
+    const plain = workspace({ apiReport: { pages: [{ package: "packages/a", pages: [], reference: "each.md" }] } });
+    writeFileSync(join(plain, "packages/a/index.d.ts"), "/** The value a. */\nexport declare const a: 1;\n");
+    cli(plain, ["update"]);
+    expect(readFileSync(join(plain, "each.md"), "utf8")).not.toContain("The value a.");
+    expect(readFileSync(join(plain, "packages/a", REPORT_FILE), "utf8")).not.toContain("The value a.");
+
+    const read = (docs: unknown) => () => readConfig(workspace({ apiReport: { pages: [{ package: "packages/a", pages: ["a.md"], reference: "each.md", docs }] } }));
+    expect(read(true)).not.toThrow();
+    expect(read("yes")).toThrow("docs must be a boolean");
+    expect(() => readConfig(workspace({ apiReport: { pages: [{ package: "packages/a", pages: ["a.md"], docs: true }] } }))).toThrow("docs needs the field reference");
+  });
+
   it("gives exit code 2 and the help for wrong arguments", () => {
     expect(cli(temp, []).code).toBe(2);
     expect(cli(temp, ["check", "--bad"]).stderr).toContain("An unknown option: --bad");
     expect(cli(temp, ["check", "--report"]).stderr).toContain("needs a value");
     expect(cli(temp, ["--help"]).stdout).toContain("Usage: api-report");
+  });
+});
+
+describe("the option entriesOnly", () => {
+  /** A workspace with one package. Its entry gives a name from a chunk of a bundler, or declares the name itself. */
+  const bundled = (chunk: boolean, rootManifest: Record<string, unknown> = {}): string =>
+    fixture({
+      "package.json": { name: "root", private: true, ...rootManifest },
+      "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n',
+      "packages/lib/package.json": { name: "lib", exports: { ".": { types: "./build/index.d.mts" } } },
+      ...(chunk
+        ? {
+            "packages/lib/build/index.d.mts": 'import { t as html } from "./html-o5bDHjNi.mjs";\nexport { html };\n',
+            "packages/lib/build/html-o5bDHjNi.d.mts": "declare function html(): void;\nexport { html as t };\n",
+          }
+        : { "packages/lib/build/index.d.mts": "declare function html(): void;\nexport { html };\n" }),
+    });
+  const reportOf = (root: string): string => join(root, "packages/lib", REPORT_FILE);
+  const error =
+    "Errors:\n  packages/lib: The report of lib has declarations in files that are not the declaration file of an entry (the option entriesOnly): " +
+    "build/html.chunk.d.mts (html). Export each name from an entry of the exports field, or change the config of the bundler.\n";
+
+  it("fails check and update for a name from a chunk, and update writes no report", () => {
+    const root = bundled(true, { apiReport: { entriesOnly: true } });
+    for (const mode of ["check", "update"]) {
+      const result = cli(root, [mode]);
+      expect(result.code, mode).toBe(1);
+      expect(result.stdout, mode).toContain(error);
+      expect(existsSync(reportOf(root)), mode).toBe(false);
+    }
+    expect(summaryMarkdown(runReports({ mode: "check", root, entriesOnly: true }))).toContain("build/html.chunk.d.mts (html)");
+  });
+
+  it("fails with the flag --entries-only also when the report is current, and update keeps the old report", () => {
+    const root = bundled(true);
+    expect(cli(root, ["update"]).code).toBe(0);
+    expect(cli(root, ["check"]).code).toBe(0);
+    const before = readFileSync(reportOf(root), "utf8");
+    const check = cli(root, ["check", "--entries-only"]);
+    expect(check.code).toBe(1);
+    expect(check.stdout).toContain(error);
+    const update = cli(root, ["update", "--entries-only"]);
+    expect(update.code).toBe(1);
+    expect(update.stdout).toContain(error);
+    expect(readFileSync(reportOf(root), "utf8")).toBe(before);
+  });
+
+  it("passes when each declaration is in an entry file", () => {
+    const root = bundled(false, { apiReport: { entriesOnly: true } });
+    expect(cli(root, ["update"]).code).toBe(0);
+    expect(readFileSync(reportOf(root), "utf8")).toContain("html: build/index.d.mts#html\n");
+    expect(cli(root, ["check"]).code).toBe(0);
+  });
+
+  it("writes the report of a chunk as before when the option is off", () => {
+    const expected = [
+      "# The public API of lib",
+      "#",
+      "# The names of each entry of the exports field, and the declaration of each name, without comments",
+      "# and private members. The command `api-report check` compares this file with the built .d.ts files.",
+      "# To accept a change of the API, start the build, then `api-report update`, and review the diff.",
+      "",
+      "## . (build/index.d.mts): names",
+      "",
+      "html: build/html.chunk.d.mts#html",
+      "",
+      "## Declarations",
+      "",
+      "### build/html.chunk.d.mts#html",
+      "declare function html(): void;",
+      "",
+    ].join("\n");
+    for (const entriesOnly of [undefined, false]) {
+      const root = bundled(true, entriesOnly === undefined ? {} : { apiReport: { entriesOnly } });
+      expect(cli(root, ["update"]).code).toBe(0);
+      expect(readFileSync(reportOf(root), "utf8")).toBe(expected);
+      expect(cli(root, ["check"]).code).toBe(0);
+    }
   });
 });
 

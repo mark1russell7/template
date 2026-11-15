@@ -1,0 +1,16 @@
+{
+  "repository": {
+    "full_name": "owner/site",
+    "default_branch": "main"
+  },
+  "workflow_run": {
+    "name": "CI",
+    "event": "push",
+    "conclusion": "success",
+    "head_branch": "main",
+    "head_sha": "0123456789abcdef0123456789abcdef01234567",
+    "head_repository": {
+      "full_name": "owner/site"
+    }
+  }
+}

@@ -49,7 +49,9 @@ on:
       stop-minutes:
         description: >-
           The time after which Stryker stops, so that the job can still write the summary and upload the report. 0
-          gives timeout-minutes minus 10. A selection that Stryker stops has no score, and it fails.
+          gives stopMinutes of the lane (rigor-mutation minutes, 0.2.4 or later), at most timeout-minutes minus 10.
+          An older rigor-mutation gives timeout-minutes minus 10. A selection that Stryker stops has no score, and it
+          fails.
         type: number
         default: 0
       dry-run:
@@ -104,7 +106,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           package_json_file: ${{ inputs.working-directory }}/package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -113,6 +115,14 @@ jobs:
           cache: pnpm
           cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      # The jobs mutate and gate use scores --alone and --reports of rigor-mutation 0.1.8.
+      - name: Version
+        run: |
+          help=$(pnpm exec rigor-mutation --help || true)
+          if ! grep -qF -- "--reports <dir>" <<< "$help"; then
+            echo "::error::This workflow needs @mark1russell7/rigor-mutation 0.1.8 or later (scores --reports and --alone)."
+            exit 1
+          fi
       # The check of the disables is fast, so it runs once here and not on each runner.
       - name: Disables
         env:
@@ -160,8 +170,8 @@ jobs:
     strategy:
       fail-fast: false
       # The runners are shared by all repositories of the account. The rule runner-budget reads only a number here,
-      # so this is not an input.
-      max-parallel: 2
+      # so this is not an input. 3 is the most that the rule accepts.
+      max-parallel: 3
       matrix:
         selection: ${{ fromJSON(needs.plan.outputs.selections) }}
     defaults:
@@ -175,7 +185,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           package_json_file: ${{ inputs.working-directory }}/package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -194,7 +204,18 @@ jobs:
           CHANGED: ${{ inputs.changed }}
         run: |
           stop=$STOP_MINUTES
-          if [ "$stop" -eq 0 ]; then stop=$((TIMEOUT_MINUTES - 10)); fi
+          if [ "$stop" -eq 0 ]; then
+            stop=$((TIMEOUT_MINUTES - 10))
+            # rigor-mutation 0.2.4 gives the stop of the lane, so plan-check and the job use one stop.
+            if minutes=$(pnpm exec rigor-mutation minutes --lane "$LANE" 2> /dev/null); then
+              lane_stop=$(sed -n 's/^stop=\([0-9][0-9]*\)$/\1/p' <<< "$minutes")
+              if [ -n "$lane_stop" ] && [ "$lane_stop" -le "$stop" ]; then
+                stop=$lane_stop
+              elif [ -n "$lane_stop" ]; then
+                echo "::notice::$SELECTION: the stop of the lane is $lane_stop minutes. The job stops Stryker after $stop minutes, 10 before timeout-minutes."
+              fi
+            fi
+          fi
           if [ "$stop" -le 0 ]; then
             echo "::error::stop-minutes is $stop. Give a positive stop-minutes, or a timeout-minutes above 10."
             exit 1
@@ -228,7 +249,8 @@ jobs:
           REPORT_ONLY: ${{ inputs.report-only }}
           TEST_COUNTS: ${{ inputs.test-counts }}
         run: |
-          options=(--test-files)
+          # --alone: the gate of a package with "gateOver": "package" reads all its parts, in the job gate.
+          options=(--test-files --alone)
           if [ -n "$TEST_COUNTS" ]; then options+=(--last "$TEST_COUNTS"); fi
           if pnpm exec rigor-mutation scores "$SELECTION" --lane "$LANE" --summary "$GITHUB_STEP_SUMMARY" "${options[@]}"; then :
           elif [ "$REPORT_ONLY" = "true" ]; then echo "::warning::$SELECTION is under its gate. This run is report only."
@@ -258,7 +280,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           package_json_file: ${{ inputs.working-directory }}/package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -290,13 +312,11 @@ jobs:
             if [ -f "$TEST_COUNTS" ]; then cp "$TEST_COUNTS" "$counts"; fi
             options+=(--last "$TEST_COUNTS" --write-last "$counts")
           fi
+          mapfile -t names < <(node -e 'for (const s of JSON.parse(process.argv[1])) console.log(s)' "$SELECTIONS")
+          # One command reads all the selections, so the gate of a package with "gateOver": "package" reads the sum of
+          # its parts. A selection with no report is a no read: "scores" names the missing file.
           status=0
-          for name in $(node -e 'for (const s of JSON.parse(process.argv[1])) console.log(s)' "$SELECTIONS"); do
-            # A selection with no report fails: "scores" names the missing file.
-            if out=$(pnpm exec rigor-mutation scores "$name" --lane "$LANE" --report "$REPORTS/mutation-$name/mutation.json" "${options[@]}"); then :; else status=1; fi
-            echo "$out"
-            echo "- $(head -n 1 <<< "$out")" >> "$GITHUB_STEP_SUMMARY"
-          done
+          pnpm exec rigor-mutation scores "${names[@]}" --lane "$LANE" --reports "$REPORTS" --summary "$GITHUB_STEP_SUMMARY" "${options[@]}" || status=1
           if [ "$REPORT_ONLY" = "true" ]; then exit 0; fi
           exit "$status"
       # The counts of the selections that passed. Commit the file as test-counts after a good run.

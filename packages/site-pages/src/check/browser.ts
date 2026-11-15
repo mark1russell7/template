@@ -60,6 +60,15 @@ export function findBrowser(given?: string, env: NodeJS.ProcessEnv = process.env
   return playwrightChromium(platform, env) ?? systemBrowsers(platform, env).find((file) => existsSync(file));
 }
 
+/**
+ * The default time limit of one call of the DevTools protocol, in milliseconds. A call with no reply in this time fails.
+ * Thus a hung page fails its view, and the job limit does not stop the check.
+ */
+export const CALL_LIMIT_MS = 60_000;
+
+/** This error tells that a call of the DevTools protocol got no reply in its time limit. The page can be hung. */
+export class NoReplyError extends Error {}
+
 /** A message of the DevTools protocol. */
 interface Message {
   id?: number;
@@ -72,6 +81,12 @@ interface Message {
 /** An event handler of a page. */
 type Listener = (params: Record<string, unknown>) => void;
 
+/** The reply of `Runtime.evaluate` and `Runtime.callFunctionOn` with `returnByValue`. */
+interface Reply {
+  result?: { value?: unknown };
+  exceptionDetails?: { text?: string; exception?: { description?: string } };
+}
+
 /** One page of a started browser. */
 export interface Page {
   /** This function sends a command of the protocol and returns its result. */
@@ -82,7 +97,16 @@ export interface Page {
   once(method: string, ms: number): Promise<Record<string, unknown>>;
   /** This function evaluates the expression in the page, and waits for a promise. */
   evaluate<T>(expression: string): Promise<T>;
+  /**
+   * This function calls the function `source` in the page with the values `args`, and waits for a promise. The values go
+   * to the page as the arguments of the call (`Runtime.callFunctionOn`), not as text of the code. Thus a value from a URL
+   * or from a page cannot change the code.
+   */
+  call<T>(source: string, ...args: readonly CallValue[]): Promise<T>;
 }
+
+/** A value that {@link Page.call} gives to a function in the page. It goes to the page as JSON. */
+export type CallValue = string | number | boolean | null | readonly CallValue[] | { readonly [key: string]: CallValue };
 
 /** A started browser. */
 export interface Browser {
@@ -97,9 +121,11 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * This function starts the browser in headless mode with a new profile, and connects to its page.
  * The browser picks a free port, so two checks can run at the same time.
  *
+ * Each call of the page gets no more than `callMs` for its reply (see `CALL_LIMIT_MS`).
+ *
  * @throws Error when the browser does not start in `timeoutMs`
  */
-export async function launch(executable: string, timeoutMs = 30_000): Promise<Browser> {
+export async function launch(executable: string, timeoutMs = 30_000, callMs: number = CALL_LIMIT_MS): Promise<Browser> {
   const profile = mkdtempSync(join(tmpdir(), "site-check-"));
   const args = [
     "--headless=new",
@@ -127,7 +153,13 @@ export async function launch(executable: string, timeoutMs = 30_000): Promise<Br
       child.kill();
       await Promise.race([new Promise((resolve) => child.once("exit", resolve)), sleep(5000)]);
     }
-    rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    try {
+      rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    } catch (error) {
+      // On Windows, a child process of the browser can keep a file of the profile open for some seconds after the stop.
+      // A profile that stays in the temporary folder does not change the result, so the check continues with a warning.
+      process.stderr.write(`site-pages check: the browser profile ${profile} stays in the temporary folder: ${error instanceof Error ? error.message : String(error)}\n`);
+    }
   };
   try {
     const portFile = join(profile, "DevToolsActivePort");
@@ -148,7 +180,7 @@ export async function launch(executable: string, timeoutMs = 30_000): Promise<Br
         await sleep(100);
       }
     }
-    const page = await connect(target.webSocketDebuggerUrl);
+    const page = await connect(target.webSocketDebuggerUrl, callMs);
     return {
       page: page.page,
       close: async () => {
@@ -162,7 +194,7 @@ export async function launch(executable: string, timeoutMs = 30_000): Promise<Br
   }
 }
 
-async function connect(url: string): Promise<{ page: Page; close: () => void }> {
+async function connect(url: string, callMs: number): Promise<{ page: Page; close: () => void }> {
   const socket = new WebSocket(url);
   await new Promise<void>((resolve, reject) => {
     socket.addEventListener("open", () => resolve(), { once: true });
@@ -190,7 +222,15 @@ async function connect(url: string): Promise<{ page: Page; close: () => void }> 
     send: (method, params = {}) =>
       new Promise((resolve, reject) => {
         const id = ++sequence;
-        pending.set(id, { resolve, reject });
+        const timer = setTimeout(() => {
+          pending.delete(id);
+          reject(new NoReplyError(`the browser did not answer ${method} in ${callMs} ms`));
+        }, callMs);
+        const done = () => clearTimeout(timer);
+        pending.set(id, {
+          resolve: (value) => (done(), resolve(value)),
+          reject: (error) => (done(), reject(error)),
+        });
         socket.send(JSON.stringify({ id, method, params }));
       }),
     on: (method, listener) => listeners.set(method, [...(listeners.get(method) ?? []), listener]),
@@ -209,11 +249,21 @@ async function connect(url: string): Promise<{ page: Page; close: () => void }> 
         page.on(method, listener);
       }),
     evaluate: async <T>(expression: string): Promise<T> => {
-      const reply = (await page.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true })) as {
-        result?: { value?: unknown };
-        exceptionDetails?: { text?: string; exception?: { description?: string } };
-      };
+      const reply = (await page.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true })) as Reply;
       if (reply.exceptionDetails) throw new Error(reply.exceptionDetails.exception?.description ?? reply.exceptionDetails.text ?? "the expression failed");
+      return reply.result?.value as T;
+    },
+    call: async <T>(source: string, ...args: readonly CallValue[]): Promise<T> => {
+      // The global object of the page is the target of the call. A new page after a navigation has a new one.
+      const target = (await page.send("Runtime.evaluate", { expression: "globalThis" })) as { result?: { objectId?: string } };
+      const reply = (await page.send("Runtime.callFunctionOn", {
+        functionDeclaration: source,
+        objectId: target.result?.objectId,
+        arguments: args.map((value) => ({ value })),
+        awaitPromise: true,
+        returnByValue: true,
+      })) as Reply;
+      if (reply.exceptionDetails) throw new Error(reply.exceptionDetails.exception?.description ?? reply.exceptionDetails.text ?? "the function failed");
       return reply.result?.value as T;
     },
   };

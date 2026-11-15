@@ -21,6 +21,8 @@ Each `uses:` of the template has a pin to a commit of `main`. Renovate does not 
 
 A workflow change between the merge of a version and its release run makes the tag job fail with HTTP 403 ("A tag that GitHub refuses"). Thus Renovate does not change `release.yml` or `scripts/release/`. The release session moves the pins of `release.yml` each week, at a quiet time.
 
+Start each command of this file in `~/git/template`, with the path of the repository.
+
 ```sh
 node scripts/release/bump-pins.ts --dry-run <owner/repo> ...
 node scripts/release/bump-pins.ts --notes "<what the new commits bring>" <owner/repo> ...
@@ -56,6 +58,8 @@ After a refusal, the script goes to the next repository. The exit code is 1 when
 
 A version pull request can open after the script made its pull request. Thus do the check again immediately before each merge:
 
+Start each command of this file in `~/git/template`, with the path of the repository.
+
 ```sh
 node scripts/release/bump-pins.ts --check <owner/repo> ...
 ```
@@ -87,6 +91,8 @@ The push to `main` starts `release.yml`. The workflow starts the CI gates, build
 `scripts/release/pack.ts` stops the release when a version is not SemVer. It also stops when a version is not greater than the `latest` version on npm. The registry does not accept a version two times, also after a removal. Thus a bad release gets a new PATCH, and `npm deprecate` marks the bad version.
 
 The rule `unreleased-change` of `@mark1russell7/conventions` fails a pull request that sets a version that npm has. The release skips such a version.
+
+The job `release-check` of the shared CI starts `pack.ts` on each pull request of a public repository (`CI.md`, "The release check of a pull request"). A pull request that changes a shipped file at a version that npm has fails there, before the merge. The error names the package and each file.
 
 When two pull requests set the same version, the second merge changes no version. Then `release.yml` does not start, and the change does not get to npm. In a repository where each pull request sets its version, set the option `versionEachChange` of the rule. Then the CI of that push to `main` fails. Raise the version in a new pull request.
 
@@ -146,6 +152,8 @@ A tag ruleset of the repository must not block the creation of tags by GitHub Ac
 
 npm trusts a workflow only for a package that exists. A new trust expires when no publish uses it in 2 days. Thus the owner bootstraps each new package one time, on the day of its first release:
 
+Start each command of this file in `~/git/template`, with the path of the repository.
+
 ```sh
 node scripts/release/npm-bootstrap.ts --dry-run
 node scripts/release/npm-bootstrap.ts --dispatch
@@ -177,6 +185,8 @@ The action `npm-publish` gives a hint for two failures of the trusted publisher.
 
 For the two failures, the owner makes the trust again, and then starts the release:
 
+Start each command of this file in `~/git/template`, with the path of the repository.
+
 ```sh
 node scripts/release/npm-bootstrap.ts --replace-trust --dispatch
 ```
@@ -194,6 +204,8 @@ The script removes a trust that does not agree with `release.yml`, for example a
 - Trusted publishing needs npm 11.5.1 or later. `npm trust` needs npm 11.15.0 or later.
 
 ## The state of the packages
+
+Start each command of this file in `~/git/template`, with the path of the repository.
 
 ```sh
 node scripts/release/npm-audit.ts            # the packages of this repository

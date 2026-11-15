@@ -5,7 +5,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { compareVersions, parseChangelog } from "@mark1russell7/site-pages";
-import { codePackages, type Break, type PackageInfo, type Rule, type RuleContext } from "../rule.ts";
+import { versionedPackages, type Break, type Rule } from "../rule.ts";
 
 /** This function gives the version and the line (from 1) of the first version section of a changelog, or undefined. */
 function topSection(text: string): { readonly version: string; readonly line: number } | undefined {
@@ -13,14 +13,6 @@ function topSection(text: string): { readonly version: string; readonly line: nu
   if (top === undefined) return undefined;
   const index = text.split(/\r?\n/).findIndex((line) => /^##\s/.test(line) && line.replace(/^##\s+/, "").trim() === top.heading);
   return { version: top.version, line: index + 1 };
-}
-
-/** The packages with a release version: the root package and the code packages that are not private and have a name and a version. */
-function versioned(context: RuleContext): readonly PackageInfo[] {
-  const all = [context.rootPackage, ...codePackages(context)];
-  return all
-    .filter((pkg, index) => all.findIndex((other) => other.file === pkg.file) === index)
-    .filter((pkg) => pkg.manifest["private"] !== true && typeof pkg.manifest["name"] === "string" && typeof pkg.manifest["version"] === "string");
 }
 
 export const changelogVersion: Rule = {
@@ -42,7 +34,7 @@ export const changelogVersion: Rule = {
     const name = String(options["file"]);
     const breaks: Break[] = [];
     let found = 0;
-    for (const pkg of versioned(context)) {
+    for (const pkg of versionedPackages(context)) {
       const file = pkg.folder === "" ? name : `${pkg.folder}/${name}`;
       if (!existsSync(join(context.root, file))) continue;
       found += 1;

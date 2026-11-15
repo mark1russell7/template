@@ -185,9 +185,10 @@ jobs:
 
   post:
     needs: review
-    # The label goes away also when the review job failed, so that the label can start one more review
+    # The label goes away also when the review job failed, so that the label can start one more review.
+    # !cancelled(), not always(): after a cancel, a job with always() asks for a runner, and the next run waits behind it.
     if: >-
-      always() &&
+      !cancelled() &&
       ((needs.review.result == 'success' && needs.review.outputs.run == 'true') ||
       (needs.review.result != 'skipped' && github.event.action == 'labeled'))
     runs-on: ubuntu-latest

@@ -40,6 +40,9 @@ NO_READ_LINE: build/index.d.ts#NO_READ_LINE
 NPM_REGISTRY: build/index.d.ts#NPM_REGISTRY
 type NameHit: build/index.d.ts#NameHit
 type NameRule: build/index.d.ts#NameRule
+type NpmDrift: build/index.d.ts#NpmDrift
+type NpmDriftKind: build/index.d.ts#NpmDriftKind
+type NpmPresence: build/index.d.ts#NpmPresence
 type OptionSpec: build/index.d.ts#OptionSpec
 type OptionValue: build/index.d.ts#OptionValue
 type Options: build/index.d.ts#Options
@@ -59,6 +62,7 @@ type PrivatePattern: build/index.d.ts#PrivatePattern
 type PrivateSources: build/index.d.ts#PrivateSources
 REAL_COMPARE: build/index.d.ts#REAL_COMPARE
 RULES: build/index.d.ts#RULES
+RULE_WARN_DAYS: build/index.d.ts#RULE_WARN_DAYS
 type RegistryAnswer: build/index.d.ts#RegistryAnswer
 type RegistryLookup: build/index.d.ts#RegistryLookup
 type Rule: build/index.d.ts#Rule
@@ -95,18 +99,20 @@ cleanPath: build/index.d.ts#cleanPath
 codePackages: build/index.d.ts#codePackages
 configsOfScript: build/index.d.ts#configsOfScript
 convertGate: build/index.d.ts#convertGate
+coverageProvider: build/index.d.ts#coverageProvider
 createContext: build/index.d.ts#createContext
 cuePreset: build/index.d.ts#cuePreset
 declaredName: build/index.d.ts#declaredName
 defaultOptions: build/index.d.ts#defaultOptions
+exportsRequire: build/index.d.ts#exportsRequire
 findHomes: build/index.d.ts#findHomes
 firstNameMatch: build/index.d.ts#firstNameMatch
 formatResult: build/index.d.ts#formatResult
 gateAfterCancel: build/index.d.ts#gateAfterCancel
 gateTrigger: build/index.d.ts#gateTrigger
 githubFetch: build/index.d.ts#githubFetch
-globFolders: build/index.d.ts#globFolders
-globToRegExp: build/index.d.ts#globToRegExp
+globFolders: build/workspace.chunk.d.ts#globFolders
+globToRegExp: build/workspace.chunk.d.ts#globToRegExp
 hasFile: build/index.d.ts#hasFile
 hasImportMetaMain: build/index.d.ts#hasImportMetaMain
 hasTests: build/index.d.ts#hasTests
@@ -139,9 +145,12 @@ nameMatches: build/index.d.ts#nameMatches
 namedVersions: build/index.d.ts#namedVersions
 noBuildOutput: build/index.d.ts#noBuildOutput
 noLocalPaths: build/index.d.ts#noLocalPaths
+npmDrift: build/index.d.ts#npmDrift
 npmLookup: build/index.d.ts#npmLookup
+npmNames: build/index.d.ts#npmNames
 npmUrl: build/index.d.ts#npmUrl
-packageFolders: build/index.d.ts#packageFolders
+packNoBuildinfo: build/index.d.ts#packNoBuildinfo
+packageFolders: build/workspace.chunk.d.ts#packageFolders
 pagesAfterRelease: build/index.d.ts#pagesAfterRelease
 pagesCalls: build/index.d.ts#pagesCalls
 pagesSite: build/index.d.ts#pagesSite
@@ -161,6 +170,7 @@ publishedMinor: build/index.d.ts#publishedMinor
 publishedMinorRule: build/index.d.ts#publishedMinorRule
 pushMainOnly: build/index.d.ts#pushMainOnly
 reachOf: build/index.d.ts#reachOf
+readAction: build/index.d.ts#readAction
 readConfig: build/index.d.ts#readConfig
 readJsonc: build/index.d.ts#readJsonc
 readOverlay: build/index.d.ts#readOverlay
@@ -169,6 +179,7 @@ releaseFiles: build/index.d.ts#releaseFiles
 releaseNotes: build/index.d.ts#releaseNotes
 replaceLine: build/index.d.ts#replaceLine
 repoOf: build/index.d.ts#repoOf
+reposOf: build/index.d.ts#reposOf
 repositoryIsPublic: build/index.d.ts#repositoryIsPublic
 repositoryOfRemote: build/index.d.ts#repositoryOfRemote
 requiredScripts: build/index.d.ts#requiredScripts
@@ -205,9 +216,17 @@ unreleasedChangeRule: build/index.d.ts#unreleasedChangeRule
 versionTitle: build/index.d.ts#versionTitle
 withOneJob: build/index.d.ts#withOneJob
 workflowParses: build/index.d.ts#workflowParses
-workspaceGlobs: build/index.d.ts#workspaceGlobs
+workspaceGlobs: build/workspace.chunk.d.ts#workspaceGlobs
 workspaceProtocol: build/index.d.ts#workspaceProtocol
 yamlFaults: build/index.d.ts#yamlFaults
+
+## ./workspace (build/workspace.d.ts): names
+
+globFolders: build/workspace.chunk.d.ts#globFolders
+globToRegExp: build/workspace.chunk.d.ts#globToRegExp
+packageFolders: build/workspace.chunk.d.ts#packageFolders
+reportFolders: build/workspace.chunk.d.ts#reportFolders
+workspaceGlobs: build/workspace.chunk.d.ts#workspaceGlobs
 
 ## bin: 1 commands
 
@@ -249,6 +268,7 @@ interface CheckOptions {
   readonly base?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly rules?: readonly Rule[];
+  readonly today?: string;
 }
 
 ### build/index.d.ts#CheckResult
@@ -320,6 +340,8 @@ interface Home {
   readonly covers: string;
   readonly packages: readonly string[];
   readonly repo: string;
+  readonly alsoIn?: readonly string[];
+  readonly pending?: readonly string[];
   readonly state: HomeState;
   readonly words: readonly string[];
   readonly signatures?: readonly string[];
@@ -359,7 +381,7 @@ interface LinePlace {
 }
 
 ### build/index.d.ts#MAP_RULE
-export declare const MAP_RULE = "Before you write a helper, find its home in this map. If the home does not have the function, add it to the home, in a pull request of the home repository. Do not make a local copy, a new package or a new repository for an area that has a home: that needs the strategist. A home that is not on npm is used with workspace:* or a github: specifier pinned to a commit. If no area fits, ask the strategist for a home before you write the code.";
+export declare const MAP_RULE: string;
 
 ### build/index.d.ts#MAX_NOTES
 export declare const MAX_NOTES: number;
@@ -392,6 +414,24 @@ interface NameRule {
   readonly word?: string;
   readonly commonAfter?: readonly string[];
 }
+
+### build/index.d.ts#NpmDrift
+interface NpmDrift {
+  readonly area: string;
+  readonly kind: NpmDriftKind;
+  readonly name?: string;
+  readonly text: string;
+}
+
+### build/index.d.ts#NpmDriftKind
+type NpmDriftKind = "missing" | "stale-pending" | "stale-state" | "no-read" | "unnamed";
+
+### build/index.d.ts#NpmPresence
+type NpmPresence = {
+  readonly onNpm: boolean;
+} | {
+  readonly error: string;
+};
 
 ### build/index.d.ts#OptionSpec
 interface OptionSpec {
@@ -488,6 +528,9 @@ export declare const REAL_COMPARE = "process.argv[1] !== undefined && realpathSy
 ### build/index.d.ts#RULES
 export declare const RULES: readonly Rule[];
 
+### build/index.d.ts#RULE_WARN_DAYS
+export declare const RULE_WARN_DAYS = 14;
+
 ### build/index.d.ts#RegistryAnswer
 type RegistryAnswer = {
   readonly versions: readonly string[];
@@ -509,6 +552,7 @@ interface Rule {
   readonly sources: readonly AuditSource[];
   readonly options: Readonly<Record<string, OptionSpec>>;
   readonly changeScoped?: boolean;
+  readonly failsFrom?: string;
   check(context: RuleContext, options: Options): RuleOutcome;
 }
 
@@ -542,7 +586,7 @@ interface RuleResult {
   readonly id: string;
   readonly title: string;
   readonly fix: string;
-  readonly status: "pass" | "break" | "off" | "skipped" | "error";
+  readonly status: "pass" | "break" | "warn" | "off" | "skipped" | "error";
   readonly breaks: readonly Break[];
   readonly ignored: number;
   readonly note?: string;
@@ -605,6 +649,7 @@ export declare const USAGE: string;
 ### build/index.d.ts#Workflow
 interface Workflow {
   readonly file: string;
+  readonly kind?: "action";
   readonly name: string;
   readonly summary: string;
   readonly inputs: readonly WorkflowInput[];
@@ -676,6 +721,9 @@ export declare function convertGate(text: string, file: string, commit?: string)
   reason: string;
 };
 
+### build/index.d.ts#coverageProvider
+export declare const coverageProvider: Rule;
+
 ### build/index.d.ts#createContext
 export declare function createContext(root: string, config: ConventionsConfig, options?: Pick<CheckOptions, "base" | "env">): RuleContext;
 
@@ -687,6 +735,9 @@ export declare function declaredName(line: string): string | undefined;
 
 ### build/index.d.ts#defaultOptions
 export declare function defaultOptions(rule: Rule): Options;
+
+### build/index.d.ts#exportsRequire
+export declare const exportsRequire: Rule;
 
 ### build/index.d.ts#findHomes
 export declare function findHomes(query: string, homes?: readonly Home[]): readonly Home[];
@@ -705,12 +756,6 @@ export declare const gateTrigger: Rule;
 
 ### build/index.d.ts#githubFetch
 export declare const githubFetch: HomeFetch;
-
-### build/index.d.ts#globFolders
-export declare function globFolders(root: string, glob: string): string[];
-
-### build/index.d.ts#globToRegExp
-export declare function globToRegExp(glob: string): RegExp;
 
 ### build/index.d.ts#hasFile
 export declare const hasFile: (dir: string, file: string) => boolean;
@@ -808,14 +853,20 @@ export declare const noBuildOutput: Rule;
 ### build/index.d.ts#noLocalPaths
 export declare const noLocalPaths: Rule;
 
+### build/index.d.ts#npmDrift
+export declare function npmDrift(homes: readonly Home[], facts: ReadonlyMap<string, NpmPresence>): readonly NpmDrift[];
+
 ### build/index.d.ts#npmLookup
 export declare const npmLookup: RegistryLookup;
+
+### build/index.d.ts#npmNames
+export declare function npmNames(homes?: readonly Home[]): readonly string[];
 
 ### build/index.d.ts#npmUrl
 export declare function npmUrl(name: string, version: string): string;
 
-### build/index.d.ts#packageFolders
-export declare function packageFolders(root: string, globs?: readonly string[] | undefined): string[];
+### build/index.d.ts#packNoBuildinfo
+export declare const packNoBuildinfo: Rule;
 
 ### build/index.d.ts#pagesAfterRelease
 export declare const pagesAfterRelease: Rule;
@@ -874,6 +925,9 @@ export declare const pushMainOnly: Rule;
 ### build/index.d.ts#reachOf
 export declare function reachOf(specifier: string): Minor | undefined;
 
+### build/index.d.ts#readAction
+export declare function readAction(file: string, text: string): Workflow;
+
 ### build/index.d.ts#readConfig
 export declare function readConfig(root: string, rules?: readonly Rule[]): ConventionsConfig;
 
@@ -897,6 +951,9 @@ export declare function replaceLine(text: string, line: number, lines: readonly 
 
 ### build/index.d.ts#repoOf
 export declare function repoOf(context: RuleContext): string | undefined;
+
+### build/index.d.ts#reposOf
+export declare function reposOf(home: Home): readonly string[];
 
 ### build/index.d.ts#repositoryIsPublic
 export declare function repositoryIsPublic(context: RuleContext): boolean | undefined;
@@ -1010,11 +1067,23 @@ export declare function withOneJob(text: string, commit?: string): {
 ### build/index.d.ts#workflowParses
 export declare const workflowParses: Rule;
 
-### build/index.d.ts#workspaceGlobs
-export declare function workspaceGlobs(root: string): string[] | undefined;
-
 ### build/index.d.ts#workspaceProtocol
 export declare const workspaceProtocol: Rule;
 
 ### build/index.d.ts#yamlFaults
 export declare function yamlFaults(text: string): YamlFault[];
+
+### build/workspace.chunk.d.ts#globFolders
+declare function globFolders(root: string, glob: string): string[];
+
+### build/workspace.chunk.d.ts#globToRegExp
+declare function globToRegExp(glob: string): RegExp;
+
+### build/workspace.chunk.d.ts#packageFolders
+declare function packageFolders(root: string, globs?: readonly string[] | undefined): string[];
+
+### build/workspace.chunk.d.ts#reportFolders
+declare function reportFolders(root: string, globs?: readonly string[]): string[];
+
+### build/workspace.chunk.d.ts#workspaceGlobs
+declare function workspaceGlobs(root: string): string[] | undefined;

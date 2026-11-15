@@ -7,6 +7,11 @@ inputs:
   branch:
     description: The branch.
     default: main
+  commit:
+    description: >-
+      The commit whose CI state the action reads, in place of the newest commit of the branch. The job ref of
+      reusable-pages.yml gives the commit of the event here.
+    default: ""
   pending:
     description: >-
       What to build while CI of the newest commit has not finished. "head" builds the newest commit, as a
@@ -20,7 +25,7 @@ outputs:
     description: The commit hash.
     value: ${{ steps.find.outputs.sha }}
   state:
-    description: The CI state of the newest commit of the branch (green, running, none or red).
+    description: The CI state of the input commit, or else of the newest commit of the branch (green, running, none or red).
     value: ${{ steps.find.outputs.state }}
 runs:
   using: composite
@@ -32,9 +37,14 @@ runs:
         GH_TOKEN: ${{ inputs.token }}
         WORKFLOW: ${{ inputs.workflow }}
         BRANCH: ${{ inputs.branch }}
+        COMMIT: ${{ inputs.commit }}
         PENDING: ${{ inputs.pending }}
       run: |
-        head=$(gh api "repos/$GITHUB_REPOSITORY/commits/$BRANCH" --jq .sha)
+        if [ -n "$COMMIT" ]; then
+          head=$COMMIT
+        else
+          head=$(gh api "repos/$GITHUB_REPOSITORY/commits/$BRANCH" --jq .sha)
+        fi
         state=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$WORKFLOW" --commit "$head" --event push \
           --json status,conclusion \
           --jq 'if length == 0 then "none" elif any(.status != "completed") then "running" elif all(.conclusion == "success") then "green" else "red" end')
@@ -50,6 +60,6 @@ runs:
           echo "::error::$WORKFLOW has no passed run on $BRANCH."
           exit 1
         fi
-        echo "The newest commit of $BRANCH is $head (CI: $state). The build takes $sha."
+        echo "The commit $head has the CI state $state. The build takes $sha."
         echo "sha=$sha" >> "$GITHUB_OUTPUT"
         echo "state=$state" >> "$GITHUB_OUTPUT"

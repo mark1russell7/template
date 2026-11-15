@@ -1,0 +1,93 @@
+/**
+ * This file is the entry of the main process of {{package}}. `tsdown` builds it to `build/main/main.js`, and
+ * `pnpm start` starts it with Electron.
+ *
+ * - The environment variable `PAGE_URL` gives the address of a page server in development, for example Vite. Without
+ *   it, the app shows the files of `build/page/` under `app://page/`.
+ * - With the argument `--smoke`, the app stops with the exit code 0 after the page sends its first message on the
+ *   port. It stops with 1 after a fault, or after 30 seconds with no message. CI uses it.
+ */
+import { readFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { BrowserWindow, MessageChannelMain, app, protocol, session } from "electron";
+import { CONTENT_SECURITY_POLICY, PAGE_SCHEME, PAGE_URL, allowsNavigation, answer, contentType, pageFile, windowOptions } from "./index.ts";
+
+const build = join(dirname(fileURLToPath(import.meta.url)), "..");
+const page = process.env["PAGE_URL"] ?? PAGE_URL;
+const smoke = process.argv.includes("--smoke");
+
+/** This function stops the app with an exit code. It tells why on a fault, and in a smoke run. */
+function stop(code: number, why: string): void {
+  if (code !== 0) console.error(`{{name}}: ${why}`);
+  else if (smoke) console.log(`smoke: ${why}`);
+  app.exit(code);
+}
+
+// The scheme of the page is a standard and secure scheme, as https is. Electron needs this before the app is ready.
+protocol.registerSchemesAsPrivileged([{ scheme: PAGE_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
+
+// Each window and each frame stays at the origin of the page, and opens no new window
+app.on("web-contents-created", (_event, contents) => {
+  contents.setWindowOpenHandler(() => ({ action: "deny" }));
+  contents.on("will-navigate", (event, url) => {
+    if (!allowsNavigation(page, url)) event.preventDefault();
+  });
+  contents.on("will-attach-webview", (event) => event.preventDefault());
+});
+
+/** This function serves the files of the page, with the content security policy. */
+async function serveFile(request: Request): Promise<Response> {
+  const file = pageFile(join(build, "page"), request.url);
+  if (file === undefined) return new Response("Not found", { status: 404 });
+  try {
+    const body = await readFile(file);
+    return new Response(body, { headers: { "content-type": contentType(file), "content-security-policy": CONTENT_SECURITY_POLICY } });
+  } catch {
+    return new Response("Not found", { status: 404 });
+  }
+}
+
+async function start(): Promise<void> {
+  // The page asks for no permission: the camera, the microphone, the notifications and the others get no.
+  session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+  session.defaultSession.setPermissionCheckHandler(() => false);
+  protocol.handle(PAGE_SCHEME, serveFile);
+
+  const window = new BrowserWindow(windowOptions(join(build, "preload", "preload.cjs")));
+  window.once("ready-to-show", () => window.show());
+  window.webContents.on("render-process-gone", (_event, details) => stop(1, `the page stopped (${details.reason})`));
+  window.webContents.on("did-fail-load", (_event, code, text, url, mainFrame) => {
+    // The code -3 (ERR_ABORTED) is a load that a new load replaced. It is not a fault.
+    if (mainFrame && code !== -3) stop(1, `the page ${url} did not load (${code} ${text})`);
+  });
+
+  // The preload script gets one end of the channel, and gives it to the page. The main process keeps the other end.
+  window.webContents.once("did-finish-load", () => {
+    const { port1, port2 } = new MessageChannelMain();
+    port1.on("message", ({ data }) => {
+      const reply = answer(data);
+      if (reply !== undefined) port1.postMessage(reply);
+      if (smoke) stop(0, "the page sent its first message");
+    });
+    port1.start();
+    window.webContents.postMessage("port", null, [port2]);
+  });
+  if (smoke) setTimeout(() => stop(1, "no message from the page in 30 seconds"), 30_000).unref();
+  await window.loadURL(page);
+}
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    const [window] = BrowserWindow.getAllWindows();
+    if (window?.isMinimized()) window.restore();
+    window?.focus();
+  });
+  app.on("window-all-closed", () => app.quit());
+  app
+    .whenReady()
+    .then(start)
+    .catch((error: unknown) => stop(1, String(error)));
+}

@@ -4,6 +4,7 @@
  * as an export that the package does not have.
  */
 import { byCode } from "./entries.ts";
+import { apiModel } from "./model.ts";
 
 /** The value of one field of the front matter of the page of each export. */
 export type FrontmatterValue = string | number | boolean;
@@ -18,6 +19,8 @@ export interface ApiPage {
   readonly reference?: string;
   /** The fields that the page of each export adds to its front matter, for example the `order` of a site. A field `title` or `description` replaces the default. */
   readonly frontmatter?: Readonly<Record<string, FrontmatterValue>>;
+  /** When true, the page of each export puts the doc comment of each declaration above it. The field needs `reference`. */
+  readonly docs?: boolean;
   /** The names that the check does not examine, each with its reason. */
   readonly except?: Readonly<Record<string, string>>;
 }
@@ -25,20 +28,10 @@ export interface ApiPage {
 /** This function gives the names of each entry of a report, by the subpath of the entry. The members of a namespace are not in the result. */
 export function reportEntries(report: string): ReadonlyMap<string, ReadonlySet<string>> {
   const entries = new Map<string, Set<string>>();
-  let current: Set<string> | null = null;
-  for (const line of report.split("\n")) {
-    if (line.startsWith("## ")) {
-      const subpath = /^## (\.\S*?)(?: \(.*\))?: /.exec(line)?.[1];
-      current = null;
-      if (subpath !== undefined) {
-        const names = new Set<string>();
-        entries.set(subpath, names);
-        if (line.endsWith(" names")) current = names;
-      }
-      continue;
-    }
-    const name = /^(?:type )?([^\s:]+): /.exec(line)?.[1];
-    if (current !== null && name !== undefined && name !== "ambient" && !name.includes(".")) current.add(name);
+  for (const entry of apiModel(report, "").entries) {
+    const names = new Set<string>();
+    for (const item of entry.names) if (item.kind !== "ambient" && !item.name.includes(".")) names.add(item.name);
+    entries.set(entry.subpath, names);
   }
   return entries;
 }

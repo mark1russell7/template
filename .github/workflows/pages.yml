@@ -4,7 +4,8 @@
 # and an explorer of the shared workflows. The site-pages action adds the Releases page and the Status page.
 # The Pages source of the repository is "GitHub Actions" (Settings > Pages).
 # A scheduled build takes the newest commit of main, or the newest green one if CI failed on it.
-# A pull request builds and checks the site in a browser, with no deploy.
+# A pull request builds and checks the site in a browser, with no deploy. The job site of actions-test.yml calls this
+# workflow on each pull request, so the required check "Actions OK" waits for the probe of the site.
 name: Pages
 
 on:
@@ -19,7 +20,8 @@ on:
   schedule:
     - cron: "30 */3 * * *"
   workflow_dispatch:
-  pull_request:
+  # actions-test.yml calls this workflow on each pull request (the job site)
+  workflow_call:
 
 permissions: {}
 

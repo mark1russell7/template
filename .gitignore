@@ -73,6 +73,11 @@ venv/
 # Build output
 dist/
 
+# The coverage reports of the tests, next to the package.json of the run: CI makes them, and git
+# does not keep them. These patterns name only the roots, thus a source folder named coverage stays in git.
+/coverage/
+/packages/*/coverage/
+
 # The npm build of each package (tsdown): release.yml builds it, and git does not keep it
 build/
 

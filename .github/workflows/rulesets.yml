@@ -1,0 +1,44 @@
+# The ruleset of each public repository: scripts/workflows/ruleset-ci-ok.ts --check reads, for each public repository
+# that is not archived, the summary checks ("CI OK", "Security OK") that passed on its last merged pull requests, and
+# fails when no ruleset of its default branch names one of them. A new repository then gets its ruleset after its
+# first merged pull request: the red run goes to the owner of the template, who starts the command in the summary.
+# A repository with no "CI OK" that passed yet is a no read in the summary, never a pass. The run changes nothing,
+# so its token only reads: the script reads public data. It needs no install: the script imports only node: modules.
+name: Rulesets
+
+on:
+  workflow_dispatch:
+  # Each day, so a new repository waits a day at most for its ruleset
+  schedule:
+    - cron: "32 7 * * *"
+  push:
+    branches: [main]
+    paths:
+      - scripts/workflows/ruleset-ci-ok.ts
+      - .github/workflows/rulesets.yml
+
+permissions: {}
+
+concurrency:
+  group: rulesets
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: The ruleset of each public repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/workflows
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Check the rulesets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/workflows/ruleset-ci-ok.ts --check

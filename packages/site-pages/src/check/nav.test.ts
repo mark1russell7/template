@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { navProblems, navSummary, runNavCli, sitemapPaths, sitePath, type NavLink, type NavPage } from "./nav.ts";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it, vi } from "vitest";
+import { crawlSite, navProblems, navSummary, navUnread, navUnreadText, repositoryOfUrl, runNavCli, sitemapPaths, sitePath, type NavLink, type NavPage } from "./nav.ts";
 
 const home = new URL("https://owner.github.io/repo/");
 
@@ -32,6 +35,15 @@ describe("sitePath", () => {
     expect(sitePath("https://owner.github.io/other/", home)).toBeUndefined();
     expect(sitePath("/repo/data/bench.json", home)).toBeUndefined();
     expect(sitePath("http://[bad", home)).toBeUndefined();
+  });
+});
+
+describe("repositoryOfUrl", () => {
+  it("gives the repository of a site of GitHub Pages", () => {
+    expect(repositoryOfUrl("https://owner.github.io/packing/")).toBe("owner/packing");
+    expect(repositoryOfUrl("https://Owner.github.io/")).toBe("owner/owner.github.io");
+    expect(repositoryOfUrl("https://example.com/packing/")).toBeUndefined();
+    expect(repositoryOfUrl("not a url")).toBeUndefined();
   });
 });
 
@@ -97,10 +109,39 @@ describe("navProblems", () => {
 
 describe("navSummary", () => {
   it("lists the problems and the pages", () => {
-    const text = navSummary({ ok: false, home: home.href, pages: [page("", 0, [])], sitemap: [], clicks: [], problems: ["a | b"] });
+    const text = navSummary({ ok: false, home: home.href, pages: [page("", 0, [])], sitemap: [], clicks: [], problems: ["a | b"], unread: [] });
     expect(text).toContain("1 page opened, 0 in the sitemap, 1 problem.");
     expect(text).toContain("- a \\| b");
     expect(text).toContain("| 0 | the home page | 200 | yes | no |");
+    expect(text).not.toContain("No read");
+  });
+
+  it("shows a no-read with its count and its pages, also with no problem", () => {
+    const unread = Array.from({ length: 12 }, (_, index) => `p${String(index)}/`);
+    const text = navSummary({ ok: false, home: home.href, pages: [page("", 0, []), page("a/", 1, [])], sitemap: [], clicks: [], problems: [], unread });
+    expect(text).toContain("**No read:** the crawl stopped at the limit of 2 pages, so it did not read 12 pages: /p0/, /p1/,");
+    expect(text).toContain("/p9/, and 2 more.");
+  });
+});
+
+describe("navUnread", () => {
+  it("has no no-read when the crawl read its whole queue", () => {
+    expect(navUnread([], [page("", 0, [])], ["", "hidden/"])).toEqual([]);
+  });
+
+  it("gives the queue and each page of the sitemap that the crawl did not open, when the crawl stopped at its limit", () => {
+    expect(navUnread(["b/", "c/"], [page("", 0, []), page("a/", 1, [])], ["", "a/", "c/", "d/"])).toEqual(["b/", "c/", "d/"]);
+  });
+
+  it("makes a page of the sitemap past the limit a no-read, not a page that no link reaches", () => {
+    const pages = [page("", 0, [], { bar: true })];
+    const unread = navUnread(["a/"], pages, ["a/", "b/"]);
+    expect(navProblems({ pages, sitemap: ["a/", "b/"], clicks: [], unread }, home, rules)).toEqual([]);
+    expect(navProblems({ pages, sitemap: ["a/", "b/"], clicks: [] }, home, rules)).toEqual([
+      "/a/ is in the sitemap, and no chain of links from home reaches it",
+      "/b/ is in the sitemap, and no chain of links from home reaches it",
+    ]);
+    expect(navUnreadText({ pages, unread })).toBe("the crawl stopped at the limit of 1 page, so it did not read 2 pages: /a/, /b/.");
   });
 });
 
@@ -118,10 +159,27 @@ describe("runNavCli", () => {
   });
 
   it("refuses a wrong command line with exit code 2", async () => {
-    for (const argv of [[], ["--out", "a", "--url", "b"], ["--url", "u", "--max-clicks", "0"], ["--url", "u", "--settle", "x"], ["--out", "a"], ["--url", "u", "--shot-pages", "C:/x"], ["--bad"]]) {
+    for (const argv of [[], ["--out", "a", "--url", "b"], ["--url", "u", "--max-clicks", "0"], ["--url", "u", "--settle", "x"], ["--out", "a"], ["--url", "u", "--shot-pages", "C:/x"], ["--url", "https://example.com/", "--preview-bar"], ["--url", "https://owner.github.io/r/", "--preview-bar", "--bar-pages", "Docs"], ["--bad"]]) {
       const run = io();
       expect(await runNavCli(argv, run.io), argv.join(" ")).toBe(2);
       expect(run.err.join("")).toContain("site-pages nav:");
+    }
+  });
+});
+
+describe("crawlSite", () => {
+  it("closes its server when the browser does not start", async () => {
+    const out = mkdtempSync(join(tmpdir(), "nav-out-"));
+    writeFileSync(join(out, "index.html"), "<!doctype html><title>Home</title>");
+    const servers = (): number => process.getActiveResourcesInfo().filter((name) => name === "TCPServerWrap").length;
+    const before = servers();
+    try {
+      const options = { out, browser: join(out, "no-such-browser"), maxClicks: 3, maxPages: 1, requireBar: false, shotPages: [], settleMs: 0, timeoutMs: 2000 };
+      await expect(crawlSite(options)).rejects.toThrow(/no-such-browser/);
+      // The event `close` of a server comes before the event loop frees its handle. Thus the test waits for a short time.
+      await vi.waitFor(() => expect(servers()).toBe(before), { timeout: 1000 });
+    } finally {
+      rmSync(out, { recursive: true, force: true });
     }
   });
 });

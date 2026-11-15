@@ -4,7 +4,7 @@
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { codePackages, inFolder, lineOf, type Break, type PackageInfo, type Rule, type RuleContext } from "../rule.ts";
+import { inFolder, lineOf, rootAndCodePackages, type Break, type PackageInfo, type Rule, type RuleContext } from "../rule.ts";
 
 /** The names of a license file, without case. */
 const LICENSE_NAME = /^licen[cs]e(?:\.(?:md|txt))?$/i;
@@ -88,8 +88,7 @@ export const licenseFile: Rule = {
     license: { type: "string", default: "MIT", description: "The license of the root of a public repository with no public package." },
   },
   check(context, options) {
-    const all = [context.rootPackage, ...codePackages(context)];
-    const unique = all.filter((pkg, index) => all.findIndex((other) => other.file === pkg.file) === index);
+    const unique = rootAndCodePackages(context);
     const published = unique.filter(isPublic);
     // A public repository needs a license file at its root, also with no public package (typeset, 11-02)
     const publicRepo = repositoryIsPublic(context) === true;

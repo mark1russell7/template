@@ -8,10 +8,18 @@
 // Build the packages first. The script stops when a package depends on a git, file or link
 // specifier, because npm users cannot install that package. It also stops when a version is not
 // SemVer, or is not greater than the "latest" version on npm (a version that is on npm is skipped).
+// When a version is already on npm, the script compares its tarball with the tarball that npm has
+// (unchanged.ts), and stops when the shipped files differ: the code changed, so the version must.
+//
+// The release check of a pull request (.github/actions/release-check) starts this script too. In a
+// repository with Changesets, it sets RELEASE_PENDING to the packages whose version a pending
+// changeset raises later (check-plan.ts). For these packages, a difference is a note, not a stop.
+// A release run does not set the variable, so it stops for each difference.
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
+import { differenceText, pendingPackages, shippedDifferences, tarballFiles } from "./unchanged.ts";
 import { publishedPackages, unpublishableDependencies, versionProblem, type Packument } from "./workspace.ts";
 
 const out = process.argv[2];
@@ -33,10 +41,13 @@ if (blocked.length > 0) {
 }
 
 const problems: string[] = [];
+const packuments = new Map<string, Packument>();
 for (const { manifest } of packages) {
   const response = await fetch(`https://registry.npmjs.org/${manifest.name.replaceAll("/", "%2f")}`);
   if (!response.ok && response.status !== 404) throw new Error(`The registry gave HTTP ${response.status} for ${manifest.name}.`);
-  const problem = versionProblem(manifest.version ?? "", response.status === 404 ? undefined : ((await response.json()) as Packument));
+  const packument = response.status === 404 ? undefined : ((await response.json()) as Packument);
+  if (packument) packuments.set(manifest.name, packument);
+  const problem = versionProblem(manifest.version ?? "", packument);
   if (problem) problems.push(`${manifest.name}: ${problem}`);
 }
 if (problems.length > 0) {
@@ -45,7 +56,10 @@ if (problems.length > 0) {
 }
 
 const shell = process.platform === "win32";
+const pending = pendingPackages(process.env["RELEASE_PENDING"]);
 const lines: string[] = [];
+const changed: string[] = [];
+const raisedLater: string[] = [];
 for (const { dir, manifest } of packages) {
   // The new file in the folder is the tarball. The output of pnpm is not used: it also holds the
   // output of the package scripts that pnpm pack starts (prepare, prepack).
@@ -55,7 +69,28 @@ for (const { dir, manifest } of packages) {
   if (added.length !== 1) throw new Error(`pnpm pack of ${manifest.name} made ${added.length} tarballs: ${added.join(", ")}`);
   const file = basename(added[0] ?? "");
   lines.push(`${manifest.name} ${manifest.version} ${file}`);
+  const published = packuments.get(manifest.name)?.versions?.[manifest.version ?? ""] as { dist?: { tarball?: string } } | undefined;
+  const tarball = published?.dist?.tarball;
+  if (tarball) {
+    const response = await fetch(tarball);
+    if (!response.ok) throw new Error(`The registry gave HTTP ${response.status} for ${tarball}.`);
+    const differences = shippedDifferences(tarballFiles(Buffer.from(await response.arrayBuffer())), tarballFiles(readFileSync(join(out, file))));
+    if (differences.length > 0) {
+      (pending.has(manifest.name) ? raisedLater : changed).push(differenceText(`${manifest.name}@${manifest.version}`, differences));
+    }
+  }
   process.stdout.write(`${manifest.name}@${manifest.version}: ${file}\n`);
+}
+if (raisedLater.length > 0) {
+  process.stdout.write(
+    `A pending changeset raises the version of these packages, so these changes ship with the next version:\n  ${raisedLater.join("\n  ")}\n`,
+  );
+}
+if (changed.length > 0) {
+  process.stderr.write(
+    `The release skips a version that is on npm, so these changes would not ship. Set a greater version (SemVer) in each package.json:\n  ${changed.join("\n  ")}\n`,
+  );
+  process.exit(1);
 }
 writeFileSync(join(out, "packages.txt"), lines.length > 0 ? `${lines.join("\n")}\n` : "");
 if (lines.length === 0) process.stdout.write("This repository has no published package.\n");

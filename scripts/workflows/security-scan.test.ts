@@ -8,6 +8,8 @@ import { dirname, join, resolve } from "node:path";
 import { describe, it, mock } from "node:test";
 import { fileURLToPath } from "node:url";
 import { SCANS, type StepResult, evaluate } from "../../.github/actions/security-scan/verdict.ts";
+import { choose, main as choiceMain, readPrivate } from "../../.github/actions/security-scan/choice.ts";
+import { SUPPRESSION_LANGUAGES, codeqlConfig, main as configMain } from "../../.github/actions/security-scan/codeql-config.ts";
 import { type Fetch, changedLines, main as newAlertsMain, newAlerts, normalizeMessage, readBaseAlerts, sarifResults } from "../../.github/actions/security-scan/new-alerts.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -22,6 +24,7 @@ const soft: StepResult = { outcome: "failure", conclusion: "success" };
 
 /** The steps of a pull request run where each scan passes. */
 const pullRequest: Record<string, StepResult> = {
+  choice: ok,
   checkout: ok,
   "dependency-review_scan": ok,
   "osv-scanner_args": ok,
@@ -40,6 +43,13 @@ const pullRequest: Record<string, StepResult> = {
   "codeql_new-alerts": ok,
 };
 const all = { "dependency-review": true, "osv-scanner": true, codeql: true } as const;
+
+/** This function gives the text of the step of the action with the id, up to the next step. */
+function stepText(id: string): string {
+  const start = action.indexOf(`\n      id: ${id}\n`);
+  assert.ok(start >= 0, `The action has no step ${id}.`);
+  return action.slice(start, action.indexOf("\n    - ", start));
+}
 
 /** This function starts the last step of the action, as action.yml starts it, and gives its exit code and output. */
 function step(steps: Record<string, StepResult>, flags: Record<string, string>): { status: number | null; out: string } {
@@ -77,6 +87,87 @@ describe("security-scan: the last step", () => {
   });
 });
 
+describe("security-scan: a private repository", () => {
+  const auto = { "dependency-review": "auto", codeql: "auto", "osv-upload": "auto" } as const;
+
+  it("auto runs the dependency review, CodeQL and the upload in a public repository", () => {
+    const choice = choose({ inputs: auto, isPrivate: false, event: "pull_request" });
+    assert.deepEqual(choice.outputs, { "dependency-review": "true", codeql: "true", "osv-upload": "true" });
+    assert.deepEqual(choice.skipped, []);
+  });
+
+  it("auto skips them in a private repository, and names the skipped scans that the event starts", () => {
+    assert.deepEqual(choose({ inputs: auto, isPrivate: true, event: "pull_request" }), { outputs: { "dependency-review": "false", codeql: "false", "osv-upload": "false" }, skipped: ["dependency-review", "codeql"], errors: [] });
+    // The dependency review starts only on a pull request, so a push does not name it
+    assert.deepEqual(choose({ inputs: auto, isPrivate: true, event: "push" }).skipped, ["codeql"]);
+  });
+
+  it('"true" and "false" keep their meaning in a private repository, as before', () => {
+    const choice = choose({ inputs: { "dependency-review": "true", codeql: "false", "osv-upload": "true" }, isPrivate: true, event: "pull_request" });
+    assert.deepEqual(choice.outputs, { "dependency-review": "true", codeql: "false", "osv-upload": "true" });
+    assert.deepEqual(choice.skipped, []);
+  });
+
+  it("an input that is not true, false or auto is an error", () => {
+    assert.deepEqual(choose({ inputs: { ...auto, codeql: "yes" }, isPrivate: false, event: "push" }).errors, ['The input codeql is "yes". Use "true", "false" or "auto".']);
+  });
+
+  it("reads the visibility from the payload, and from the API when the payload has none (a schedule)", async () => {
+    const never: Fetch = async () => {
+      throw new Error("no request");
+    };
+    assert.equal(await readPrivate({ PRIVATE: "true" }, never), true);
+    const urls: string[] = [];
+    const api: Fetch = async (url) => {
+      urls.push(url);
+      return { ok: true, status: 200, text: async () => JSON.stringify({ private: true }) };
+    };
+    assert.equal(await readPrivate({ PRIVATE: "", GITHUB_API_URL: "https://api.example", GITHUB_REPOSITORY: "owner/repo" }, api), true);
+    assert.deepEqual(urls, ["https://api.example/repos/owner/repo"]);
+    await assert.rejects(readPrivate({ PRIVATE: "" }, answer(403, { message: "no" })), /HTTP 403/);
+  });
+
+  it("the step writes the outputs, and fails when it cannot read the visibility", async () => {
+    const folder = mkdtempSync(join(tmpdir(), "choice-"));
+    const log = mock.method(console, "log", () => undefined);
+    try {
+      const output = join(folder, "output");
+      const env = { DEPENDENCY_REVIEW: "auto", CODEQL: "auto", OSV_UPLOAD: "auto", PRIVATE: "true", EVENT: "pull_request", GITHUB_OUTPUT: output };
+      assert.equal(await choiceMain(env, answer(500, {})), 0);
+      assert.equal(readFileSync(output, "utf8"), "dependency-review=false\ncodeql=false\nosv-upload=false\nskipped=dependency-review,codeql\n");
+      assert.equal(await choiceMain({ ...env, PRIVATE: "" }, answer(500, {})), 1);
+      // No input is auto: the step needs no visibility and makes no request
+      assert.equal(await choiceMain({ ...env, DEPENDENCY_REVIEW: "true", CODEQL: "true", OSV_UPLOAD: "false", PRIVATE: "" }, answer(500, {})), 0);
+    } finally {
+      log.mock.restore();
+      rmSync(folder, { recursive: true, force: true });
+    }
+  });
+
+  it("a scan that auto skips is not a pass: the last step gives a warning that names it and tells why", () => {
+    const steps = { ...pullRequest, "dependency-review_scan": skipped, codeql_languages: skipped, codeql_init: skipped, codeql_analyze: skipped, "codeql_new-alerts": skipped };
+    const { status, out } = step(steps, { DEPENDENCY_REVIEW: "false", OSV_SCANNER: "true", CODEQL: "false", SKIPPED: "dependency-review,codeql" });
+    console.log(out);
+    assert.equal(status, 0);
+    assert.match(out, /SKIP dependency-review: the repository is private/);
+    assert.match(out, /::warning title=Security scan codeql skipped::The scan codeql did not run: the repository is private, and the scan needs GitHub Advanced Security\. Set the input codeql to "true" to start it\./);
+    assert.doesNotMatch(out, /::error::/);
+  });
+
+  it("red: a failed choice fails the last step, because the expected scans are not known", () => {
+    const verdict = evaluate({ steps: { ...pullRequest, choice: failed }, expected: { "dependency-review": false, "osv-scanner": true, codeql: false } });
+    assert.deepEqual(verdict.failed, ["choice"]);
+    assert.deepEqual(evaluate({ steps: Object.fromEntries(Object.entries(pullRequest).filter(([id]) => id !== "choice")), expected: all }).failed, ["choice"]);
+  });
+
+  it("the caller of the template checks out the folder of the actions only in the template, so a stamped private repository has no partial clone", () => {
+    const caller = readFileSync(resolve(root, ".github/workflows/security.yml"), "utf8");
+    const sparse = caller.replace(/\r\n/g, "\n").split(/\n {6}- /).filter((each) => each.includes("sparse-checkout:"));
+    assert.equal(sparse.length, 1);
+    assert.match(sparse[0] ?? "", /^if: github\.repository == 'mark1russell7\/template'\n/);
+  });
+});
+
 describe("security-scan: evaluate", () => {
   it("names each failed scan, in the order of the job", () => {
     const verdict = evaluate({ steps: { ...pullRequest, "dependency-review_scan": failed, codeql_analyze: { outcome: "cancelled", conclusion: "cancelled" } }, expected: all });
@@ -93,7 +184,7 @@ describe("security-scan: evaluate", () => {
   });
 
   it("fails each expected scan after a failed checkout", () => {
-    const steps = Object.fromEntries(Object.entries(pullRequest).map(([id]) => [id, id === "checkout" ? failed : skipped]));
+    const steps = Object.fromEntries(Object.entries(pullRequest).map(([id, each]) => [id, id === "checkout" ? failed : id === "choice" ? each : skipped]));
     assert.deepEqual(evaluate({ steps, expected: all }).failed, ["checkout", "dependency-review", "osv-scanner", "codeql"]);
   });
 
@@ -117,7 +208,7 @@ describe("security-scan: evaluate", () => {
   });
 
   it("a push run: the dependency review is off, and the other scans pass", () => {
-    const steps: Record<string, StepResult> = { checkout: ok, "dependency-review_scan": skipped, "osv-scanner_args": ok, "osv-scanner_scan": soft, "osv-scanner_check": ok, "osv-scanner_upload": ok, codeql_languages: ok, codeql_init: ok, codeql_analyze: ok, "codeql_new-alerts": skipped };
+    const steps: Record<string, StepResult> = { choice: ok, checkout: ok, "dependency-review_scan": skipped, "osv-scanner_args": ok, "osv-scanner_scan": soft, "osv-scanner_check": ok, "osv-scanner_upload": ok, codeql_languages: ok, codeql_init: ok, codeql_analyze: ok, "codeql_new-alerts": skipped };
     const verdict = evaluate({ steps, expected: { ...all, "dependency-review": false } });
     assert.deepEqual(verdict.failed, []);
     assert.equal(verdict.rows.find((row) => row.name === "dependency-review")?.state, "off");
@@ -132,10 +223,10 @@ describe("security-scan: action.yml", () => {
     .map((text) => ({ id: /\n      id: (\S+)/.exec(`\n      ${text}`)?.[1], condition: /\n      if: (.+)/.exec(text)?.[1] ?? "" }));
 
   it("each step of a scan has an id that starts with a scan and _, and has !cancelled() in its condition", () => {
-    const ids = steps.map((each) => each.id).filter((id) => id !== undefined && id !== "checkout");
+    const ids = steps.map((each) => each.id).filter((id) => id !== undefined && id !== "checkout" && id !== "choice");
     assert.ok(ids.length >= 10, `The action has ${String(ids.length)} steps of scans.`);
     for (const each of steps) {
-      if (each.id === undefined || each.id === "checkout") continue;
+      if (each.id === undefined || each.id === "checkout" || each.id === "choice") continue;
       assert.ok(SCANS.some((scan) => each.id?.startsWith(`${scan}_`)), `The id ${each.id} does not start with a scan.`);
       assert.match(each.condition, /^\$\{\{ !cancelled\(\) && /, `The step ${each.id} does not have !cancelled().`);
     }
@@ -150,17 +241,11 @@ describe("security-scan: action.yml", () => {
   });
 
   it("the first CodeQL init may fail, a second init starts only then after a wait, and the analysis runs after either", () => {
-    /** This function gives the text of the step with the id, up to the next step. */
-    const block = (id: string): string => {
-      const start = action.indexOf(`\n      id: ${id}\n`);
-      assert.ok(start >= 0, `The action has no step ${id}.`);
-      return action.slice(start, action.indexOf("\n    - ", start));
-    };
-    assert.match(block("codeql_init"), /\n {6}continue-on-error: true\n/);
-    assert.doesNotMatch(block("codeql_init"), /tools:/);
-    assert.ok(block("codeql_init-retry").includes("if: ${{ !cancelled() && steps.codeql_init.outcome == 'failure' }}"));
+    assert.match(stepText("codeql_init"), /\n {6}continue-on-error: true\n/);
+    assert.doesNotMatch(stepText("codeql_init"), /tools:/);
+    assert.ok(stepText("codeql_init-retry").includes("if: ${{ !cancelled() && steps.codeql_init.outcome == 'failure' }}"));
     // codeql-action ignores "tools: toolcache" in a push or pull request run (seen in run 42471713951)
-    assert.doesNotMatch(block("codeql_init-retry"), /tools:/);
+    assert.doesNotMatch(stepText("codeql_init-retry"), /tools:/);
     const wait = action.indexOf("\n    - name: Wait before the second CodeQL start\n");
     assert.ok(wait > action.indexOf("\n      id: codeql_init\n") && wait < action.indexOf("\n      id: codeql_init-retry\n"), "The wait is between the two starts.");
     assert.ok(
@@ -168,8 +253,8 @@ describe("security-scan: action.yml", () => {
         .slice(wait, action.indexOf("\n    - ", wait + 1))
         .includes("if: ${{ !cancelled() && steps.codeql_init.outcome == 'failure' }}\n      shell: bash\n      run: sleep 60"),
     );
-    assert.doesNotMatch(block("codeql_init-retry"), /continue-on-error/);
-    assert.ok(block("codeql_analyze").includes("steps.codeql_init.outcome == 'success' || steps.codeql_init-retry.outcome == 'success'"));
+    assert.doesNotMatch(stepText("codeql_init-retry"), /continue-on-error/);
+    assert.ok(stepText("codeql_analyze").includes("steps.codeql_init.outcome == 'success' || steps.codeql_init-retry.outcome == 'success'"));
   });
 
   it("STEPS has only the outcome and the conclusion of each step, so a large output does not go in the environment", () => {
@@ -196,12 +281,14 @@ const PLAIN = "Potential cache poisoning in the context of the default branch du
 const KNOWN_LINES = [219, 244, 249, 262];
 
 /** This function gives a SARIF file of CodeQL with a result of each entry. */
-function sarif(entries: readonly { rule: string; line: number; text?: string }[]): unknown {
+function sarif(entries: readonly { rule: string; line: number; text?: string; suppressed?: boolean }[]): unknown {
   const rules = [...new Set(entries.map((entry) => entry.rule))].map((id) => ({ id, properties: { "security-severity": "9.0" } }));
   const results = entries.map((entry) => ({
     ruleId: entry.rule,
     message: { text: entry.text ?? LINKED },
     locations: [{ physicalLocation: { artifactLocation: { uri: WORKFLOW }, region: { startLine: entry.line, endLine: entry.line + 4 } } }],
+    // The query AlertSuppression.ql adds this to an alert below a comment "codeql[<rule id>]"
+    ...(entry.suppressed === true ? { suppressions: [{ kind: "inSource", status: "accepted" }] } : {}),
   }));
   return { runs: [{ tool: { driver: { name: "CodeQL", rules } }, results }] };
 }
@@ -286,5 +373,64 @@ describe("security-scan: the new CodeQL alerts", () => {
     assert.equal(alerts.length, 103);
     assert.equal(urls.length, 2);
     assert.match(urls[1] ?? "", /^https:\/\/api\.example\/repos\/owner\/repo\/code-scanning\/alerts\?ref=refs%2Fheads%2Fmain&state=open&tool_name=CodeQL&per_page=100&page=2$/);
+  });
+});
+
+describe("security-scan: the suppression comments of CodeQL", () => {
+  it("the config adds the query AlertSuppression.ql of each language that has one, once for each pack", () => {
+    assert.equal(codeqlConfig("javascript-typescript,actions"), '{"packs":{"javascript":["codeql/javascript-queries:AlertSuppression.ql"]}}');
+    assert.deepEqual(JSON.parse(codeqlConfig("java-kotlin, c-cpp,python,javascript,typescript")), {
+      packs: {
+        java: ["codeql/java-queries:AlertSuppression.ql"],
+        cpp: ["codeql/cpp-queries:AlertSuppression.ql"],
+        python: ["codeql/python-queries:AlertSuppression.ql"],
+        javascript: ["codeql/javascript-queries:AlertSuppression.ql"],
+      },
+    });
+    // No language has the query: the init of CodeQL then uses its default configuration
+    assert.equal(codeqlConfig("actions,rust"), "");
+    assert.equal(codeqlConfig(""), "");
+  });
+
+  it("each language of the step Languages is in the list, except the two that have no query", () => {
+    const table = /declare -A patterns=\(\n((?: {10}\[.*\n)+)/.exec(action)?.[1] ?? "";
+    const names = [...table.matchAll(/\[([\w-]+)\]/g)].map((match) => match[1] ?? "");
+    assert.ok(names.length >= 12, names.join(","));
+    for (const name of names) assert.equal(name in SUPPRESSION_LANGUAGES, !["actions", "rust"].includes(name), name);
+    for (const language of new Set(Object.values(SUPPRESSION_LANGUAGES))) assert.match(language, /^(javascript|python|go|ruby|java|csharp|cpp|swift)$/);
+  });
+
+  it("the step Languages writes the config, and both CodeQL inits read it", () => {
+    const languages = stepText("codeql_languages");
+    assert.ok(languages.includes("CODEQL_CONFIG: ${{ github.action_path }}/codeql-config.ts"));
+    assert.ok(languages.indexOf('KEPT="$joined" node "$CODEQL_CONFIG"') > languages.indexOf('echo "languages=$joined"'));
+    for (const id of ["codeql_init", "codeql_init-retry"]) assert.ok(stepText(id).includes("\n        config: ${{ steps.codeql_languages.outputs.config }}\n"), id);
+  });
+
+  it("main writes the output config and names the languages in the summary", () => {
+    const folder = mkdtempSync(join(tmpdir(), "codeql-config-"));
+    try {
+      const output = join(folder, "output");
+      const summary = join(folder, "summary");
+      assert.equal(configMain({ KEPT: "javascript-typescript,actions", GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: summary }), 0);
+      assert.equal(readFileSync(output, "utf8"), `config=${codeqlConfig("javascript-typescript")}\n`);
+      assert.equal(readFileSync(summary, "utf8"), "CodeQL suppression comments: javascript\n");
+      assert.equal(configMain({ KEPT: "actions", GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: summary }), 0);
+      assert.match(readFileSync(output, "utf8"), /\nconfig=\n$/);
+      assert.match(readFileSync(summary, "utf8"), /\nCodeQL suppression comments: none\n$/);
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
+  });
+
+  it("green: an alert below a suppression comment is not new, red: the same alert with no comment is new", async () => {
+    const injection = { rule: "js/code-injection", line: 230, text: "Code injection" };
+    const base = KNOWN_LINES.map((line) => ({ rule: POISON, line }));
+    const commented = await newAlertsStep(sarif([...base, { ...injection, suppressed: true }]), answer(200, known));
+    assert.equal(commented.status, 0, commented.out);
+    assert.doesNotMatch(commented.out, /::error/);
+    const bare = await newAlertsStep(sarif([...base, injection]), answer(200, known));
+    assert.equal(bare.status, 1);
+    assert.match(bare.out, /adds 1 CodeQL alerts/);
   });
 });

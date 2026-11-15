@@ -1,0 +1,12 @@
+/**
+ * This file is the preload script of {{package}}. `tsdown` builds it to `build/preload/preload.cjs`, because a preload
+ * script in a sandbox must be CommonJS. It gives the page no Electron API: it gives the page only the message port of
+ * the main process.
+ */
+/// <reference lib="dom" />
+import { ipcRenderer } from "electron";
+
+ipcRenderer.once("port", (event) => {
+  // The target is the origin of the page, so no frame of another origin gets the port
+  window.postMessage({ type: "port" }, window.location.origin, event.ports);
+});

@@ -143,6 +143,40 @@ The folder of `--shots` gets a screenshot of each view, `report.json` and `summa
 
 The check finds a browser in this order: `--browser`, `$SITE_CHECK_BROWSER`, the newest Chromium of Playwright, and then Chrome or Edge. The folder `src/check` imports only Node.js. Thus Node.js 22.18 or later can start `src/check/main.ts` with no install. The workflow `reusable-pages.yml` of the template uses it this way.
 
+## The site bar
+
+The command `site-pages bar` writes one shared bar into each HTML page of a built site. The bar comes first in the body of each page.
+
+```sh
+site-pages bar --out dist --repo owner/name --pages "Demo=demo/,Docs=docs/" --site-pages --npm @owner/name
+```
+
+- The bar has the portfolio of the owner and the name of the site. The name links to the home.
+- It has a link to the home, to each page of `--pages`, and to Releases and Status with `--site-pages`. The link of the current page has `aria-current="page"`.
+- It also links to the repository on GitHub, and to npm with `--npm`.
+- The bar takes the place of the header of the Releases page and the Status page.
+- Its CSS has its own class names, so the CSS of the site does not change the bar. It follows the light and the dark scheme. Its rows wrap at 360 px.
+- The command can start two times on one folder. The second start gives the same pages.
+
+In `reusable-pages.yml`, the input `site-bar: true` starts the command before the upload. Then `site-pages nav --require-bar` crawls the built site, and a failure stops the deploy.
+
+## The scroll cue of the built pages
+
+The command `site-pages cue` changes each code block (`pre`) of each HTML page of a built site. Each block gets the class `scroll-cue` and a place in the tab order. It also writes the style `scroll-cue.css` into each changed page.
+
+```sh
+site-pages cue --out dist
+```
+
+- A code block that is wider than its box shows a fade at the edge with more content. A block that is not wider shows no cue.
+- A block with `data-overflow-ok` or with the class `scroll-cue` stays as it is. The text of `script`, `style` and `textarea` does not change.
+- In a browser with no scroll timelines, a small script gives `--scroll-cue-bg` the background color of the block. Thus the block keeps the color of its theme.
+- A script of a page can make a code block in the browser, for example from Markdown. Thus a page with a script of its own also gets the style and a small script. That script gives the cue to each code block that the page makes, by the same rules.
+- A page can put a code block in a box of its own that scrolls, and give the block the width of its text. When that box holds only the block and the text is wider than the box, the script gives the box the cue.
+- The command can start two times on one folder. The second start gives the same pages.
+
+In `reusable-pages.yml`, the input `scroll-cue` (default `true`) starts the command before the site check and the upload.
+
 ## The navigation of a site
 
 The command `site-pages nav` opens the home page of a site in a headless Chromium. It follows the links that the page shows, page by page, and counts the clicks from home.
@@ -160,6 +194,8 @@ The command fails for each of these problems:
 - A link goes to a page that gives a status of 400 or more.
 - A click on a link to `releases/` or `status/` does not show the page of site-pages. A single-page application can catch the click and show its own page.
 - With `--require-bar`, a page has no shared site bar.
+
+The crawl opens at most `--max-pages` pages (default: 60). When it stops at this limit, the pages that it did not open are a "no read". A no-read is not a pass: the command fails, and `report.json` lists the pages in `unread`. The summary shows their count and their paths. In `site-audit.yml`, each no-read is a warning on the check of the pull request.
 
 The folder of `--shots` gets `report.json`, `summary.md` and screenshots of the home, the releases and the status pages, at 1280 px and 360 px.
 
@@ -452,9 +488,17 @@ import "@mark1russell7/site-pages/scroll-cue.css";
 The class sets `overflow-x: auto`. A browser with scroll timelines keeps the background of the box, so a code block keeps the color of its theme. A browser with no scroll timelines gets the background color `--scroll-cue-bg` and a shade of the color `--scroll-cue-shade`. Set `--scroll-cue-bg` to the background color of the box:
 
 ```css
-.code {
+.code.scroll-cue {
   --scroll-cue-bg: var(--code-bg);
 }
+```
+
+The rule that sets `--scroll-cue-bg` must be more specific than `.scroll-cue`, which sets the default `Canvas`. The command `site-pages cue` puts its style last in `<head>`. Thus a rule with only `pre` or `.code` loses, and the fade gets the wrong color.
+
+The fades run on a scroll timeline (`animation-timeline: scroll(self inline)`). In Chromium, `document.getAnimations()` gives each fade as a running animation with one iteration, and the fade does not end. A test that waits for the end of each animation, for example before an axe check of the contrast, then stops at its time limit. Such a test must skip each animation whose timeline is not `document.timeline`:
+
+```ts
+const running = document.getAnimations().filter((a) => a.timeline === document.timeline && a.playState === "running");
 ```
 
 Markdown has no way to set the class of a table or a code block. For a Markdown page, add the plugin `rehypeScrollCue` of the entry `@mark1russell7/site-pages/vite`. It gives the class and a tab stop to each table and each code block. A table also gets a label. A code block keeps a tab stop that it has:
@@ -499,6 +543,49 @@ The theme `auto` removes `data-theme`, and the CSS of the site then obeys `prefe
 </script>
 ```
 
+## The parts of a live demo
+
+A home page shows the package at work: a visitor types or clicks, and the page shows the result of the real functions. The entry `@mark1russell7/site-pages/demo` has the parts that each demo uses. Like `./chrome`, it imports no Node.js module. The file `@mark1russell7/site-pages/demo.css` has their style.
+
+| Function | Operation |
+| --- | --- |
+| `examples(row, items, pick)` | Fills a row with one button for each example `[label, value]`. A click starts `pick` with the value. |
+| `verdict(pass, title, ...reason)` | Makes the line of a verdict: a check or a cross, a title in bold and a reason. The mark has the label "Pass" or "Fail". |
+| `setField(field, value)` | Sets the value of a field and sends an `input` event, as typing does. |
+| `partsAt(text, ranges)` | Divides a text into parts at ranges `[start, end)`. Ranges that overlap become one part. |
+| `partsOf(text, find)` | Divides a text into parts at each copy of `find`. |
+| `markedText(parts, label)` | Shows a text in a box, with a `mark` element on each part with `hit`. |
+
+The style gives these classes:
+
+| Class | Element |
+| --- | --- |
+| `sp-demo` | A section of the page with one demo. |
+| `sp-field` | A label with its input, its text box or its range. Put the text of the label in a `span`. |
+| `sp-pair` | Two or three fields side by side. On a phone, they are in one column. |
+| `sp-examples` | The row of `examples`. A button with `aria-pressed="true"` shows as chosen. |
+| `sp-choices` | A row of choices, for example a radio group. The button with `aria-checked="true"` shows as chosen. |
+| `sp-cards`, `sp-card` | One card for each version of a result. |
+
+```ts
+import "@mark1russell7/site-pages/demo.css";
+import { byId } from "@mark1russell7/site-pages/chrome";
+import { examples, markedText, partsOf, setField, verdict } from "@mark1russell7/site-pages/demo";
+
+const input = byId<HTMLInputElement>("find");
+const result = byId("result");
+const show = (): void => {
+  const parts = partsOf("Is 1+1=2? Yes.", input.value);
+  const found = parts.some((part) => part.hit);
+  result.replaceChildren(verdict(found, found ? "Found:" : "Not found:", `the text has "${input.value}".`), markedText(parts, "The text"));
+};
+input.addEventListener("input", show);
+examples(byId("find-examples"), [["A question", "1+1=2?"], ["A word", "Yes"]], (value) => setField(input, value));
+show();
+```
+
+The style reads the tokens of a site when they exist, for example `--surface`, `--ink`, `--muted` and `--rule` of `shell.css`. Without them, it uses its own colors, in light and in dark. The tokens `--sp-pass`, `--sp-pass-bg`, `--sp-fail`, `--sp-fail-bg` and `--sp-hit` set the colors of a verdict and of a mark.
+
 ## The measures of a site
 
 The file `kpi.json` at the root of a site holds the measures of the project, in the format `kpi/1`. A reader outside the site takes the numbers from this file.
@@ -520,16 +607,17 @@ interface KpiFile {
   project: string;
   at: string; // the ISO time of the data in UTC, never the time of the build
   commit: string; // the full commit of the build
-  measures: Array<{ id: string; value: number; unit?: string; at?: string; notCounted?: string }>;
+  measures: Array<{ id: string; value: number; unit?: string; at?: string; notCounted?: string; targets?: Array<{ value: number; by: string }> }>;
   engines?: Array<{ name: string; version: string }>; // the Status page shows them
 }
 ```
 
 - Give `at` from the record of the data. The writer has no default for this field, because a build time hides old data.
 - Give `at` on a measure when its data is from another time than the file. The Status page then shows a date for each measure.
+- Give `targets` on a measure with a plan. Each target has a value of 0 or more and a date `by` as `YYYY-MM-DD`. The dates go up from the first target to the last. The Status page shows the first target on or after the date of the data, with the unit of the measure. Without such a target, it shows the last target with the word "(past)".
 - Give `notCounted` on a count of faults, for example a count of old text. The text names what the count does not read, so a 0 does not seem to tell more than it measured. The Status page shows the text.
 - Without `commit`, the plugin takes `GITHUB_SHA`, else the head of the repository.
-- A fault in the data stops the build, and the old site stays. A fault is a wrong form, a value that is not finite, a repeated id or a time after the check. The time rules apply to the file and to each measure.
+- A fault in the data stops the build, and the old site stays. A fault is a wrong form, a value that is not finite, a repeated id, a time after the check or a wrong target. The time rules apply to the file and to each measure.
 - A site with no Vite build calls `writeKpi(out, input)` from the root entry, before `site-pages build`.
 - `site-pages build` reads the file from the output folder. It adds the file to `data/status.json`, and the Status page shows the measures, the data date and the engines.
 
