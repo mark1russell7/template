@@ -9,6 +9,12 @@ inputs:
       A GitHub token that can read the pull requests of the repository. In a public repository, each token can. A
       private repository gives "pull-requests: read" to the job.
     default: ${{ github.token }}
+  file:
+    description: >-
+      A path. When the branch has the pull request, the step writes it there as JSON, the same value as the output
+      pull-request. A job that gives the text of the pull request to another job uses the file, not the output: one
+      environment variable takes at most 32 767 characters on Windows and 128 KiB on Linux, and a body can be longer.
+    default: ""
 outputs:
   found:
     description: true when the branch of the run has one open pull request, and its head is the commit of the run.
@@ -53,6 +59,7 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
+        PULL_REQUEST_FILE: ${{ inputs.file }}
         PULL: ${{ github.action_path }}/pull.ts
       # Node 22.18 and later run TypeScript with no build. The job sets up Node 26.
       run: node "$PULL"

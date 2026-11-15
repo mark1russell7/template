@@ -52,6 +52,7 @@ The job starts all the scripts, also after a failure. Then it fails with the nam
 | `release-check-private` | `false` | The release check also starts in a private repository. A private repository pays for each job start, so the default skips the job there. |
 | `release-build` | (empty) | The input `build` of the `release.yml` of the repository, for the release check. |
 | `release-node-version` | `26` | The input `node-version` of the `release.yml` of the repository, for the release check. |
+| `pull-request-private` | `false` | In a private repository, the job `pull` finds the pull request of a dispatched run. The caller also gives `pull-requests: read` (refer to "A dispatched run of a pull request"). |
 
 ### Coverage
 
@@ -216,18 +217,22 @@ Then the run examines that change, as a `pull_request` run does:
 - The job `changesets` examines the changesets of the change, with the labels of the pull request.
 - The job `release-check` starts the release build on the commit of the run.
 - The job `checks` deepens the checkout to the merge base. It gives the tip of the base branch to `check:conventions` in the variable `CONVENTIONS_BASE`.
-- The job `checks` writes the title, the body and the number of commits of the pull request to a JSON file. The variable `CONVENTIONS_PULL_REQUEST` gives its path.
+- The job `pull` saves the pull request as the artifact `pull-request-of-run`: its title, its body and its number of commits, in a JSON file. The job `checks` downloads it, and the variable `CONVENTIONS_PULL_REQUEST` gives its path. The job uses a file, not an output: a step gets an output of a job through an environment variable. On Windows, an environment variable takes at most 32,767 characters, and a body can be longer.
 - Thus the rules `release-files`, `unreleased-change`, `home-package`, `version-title` and `no-local-paths` examine the change. The README of `@mark1russell7/conventions` tells how.
 
 The job `pull` fails when it cannot tell the change, and a failure of the job `pull` fails `CI OK`:
 
 - Two open pull requests have the branch as their head. The job cannot tell the base.
-- The head stays different from the commit of the run. A newer push starts a new run.
-- A read of the API fails or is refused.
+- The head stays different from the commit of the run. If the branch has a newer commit, the `pull_request` run of that commit examines it. Else start the run again.
+- A read of the API is refused (HTTP 403 or 404), or the rate limit of the API stops it. The error tells which, and what to do.
+- A read of the API fails for a time (HTTP 429 or 5xx, or no answer) after 3 more reads, 10 s apart. This limit is for all reads of the run together.
+- The base branch of the pull request is not in the repository: it was deleted or renamed.
 
 The job `checks` starts also after a failure of the job `pull`, so the run still shows its results. A run on the default branch does not start the job `pull`, for example the gate of `release.yml`.
 
-The job `pull` has no `permissions` key, so it gets the permissions of the caller. A job of a called workflow cannot ask for more than its caller gives. A `permissions` key on the job stops each caller that gives only `contents: read`. In a public repository, each token can read the pull requests. A private repository gives `pull-requests: read` to the job that calls `reusable-ci.yml`:
+The job `pull` has no `permissions` key, so it gets the permissions of the caller. A job of a called workflow cannot ask for more than its caller gives. A `permissions` key on the job stops each caller that gives only `contents: read`. In a public repository, each token can read the pull requests.
+
+In a private repository, the job `pull` starts only with the input `pull-request-private: true`. A private repository pays for each job start. The job that calls `reusable-ci.yml` gives the input and `pull-requests: read`:
 
 ```yaml
 jobs:
@@ -236,9 +241,11 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+    with:
+      pull-request-private: true
 ```
 
-Without this permission, the job `pull` fails on a dispatched run of a pull request in a private repository. Its error names the permission.
+Without the input, a dispatched run in a private repository examines no change, as a run on the default branch. The changeset check and the release check do not start. With the input and without the permission, the job `pull` fails, and its error names the permission.
 
 ### A gate with paths
 

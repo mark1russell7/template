@@ -1,7 +1,7 @@
 // Tests pull.ts of the action pull-of-run: the lookup of the pull request of a run that workflow_dispatch starts, with a
 // fake fetch. Also tests the job pull of reusable-ci.yml, and how the jobs changesets, release-check and checks use it.
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { after, describe, it, mock } from "node:test";
@@ -35,6 +35,10 @@ function pull(number: number, over: { head?: string; repo?: string; ref?: string
 interface Route {
   readonly status: number;
   readonly body: unknown;
+  /** The headers of the answer, with lowercase names. */
+  readonly headers?: Readonly<Record<string, string>>;
+  /** The fetch throws an error with this message, as when the API does not answer. */
+  readonly throws?: string;
 }
 
 /**
@@ -55,7 +59,13 @@ function fake(routes: Record<string, Route | Route[]>): { fetcher: Fetch; urls: 
     const count = calls.get(path) ?? 0;
     calls.set(path, count + 1);
     const answer = list[Math.min(count, list.length - 1)] as Route;
-    return { status: answer.status, text: async () => (typeof answer.body === "string" ? answer.body : JSON.stringify(answer.body)) };
+    if (answer.throws !== undefined) throw new Error(answer.throws);
+    const headers = answer.headers ?? {};
+    return {
+      status: answer.status,
+      headers: { get: (name: string) => headers[name.toLowerCase()] ?? null },
+      text: async () => (typeof answer.body === "string" ? answer.body : JSON.stringify(answer.body)),
+    };
   };
   return { fetcher, urls };
 }
@@ -125,7 +135,7 @@ describe("pullOfRun", () => {
     const error = errorOf(await pullOfRun(fetcher, input, time));
     assert.equal(
       error,
-      `The pull request #7 has the head ${OLD_HEAD}, but the run is on ${HEAD}. The head stayed different for 30 s, so the job cannot tell the change of the run. A newer push to topic/one starts a new run.`,
+      `The pull request #7 has the head ${OLD_HEAD}, but the run is on ${HEAD}. The head stayed different for 30 s, so the job cannot tell the change of the run. When topic/one has a newer commit, the pull_request run of that commit examines it. Else start this run again.`,
     );
     assert.deepEqual(time.slept, [10_000, 10_000, 10_000]);
     // 1 list, 4 reads of the pull request, and no read of the base
@@ -150,28 +160,99 @@ describe("pullOfRun", () => {
     assert.equal(found.pullRequest.number, 7);
   });
 
-  it("fails on a refused read (403, 404) with the permission that a private repository gives", async () => {
+  it("fails on a refused read (403, 404) of the list or of the pull request, with the permission that a private repository gives", async () => {
+    const refused = (status: number): Route => ({ status, body: { message: "Resource not accessible by integration" } });
     for (const status of [403, 404]) {
-      const { fetcher } = fake({ [LIST]: { status, body: { message: "Resource not accessible by integration" } } });
-      const error = errorOf(await pullOfRun(fetcher, input, timing()));
+      const time = timing();
+      const error = errorOf(await pullOfRun(fake({ [LIST]: refused(status) }).fetcher, input, time));
       assert.ok(error.startsWith(`GET ${LIST}?state=open&head=acme%3Atopic%2Fone&per_page=100 gave HTTP ${String(status)}: Resource not accessible by integration.`), error);
-      assert.match(error, /A private repository gives "pull-requests: read" to the job that calls reusable-ci\.yml, in its ci\.yml/u);
+      assert.match(error, /A private repository gives "pull-requests: read" to the job that calls reusable-ci\.yml, in its ci\.yml, with the input pull-request-private/u);
+      // A refusal does not pass when the step reads again, so the step does not wait
+      assert.deepEqual(time.slept, []);
+      const single = errorOf(await pullOfRun(fake({ [LIST]: ok([pull(7)]), [`${LIST}/7`]: refused(status) }).fetcher, input, timing()));
+      assert.ok(single.startsWith(`GET ${LIST}/7 gave HTTP ${String(status)}: Resource not accessible by integration. The token of the job cannot read the pull requests.`), single);
     }
   });
 
-  it("fails on a server error with its status, and on a read of the base branch that fails", async () => {
-    const { fetcher } = fake({ [LIST]: { status: 500, body: "" } });
-    assert.equal(errorOf(await pullOfRun(fetcher, input, timing())), `GET ${LIST}?state=open&head=acme%3Atopic%2Fone&per_page=100 gave HTTP 500.`);
-    const base = fake({ [LIST]: ok([pull(7)]), [`${LIST}/7`]: ok(pull(7)), [`repos/${REPO}/git/ref/heads/main`]: { status: 502, body: { message: "Bad gateway" } } });
-    assert.equal(errorOf(await pullOfRun(base.fetcher, input, timing())), `GET repos/${REPO}/git/ref/heads/main gave HTTP 502: Bad gateway.`);
+  it("names the rate limit, not the permission, when the rate limit refuses a read", async () => {
+    const limited: Route[] = [
+      { status: 403, body: { message: "Forbidden" }, headers: { "x-ratelimit-remaining": "0" } },
+      { status: 403, body: { message: "You have exceeded a secondary rate limit." } },
+      { status: 403, body: { message: "API rate limit exceeded for installation ID 1." } },
+    ];
+    for (const route of limited) {
+      const time = timing();
+      const error = errorOf(await pullOfRun(fake({ [LIST]: route }).fetcher, input, time));
+      assert.match(error, /gave HTTP 403: .*\. The rate limit of the API stopped the read\. Start the run again when the limit resets\.$/u);
+      assert.doesNotMatch(error, /pull-requests: read/u);
+      assert.deepEqual(time.slept, []);
+    }
+    // HTTP 429 fails for a time, so the step reads again, and then names the rate limit and the reads again
+    const time = timing();
+    const error = errorOf(await pullOfRun(fake({ [LIST]: { status: 429, body: { message: "Too many requests" } } }).fetcher, input, time));
+    assert.equal(
+      error,
+      `GET ${LIST}?state=open&head=acme%3Atopic%2Fone&per_page=100 gave HTTP 429: Too many requests. The rate limit of the API stopped the read. Start the run again when the limit resets. The step read the API again 3 times, 10 s apart, which is the limit of the run.`,
+    );
+    assert.deepEqual(time.slept, [10_000, 10_000, 10_000]);
+  });
+
+  it("reads again after a server error or no answer, and gives the pull request when a read passes", async () => {
+    const time = timing();
+    const { fetcher, urls } = fake({ [LIST]: [{ status: 500, body: "" }, { status: 0, body: "", throws: "socket hang up" }, ok([pull(7)])], [`${LIST}/7`]: ok(pull(7)), ...tip() });
+    const result = await pullOfRun(fetcher, input, time);
+    assert.ok("found" in result && result.found, JSON.stringify(result));
+    assert.equal(result.pullRequest.base.sha, TIP);
+    assert.deepEqual(time.slept, [10_000, 10_000]);
+    assert.equal(urls.length, 5);
+  });
+
+  it("fails after the limit of reads again, with the status and the count, for all reads of the run together", async () => {
+    const list = `GET ${LIST}?state=open&head=acme%3Atopic%2Fone&per_page=100`;
+    const server = timing();
+    assert.equal(errorOf(await pullOfRun(fake({ [LIST]: { status: 500, body: "" } }).fetcher, input, server)), `${list} gave HTTP 500. The step read the API again 3 times, 10 s apart, which is the limit of the run.`);
+    assert.deepEqual(server.slept, [10_000, 10_000, 10_000]);
+    // Two reads again of the list, and one of the base branch: the limit is for the run, not for each read
+    const shared = timing();
+    const base = fake({
+      [LIST]: [{ status: 503, body: "" }, { status: 503, body: "" }, ok([pull(7)])],
+      [`${LIST}/7`]: ok(pull(7)),
+      [`repos/${REPO}/git/ref/heads/main`]: { status: 502, body: { message: "Bad gateway" } },
+    });
+    assert.equal(
+      errorOf(await pullOfRun(base.fetcher, input, shared)),
+      `GET repos/${REPO}/git/ref/heads/main gave HTTP 502: Bad gateway. The step read the API again 3 times, 10 s apart, which is the limit of the run.`,
+    );
+    assert.deepEqual(shared.slept, [10_000, 10_000, 10_000]);
     const thrown: Fetch = async () => {
       throw new Error("connect ECONNREFUSED");
     };
-    assert.equal(errorOf(await pullOfRun(thrown, input, timing())), "The API did not answer: connect ECONNREFUSED");
+    assert.equal(
+      errorOf(await pullOfRun(thrown, input, timing())),
+      `The API did not answer GET ${LIST}?state=open&head=acme%3Atopic%2Fone&per_page=100: connect ECONNREFUSED. The step read the API again 3 times, 10 s apart, which is the limit of the run.`,
+    );
+    // With no reads again, the error has no count
+    assert.equal(errorOf(await pullOfRun(fake({ [LIST]: { status: 500, body: "" } }).fetcher, input, { ...timing(), retries: 0 })), `${list} gave HTTP 500.`);
+  });
+
+  it("names a base branch that is gone (404), and the contents permission on a refused read of the branch (403)", async () => {
+    const routes = (status: number): Record<string, Route> => ({ [LIST]: ok([pull(7)]), [`${LIST}/7`]: ok(pull(7)), [`repos/${REPO}/git/ref/heads/main`]: { status, body: { message: "Not Found" } } });
+    assert.equal(
+      errorOf(await pullOfRun(fake(routes(404)).fetcher, input, timing())),
+      `GET repos/${REPO}/git/ref/heads/main gave HTTP 404: Not Found. The base branch main of #7 is not in the repository: it was deleted or renamed. Change the base of the pull request.`,
+    );
+    const refused = errorOf(await pullOfRun(fake(routes(403)).fetcher, input, timing()));
+    assert.match(refused, /gave HTTP 403: Not Found\. The token of the job cannot read the branches of the repository\. The job that calls reusable-ci\.yml gives "contents: read"\.$/u);
+    assert.doesNotMatch(refused, /pull-requests/u);
   });
 
   it("fails on an answer that it does not know, and on a repository or a commit that is not valid", async () => {
     assert.match(errorOf(await pullOfRun(fake({ [LIST]: ok({ items: [] }) }).fetcher, input, timing())), /not a JSON array/u);
+    assert.match(errorOf(await pullOfRun(fake({ [LIST]: ok("<html>") }).fetcher, input, timing())), /not a JSON array/u);
+    for (const body of [[pull(7)], "<html>", null]) {
+      const single = fake({ [LIST]: ok([pull(7)]), [`${LIST}/7`]: ok(body) });
+      assert.equal(errorOf(await pullOfRun(single.fetcher, input, timing())), "The read of the pull request #7 is not a JSON object.");
+    }
     const noTip = fake({ [LIST]: ok([pull(7)]), [`${LIST}/7`]: ok(pull(7)), ...tip("") });
     assert.match(errorOf(await pullOfRun(noTip.fetcher, input, timing())), /no commit at the tip of main/u);
     assert.match(errorOf(await pullOfRun(fake({}).fetcher, { ...input, repository: "widgets" }, timing())), /not <owner>\/<name>/u);
@@ -257,6 +338,43 @@ describe("main", () => {
     assert.match(lines[0] ?? "", /^::error title=Pull request of the run::GET .* gave HTTP 403: 100 %25 refused%0A::warning::injected\. /u);
     assert.match(summary, /^### Pull request of the run\n\nNo read: /u);
   });
+
+  it("writes the pull request to PULL_REQUEST_FILE, in a folder that it makes, as the output pull-request", async () => {
+    const file = join(temp, "folder-one", "folder-two", "pull-request.json");
+    const body = `${"A long body. ".repeat(4_000)}\nwith a line break`;
+    const routes = { [LIST]: ok([pull(7, { body })]), [`${LIST}/7`]: ok(pull(7, { body })), ...tip() };
+    const { code, outputs } = await run(routes, { PULL_REQUEST_FILE: file });
+    assert.equal(code, 0);
+    const written = readFileSync(file, "utf8");
+    assert.ok(written.endsWith("}\n"));
+    assert.equal(written, `${outputs.get("pull-request") ?? ""}\n`);
+    // Longer than one environment variable on Windows can be, so the job checks reads the file, not the output
+    assert.ok(written.length > 32_767);
+    assert.equal((JSON.parse(written) as { body: string }).body, body);
+  });
+
+  it("writes no file when the branch has no pull request, or when PULL_REQUEST_FILE is empty", async () => {
+    const none = join(temp, "none", "pull-request.json");
+    assert.equal((await run({ [LIST]: ok([]) }, { PULL_REQUEST_FILE: none })).code, 0);
+    assert.equal(existsSync(none), false);
+    const { code, outputs } = await run({ [LIST]: ok([pull(7)]), [`${LIST}/7`]: ok(pull(7)), ...tip() }, { PULL_REQUEST_FILE: "" });
+    assert.equal(code, 0);
+    assert.equal(outputs.get("found"), "true");
+  });
+
+  it("fails, and writes no output, when it cannot write PULL_REQUEST_FILE or GITHUB_OUTPUT is not set", async () => {
+    const routes = { [LIST]: ok([pull(7)]), [`${LIST}/7`]: ok(pull(7)), ...tip() };
+    // The path is a folder, so the write fails
+    const folder = join(temp, "a-folder");
+    mkdirSync(folder);
+    const unwritable = await run(routes, { PULL_REQUEST_FILE: folder });
+    assert.equal(unwritable.code, 1);
+    assert.equal(unwritable.outputs.size, 0);
+    assert.match(unwritable.log, /^::error title=Pull request of the run::The step cannot write the pull request to /mu);
+    const noOutput = await run(routes, { GITHUB_OUTPUT: "" });
+    assert.equal(noOutput.code, 1);
+    assert.match(noOutput.log, /^::error title=Pull request of the run::GITHUB_OUTPUT is not set\.$/mu);
+  });
 });
 
 describe("outputsOf", () => {
@@ -303,26 +421,44 @@ describe("the action and its job in reusable-ci.yml", () => {
     assert.ok(install < action.indexOf('run: node "$PULL"'));
   });
 
-  it("gives each output of the step, and the job gives each output that the other jobs read", () => {
+  it("gives each output of the step, and the job gives each output that the other jobs read, but not the text", () => {
     const outputs = ["found", "number", "base-ref", "base-sha", "head-ref", "head-sha", "labels", "pull-request"];
     for (const name of outputs) assert.match(action, new RegExp(`\\n  ${name}:\\n(?: {4}.*\\n)+? {4}value: \\$\\{\\{ steps\\.pull\\.outputs\\.${name} \\}\\}\\n`, "u"), name);
     const job = jobText("pull");
-    for (const name of ["found", "base-ref", "base-sha", "head-ref", "head-sha", "labels", "pull-request"]) assert.match(job, new RegExp(`\\n {6}${name}: \\$\\{\\{ steps\\.pull\\.outputs\\.${name} \\}\\}\\n`, "u"), name);
+    const block = /\n {4}outputs:\n((?: {6}.*\n)+)/u.exec(job)?.[1] ?? "";
+    assert.deepEqual(
+      [...block.matchAll(/^ {6}([a-z-]+): \$\{\{ steps\.pull\.outputs\.([a-z-]+) \}\}$/gmu)].map((match) => [match[1], match[2]]),
+      ["found", "base-ref", "base-sha", "head-ref", "head-sha", "labels"].map((name) => [name, name]),
+    );
+    // The text of the pull request goes to the job checks in a file: an output of a job reaches a step as an environment
+    // variable, and a body can be longer than Windows allows
+    assert.doesNotMatch(job, /outputs\.pull-request/u);
+    assert.match(action, /\n  file:\n(?: {4}.*\n)+? {4}default: ""\n/u);
+    assert.match(action, /\n {8}PULL_REQUEST_FILE: \$\{\{ inputs\.file \}\}\n/u);
   });
 
   it("starts the job pull only on a dispatched run on a branch that is not the default branch, with no permissions of its own", () => {
     const job = jobText("pull");
     assert.equal(
       condition(job, 4),
-      "github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/') && github.ref != format('refs/heads/{0}', github.event.repository.default_branch)",
+      "github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/') && github.ref != format('refs/heads/{0}', github.event.repository.default_branch) && (!github.event.repository.private || inputs.pull-request-private)",
     );
+    // A private repository opts in, because its caller also gives pull-requests: read
+    assert.match(ci, /\n {6}pull-request-private:\n(?: {8}.*\n)+? {8}type: boolean\n {8}default: false\n/u);
     // A permissions key above the caller would stop each caller that gives only contents: read
     assert.doesNotMatch(job, /\n {4}permissions:/u);
     // The job runs only code of the template: the action from the commit of the workflow, and no checkout of the repository
     assert.equal([...job.matchAll(/uses: actions\/checkout@/gu)].length, 1);
     assert.match(job, /\n {10}repository: \$\{\{ job\.workflow_repository \}\}\n {10}ref: \$\{\{ job\.workflow_sha \}\}\n {10}path: \.shared-actions\n {10}sparse-checkout: \.github\/actions\n/u);
     assert.match(job, /node-version: "26"/u);
-    assert.match(job, /\n {6}- id: pull\n {8}uses: \.\/\.shared-actions\/\.github\/actions\/pull-of-run\n/u);
+    assert.match(job, /\n {6}- id: pull\n {8}uses: \.\/\.shared-actions\/\.github\/actions\/pull-of-run\n {8}with:\n {10}file: \$\{\{ runner\.temp \}\}\/pull-request-of-run\/pull-request\.json\n/u);
+    // The job saves the file for the job checks. A run again of the workflow replaces it.
+    const save = job.slice(job.indexOf("- name: Save the pull request of the run"));
+    assert.equal(condition(save, 8), "steps.pull.outputs.found == 'true'");
+    assert.match(
+      save,
+      /\n {8}uses: actions\/upload-artifact@[0-9a-f]{40} # v\d+\.\d+\.\d+\n {8}with:\n {10}name: pull-request-of-run\n {10}path: \$\{\{ runner\.temp \}\}\/pull-request-of-run\/pull-request\.json\n {10}if-no-files-found: error\n {10}retention-days: 1\n {10}overwrite: true\n/u,
+    );
   });
 
   it("starts the job changesets on a pull request, or on the pull request of the job pull, with its values", () => {
@@ -351,10 +487,21 @@ describe("the action and its job in reusable-ci.yml", () => {
     assert.match(deepen, /\n {10}PULL_BASE: \$\{\{ needs\.pull\.outputs\.base-sha \}\}\n/u);
     const file = job.slice(job.indexOf("- name: Pull request of the run"));
     assert.equal(condition(file, 8), "needs.pull.outputs.found == 'true'");
-    // The text of the pull request goes through a variable, never through an expression in the script
-    assert.match(file, /\n {10}PULL_REQUEST: \$\{\{ needs\.pull\.outputs\.pull-request \}\}\n {8}run: printf '%s\\n' "\$PULL_REQUEST" > "\$RUNNER_TEMP\/pull-request\.json"\n/u);
+    // The text of the pull request comes as the file of the job pull: no expression and no variable has it
+    assert.match(file, /\n {8}uses: actions\/download-artifact@[0-9a-f]{40} # v\d+\.\d+\.\d+\n {8}with:\n {10}name: pull-request-of-run\n {10}path: \$\{\{ runner\.temp \}\}\/pull-request-of-run\n/u);
+    assert.doesNotMatch(job, /\n {10}PULL_REQUEST:|outputs\.pull-request/u);
     const scripts = job.slice(job.indexOf("- name: Scripts"));
     assert.match(scripts, /\n {10}CONVENTIONS_BASE: \$\{\{ needs\.pull\.outputs\.base-sha \}\}\n/u);
-    assert.match(scripts, /\n {10}CONVENTIONS_PULL_REQUEST: \$\{\{ needs\.pull\.outputs\.found == 'true' && format\('\{0\}\/pull-request\.json', runner\.temp\) \|\| '' \}\}\n/u);
+    assert.match(
+      scripts,
+      /\n {10}CONVENTIONS_PULL_REQUEST: \$\{\{ needs\.pull\.outputs\.found == 'true' && format\('\{0\}\/pull-request-of-run\/pull-request\.json', runner\.temp\) \|\| '' \}\}\n/u,
+    );
+    // Each pin of upload-artifact and download-artifact is the pin that the other workflows of the template use
+    const pins = (name: string): Set<string> =>
+      new Set(
+        ["reusable-ci.yml", "reusable-mutation.yml", "actions-test.yml"].flatMap((workflow) => [...read(`.github/workflows/${workflow}`).matchAll(new RegExp(`actions/${name}@([0-9a-f]{40})`, "gu"))].map((match) => match[1] ?? "")),
+      );
+    assert.equal(pins("upload-artifact").size, 1);
+    assert.equal(pins("download-artifact").size, 1);
   });
 });

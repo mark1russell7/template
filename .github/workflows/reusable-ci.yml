@@ -141,6 +141,14 @@ on:
         description: The input node-version of the release.yml of the repository (reusable-release-build.yml), for the job release-check.
         type: string
         default: "26"
+      pull-request-private:
+        description: >-
+          In a private repository, the job pull finds the pull request of a dispatched run only when this input is true.
+          The job that calls this workflow then gives "pull-requests: read" (CI.md, "A dispatched run of a pull
+          request"). With false, a dispatched run in a private repository examines no change, and a private repository
+          pays for no start of the job pull.
+        type: boolean
+        default: false
     secrets:
       CONVENTIONS_PRIVATE_PATTERNS:
         description: >-
@@ -153,17 +161,21 @@ jobs:
   # A run that workflow_dispatch starts has no pull request in its event, for example a gate of the queue (CI.md "The
   # queue"). This job finds the open pull request of the branch, and gives its base, its head, its labels and its text to
   # the other jobs. A failure of this job fails the CI: the other jobs do not pass a change that they cannot read. A run on
-  # the default branch, for example the gate of release.yml, has no pull request, so the job does not start.
+  # the default branch, for example the gate of release.yml, has no pull request, so the job does not start. In a private
+  # repository, the job starts only with the input pull-request-private, because only then can the token of the job read
+  # the pull requests.
   pull:
     if: >-
       github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/')
       && github.ref != format('refs/heads/{0}', github.event.repository.default_branch)
+      && (!github.event.repository.private || inputs.pull-request-private)
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # The job has no permissions of its own, so it gets the permissions of the caller. A job of a called workflow cannot
-    # ask for more than the caller gives: "pull-requests: read" here would stop each caller that gives only "contents:
-    # read", also when the job does not start. In a public repository, each token can read the pull requests. A private
-    # repository gives "pull-requests: read" to the job that calls this workflow. The job runs only code of the template.
+    # The job has no permissions key, so it gets the permissions of the caller. A job of a called workflow cannot ask for
+    # more than the caller gives: "pull-requests: read" here would stop each caller that gives only "contents: read", also
+    # when the job does not start. In a public repository, each token can read the pull requests. A private repository
+    # gives "pull-requests: read" to the job that calls this workflow, with the input pull-request-private. The job runs
+    # only code of the template, and its one write is the artifact pull-request-of-run of this run.
     outputs:
       found: ${{ steps.pull.outputs.found }}
       base-ref: ${{ steps.pull.outputs.base-ref }}
@@ -171,7 +183,6 @@ jobs:
       head-ref: ${{ steps.pull.outputs.head-ref }}
       head-sha: ${{ steps.pull.outputs.head-sha }}
       labels: ${{ steps.pull.outputs.labels }}
-      pull-request: ${{ steps.pull.outputs.pull-request }}
     steps:
       # The action comes from the commit of this workflow, as in the job changesets. The job does not check out the
       # repository.
@@ -188,6 +199,20 @@ jobs:
           node-version: "26"
       - id: pull
         uses: ./.shared-actions/.github/actions/pull-of-run
+        with:
+          file: ${{ runner.temp }}/pull-request-of-run/pull-request.json
+      # The job checks reads the title, the body and the number of commits from this file. A file, not an output of the
+      # job: a step gets an output of a job through an environment variable, which takes at most 32 767 characters on
+      # Windows, and a body can be longer. A run again of the whole workflow uploads the file again (overwrite).
+      - name: Save the pull request of the run
+        if: steps.pull.outputs.found == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pull-request-of-run
+          path: ${{ runner.temp }}/pull-request-of-run/pull-request.json
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
 
   changesets:
     needs: pull
@@ -372,18 +397,20 @@ jobs:
           done <<< "$PATTERNS"
           exit 0
       # On a run that workflow_dispatch starts, the event file has no pull request. check:conventions reads the pull
-      # request of the job pull from this file (CONVENTIONS_PULL_REQUEST): its title, its body and its number of commits.
-      # The text goes through a variable, so no expression puts it into the script.
+      # request of the job pull from the file that the job saved (CONVENTIONS_PULL_REQUEST): its title, its body and its
+      # number of commits. No expression and no environment variable has the text, so its length and its characters do
+      # not matter.
       - name: Pull request of the run
         if: needs.pull.outputs.found == 'true'
-        env:
-          PULL_REQUEST: ${{ needs.pull.outputs.pull-request }}
-        run: printf '%s\n' "$PULL_REQUEST" > "$RUNNER_TEMP/pull-request.json"
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: pull-request-of-run
+          path: ${{ runner.temp }}/pull-request-of-run
       # CONVENTIONS_BASE and CONVENTIONS_PULL_REQUEST are empty, except on a run of the job pull that found a pull request
       - name: Scripts
         env:
           CONVENTIONS_BASE: ${{ needs.pull.outputs.base-sha }}
-          CONVENTIONS_PULL_REQUEST: ${{ needs.pull.outputs.found == 'true' && format('{0}/pull-request.json', runner.temp) || '' }}
+          CONVENTIONS_PULL_REQUEST: ${{ needs.pull.outputs.found == 'true' && format('{0}/pull-request-of-run/pull-request.json', runner.temp) || '' }}
           CONVENTIONS_PRIVATE_PATTERNS: ${{ secrets.CONVENTIONS_PRIVATE_PATTERNS }}
           SCRIPTS: ${{ inputs.scripts }}
           RECURSIVE: ${{ inputs.recursive-scripts }}
