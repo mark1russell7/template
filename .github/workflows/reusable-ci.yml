@@ -314,9 +314,12 @@ jobs:
       # The checkout of a pull request of more than one commit ends inside the change. The rule release-files of
       # check:conventions reads each commit of the change, so this step deepens the checkout to the merge base. The rule
       # unreleased-change reads the version at the merge base, which a pull request of one commit also needs when main
-      # moved after the start of its branch. When the checkout has the merge base, the step ends at once. On a run that
-      # workflow_dispatch starts, the checkout is the head of the branch, not a merge commit. The base is then the tip of
-      # the base branch from the job pull, and the step fetches it first.
+      # moved after the start of its branch. On a run that workflow_dispatch starts, the checkout is the head of the
+      # branch, not a merge commit. The base is then the tip of the base branch from the job pull, and the step fetches
+      # it first. A shallow checkout can give a wrong merge base: an older commit below the true merge base. This occurs
+      # when the branch merged an old commit of main. The merge base is correct only when no commit from it to the two
+      # tips is a shallow commit (the file shallow of git). The step stops only then. Else it deepens the checkout, and
+      # at the end it fetches the whole history. The test scripts/workflows/deepen.test.ts runs this step on a fixture.
       - name: Deepen to the merge base
         if: inputs.fetch-depth != 0 && (github.event.pull_request.commits > 0 || needs.pull.outputs.found == 'true')
         env:
@@ -330,11 +333,21 @@ jobs:
           else
             base=$(git rev-parse HEAD^1) && head=$(git rev-parse HEAD^2) || exit 0
           fi
+          # The function gives 0 when the merge base is correct: the commits from it to the two tips have no shallow
+          # commit. Only a condition calls it, so set -e does not apply in it. A pipe from rev-list to grep -q is not
+          # safe: with pipefail, rev-list can end on SIGPIPE, and the negated pipe then reads as correct.
+          complete() {
+            mb=$(git merge-base "$base" "$head") || return 1
+            shallow=$(git rev-parse --git-path shallow) || return 1
+            [ -s "$shallow" ] || return 0
+            span=$(git rev-list "^$mb" "$base" "$head") || return 1
+            ! grep -qxF -f "$shallow" <<< "$span"
+          }
           for depth in 16 128 1024; do
-            git merge-base "$base" "$head" > /dev/null && exit 0
+            complete && exit 0
             git -c "http.extraheader=$auth" fetch --quiet --no-tags --deepen="$depth" origin "$base" "$head"
           done
-          git merge-base "$base" "$head" > /dev/null || git -c "http.extraheader=$auth" fetch --quiet --no-tags --unshallow origin "$base" "$head"
+          complete || git -c "http.extraheader=$auth" fetch --quiet --no-tags --unshallow origin "$base" "$head"
       # On a push to the default branch, the rule unreleased-change of check:conventions compares the commit before the
       # push with HEAD. A push of more commits than the depth of the checkout does not have that commit, so this step
       # fetches it. A failed fetch only makes the rule skip.
