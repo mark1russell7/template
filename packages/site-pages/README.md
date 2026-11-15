@@ -526,6 +526,7 @@ The entry `@mark1russell7/site-pages/chrome` has small helpers for the script of
 | `rovingIndex(key, index, count, axis)` | Gives the index after an arrow key, with a wrap at each end. A tab list or a list of results uses it. |
 
 Put the role and the label of the group on the container, for example `<div role="radiogroup" aria-label="Unit">`. The axis `horizontal` uses only the left and right arrows, and `vertical` uses only the up and down arrows. The default `both` uses the four arrows.
+Add the class `sp-choices` of `demo.css` to the container. Then the buttons show as a row, and the button of the value shows as chosen.
 
 ```ts
 import { byId, copyText, h, setupTheme } from "@mark1russell7/site-pages/chrome";
