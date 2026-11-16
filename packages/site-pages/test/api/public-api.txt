@@ -84,6 +84,8 @@ type ReleaseReading: build/index.d.ts#ReleaseReading
 type ReleaseSources: build/index.d.ts#ReleaseSources
 type ReleaseSummary: build/index.d.ts#ReleaseSummary
 RoadmapParseError: build/index.d.ts#RoadmapParseError
+SITE_ICON_HREF: build/index.d.ts#SITE_ICON_HREF
+SITE_ICON_SVG: build/index.d.ts#SITE_ICON_SVG
 STATUS_CLASSES: build/index.d.ts#STATUS_CLASSES
 STATUS_SCRIPT: build/index.d.ts#STATUS_SCRIPT
 type StatusBoardData: build/chunks/freshness.d.ts#StatusBoardData
@@ -120,9 +122,11 @@ githubReleaseLag: build/index.d.ts#githubReleaseLag
 githubReleases: build/index.d.ts#githubReleases
 globFiles: build/index.d.ts#globFiles
 greenRunOf: build/index.d.ts#greenRunOf
+hasIconLink: build/index.d.ts#hasIconLink
 headCommit: build/index.d.ts#headCommit
 headingAnchor: build/index.d.ts#headingAnchor
 headingDate: build/index.d.ts#headingDate
+iconLink: build/index.d.ts#iconLink
 inlineMarkdown: build/index.d.ts#inlineMarkdown
 isShallow: build/index.d.ts#isShallow
 kindOf: build/index.d.ts#kindOf
@@ -261,6 +265,7 @@ SiteKpiInput: build/vite.d.ts#SiteKpiInput
 SiteKpiPlugin: build/vite.d.ts#SiteKpiPlugin
 SiteShellConfig: build/vite.d.ts#SiteShellConfig
 SiteShellConfigInput: build/vite.d.ts#SiteShellConfigInput
+SiteShellIconTag: build/vite.d.ts#SiteShellIconTag
 SiteShellOptions: build/vite.d.ts#SiteShellOptions
 SiteShellPlugin: build/vite.d.ts#SiteShellPlugin
 SiteShellTag: build/vite.d.ts#SiteShellTag
@@ -1082,6 +1087,7 @@ interface PageOptions {
   extraCss?: string | undefined;
   generatedAt: string;
   commit: string | null;
+  icon?: string | undefined;
 }
 
 ### build/index.d.ts#PageParts
@@ -1187,6 +1193,12 @@ interface ReleaseSummary {
 
 ### build/index.d.ts#RoadmapParseError
 export declare class RoadmapParseError extends Error {}
+
+### build/index.d.ts#SITE_ICON_HREF
+export declare const SITE_ICON_HREF: string;
+
+### build/index.d.ts#SITE_ICON_SVG
+export declare const SITE_ICON_SVG = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 32 32\"><rect width=\"32\" height=\"32\" rx=\"7\" fill=\"#2346c4\"/><path d=\"M10 7h8l5 5v13H10z\" fill=\"#fff\"/><path d=\"M18 7v5h5z\" fill=\"#e7ecfd\"/></svg>";
 
 ### build/index.d.ts#STATUS_CLASSES
 export declare const STATUS_CLASSES: readonly StatusClass[];
@@ -1352,6 +1364,9 @@ export declare function greenRunOf(runs: readonly WorkflowRunEnd[]): {
   at: string;
 } | null;
 
+### build/index.d.ts#hasIconLink
+export declare function hasIconLink(html: string): boolean;
+
 ### build/index.d.ts#headCommit
 export declare function headCommit(repoDir: string): string | null;
 
@@ -1360,6 +1375,9 @@ export declare function headingAnchor(heading: string): string;
 
 ### build/index.d.ts#headingDate
 export declare function headingDate(repoDir: string, version: string, file: string): string | null;
+
+### build/index.d.ts#iconLink
+export declare function iconLink(href?: string): string;
 
 ### build/index.d.ts#inlineMarkdown
 export declare function inlineMarkdown(markdown: string): string;
@@ -1555,17 +1573,28 @@ export interface SiteShellConfigInput {
   } | null | undefined;
 }
 
+### build/vite.d.ts#SiteShellIconTag
+export interface SiteShellIconTag {
+  readonly tag: "link";
+  readonly attrs: {
+    readonly rel: "icon";
+    readonly href: string;
+  };
+  readonly injectTo: "head";
+}
+
 ### build/vite.d.ts#SiteShellOptions
 export interface SiteShellOptions {
   readonly themeKey: string;
   readonly packageFile?: string | false | undefined;
+  readonly icon?: string | false | undefined;
 }
 
 ### build/vite.d.ts#SiteShellPlugin
 export interface SiteShellPlugin {
   readonly name: string;
   config(config: SiteShellConfigInput): SiteShellConfig;
-  transformIndexHtml(): SiteShellTag[];
+  transformIndexHtml(html?: string): (SiteShellTag | SiteShellIconTag)[];
 }
 
 ### build/vite.d.ts#SiteShellTag
