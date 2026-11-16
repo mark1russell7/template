@@ -58,6 +58,7 @@ export {
   pinnedGitDeps,
   pipeFails,
   gateAfterCancel,
+  publishTextSafe,
   pushMainOnly,
   releaseFiles,
   requiredScripts,
