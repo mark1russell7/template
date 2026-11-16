@@ -8,10 +8,13 @@ The workflow `.github/workflows/release.yml` publishes the packages of this repo
 
 | Job | What it uses |
 |---|---|
-| `verify` | The `ci.yml` of the repository. |
+| `tree` | `reusable-release-tree.yml` of the template, with `scripts/workflows/verified-tree.ts` of the same template commit. |
+| `verify` | The `ci.yml` of the repository. It starts only when `tree` gives no yes. |
 | `build` | `reusable-release-build.yml` of the template, with `scripts/release/pack.ts` and `scripts/release/tags.ts` of the same template commit. |
 | `publish` | A job of `release.yml`. Its step is the action `npm-publish` of the template. |
 | `tag` | `reusable-release-tag.yml` of the template. |
+
+The job `tree` tells if the tree of the release commit already passed CI in its pull request (`CI.md`, "A tree that passed CI"). With a yes, `verify` does not start, and `build` starts at once. A no, a no read and a failure of `tree` start `verify`, as before. Each file that changed after the CI run of the pull request gives a no.
 
 The job `publish` stays in `release.yml`. The trusted publisher of each package names this repository and `release.yml`. A composite action operates in the job that uses it, so npm sees the same workflow as before. `CI.md` tells the reasons.
 
@@ -86,7 +89,11 @@ The owner (Mark) and one Claude session that the owner names are responsible for
 4. Change `version` in the `package.json` of the package. In the pull request, give the SemVer reason.
 5. Merge the change to `main`.
 
-The push to `main` starts `release.yml`. The workflow starts the CI gates, builds and packs each published package, and publishes each version that is not on npm. Then it makes a git tag and a GitHub release for each new version. A version with a hyphen, for example `1.2.0-rc.1`, gets the dist-tag `next`. The other versions get `latest`.
+The push to `main` starts `release.yml`. The workflow starts the CI gates, builds and packs each published package, and publishes each version that is not on npm. Then it makes a git tag and a GitHub release for each new version.
+
+A version with a hyphen, for example `1.2.0-rc.1`, gets the dist-tag `next`. A version above the `latest` of npm gets `latest`. A lower version gets `latest-<major>.<minor>`, and `latest` stays. Thus two releases in either sequence do not move `latest` back. The summary of the run lists each version that did not get `latest`.
+
+`pack.ts` stops a lower version before the publish. Thus a lower version comes to the publish only when a different release published a higher version after the pack of this release.
 
 `scripts/release/pack.ts` stops the release when a version is not SemVer. It also stops when a version is not greater than the `latest` version on npm. The registry does not accept a version two times, also after a removal. Thus a bad release gets a new PATCH, and `npm deprecate` marks the bad version.
 
@@ -97,6 +104,16 @@ The job `release-check` of the shared CI starts `pack.ts` on each pull request o
 When two pull requests set the same version, the second merge changes no version. Then `release.yml` does not start, and the change does not get to npm. In a repository where each pull request sets its version, set the option `versionEachChange` of the rule. Then the CI of that push to `main` fails. Raise the version in a new pull request.
 
 To publish again after a failure, start the workflow by hand: `gh workflow run release.yml --ref main`. It skips each version that is on npm.
+
+### Two releases at one time
+
+Two runs of `release.yml` do not wait for each other before the publish. Each commit has its own concurrency group. Thus the CI gates and the build of a newer merge start immediately.
+
+- Only the job `publish` waits, in the concurrency group `release-publish`. Thus only one publish operates at a time.
+- GitHub keeps only the newest publish that waits, and cancels the older one. That older run then shows "cancelled".
+- The newer run publishes the versions of the older run too, because its tree has them. Its job `tag` tags each version of its plan that has no tag.
+- When the newer merge raised the same package again, npm can get only the newer version. For example, npm gets 0.4.2 and no 0.4.1.
+- The builds of two runs can end in either sequence, so a lower version can come to npm after a higher one. It gets `latest-<major>.<minor>`, not `latest`.
 
 ## Only a commit on main
 
@@ -128,6 +145,8 @@ A repository with its own `tags.ts` can change the plan. For example, it can giv
 ### A second run
 
 The job skips each tag that exists. Thus a second run of the workflow does no harm.
+
+The jobs `tag` of two runs can start at one time. When `gh release create` fails and the tag exists after it, a different run made the tag. Then the job skips it.
 
 A run also tags a version that it did not publish, but only when these two conditions are true:
 

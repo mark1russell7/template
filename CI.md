@@ -358,6 +358,17 @@ The lookup fails open. Thus a gate skips only after a read of its files:
 
 `pull-of-run` is TypeScript, so it needs Node.js 22.18 or later. Thus the job sets up Node.js before it. A composite action cannot start a different action of its repository with a path that works for a caller outside the repository. Thus the job of the caller has the two steps, and the template has one lookup of the pull request.
 
+### The read of the CI minutes
+
+The action `changes` skips a whole gate job when no file of the gate changes. A finer selector starts only the tests that a change can affect. The workflow `ci-minutes.yml` of the template measures what each part of a selector can save, before the selector exists. Each Monday it reads the pull-request runs of the last 7 days of each public repository.
+
+- The read takes 10 completed runs of each repository, spread over the week. For each run, it reads the jobs with the time of each step, and the changed files of the pull request.
+- Each step gets a class from its name: setup, install, build, test, check or other. The first rule that matches decides. Thus "Build and test" counts as test time, and the test time is an upper bound.
+- Each pull request gets a kind from its files. The kinds are large (a full page of 100 files), docs only, lockfile, workflow, root file, packages and other. The first kind that applies decides.
+- The summary gives the minutes of each class, each kind and each job by name. It also gives the minutes that each part of a selector can save. The part "packages" is an upper bound: the test time times the share of the packages that the change does not touch.
+- The artifact `ci-minutes` has `ci-minutes.json` with each record of a job and of a pull request. A later study takes its quantiles from these records with no new read.
+- The token of GitHub Actions has 1000 reads each hour. Before each repository, the read examines the limit. When too few reads are left, it waits for the next hour of the token, up to 65 minutes. Else it stops and names each repository that it did not read. The scheduled run fails when the read cannot read a repository.
+
 ## The queue
 
 Several writers merge into one `main` with `gh pr merge --auto`. Two pull requests can each pass their gate alone and break `main` together. For example, two pull requests set the same version, or one pull request removes an export that the other starts to use.
@@ -416,6 +427,72 @@ The queue does not do these things:
 - `GITHUB_TOKEN` cannot write a workflow file. When the new commits of `main` change a file of `.github/workflows`, GitHub can refuse the update. Then a person updates the branch.
 - When the head does not change in the wait time, the queue starts no run. The next run of the queue does not see that pull request as `BEHIND`, but it starts the held runs of its head (step 6).
 - Each merge updates each other pull request that is behind, and starts its gates again. With N pull requests in the queue, the merge of all of them starts about N × N / 2 runs of each gate.
+
+## A tree that passed CI
+
+`release.yml` starts `verify`, the gates of `ci.yml`, on the commit on `main`. When the pull request passed CI on the same tree, `verify` does the same work again. `scripts/workflows/verified-tree.ts` tells if the tree of a commit already passed CI in its pull request. The job `tree` of `release.yml` starts it through `reusable-release-tree.yml`, and `verify` starts only when the answer is not yes.
+
+```sh
+node scripts/workflows/verified-tree.ts [--sha <commit>] [--workflow <file>] [--job <name>]...
+```
+
+| Input | Default |
+|---|---|
+| The repository | `GITHUB_REPOSITORY` |
+| `--sha` | `GITHUB_SHA` |
+| `--workflow` | `WORKFLOW_FILE`, else `ci.yml` |
+| `--job`, one time for each job that must pass | The lines of `REQUIRED_JOBS`, else `CI OK` |
+| The token | `GH_TOKEN`, else `GITHUB_TOKEN` |
+
+`reusable-release-tree.yml` gets the script from the template commit of the workflow, so a repository needs no copy. Its inputs are `workflow` (default `ci.yml`) and `jobs` (default `CI OK`, one name on each line). Its outputs are `verified` and `reason`. The caller job gives it `actions: read`, `contents: read`, `issues: read` and `pull-requests: read`. The timeline of a pull request is an issue endpoint.
+
+The script writes `verified=true` or `verified=false`, and `reason=<code>`, to `GITHUB_OUTPUT`. It writes one line to the step summary and the same line to stdout. The exit code is 0 for a yes and for a no. A no is not an error. Then the caller starts the full checks.
+
+The answer is yes only when each rule holds. Each rule that fails has its own reason code. The cheap rules come first:
+
+1. The commit has exactly one parent (`not-one-parent`).
+2. Exactly one merged pull request has this commit as its merge commit (`no-pull`, `many-pulls`). Its base is the default branch (`pull-base-not-default`). Its head is a branch of the same repository (`pull-head-fork`).
+3. The tree of the commit is the tree of the head of the pull request (`tree-differs`).
+4. The parent of the commit is the head, or an ancestor of the head (`head-behind-parent`). The compare of the parent and the head gives `behind_by` 0.
+5. Of the runs of the workflow with the event `pull_request` on the head commit, the newest run passed. Each run must be from the head branch of the same repository. Its status is `completed` (`run-not-completed`), and its conclusion is `success` (`run-not-success`). The newest run has the highest `run_number`, then the highest `run_attempt`. With no such run, the answer is no (`no-run`).
+6. GitHub made the newest run before the merge (`run-after-merge`). Its `created_at` is at least one second before `merged_at`.
+7. At the second of the newest run, no other pull request of the head branch was open (`other-pull-at-run`). Also, no other pull request of the head branch has the head commit (`many-pulls-of-head`).
+8. No base change of the pull request came in the second of the newest run or after it (`base-changed-after-run`). The timeline events are `base_ref_changed`, `automatic_base_change_succeeded` and `base_ref_force_pushed`.
+9. Each job that must pass is in that run (`job-missing`) with the conclusion `success` (`job-not-success`). A skipped job is not a pass.
+
+The `created_at` of a run is the time of its event. A rerun keeps that time. Thus rules 6, 7 and 8 also apply to a rerun.
+
+For rule 7, the script reads the pull requests of the head branch in each state:
+
+- Another pull request was open at the second of the run when two conditions are true. Its `created_at` is at that second or earlier. Its `closed_at` is empty, or at that second or later.
+- An older pull request of the same branch, closed before the run, is a yes. A release tool that uses its branch again gives this case.
+- The pull request of rule 2 must be in the list, with the head commit. Its `created_at` must be at the second of the run or earlier. Else the facts do not agree (`no-read-head-pulls`).
+
+The rules prove that CI tested the tree of the release:
+
+- A `pull_request` run tests the merge of its base branch into the head. The base commit is the newest commit of the base branch at the time of the event.
+- Rule 5: the run is a run of the head branch of this pull request.
+- Rule 7: at the second of the newest run, no other pull request of the head branch was open. Thus the run is a run of this pull request.
+- A workflow with the type `closed` can make a run after the close of a pull request. That pull request keeps the head of its close. Thus the check of the head commit in rule 7 stops that run.
+- Rule 8: no base change came after the run. Thus the base of the run is the base of the merge, the default branch. A stacked pull request that GitHub retargeted before its newest run is a yes.
+- Rule 6: the run is older than the merge. Thus the base commit is a commit of `main` before the merge.
+- `main` only moves forward. Thus that base commit is the parent of the release commit, or an ancestor of the parent.
+- Rule 4 makes the parent an ancestor of the head. Thus the base commit is also an ancestor of the head.
+- The merge of an ancestor into the head gives the tree of the head. Rule 3 makes that tree the tree of the release commit.
+
+Each HTTP error, each missing or malformed field and each fact that the script cannot read gives `verified=false`. Its reason starts with `no-read-`. A no read is not a pass at any time.
+
+- Each sha must match `^[0-9a-f]{40}$` before the script puts it in a URL or an output.
+- Each time must be an ISO time in UTC, for example `2026-11-16T12:02:47Z`. The script compares times to the second.
+- Each value in the outputs is a fixed text of the script, a checked sha or a number. A text of the API, for example a branch name, does not go to an output.
+- The head branch goes only into a URL, through `encodeURIComponent`.
+- The script imports only the built-in modules of Node.js, so it needs no install.
+
+The script has these limits:
+
+- The run of the pull request has the event `pull_request`. `verify` of a release has the event `push` or `workflow_dispatch`. A job of `ci.yml` with a condition on the event is not the same in the two runs. For example, `ci / changesets` starts only for a pull request. The list of jobs is the tool for this: the owner of the release names each job that must pass.
+- The proof needs a `main` that only moves forward. A ruleset that blocks a force push gives this.
+- Rules 6, 7 and 8 compare the times of GitHub to the second. A change in the time between an event and its run is not seen.
 
 ## The lockfile of a branch
 
@@ -678,6 +755,7 @@ The job `site` of `ci.yml` checks the site of each pull request, and "CI OK" nee
 - A caller on `workflow_run` after CI is also correct. A failed CI run, a CI run of a pull request and a CI run of a push to a different branch build nothing. The job `build` examines the branch, so the filter `branches: [main]` of the caller is not necessary.
 - The input `pending` is `head` by default. With `pending: green`, a head whose CI runs deploys nothing.
 - The inputs of `site-pages` go to the action: `site-pages-version`, `roadmap`, `base`, `packages`, `changesets`, `group`, `css`, `site-name` and `data-only`.
+- An empty `site-pages-version` (the default) builds the Releases page and the Status page from the source of site-pages at the template commit of the workflow. A version range installs that version from npm.
 - `site-pages: false` builds the site without the Releases page and the Status page.
 - Without `roadmap`, the Status page shows only the open pull requests and issues. The rule `roadmap-parses` of `@mark1russell7/conventions` thus needs `roadmap` in the site config or in each call, or `site-pages: false`.
 - `site-check: true` checks the built pages in a headless Chromium before the upload. A failed check stops the deploy. The next list tells the check.
@@ -701,7 +779,7 @@ The job `site` of `ci.yml` checks the site of each pull request, and "CI OK" nee
 - The workflow `site-audit.yml` of the template checks the live home of each public site each Monday. Start it by hand from the Actions tab.
 - The audit does not fail for a bad site. Its artifact `site-audit` has the screenshots, `report.json` of each site and `audit.json`.
 - The job `nav` of the audit starts `site-pages nav` on each site. Its artifact `site-nav` has the screenshots, `report.json` of each site and `nav.json`.
-- Each pull request starts `site-audit.yml`, so its check "Site audit OK" is always there. A pull request that changes `site-audit.yml` or the crawl starts only the job `nav`.
+- Each pull request starts `site-audit.yml`, so its check "Site audit OK" is always there. A pull request that changes `site-audit.yml` or the crawl starts the job `nav`. A pull request that changes the site check starts the job `compare`.
 - `site-bar: true` writes the shared site bar into each built HTML page. `site-bar-pages` names the pages of the bar, for example `Demo=demo/,Docs=docs/`. `site-bar-npm` gives the npm link.
 - With `site-bar: true`, the crawl `site-pages nav` examines the built site. A page with no bar, a page more than 2 clicks from home or a page with no way back stops the deploy.
 - `scroll-cue` (default `true`) gives each code block of each built HTML page the scroll cue of `site-pages cue`. A block wider than its box shows a fade at the edge with more content.
@@ -713,6 +791,21 @@ The job `site` of `ci.yml` checks the site of each pull request, and "CI OK" nee
 - The workflow gets the actions of the same template commit as the workflow file. A second checkout gets them.
 - Each public repository has a site. The rule `pages-site` of `@mark1russell7/conventions` needs a call of this workflow without `deploy: false`.
 - The Pages source of the repository is "GitHub Actions". To set it, start `gh api -X POST repos/<owner>/<repo>/pages -f build_type=workflow` one time.
+
+### The compare of the site check
+
+A change of the site check can fail a page that passed before. The site sees the failure only when its pin moves. Thus the job `compare` of `site-audit.yml` examines each change of the check before it merges.
+
+- The job starts on a pull request that changes `packages/site-pages/src/check`, `bar`, `render/html.ts`, `scripts/workflows/site-compare.ts` or `site-audit.yml`.
+- For each public site with a site check, `scripts/workflows/site-compare.ts` reads the pages and the widths of its site config.
+- The config is `.github/site.json`, the inputs of the call of `reusable-pages.yml` without `deploy: false`, or the inputs of the action `site-check`.
+- The script starts the check of the base and the check of the pull request on the live pages. Then it compares the problems of each view.
+- A view is a page at one width in one color scheme. A problem that only the new check finds is a new problem.
+- A site with a new problem gets a second pair of checks. Only a new problem of both pairs fails the job. A problem of one pair is a warning.
+- A site with no report of the base is a no read, with a warning. A site with a report of the base and no report of the pull request fails.
+- A site with no site check is out of scope, because no change of the check fails its deploy. The probes of the sites are not part of the compare.
+- The job has 4 shards. Two shards start at one time, after the job `nav`. One check of all sites is approximately 1000 views, or 65 minutes.
+- The artifact `site-compare-<shard>` has `compare-<shard>.json`, and the report and the log of each check. Only a site with a new problem keeps its screenshots.
 
 ### The site config
 

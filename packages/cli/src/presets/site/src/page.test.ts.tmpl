@@ -9,6 +9,10 @@ describe("the home page", () => {
     expect(page).toContain("{{install}}");
   });
 
+  it("has an icon link, so the browser does not ask for /favicon.ico", () => {
+    expect(page).toMatch(/<link rel="icon" href="[^"]+">/);
+  });
+
   it("links to the pages of site-pages and to the repository", () => {
     expect(page).toContain('href="./releases/"');
     expect(page).toContain('href="./status/"');

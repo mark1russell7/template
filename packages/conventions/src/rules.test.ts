@@ -1451,6 +1451,24 @@ describe("unreleased-change", () => {
       expect(check(built, { "@x/a": ["1.0.0"] }).breaks.map((item) => item.file)).toEqual(["packages/a/package.json"]);
     });
 
+    it("counts only the inputs of a build output as shipped, and each tracked entry of the field files", () => {
+      const other = { "packages/a/go/go.mod": "module a\n", "packages/a/vm/Dockerfile": "FROM x\n", "packages/a/schema/a.json": "{}\n", "packages/a/src/a.css": "a {}\n" };
+      const built = repo("1.0.0", other, { files: ["build", "schema"] });
+      // A file that no entry names and no build reads does not ship
+      change(built, { "packages/a/go/go.mod": "module b\n", "packages/a/vm/Dockerfile": "FROM y\n" });
+      expect(check(built, { "@x/a": ["1.0.0"] }).status).toBe("pass");
+      // Each file of src/ is an input of the build, and a tracked entry ships its own files
+      for (const [file, text] of [["packages/a/src/a.css", "b {}\n"], ["packages/a/schema/a.json", "[]\n"]] as const) {
+        const root = repo("1.0.0", other, { files: ["build", "schema"] });
+        change(root, { [file]: text });
+        expect(check(root, { "@x/a": ["1.0.0"] }).breaks.map((item) => item.message)).toEqual([expect.stringContaining(`The change ships ${file}.`)]);
+      }
+      // npm packs the files of main and bin for each value of files
+      const packed = repo("1.0.0", { "packages/a/cli/run.sh": "1\n" }, { files: ["schema"], bin: { run: "./cli/run.sh" } });
+      change(packed, { "packages/a/cli/run.sh": "2\n" });
+      expect(check(packed, { "@x/a": ["1.0.0"] }).breaks.map((item) => item.message)).toEqual([expect.stringContaining("The change ships packages/a/cli/run.sh.")]);
+    });
+
     it("skips a Changesets repository, a placeholder version, a registry error and a run with no change", () => {
       const changesets = repo("1.0.0", { ".changeset/config.json": "{}\n" });
       change(changesets, { "packages/a/src/index.ts": "export const a = 2;\n" });

@@ -72,6 +72,8 @@ jobs:
       #     The tag goes on the commit that the statement names: the commit that the version came from.
       #   - A version without such a statement (a publish by hand) gets no tag.
       # A tag that exists is skipped, so a second run does no harm. gh creates the tag on GitHub.
+      # The tag jobs of two runs can start at the same time (release.yml). When gh fails and the tag
+      # exists after it, a different run made the tag, and the job skips it.
       #
       # GitHub refuses (HTTP 403) a tag from the workflow token on a commit whose workflow files differ
       # from the workflow files of each branch: that token cannot change workflows. Thus an old commit
@@ -198,6 +200,10 @@ jobs:
             fi
             if output=$(gh release create "$tag" "${files[@]}" --repo "$GITHUB_REPOSITORY" --target "$target" --title "$title" --notes-file notes.md "${flags[@]}" 2>&1); then
               echo "$output"
+              continue
+            fi
+            if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" > /dev/null 2>&1; then
+              echo "gh did not make the release $tag, but the tag exists: a different run made it at the same time."
               continue
             fi
             if ! grep -q "HTTP 403" <<<"$output"; then
