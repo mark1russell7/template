@@ -158,7 +158,7 @@ describe("dist-tag.ts", () => {
 // and a fake npm that writes its arguments to a log. It needs bash, so it does not start on Windows.
 describe("the step Publish", { skip: process.platform === "win32" ? "the step needs bash" : false }, () => {
   /** This function starts the step on a registry of packuments and a list of tarballs, and gives what it did. */
-  const publish = (registry: Record<string, unknown>, packages: readonly string[]): { status: number | null; stderr: string; npm: string[]; output: string; summary: string } => {
+  const publish = (registry: Record<string, unknown>, packages: readonly string[]): { status: number | null; log: string; npm: string[]; output: string; summary: string } => {
     const folder = mkdtempSync(join(tmpdir(), "npm-publish-step-"));
     try {
       const bin = join(folder, "bin");
@@ -173,7 +173,7 @@ describe("the step Publish", { skip: process.platform === "win32" ? "the step ne
           "#!/usr/bin/env bash",
           'out=""; url=""',
           'while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2 ;; -w) shift 2 ;; -*) shift ;; *) url="$1"; shift ;; esac; done',
-          'name="${url#https://registry.npmjs.org/}"; name="${name%%\?*}"; name="${name//%2f/__}"',
+          'name="${url#https://registry.npmjs.org/}"; name="${name%%[?]*}"; name="${name//%2f/__}"',
           'if [ -f "$FAKE_REGISTRY/$name.json" ]; then cp "$FAKE_REGISTRY/$name.json" "$out"; printf 200; else printf 500; fi',
           "",
         ].join("\n"),
@@ -200,7 +200,7 @@ describe("the step Publish", { skip: process.platform === "win32" ? "the step ne
       });
       return {
         status: run.status,
-        stderr: run.stderr,
+        log: `${run.stdout}${run.stderr}`,
         npm: readFileSync(files.npm, "utf8").split("\n").filter((line) => line !== ""),
         output: readFileSync(files.output, "utf8"),
         summary: readFileSync(files.summary, "utf8"),
@@ -223,11 +223,11 @@ describe("the step Publish", { skip: process.platform === "win32" ? "the step ne
       },
       ["@scope/a 0.1.2 scope-a-0.1.2.tgz", "b 0.1.10 b-0.1.10.tgz", "c 0.2.0-rc.1 c-0.2.0-rc.1.tgz", "d 1.0.0 d-1.0.0.tgz"],
     );
-    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.status, 0, result.log);
     assert.equal(result.npm.length, 3, result.npm.join("\n"));
-    assert.ok(result.npm[0]?.startsWith(args("scope-a-0.1.2.tgz", "latest-0.1")), result.npm[0]);
-    assert.ok(result.npm[1]?.startsWith(args("b-0.1.10.tgz", "latest")), result.npm[1]);
-    assert.ok(result.npm[2]?.startsWith(args("c-0.2.0-rc.1.tgz", "next")), result.npm[2]);
+    assert.ok(result.npm[0]?.startsWith(args("scope-a-0.1.2.tgz", "latest-0.1")), result.npm.join("\n"));
+    assert.ok(result.npm[1]?.startsWith(args("b-0.1.10.tgz", "latest")), result.npm.join("\n"));
+    assert.ok(result.npm[2]?.startsWith(args("c-0.2.0-rc.1.tgz", "next")), result.npm.join("\n"));
     assert.equal(result.output, "published=@scope/a@0.1.2 b@0.1.10 c@0.2.0-rc.1\n");
     assert.match(result.summary, /^### Versions that did not get the dist-tag latest$/mu);
     assert.match(result.summary, /^- `@scope\/a@0\.1\.2`: dist-tag `latest-0\.1`, superseded by 0\.1\.3$/mu);
@@ -236,7 +236,7 @@ describe("the step Publish", { skip: process.platform === "win32" ? "the step ne
 
   it("writes no summary when each version gets latest", () => {
     const result = publish({ a: { "dist-tags": { latest: "0.1.9" }, versions: { "0.1.9": {} } } }, ["a 0.1.10 a-0.1.10.tgz"]);
-    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.status, 0, result.log);
     assert.deepEqual(result.npm.map((line) => line.split(" --logs-dir")[0]), [args("a-0.1.10.tgz", "latest").split(" --logs-dir")[0]]);
     assert.equal(result.summary, "");
   });
@@ -246,8 +246,9 @@ describe("the step Publish", { skip: process.platform === "win32" ? "the step ne
       { a: { "dist-tags": { latest: "0.1.0" }, versions: { "0.1.0": {} } }, b: { "dist-tags": { latest: "beta" }, versions: {} }, c: { versions: {} } },
       ["a 0.1.1 a-0.1.1.tgz", "b 0.2.0 b-0.2.0.tgz", "c 0.1.0 c-0.1.0.tgz"],
     );
-    assert.equal(result.status, 1);
-    assert.equal(result.npm.length, 1, result.npm.join("\n"));
+    assert.equal(result.status, 1, result.log);
+    assert.equal(result.npm.length, 1, result.log);
     assert.equal(result.output, "published=a@0.1.1\n");
+    assert.match(result.log, /::error::The step cannot choose the dist-tag of b 0\.2\.0/u);
   });
 });
