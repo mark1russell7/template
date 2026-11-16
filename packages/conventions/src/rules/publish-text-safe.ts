@@ -12,16 +12,17 @@
  * break gives the line and the name of the shape, not the token.
  *
  * This rule does not wait `RULE_WARN_DAYS`: it fails from its release day. The wait gives the owners time to fix the
- * breaks of a new rule. On 2026-11-16 a measure of the shapes of this file read 448 README files and 660 manifests of
- * the local clones. It found 1 true example, the README of text 0.0.7 (in 2 old clones), and 0 false hits. The token
- * shapes of text 0.0.8 found 0 tokens in 441 README files of the same clones. A walk of each key and string of 659
- * manifests (55,734 in all) found 0 attack shapes and 0 tokens.
+ * breaks of a new rule. On 2026-11-16 a first read of the local clones used the attack shapes of this file. It found
+ * 1 true example, the README of text 0.0.7 (in 2 old clones), and 0 false hits. Thus the wait protects no repository.
+ * A wait of 14 days lets a repeat of the text case pass with only a warning.
  *
- * Thus the wait protects no repository. A wait of 14 days lets a repeat of the text case pass with only a warning.
+ * At 11:32 UTC of the same day, one read of both scopes took 446 README files and 664 manifests (56,049 keys and
+ * strings) of the local clones. It found 0 attack shapes and 0 tokens. The sessions add, pull and remove clones during
+ * a day, so each count is the count of one read.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { findSecretShapes, findSecretShapesInValue, SECRET_SHAPES, type SecretShape, type ValueShapeMatch } from "@mark1russell7/text/redact";
+import { findSecretShapes, findSecretShapesInValue, redactSecretShapes, SECRET_SHAPES, type SecretShape, type ValueShapeMatch } from "@mark1russell7/text/redact";
 import { inFolder, lineOf, versionedPackages, type Break, type Rule } from "../rule.ts";
 
 /** A shape of an attack in a text: an id, the words for the message, the pattern and the evidence of a refusal. */
@@ -122,8 +123,22 @@ export function secretLines(text: string, shapes: readonly SecretShape[] = SECRE
 /** The names of the README files that npm packs from the folder of a package, with each case and extension. */
 const README = /^readme(?:\.[\w-]+)?$/i;
 
-/** This function gives a matched text for a message, with no line end and at most 60 characters. */
-const shown = (text: string): string => JSON.stringify(text.length > 60 ? `${text.slice(0, 57)}...` : text);
+/**
+ * This function gives a text with each token of a known service as `[secret]`. A break message holds a matched text
+ * and the keys of a path. A token can be in each of them: in the span of `sql-tautology`, in a key, or in the key of
+ * a parent. Each part goes through this function before its cut to 60 characters. A token that the cut divides has
+ * no shape for a later pass. Each finished message goes through it again.
+ */
+const secretFree = (text: string): string => redactSecretShapes(text);
+
+/** This function gives a matched text for a message, with no token, no line end and at most 60 characters. */
+const shown = (text: string): string => {
+  const free = secretFree(text);
+  return JSON.stringify(free.length > 60 ? `${free.slice(0, 57)}...` : free);
+};
+
+/** This function gives the path of a match in words for a message, with each token in a key as `[secret]`. */
+const shownPath = (path: readonly (string | number)[]): string => fieldOf(path.map((part) => (typeof part === "string" ? secretFree(part) : part)));
 
 /** This function gives the end of the message of an attack shape: the refusal on record, or the source of the shape. */
 const refusalOf = (shape: AttackShape): string =>
@@ -132,7 +147,7 @@ const refusalOf = (shape: AttackShape): string =>
     : `The npm registry refused a publish with this shape (${shape.seen}).`;
 
 /** This function gives the end of the message of a token. It names the shape, and it does not show the token. */
-const tokenOf = (shape: SecretShape): string =>
+const tokenOf = (shape: Pick<SecretShape, "id" | "label">): string =>
   `${shape.label} (${shape.id}). npm shows this text to each reader of the package. Revoke the secret at its service, and then remove it.`;
 
 /** A name of a key that a path shows after a dot. Each other key goes in brackets as JSON, for example `exports["./a"]`. */
@@ -164,6 +179,10 @@ function stringAt(value: unknown, path: readonly (string | number)[], inKey: boo
  * path after the line of the key before it, as `"key":` and then as `"key"`. An index of an array keeps the line of
  * its key. For a string that is not a key, it then finds the string as JSON after that line. When a part is not in the
  * text, the line of the part before stays. An example is a key that the file writes with an escape.
+ *
+ * A key with the same name in an earlier object under the same parent gives an earlier line. An example is the path
+ * `a.x` in `{"a": {"z": {"x": 1}, "x": "bad"}}`. The search of the string corrects this for a value with a distinct
+ * text, but not for a match in a key. Only the line is wrong: the path and the shape of the break stay correct.
  */
 export function pathLine(text: string, path: readonly (string | number)[], leaf?: string): number | undefined {
   let line: number | undefined;
@@ -185,11 +204,18 @@ export const publishTextSafe: Rule = {
   sources: [
     { repo: "text", rule: "publish-text-safe", doc: "packages/text/README.md (0.0.7, pull request 32)" },
     { repo: "text", rule: "secret-shapes", doc: "packages/text/src/redact.ts (SECRET_SHAPES, findSecretShapesInValue, 0.0.8)" },
+    { repo: "private", rule: "publish-text-safe", doc: "docs/STRATEGY.md (2026-11-16, the publish document has no attack shape and no token)" },
   ],
   options: {},
   failsFrom: "2026-11-16",
   check(context) {
     const breaks: Break[] = [];
+    // The one way out of a break: each finished message goes through the redaction again.
+    const push = (found: Break): void => {
+      breaks.push({ ...found, message: secretFree(found.message) });
+    };
+    const byId = new Map(ATTACK_SHAPES.map((shape) => [shape.id, shape]));
+    const secretById = new Map(SECRET_SHAPES.map((shape) => [shape.id, shape]));
     for (const pkg of versionedPackages(context)) {
       const name = String(pkg.manifest["name"]);
       let names: string[];
@@ -206,41 +232,44 @@ export const publishTextSafe: Rule = {
           continue;
         }
         for (const hit of attackLines(text)) {
-          breaks.push({
+          push({
             file: inFolder(pkg.folder, file),
             line: hit.line,
             message: `The README of ${name} has ${shown(hit.text)}, ${hit.shape.what} (${hit.shape.id}). ${refusalOf(hit.shape)}`,
           });
         }
         for (const hit of secretLines(text)) {
-          breaks.push({ file: inFolder(pkg.folder, file), line: hit.line, message: `The README of ${name} has ${tokenOf(hit.shape)}` });
+          push({ file: inFolder(pkg.folder, file), line: hit.line, message: `The README of ${name} has ${tokenOf(hit.shape)}` });
         }
       }
-      // The whole manifest: each key and each string, in the order of the document. One break for each shape of a string.
-      const byId = new Map(ATTACK_SHAPES.map((shape) => [shape.id, shape]));
+      // The whole manifest: each key and each string, in the order of the document. One break for each shape of a
+      // string. A match that the rule cannot read still gives a break, with no matched text: a gate shows such a case.
       const done = new Set<string>();
       for (const match of attacksInValue(pkg.manifest)) {
+        const once = `${match.inKey}:${JSON.stringify(match.path)}:${match.shape}`;
+        if (done.has(once)) continue;
+        done.add(once);
         const shape = byId.get(match.shape);
         const value = stringAt(pkg.manifest, match.path, match.inKey);
-        const once = `${match.inKey}:${JSON.stringify(match.path)}:${match.shape}`;
-        if (shape === undefined || value === undefined || done.has(once)) continue;
-        done.add(once);
         const line = pathLine(pkg.text, match.path, match.inKey ? undefined : value);
-        breaks.push({
+        const what = shape === undefined ? `the shape ${match.shape}` : `${shape.what} (${shape.id})`;
+        const has = value === undefined ? `${what}, in a text that the rule cannot read` : `${shown(value.slice(match.start, match.end))}, ${what}`;
+        push({
           file: pkg.file,
           ...(line === undefined ? {} : { line }),
-          message: `The ${match.inKey ? "key" : "field"} "${fieldOf(match.path)}" of ${name} has ${shown(value.slice(match.start, match.end))}, ${shape.what} (${shape.id}). ${refusalOf(shape)}`,
+          message: `The ${match.inKey ? "key" : "field"} "${shownPath(match.path)}" of ${name} has ${has}.${shape === undefined ? "" : ` ${refusalOf(shape)}`}`,
         });
       }
-      const secretById = new Map(SECRET_SHAPES.map((shape) => [shape.id, shape]));
       for (const match of findSecretShapesInValue(pkg.manifest)) {
-        const shape = secretById.get(match.shape);
-        if (shape === undefined) continue;
+        const once = `secret:${match.inKey}:${JSON.stringify(match.path)}:${match.shape}`;
+        if (done.has(once)) continue;
+        done.add(once);
+        const shape = secretById.get(match.shape) ?? { id: match.shape, label: "a token of a known service" };
         const line = pathLine(pkg.text, match.path, match.inKey ? undefined : stringAt(pkg.manifest, match.path, false));
-        breaks.push({
+        push({
           file: pkg.file,
           ...(line === undefined ? {} : { line }),
-          message: `The ${match.inKey ? "key" : "field"} "${fieldOf(match.path)}" of ${name} has ${tokenOf(shape)}`,
+          message: `The ${match.inKey ? "key" : "field"} "${shownPath(match.path)}" of ${name} has ${tokenOf(shape)}`,
         });
       }
     }

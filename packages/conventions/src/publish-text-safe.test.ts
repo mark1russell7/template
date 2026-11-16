@@ -2,8 +2,11 @@
  * The rule `publish-text-safe` on fixture repositories. The README of @mark1russell7/text 0.0.7 is the planted case.
  *
  * The corpus of the measure, on 2026-11-16: the README.md and package.json files at the root and in packages/<p> of
- * the local clones (448 README files, 660 manifests). The shapes of the rule file found
- * 1 true example (the text 0.0.7 README, in 2 old clones) and 0 false hits. A first pattern of quoted words with `or`
+ * the local clones. A first read with the shapes of the rule file found 1 true example (the text 0.0.7 README, in 2
+ * old clones) and 0 false hits. A read at 11:32 UTC took 446 README files and 664 manifests, and it found no hit. The
+ * sessions add, pull and remove clones during a day, so each count is the count of one read.
+ *
+ * A first pattern of quoted words with `or`
  * gave 8 false hits on the text `role="table"` or `role="grid"`. The clean cases below are lines of that corpus.
  * A change of a pattern runs again against the same corpus: the script reads the two levels, no walk.
  */
@@ -201,6 +204,45 @@ describe("publish-text-safe", () => {
     expect(result.breaks[0]?.message).toContain('The field "repository.url" of @x/q has a classic personal access token of GitHub');
     expect(result.breaks[0]?.message).not.toContain(CLASSIC);
     expect(result.breaks[0]?.message).not.toContain("a1a1");
+  });
+
+  it("breaks on a token as a key under config, with [secret] in the path, and the message holds no part of the token", () => {
+    const manifest = `${JSON.stringify({ name: "@x/q", version: "1.0.0", config: { [NPM]: "on" } }, null, 2)}\n`;
+    const result = check(repo({ "package.json": manifest }));
+    expect(result.breaks.map((item) => [item.line, /\(([a-z-]+)\)\. npm/.exec(item.message)?.[1]])).toEqual([[5, "npm"]]);
+    expect(result.breaks[0]?.message).toContain('The key "config["[secret]"]" of @x/q has an access token of npm');
+    expect(result.breaks[0]?.message).not.toContain(NPM);
+    expect(result.breaks[0]?.message).not.toContain("b2b2");
+  });
+
+  it("breaks on a token as the parent key of an attack string, and neither message holds a part of the token", () => {
+    const manifest = `${JSON.stringify({ name: "@x/q", version: "1.0.0", config: { [CLASSIC]: { mode: "x or 1=1" } } }, null, 2)}\n`;
+    const result = check(repo({ "package.json": manifest }));
+    expect(result.breaks.map((item) => [item.line, /^The (?:field|key) "(.+?)" of /.exec(item.message)?.[1]])).toEqual([
+      [6, 'config["[secret]"].mode'],
+      [5, 'config["[secret]"]'],
+    ]);
+    expect(result.breaks[0]?.message).toContain('has "or 1=1", a SQL probe');
+    expect(result.breaks[1]?.message).toContain("a classic personal access token of GitHub (github-classic)");
+    for (const item of result.breaks) {
+      expect(item.message).not.toContain(CLASSIC);
+      expect(item.message).not.toContain("a1a1");
+    }
+  });
+
+  it("breaks on a token in the span of an attack before the cut of the span, and gives one break for each shape of a string", () => {
+    // The span of sql-tautology takes the two tokens: 86 characters, so the cut at 57 divides the second token.
+    const manifest = `${JSON.stringify({ name: "@x/q", version: "1.0.0", description: `x' or ${CLASSIC}=${CLASSIC}` }, null, 2)}\n`;
+    const result = check(repo({ "package.json": manifest }));
+    expect(result.breaks.map((item) => [item.line, /\(([a-z-]+)\)\. /.exec(item.message)?.[1]])).toEqual([
+      [4, "sql-tautology"],
+      [4, "github-classic"],
+    ]);
+    expect(result.breaks[0]?.message).toContain(`The field "description" of @x/q has "' or [secret]=[secret]", a SQL tautology`);
+    for (const item of result.breaks) {
+      expect(item.message).not.toContain(CLASSIC);
+      expect(item.message).not.toContain("a1a1");
+    }
   });
 
   it("gives the path of a string in words and the line of the string in the text", () => {
