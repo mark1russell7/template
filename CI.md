@@ -653,7 +653,7 @@ The job `site` of `ci.yml` checks the site of each pull request, and "CI OK" nee
 - The workflow `site-audit.yml` of the template checks the live home of each public site each Monday. Start it by hand from the Actions tab.
 - The audit does not fail for a bad site. Its artifact `site-audit` has the screenshots, `report.json` of each site and `audit.json`.
 - The job `nav` of the audit starts `site-pages nav` on each site. Its artifact `site-nav` has the screenshots, `report.json` of each site and `nav.json`.
-- Each pull request starts `site-audit.yml`, so its check "Site audit OK" is always there. A pull request that changes `site-audit.yml` or the crawl starts only the job `nav`.
+- Each pull request starts `site-audit.yml`, so its check "Site audit OK" is always there. A pull request that changes `site-audit.yml` or the crawl starts the job `nav`. A pull request that changes the site check starts the job `compare`.
 - `site-bar: true` writes the shared site bar into each built HTML page. `site-bar-pages` names the pages of the bar, for example `Demo=demo/,Docs=docs/`. `site-bar-npm` gives the npm link.
 - With `site-bar: true`, the crawl `site-pages nav` examines the built site. A page with no bar, a page more than 2 clicks from home or a page with no way back stops the deploy.
 - `scroll-cue` (default `true`) gives each code block of each built HTML page the scroll cue of `site-pages cue`. A block wider than its box shows a fade at the edge with more content.
@@ -665,6 +665,21 @@ The job `site` of `ci.yml` checks the site of each pull request, and "CI OK" nee
 - The workflow gets the actions of the same template commit as the workflow file. A second checkout gets them.
 - Each public repository has a site. The rule `pages-site` of `@mark1russell7/conventions` needs a call of this workflow without `deploy: false`.
 - The Pages source of the repository is "GitHub Actions". To set it, start `gh api -X POST repos/<owner>/<repo>/pages -f build_type=workflow` one time.
+
+### The compare of the site check
+
+A change of the site check can fail a page that passed before. The site sees the failure only when its pin moves. Thus the job `compare` of `site-audit.yml` examines each change of the check before it merges.
+
+- The job starts on a pull request that changes `packages/site-pages/src/check`, `bar`, `render/html.ts`, `scripts/workflows/site-compare.ts` or `site-audit.yml`.
+- For each public site with a site check, `scripts/workflows/site-compare.ts` reads the pages and the widths of its site config.
+- The config is `.github/site.json`, the inputs of the call of `reusable-pages.yml` without `deploy: false`, or the inputs of the action `site-check`.
+- The script starts the check of the base and the check of the pull request on the live pages. Then it compares the problems of each view.
+- A view is a page at one width in one color scheme. A problem that only the new check finds is a new problem.
+- A site with a new problem gets a second pair of checks. Only a new problem of both pairs fails the job. A problem of one pair is a warning.
+- A site with no report of the base is a no read, with a warning. A site with a report of the base and no report of the pull request fails.
+- A site with no site check is out of scope, because no change of the check fails its deploy. The probes of the sites are not part of the compare.
+- The job has 4 shards. Two shards start at one time, after the job `nav`. One check of all sites is approximately 1000 views, or 65 minutes.
+- The artifact `site-compare-<shard>` has `compare-<shard>.json`, and the report and the log of each check. Only a site with a new problem keeps its screenshots.
 
 ### The site config
 
