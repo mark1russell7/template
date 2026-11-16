@@ -8,10 +8,13 @@ The workflow `.github/workflows/release.yml` publishes the packages of this repo
 
 | Job | What it uses |
 |---|---|
-| `verify` | The `ci.yml` of the repository. |
+| `tree` | `reusable-release-tree.yml` of the template, with `scripts/workflows/verified-tree.ts` of the same template commit. |
+| `verify` | The `ci.yml` of the repository. It starts only when `tree` gives no yes. |
 | `build` | `reusable-release-build.yml` of the template, with `scripts/release/pack.ts` and `scripts/release/tags.ts` of the same template commit. |
 | `publish` | A job of `release.yml`. Its step is the action `npm-publish` of the template. |
 | `tag` | `reusable-release-tag.yml` of the template. |
+
+The job `tree` tells if the tree of the release commit already passed CI in its pull request (`CI.md`, "A tree that passed CI"). With a yes, `verify` does not start, and `build` starts at once. A no, a no read and a failure of `tree` start `verify`, as before. Each file that changed after the CI run of the pull request gives a no.
 
 The job `publish` stays in `release.yml`. The trusted publisher of each package names this repository and `release.yml`. A composite action operates in the job that uses it, so npm sees the same workflow as before. `CI.md` tells the reasons.
 
