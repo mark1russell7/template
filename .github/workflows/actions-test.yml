@@ -53,9 +53,16 @@ on:
       - "package.json"
       - "pnpm-lock.yaml"
       - "packages/*/package.json"
-      # The site check and the site config of reusable-pages.yml run from these folders
+      # The site config, the Releases and Status pages, the site check and the bar of reusable-pages.yml start from
+      # these files, the sparse checkout of its shared actions. The test site is the only test that starts them with
+      # the type stripping of Node.js.
+      - "packages/site-pages/src/*.ts"
+      - "packages/site-pages/src/bar/**"
       - "packages/site-pages/src/check/**"
       - "packages/site-pages/src/config/**"
+      - "packages/site-pages/src/data/**"
+      - "packages/site-pages/src/render/**"
+      - "packages/site-pages/styles/**"
   # Each pull request starts this workflow, so the check "Actions OK" of the ruleset is always there. The job
   # changes skips the tests when the pull request changes no file of them (CI.md, "A gate with paths").
   pull_request:
@@ -113,8 +120,13 @@ jobs:
             package.json
             pnpm-lock.yaml
             packages/*/package.json
+            packages/site-pages/src/*.ts
+            packages/site-pages/src/bar/**
             packages/site-pages/src/check/**
             packages/site-pages/src/config/**
+            packages/site-pages/src/data/**
+            packages/site-pages/src/render/**
+            packages/site-pages/styles/**
 
   green-main:
     needs: changes

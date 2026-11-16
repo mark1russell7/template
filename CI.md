@@ -678,6 +678,7 @@ The job `site` of `ci.yml` checks the site of each pull request, and "CI OK" nee
 - A caller on `workflow_run` after CI is also correct. A failed CI run, a CI run of a pull request and a CI run of a push to a different branch build nothing. The job `build` examines the branch, so the filter `branches: [main]` of the caller is not necessary.
 - The input `pending` is `head` by default. With `pending: green`, a head whose CI runs deploys nothing.
 - The inputs of `site-pages` go to the action: `site-pages-version`, `roadmap`, `base`, `packages`, `changesets`, `group`, `css`, `site-name` and `data-only`.
+- An empty `site-pages-version` (the default) builds the Releases page and the Status page from the source of site-pages at the template commit of the workflow. A version range installs that version from npm.
 - `site-pages: false` builds the site without the Releases page and the Status page.
 - Without `roadmap`, the Status page shows only the open pull requests and issues. The rule `roadmap-parses` of `@mark1russell7/conventions` thus needs `roadmap` in the site config or in each call, or `site-pages: false`.
 - `site-check: true` checks the built pages in a headless Chromium before the upload. A failed check stops the deploy. The next list tells the check.
@@ -840,6 +841,17 @@ uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<full commit SHA>
 - Renovate does not change `release.yml`. The release session moves the pins of `release.yml` with `scripts/release/bump-pins.ts` (`RELEASING.md`).
 - A change of the template that must not wait for Renovate goes out with `bump-pins.ts --file <workflow>` (`RELEASING.md`).
 - Renovate also moves `CLAUDE_CODE_VERSION` of `reusable-ai-review.yml` to the newest version on npm. A person reviews and merges that pull request.
+
+### The packages of the workflow scripts
+
+Some workflow scripts import a package of the template, for example `@mark1russell7/text`. The workflow installs that package with npm, outside pnpm. It does not pin a version of its own.
+
+- The install step starts `.github/actions/pull-of-run/locked-version.ts`. The script reads the version that `pnpm-lock.yaml` of the template gives for the root package.
+- The script is in the folder of the action. Thus each checkout of the action has it, also a sparse checkout of `.github/actions`.
+- Thus a bump of the lockfile, for example by the release train, also moves each such install. No pin in a workflow stays behind.
+- `reusable-queue.yml` and the action `pull-of-run` install `@mark1russell7/text` in this way.
+- A test of `scripts/workflows/locked-version.test.ts` fails when a workflow or an action installs a package of the lockfile at a version in its text.
+- The script imports only Node.js modules, because it starts before the install.
 
 ## The template and new repositories
 
