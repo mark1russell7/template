@@ -5,7 +5,7 @@ inputs:
     description: The built output folder of the site, for example packages/site/dist.
     required: true
   version:
-    description: The version range of @mark1russell7/site-pages. Empty gives the default range, ^0.2.0.
+    description: An npm version range of @mark1russell7/site-pages. Empty starts the source of site-pages at the commit of this action, with no install.
     default: ""
   roadmap:
     description: The roadmap file. Without it, the Status page has only the open pull requests and issues.
@@ -61,9 +61,19 @@ runs:
         [ -z "$SP_CSS" ] || args+=(--css "$SP_CSS")
         [ -z "$SP_SITE_NAME" ] || args+=(--site-name "$SP_SITE_NAME")
         [ "$SP_DATA_ONLY" != "true" ] || args+=(--data-only)
-        # The package goes into its own folder. npx in the repository finds a site-pages of the repository first (a
-        # workspace package with no build), and then the bin is missing. The default range is here, so that an empty
-        # input (from reusable-pages.yml) also gets it.
-        tool="$RUNNER_TEMP/site-pages-tool"
-        npm install --prefix "$tool" --no-save --no-package-lock --no-audit --no-fund "@mark1russell7/site-pages@${SP_VERSION:-^0.2.0}"
-        "$tool/node_modules/.bin/site-pages" "${args[@]}"
+        # An empty version starts the bin of site-pages from the source of the same template commit as this action. The
+        # check and the bar of reusable-pages.yml also come from that commit, so the pages get each fix with no npm
+        # release. src/cli.ts imports only Node.js and the folders of the sparse checkout. cli.test.ts holds that rule.
+        if [ -z "$SP_VERSION" ]; then
+          if ! node -e 'const [a, b] = process.versions.node.split(".").map(Number); process.exit(a >= 24 || (a === 23 && b >= 6) || (a === 22 && b >= 18) ? 0 : 1)'; then
+            echo "::error::The site-pages action needs Node.js 22.18 or later for the source of site-pages, not $(node --version). Set up a later Node.js, or give the input version."
+            exit 1
+          fi
+          node "$GITHUB_ACTION_PATH/../../../packages/site-pages/src/cli.ts" "${args[@]}"
+        else
+          # The package goes into its own folder. npx in the repository finds a site-pages of the repository first (a
+          # workspace package with no build), and then the bin is missing.
+          tool="$RUNNER_TEMP/site-pages-tool"
+          npm install --prefix "$tool" --no-save --no-package-lock --no-audit --no-fund "@mark1russell7/site-pages@$SP_VERSION"
+          "$tool/node_modules/.bin/site-pages" "${args[@]}"
+        fi
