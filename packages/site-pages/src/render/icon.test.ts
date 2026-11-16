@@ -9,6 +9,12 @@ describe("the default icon", () => {
     expect(SITE_ICON_HREF).not.toMatch(/["'<> ]/);
   });
 
+  it("is the literal of the encoded SVG, so a bundle that does not use the icon drops it", () => {
+    expect(SITE_ICON_HREF).toBe(`data:image/svg+xml,${encodeURIComponent(SITE_ICON_SVG)}`);
+    const source = readFileSync(new URL("./icon.ts", import.meta.url), "utf8");
+    expect(source).not.toContain("encodeURIComponent(");
+  });
+
   it("gives a link element with the default or another href", () => {
     expect(iconLink()).toBe(`<link rel="icon" href="${SITE_ICON_HREF}">`);
     expect(iconLink("/own.svg")).toBe('<link rel="icon" href="/own.svg">');
