@@ -176,7 +176,7 @@ An unknown rule, an unknown option, or an exception or a changed option without 
 | `pre-push <remote> [<url>]` | Examine the new commits of a push with the private name list. The git hook `pre-push` starts it. |
 | `hook install` | Write the git hook `pre-push`. In CI, or outside a git repository, the command does nothing. |
 
-A run that `workflow_dispatch` starts has no pull request in its event file. The queue of the template starts the gates of a pull request in this way. For such a run, the shared CI finds the pull request of the branch, and gives two environment variables to the check:
+A run that `workflow_dispatch` starts has no pull request in its event file. A person can start the gates of a pull request in this way. For such a run, the shared CI finds the pull request of the branch, and gives two environment variables to the check:
 
 | Variable | What it gives |
 |---|---|
@@ -253,6 +253,8 @@ conventions map --overlay homes.json --markdown   # with more homes from a JSON 
 ```
 
 Each home can give `signatures`: the names of functions that only the home has, as regular expressions of a whole name. The rule `home-package` breaks on a new function with such a name in another repository. Its message says if the home already exports the name. The index of the exports is `src/home-exports.ts`. The script `scripts/homes/exports.ts` of the template writes it from the latest version of each home on npm.
+
+The job `exports` of the workflow Homes npm compares the index with npm each day. When the index is old, the job uploads a new index as the artifact `home-exports`.
 
 A home can also give `modules`: the modules that only the home imports at run time. The home of local databases gives `node:sqlite`. The rule `home-module` breaks on a new value import of such a module in another repository. An `import type` gives only types, so it does not break.
 
