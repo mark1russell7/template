@@ -167,13 +167,90 @@ jobs:
     permissions:
       contents: read
 
+  # The rules of conventions of a pull request, over each public repository that uses them (CI.md, "The compare of the
+  # conventions rules"). The job fails on a failure of a rule that only the pull request gives. Only the template has the
+  # source of the rules, so a repository from the stamp skips this job.
+  rules:
+    if: github.repository == 'mark1russell7/template' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      # The merge commit of the pull request: its rules, and the script of the compare
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: next
+          persist-credentials: false
+      - id: changes
+        uses: ./next/.github/actions/changes
+        with:
+          paths: |
+            .github/workflows/ci.yml
+            scripts/workflows/rule-compare.ts
+            packages/conventions/src/**
+            !packages/conventions/src/**/*.test.ts
+      # The base of the pull request: the rules that each repository gets when its pin moves to the base
+      - if: steps.changes.outputs.match == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: base
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - if: steps.changes.outputs.match == 'true'
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: next/package.json
+      - if: steps.changes.outputs.match == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: pnpm
+          cache-dependency-path: next/pnpm-lock.yaml
+      # Only the package of the rules and its dependencies. The script imports the escapes of Markdown and of workflow
+      # commands at the version that pnpm-lock.yaml gives (CI.md, "The packages of the workflow scripts").
+      - name: Install the rules of the base and of the pull request
+        if: steps.changes.outputs.match == 'true'
+        run: |
+          (cd next && pnpm install --frozen-lockfile --filter "@mark1russell7/conventions...")
+          (cd base && pnpm install --frozen-lockfile --filter "@mark1russell7/conventions...")
+          version="$(node next/.github/actions/pull-of-run/locked-version.ts next/pnpm-lock.yaml @mark1russell7/text)"
+          npm install --no-save --no-package-lock --ignore-scripts --prefix next/scripts/workflows "@mark1russell7/text@${version}"
+      # The public repositories of the owner that are not archived. The script puts out of scope each one with no
+      # dependency on the rules.
+      - name: The repositories
+        id: repos
+        if: steps.changes.outputs.match == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          gh api --paginate "users/$OWNER/repos?per_page=100" \
+            --jq '.[] | select((.private | not) and (.archived | not)) | .full_name' | sort > "$RUNNER_TEMP/rule-repos.txt"
+          echo "$(wc -l < "$RUNNER_TEMP/rule-repos.txt") repositories"
+          echo "list=$(jq -Rnc '[inputs | select(length > 0)]' < "$RUNNER_TEMP/rule-repos.txt")" >> "$GITHUB_OUTPUT"
+      - name: The compare of the rules
+        if: steps.changes.outputs.match == 'true'
+        env:
+          LIST: ${{ steps.repos.outputs.list }}
+        run: node next/scripts/workflows/rule-compare.ts --repos "$LIST" --base base --next next --out "$RUNNER_TEMP/rule-compare" --work "$RUNNER_TEMP/rule-clones" --jobs 4
+      - name: The reports of the compare
+        if: ${{ !cancelled() && steps.changes.outputs.match == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rule-compare
+          path: ${{ runner.temp }}/rule-compare
+          if-no-files-found: warn
+
   # The one check of the ruleset of main (CI.md, "The check of the ruleset"). It passes only when
   # each job of needs passed, or was skipped by its own if and ALLOW_SKIP names it. A new job of this
   # file goes in needs, so the ruleset never has to change, and gh pr merge --auto waits for the whole gate.
   ci-ok:
     name: CI OK
     if: ${{ !cancelled() }}
-    needs: [ci, presets, renovate-presets, stamp, site]
+    needs: [ci, presets, renovate-presets, stamp, site, rules]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}
@@ -182,7 +259,7 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
           # The jobs that their own if may skip, separated by spaces. Each other job must pass.
-          ALLOW_SKIP: "presets renovate-presets stamp"
+          ALLOW_SKIP: "presets renovate-presets stamp rules"
         run: |
           echo "$NEEDS" | jq -r 'to_entries[] | "\(.key) \(.value.result)"' > results
           cat results
