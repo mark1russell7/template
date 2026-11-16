@@ -22,6 +22,7 @@ import {
   readInput,
   readList,
   summaryLine,
+  timeOf,
   verify,
 } from "./verified-tree.ts";
 
@@ -33,19 +34,27 @@ const P = "a".repeat(40);
 const H = "b".repeat(40);
 const TREE = "d".repeat(40);
 const RUN = 7001;
+const PULL = 5;
 const GATE = "CI OK";
+/** The time that GitHub made the run, and the time of the merge, one hour later. */
+const MADE = "2026-11-16T09:00:00Z";
+const MERGED = "2026-11-16T10:00:00Z";
 
-type Kind = "repo" | "commit" | "pulls" | "head" | "compare" | "runs" | "jobs";
-const KINDS: readonly Kind[] = ["commit", "pulls", "repo", "head", "compare", "runs", "jobs"];
+type Kind = "repo" | "commit" | "pulls" | "head-pulls" | "head" | "compare" | "runs" | "timeline" | "jobs";
+const KINDS: readonly Kind[] = ["commit", "pulls", "repo", "head-pulls", "head", "compare", "runs", "timeline", "jobs"];
 
 /** The answers of the fake API. Each test changes the fields that it needs. */
 interface World {
   repo: unknown;
   commit: unknown;
   pulls: unknown[];
+  /** The head branch. The fake gives `headPulls` only for a query of this branch. */
+  branch: string;
+  headPulls: unknown[];
   head: unknown;
   compare: unknown;
   runs: unknown[];
+  timeline: unknown[];
   jobs: unknown[];
   /** The HTTP status of each kind of call that fails. */
   fail: Partial<Record<Kind, number>>;
@@ -58,7 +67,7 @@ type Json = Record<string, unknown>;
 const commitBody = (sha: string, over: Json = {}): Json => ({ sha, commit: { tree: { sha: TREE }, message: "a change" }, parents: [{ sha: P }], ...over });
 const baseOf = (over: Json = {}): Json => ({ ref: "main", sha: P, repo: { full_name: repo }, ...over });
 const headOf = (over: Json = {}): Json => ({ ref: "feature", sha: H, repo: { full_name: repo }, ...over });
-const pullBody = (over: Json = {}): Json => ({ number: 5, title: "feat: a change", state: "closed", merged_at: "2026-11-16T10:00:00Z", merge_commit_sha: C, base: baseOf(), head: headOf(), ...over });
+const pullBody = (over: Json = {}): Json => ({ number: PULL, title: "feat: a change", state: "closed", merged_at: MERGED, merge_commit_sha: C, base: baseOf(), head: headOf(), ...over });
 const runBody = (over: Json = {}): Json => ({
   id: RUN,
   run_number: 10,
@@ -68,10 +77,14 @@ const runBody = (over: Json = {}): Json => ({
   head_sha: H,
   head_branch: "feature",
   head_repository: { full_name: repo },
+  created_at: MADE,
+  run_started_at: MADE,
   status: "completed",
   conclusion: "success",
   ...over,
 });
+/** A base change in the timeline of the pull request. */
+const baseChange = (event: string, created_at: unknown): Json => ({ id: 1, event, created_at, commit_id: null });
 const jobBody = (name: string, over: Json = {}): Json => ({ id: 1, run_id: RUN, name, status: "completed", conclusion: "success", ...over });
 
 /** A repository where each rule holds: a squash merge of a head that has the parent, and a gate that passed. */
@@ -80,9 +93,21 @@ function world(): World {
     repo: { full_name: repo, default_branch: "main" },
     commit: commitBody(C),
     pulls: [pullBody()],
+    branch: "feature",
+    headPulls: [pullBody()],
     head: commitBody(H),
     compare: { status: "ahead", ahead_by: 1, behind_by: 0, merge_base_commit: { sha: P } },
     runs: [runBody()],
+    // The shapes of a live timeline: a committed item has no created_at, and a review has submitted_at
+    timeline: [
+      { event: "committed", sha: H, message: "a change", parents: [{ sha: P }] },
+      { event: "labeled", created_at: "2026-11-16T08:30:00Z", label: { name: "ci" } },
+      { event: "reviewed", state: "approved", submitted_at: "2026-11-16T09:30:00Z" },
+      { event: "automatic_base_change_failed", created_at: "2026-11-16T09:40:00Z" },
+      { event: "merged", created_at: MERGED, commit_id: C },
+      { event: "closed", created_at: MERGED },
+      { event: "head_ref_deleted", created_at: "2026-11-16T10:00:03Z" },
+    ],
     jobs: [jobBody("ci / checks (ubuntu-latest, node 26)"), jobBody("presets (node)", { conclusion: "skipped" }), jobBody(GATE)],
     fail: {},
     totals: {},
@@ -95,9 +120,11 @@ function kindOf(pathname: string): Kind | null {
   if (pathname === base) return "repo";
   if (pathname === `${base}/commits/${C}`) return "commit";
   if (pathname === `${base}/commits/${C}/pulls`) return "pulls";
+  if (pathname === `${base}/pulls`) return "head-pulls";
   if (pathname === `${base}/commits/${H}`) return "head";
   if (pathname === `${base}/compare/${P}...${H}`) return "compare";
   if (pathname === `${base}/actions/workflows/ci.yml/runs`) return "runs";
+  if (pathname === `${base}/issues/${String(PULL)}/timeline`) return "timeline";
   if (new RegExp(`^${base}/actions/runs/\\d+/jobs$`).test(pathname)) return "jobs";
   return null;
 }
@@ -123,12 +150,17 @@ function answer(w: World, path: string): ApiResponse {
       return ok(w.commit);
     case "pulls":
       return ok(page(w.pulls));
+    case "head-pulls":
+      // Like the API, a query of a different branch gives an empty list, not an error
+      return ok(params.get("state") === "all" && params.get("head") === `owner:${w.branch}` ? page(w.headPulls) : []);
     case "head":
       return ok(w.head);
     case "compare":
       return ok(w.compare);
     case "runs":
       return ok({ total_count: w.totals.runs ?? w.runs.length, workflow_runs: page(w.runs) });
+    case "timeline":
+      return ok(page(w.timeline));
     case "jobs":
       return ok({ total_count: w.totals.jobs ?? w.jobs.length, jobs: page(w.jobs) });
   }
@@ -177,11 +209,24 @@ describe("verified tree: the rules", () => {
       `repos/${repo}/commits/${C}`,
       `repos/${repo}/commits/${C}/pulls?per_page=100&page=1`,
       `repos/${repo}`,
+      `repos/${repo}/pulls?state=all&head=owner:feature&per_page=100&page=1`,
       `repos/${repo}/commits/${H}`,
       `repos/${repo}/compare/${P}...${H}?per_page=1`,
       `repos/${repo}/actions/workflows/ci.yml/runs?head_sha=${H}&event=pull_request&per_page=100&page=1`,
+      `repos/${repo}/issues/${String(PULL)}/timeline?per_page=100&page=1`,
       `repos/${repo}/actions/runs/${String(RUN)}/jobs?filter=latest&per_page=100&page=1`,
     ]);
+  });
+
+  it("puts a head branch with special characters into the URL through encodeURIComponent only", async () => {
+    const w = world();
+    w.branch = "feat/a b&head=x";
+    w.pulls = [pullBody({ head: headOf({ ref: w.branch }) })];
+    w.headPulls = [pullBody({ head: headOf({ ref: w.branch }) })];
+    w.runs = [runBody({ head_branch: w.branch })];
+    const api = fakeApi(w);
+    assert.deepEqual(await verify(api, input()), { verified: true, reason: "passed", head: H, run: RUN });
+    assert.ok(api.calls.includes(`repos/${repo}/pulls?state=all&head=owner:feat%2Fa%20b%26head%3Dx&per_page=100&page=1`));
   });
 
   const yes: { readonly name: string; readonly change: (w: World) => void; readonly over?: Partial<Facts> }[] = [
@@ -190,6 +235,20 @@ describe("verified tree: the rules", () => {
     { name: "a path of the run with the ref of a called file", change: (w) => (w.runs = [runBody({ path: ".github/workflows/ci.yml@refs/heads/main" })]) },
     { name: "a list of required jobs that each passed", change: () => undefined, over: { required: [GATE, "ci / checks (ubuntu-latest, node 26)"] } },
     { name: "an older run from a fork that failed", change: (w) => void w.runs.push(runBody({ id: 6999, run_number: 8, head_repository: { full_name: "someone/repo" }, conclusion: "failure" })) },
+    {
+      name: "a stacked pull request: base changes to the default branch, then a newer run",
+      change: (w) => {
+        w.timeline.unshift(baseChange("base_ref_changed", "2026-11-16T08:00:00Z"), baseChange("automatic_base_change_succeeded", "2026-11-16T08:59:59Z"));
+        w.runs.unshift(runBody({ id: 6990, run_number: 9, created_at: "2026-11-16T07:00:00Z" }));
+      },
+    },
+    {
+      name: "an older pull request of the same branch into a different base, with a different head commit",
+      change: (w) => void w.headPulls.push(pullBody({ number: 3, merged_at: null, merge_commit_sha: null, base: baseOf({ ref: "release" }), head: headOf({ sha: "9".repeat(40) }) })),
+    },
+    { name: "a newer run on the head commit from a different branch that failed", change: (w) => void w.runs.push(runBody({ id: 7002, run_number: 11, head_branch: "copy", conclusion: "failure" })) },
+    { name: "a run made in the second before the second of the merge", change: (w) => (w.runs = [runBody({ created_at: "2026-11-16T09:59:59.999Z" })]) },
+    { name: "a rerun after the merge of a run made before it (created_at decides, not run_started_at)", change: (w) => (w.runs = [runBody({ run_attempt: 3, run_started_at: "2026-11-16T11:00:00Z" })]) },
   ];
   for (const each of yes) {
     it(`gives yes with ${each.name}`, async () => {
@@ -228,6 +287,37 @@ describe("verified tree: the rules", () => {
     { name: "a required job that failed", change: (w) => (w.jobs = [jobBody(GATE, { conclusion: "failure" })]), reason: "job-not-success" },
     { name: "a second required job that is missing", change: () => undefined, reason: "job-missing", over: { required: [GATE, "Xplat OK"] } },
     { name: "two runs with the same number and attempt", change: (w) => void w.runs.push(runBody({ id: 7002 })), reason: "no-read-runs" },
+    {
+      name: "a second pull request of the head branch with the head commit, into a different base",
+      change: (w) => void w.headPulls.push(pullBody({ number: 6, state: "open", merged_at: null, merge_commit_sha: null, base: baseOf({ ref: "release" }) })),
+      reason: "many-pulls-of-head",
+    },
+    { name: "a second closed pull request of the head branch with the head commit", change: (w) => void w.headPulls.unshift(pullBody({ number: 4, merged_at: null, merge_commit_sha: null })), reason: "many-pulls-of-head" },
+    { name: "only a run of a different branch on the head commit", change: (w) => (w.runs = [runBody({ head_branch: "copy" })]), reason: "no-run" },
+    { name: "only a run with no head branch", change: (w) => (w.runs = [runBody({ head_branch: null })]), reason: "no-run" },
+    { name: "a run made after the merge", change: (w) => (w.runs = [runBody({ created_at: "2026-11-16T10:00:01Z" })]), reason: "run-after-merge" },
+    { name: "a run made in the second of the merge", change: (w) => (w.runs = [runBody({ created_at: MERGED })]), reason: "run-after-merge" },
+    {
+      name: "a run made in the second of the merge, some milliseconds before it",
+      change: (w) => {
+        w.pulls = [pullBody({ merged_at: "2026-11-16T10:00:00.900Z" })];
+        w.runs = [runBody({ created_at: "2026-11-16T10:00:00.100Z" })];
+      },
+      reason: "run-after-merge",
+    },
+    { name: "a newer run after the merge (an event such as closed or labeled)", change: (w) => void w.runs.push(runBody({ id: 7002, run_number: 11, created_at: "2026-11-16T10:05:00Z" })), reason: "run-after-merge" },
+    { name: "a base change after the run", change: (w) => void w.timeline.push(baseChange("base_ref_changed", "2026-11-16T09:30:00Z")), reason: "base-changed-after-run" },
+    { name: "an automatic base change after the run", change: (w) => void w.timeline.push(baseChange("automatic_base_change_succeeded", "2026-11-16T09:30:00Z")), reason: "base-changed-after-run" },
+    { name: "a force push of the base after the run", change: (w) => void w.timeline.push(baseChange("base_ref_force_pushed", "2026-11-16T09:30:00Z")), reason: "base-changed-after-run" },
+    { name: "a base change in the second of the run", change: (w) => void w.timeline.push(baseChange("base_ref_changed", MADE)), reason: "base-changed-after-run" },
+    {
+      name: "a rerun after a base change: the run keeps the time of its event",
+      change: (w) => {
+        w.runs = [runBody({ run_attempt: 2, run_started_at: "2026-11-16T09:20:00Z" })];
+        w.timeline.push(baseChange("base_ref_changed", "2026-11-16T09:10:00Z"));
+      },
+      reason: "base-changed-after-run",
+    },
   ];
   for (const each of no) {
     it(`gives no (${each.reason}) with ${each.name}`, async () => {
@@ -259,6 +349,16 @@ describe("verified tree: a fact that the script cannot read is never a pass", ()
     { name: "a head with no repository", change: (w) => (w.pulls = [pullBody({ head: headOf({ repo: null }) })]), reason: "no-read-pulls" },
     { name: "a pull request with no merged_at", change: (w) => (w.pulls = [pullBody({ merged_at: undefined })]), reason: "no-read-pulls" },
     { name: "a pull request with no fields", change: (w) => (w.pulls = [{}]), reason: "no-read-pulls" },
+    { name: "a pull request with no number", change: (w) => (w.pulls = [pullBody({ number: undefined })]), reason: "no-read-pulls" },
+    { name: "a pull request with no head branch", change: (w) => (w.pulls = [pullBody({ head: headOf({ ref: undefined }) })]), reason: "no-read-pulls" },
+    { name: "a merged_at that is not a time", change: (w) => (w.pulls = [pullBody({ merged_at: "yesterday" })]), reason: "no-read-pulls" },
+    { name: "a merged_at with no time zone", change: (w) => (w.pulls = [pullBody({ merged_at: "2026-11-16T10:00:00" })]), reason: "no-read-pulls" },
+    { name: "a merged_at on a date that does not exist", change: (w) => (w.pulls = [pullBody({ merged_at: "2026-02-30T10:00:00Z" })]), reason: "no-read-pulls" },
+    { name: "a list of the head branch without the pull request", change: (w) => (w.headPulls = []), reason: "no-read-head-pulls" },
+    { name: "a list of the head branch with only a different number on the head commit", change: (w) => (w.headPulls = [pullBody({ number: 6 })]), reason: "no-read-head-pulls" },
+    { name: "a pull request of the head branch with no number", change: (w) => void w.headPulls.push({ head: { sha: H } }), reason: "no-read-head-pulls" },
+    { name: "a pull request of the head branch with a head that is not a sha", change: (w) => void w.headPulls.push(pullBody({ number: 6, head: headOf({ sha: "main" }) })), reason: "no-read-head-pulls" },
+    { name: "a head branch with a control character", change: (w) => (w.pulls = [pullBody({ head: headOf({ ref: "feature\n" }) })]), reason: "no-read-head-pulls" },
     { name: "no default branch", change: (w) => (w.repo = { full_name: repo }), reason: "no-read-repo" },
     { name: "an empty default branch", change: (w) => (w.repo = { full_name: repo, default_branch: "" }), reason: "no-read-repo" },
     { name: "a head commit that is not the head of the pull request", change: (w) => (w.head = commitBody("f".repeat(40))), reason: "no-read-head" },
@@ -273,6 +373,14 @@ describe("verified tree: a fact that the script cannot read is never a pass", ()
     { name: "a run with no conclusion field", change: (w) => (w.runs = [runBody({ conclusion: undefined })]), reason: "no-read-runs" },
     { name: "a run with no head repository", change: (w) => (w.runs = [runBody({ head_repository: null })]), reason: "no-read-runs" },
     { name: "a total_count of the runs that the pages do not give", change: (w) => (w.totals.runs = 2), reason: "no-read-runs" },
+    { name: "a run with no created_at", change: (w) => (w.runs = [runBody({ created_at: undefined })]), reason: "no-read-runs" },
+    { name: "a run with a created_at that is a number", change: (w) => (w.runs = [runBody({ created_at: 1794826800 })]), reason: "no-read-runs" },
+    { name: "a run with a created_at at hour 24", change: (w) => (w.runs = [runBody({ created_at: "2026-11-16T24:00:00Z" })]), reason: "no-read-runs" },
+    { name: "a run with a head branch that is a number", change: (w) => (w.runs = [runBody({ head_branch: 5 })]), reason: "no-read-runs" },
+    { name: "a base change with no created_at", change: (w) => void w.timeline.push({ event: "base_ref_changed", id: 1 }), reason: "no-read-timeline" },
+    { name: "a base change with a created_at that is not an ISO time", change: (w) => void w.timeline.push(baseChange("base_ref_changed", "2026-11-16 08:00")), reason: "no-read-timeline" },
+    { name: "an automatic base change on a date that does not exist", change: (w) => void w.timeline.push(baseChange("automatic_base_change_succeeded", "2026-02-30T08:00:00Z")), reason: "no-read-timeline" },
+    { name: "a timeline item that is not an object", change: (w) => void w.timeline.push("base_ref_changed"), reason: "no-read-timeline" },
     { name: "a job with a conclusion that is a number", change: (w) => (w.jobs = [jobBody(GATE, { conclusion: 1 })]), reason: "no-read-jobs" },
     { name: "a job of a different run", change: (w) => (w.jobs = [jobBody(GATE, { run_id: 9 })]), reason: "no-read-jobs" },
     { name: "a total_count of the jobs that is not valid", change: (w) => (w.totals.jobs = -1), reason: "no-read-jobs" },
@@ -307,6 +415,23 @@ describe("verified tree: a fact that the script cannot read is never a pass", ()
     assert.ok(api.calls.includes(`repos/${repo}/actions/workflows/ci.yml/runs?head_sha=${H}&event=pull_request&per_page=100&page=2`));
   });
 
+  it("reads the timeline on two pages, so a base change on page 2 decides", async () => {
+    const w = world();
+    w.timeline = [...Array.from({ length: 100 }, () => ({ event: "labeled", created_at: "2026-11-16T08:00:00Z" })), baseChange("base_ref_changed", "2026-11-16T09:30:00Z")];
+    const api = fakeApi(w);
+    assert.deepEqual(await verify(api, input()), { verified: false, reason: "base-changed-after-run", head: H, run: RUN });
+    assert.ok(api.calls.includes(`repos/${repo}/issues/${String(PULL)}/timeline?per_page=100&page=2`));
+  });
+
+  it("reads only ISO times in UTC, to the second", () => {
+    assert.equal(timeOf("2026-11-16T09:00:00Z"), Date.parse("2026-11-16T09:00:00Z") / 1000);
+    assert.equal(timeOf("2026-11-16T09:00:00.999Z"), timeOf("2026-11-16T09:00:00Z"));
+    for (const value of ["2026-11-16T09:00:00+00:00", "2026-11-16T09:00:00", "2026-02-29T00:00:00Z", "2026-11-16T09:60:00Z", "", "now", null, 1794826800, undefined]) {
+      assert.equal(timeOf(value), null, String(value));
+    }
+    assert.equal(timeOf("2028-02-29T00:00:00Z"), Date.parse("2028-02-29T00:00:00Z") / 1000);
+  });
+
   it("gives no list after 10 full pages", async () => {
     const full: Api = { get: async () => ({ status: 200, body: { total_count: 5000, jobs: Array.from({ length: 100 }, () => ({})) } }) };
     assert.equal(await readList(full, "repos/owner/repo/actions/runs/1/jobs?filter=latest", "jobs"), null);
@@ -314,14 +439,31 @@ describe("verified tree: a fact that the script cannot read is never a pass", ()
 });
 
 describe("verified tree: decide is a pure function over the facts", () => {
+  const made = Date.parse(MADE) / 1000;
   const facts: Facts = {
     ...input(),
     commit: { sha: C, tree: TREE, parents: [P] },
-    pulls: [{ merged: true, mergeCommit: C, baseRef: "main", baseRepository: repo, headSha: H, headRepository: repo }],
+    pulls: [{ number: PULL, mergedAt: Date.parse(MERGED) / 1000, mergeCommit: C, baseRef: "main", baseRepository: repo, headRef: "feature", headSha: H, headRepository: repo }],
     repo: { defaultBranch: "main" },
+    headPulls: { ref: "feature", pulls: [{ number: PULL, headSha: H }] },
     head: { sha: H, tree: TREE, parents: [P] },
     compare: { base: P, head: H, behindBy: 0, mergeBase: P },
-    runs: [{ id: RUN, runNumber: 10, runAttempt: 1, path: ".github/workflows/ci.yml", event: "pull_request", headSha: H, headRepository: repo, status: "completed", conclusion: "success" }],
+    runs: [
+      {
+        id: RUN,
+        runNumber: 10,
+        runAttempt: 1,
+        path: ".github/workflows/ci.yml",
+        event: "pull_request",
+        headSha: H,
+        headBranch: "feature",
+        headRepository: repo,
+        createdAt: made,
+        status: "completed",
+        conclusion: "success",
+      },
+    ],
+    timeline: { pull: PULL, changes: [made - 1] },
     jobs: { run: RUN, jobs: [{ name: GATE, status: "completed", conclusion: "success" }] },
   };
 
@@ -335,7 +477,9 @@ describe("verified tree: decide is a pure function over the facts", () => {
   it("asks for each absent fact in the order of the rules", () => {
     assert.deepEqual(decide(input()), { kind: "read", need: { fact: "commit", sha: C } });
     assert.deepEqual(decide(without(["jobs"])), { kind: "read", need: { fact: "jobs", run: RUN } });
+    assert.deepEqual(decide(without(["timeline", "jobs"])), { kind: "read", need: { fact: "timeline", pull: PULL } });
     assert.deepEqual(decide(without(["compare", "runs", "jobs"])), { kind: "read", need: { fact: "compare", base: P, head: H } });
+    assert.deepEqual(decide(without(["headPulls", "head", "compare", "runs", "timeline", "jobs"])), { kind: "read", need: { fact: "headPulls", owner: "owner", ref: "feature" } });
   });
 
   it("gives a no read for a fact of a different commit or run, and for inputs that are not valid", () => {
@@ -347,6 +491,10 @@ describe("verified tree: decide is a pure function over the facts", () => {
     assert.equal(reason({ compare: { base: H, head: P, behindBy: 0, mergeBase: P } }), "no-read-compare");
     assert.equal(reason({ jobs: { run: 1, jobs: [{ name: GATE, status: "completed", conclusion: "success" }] } }), "no-read-jobs");
     assert.equal(reason({ commit: { noRead: "no-read-commit" } }), "no-read-commit");
+    assert.equal(reason({ headPulls: { ref: "other", pulls: [{ number: PULL, headSha: H }] } }), "no-read-head-pulls");
+    assert.equal(reason({ timeline: { pull: PULL + 1, changes: [] } }), "no-read-timeline");
+    assert.equal(reason({ timeline: { pull: PULL, changes: [made - 1, made] } }), "base-changed-after-run");
+    assert.equal(reason({ timeline: { pull: PULL, changes: [] } }), "passed");
     assert.equal(reason({ sha: "C".repeat(40) }), "no-read-input");
     assert.equal(reason({ repository: "owner/.." }), "no-read-input");
     assert.equal(reason({ workflow: "../ci.yml" }), "no-read-input");
@@ -395,7 +543,7 @@ describe("verified tree: the step", () => {
     assert.equal(result.output, "verified=true\nreason=passed\n");
     assert.equal(result.summary, `${line}\n`);
     assert.deepEqual(result.logged, [line]);
-    assert.equal(result.requests.length, 7);
+    assert.equal(result.requests.length, 9);
     for (const request of result.requests) {
       assert.equal(request.method, "GET");
       assert.ok(request.url.startsWith(`https://api.example/repos/${repo}`));

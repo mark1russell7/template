@@ -435,33 +435,44 @@ node scripts/workflows/verified-tree.ts [--sha <commit>] [--workflow <file>] [--
 
 The script writes `verified=true` or `verified=false`, and `reason=<code>`, to `GITHUB_OUTPUT`. It writes one line to the step summary and the same line to stdout. The exit code is 0 for a yes and for a no. A no is not an error. Then the caller starts the full checks.
 
-The answer is yes only when each rule holds. Each rule that fails has its own reason code:
+The answer is yes only when each rule holds. Each rule that fails has its own reason code. The cheap rules come first:
 
 1. The commit has exactly one parent (`not-one-parent`).
 2. Exactly one merged pull request has this commit as its merge commit (`no-pull`, `many-pulls`). Its base is the default branch (`pull-base-not-default`). Its head is a branch of the same repository (`pull-head-fork`).
-3. The tree of the commit is the tree of the head of the pull request (`tree-differs`).
-4. The parent of the commit is the head, or an ancestor of the head (`head-behind-parent`). The compare of the parent and the head gives `behind_by` 0.
-5. Of the runs of the workflow with the event `pull_request` on the head from the same repository, the newest run passed. Its status is `completed` (`run-not-completed`), and its conclusion is `success` (`run-not-success`). The newest run has the highest `run_number`, then the highest `run_attempt`. With no such run, the answer is no (`no-run`).
-6. Each job that must pass is in that run (`job-missing`) with the conclusion `success` (`job-not-success`). A skipped job is not a pass.
+3. Of the pull requests of the head branch, in each state, exactly one has the head commit. It is the pull request of rule 2 (`many-pulls-of-head`).
+4. The tree of the commit is the tree of the head of the pull request (`tree-differs`).
+5. The parent of the commit is the head, or an ancestor of the head (`head-behind-parent`). The compare of the parent and the head gives `behind_by` 0.
+6. Of the runs of the workflow with the event `pull_request` on the head commit, the newest run passed. Each run must be from the head branch of the same repository. Its status is `completed` (`run-not-completed`), and its conclusion is `success` (`run-not-success`). The newest run has the highest `run_number`, then the highest `run_attempt`. With no such run, the answer is no (`no-run`).
+7. GitHub made the newest run before the merge (`run-after-merge`). Its `created_at` is at least one second before `merged_at`.
+8. No base change of the pull request came in the second of the newest run or after it (`base-changed-after-run`). The timeline events are `base_ref_changed`, `automatic_base_change_succeeded` and `base_ref_force_pushed`.
+9. Each job that must pass is in that run (`job-missing`) with the conclusion `success` (`job-not-success`). A skipped job is not a pass.
 
-Rules 3 and 4 prove that CI tested the tree of the release:
+The `created_at` of a run is the time of its event. A rerun keeps that time. Thus rules 7 and 8 also apply to a rerun.
 
-- A `pull_request` run tests the merge of the base branch into the head. The base commit is the newest commit of the base branch at the time of the run.
+The rules prove that CI tested the tree of the release:
+
+- A `pull_request` run tests the merge of its base branch into the head. The base commit is the newest commit of the base branch at the time of the event.
+- Rule 8: no base change came after the run. Thus the base of the run is the base of the merge, the default branch. A stacked pull request that GitHub retargeted before its newest run is a yes.
+- Rules 3 and 6: the run is of the head branch of this pull request. No other pull request of that branch has the head commit.
+- Rule 7: the run is older than the merge. Thus the base commit is a commit of `main` before the merge.
 - `main` only moves forward. Thus that base commit is the parent of the release commit, or an ancestor of the parent.
-- Rule 4 makes the parent an ancestor of the head. Thus the base commit is also an ancestor of the head.
-- The merge of an ancestor into the head gives the tree of the head. Rule 3 makes that tree the tree of the release commit.
+- Rule 5 makes the parent an ancestor of the head. Thus the base commit is also an ancestor of the head.
+- The merge of an ancestor into the head gives the tree of the head. Rule 4 makes that tree the tree of the release commit.
 
 Each HTTP error, each missing or malformed field and each fact that the script cannot read gives `verified=false`. Its reason starts with `no-read-`. A no read is not a pass at any time.
 
 - Each sha must match `^[0-9a-f]{40}$` before the script puts it in a URL or an output.
+- Each time must be an ISO time in UTC, for example `2026-11-16T12:02:47Z`. The script compares times to the second.
 - Each value in the outputs is a fixed text of the script, a checked sha or a number. A text of the API, for example a branch name, does not go to an output.
+- The head branch goes only into a URL, through `encodeURIComponent`.
 - The script imports only the built-in modules of Node.js, so it needs no install.
 
 The script has these limits:
 
 - The run of the pull request has the event `pull_request`. `verify` of a release has the event `push` or `workflow_dispatch`. A job of `ci.yml` with a condition on the event is not the same in the two runs. For example, `ci / changesets` starts only for a pull request. The list of jobs is the tool for this: the owner of the release names each job that must pass.
 - The proof needs a `main` that only moves forward. A ruleset that blocks a force push gives this.
-- The proof needs the default branch as the base of the run. A pull request whose base changed after its last run breaks this. A second pull request of the same head into a different base also breaks it. The API does not give the base of a run.
+- Rules 7 and 8 compare the times of GitHub to the second. A base change in the time between an event and its run is not seen.
+- Rule 3 sees the head of each pull request at the time of the read.
 
 ## The lockfile of a branch
 

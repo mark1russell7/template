@@ -12,36 +12,47 @@
 // "CI OK" (the name of the gate job ci-ok of ci.yml). The token comes from GH_TOKEN, else GITHUB_TOKEN, and only from there.
 //
 // decide() is a pure function over the facts that the script read: it gives the verdict, or the next fact to read. The
-// answer is yes only when each rule holds. Each failed rule has its own reason code:
+// answer is yes only when each rule holds. Each failed rule has its own reason code. The cheap rules come first:
 //   1. The commit C has exactly one parent P (not-one-parent).
 //   2. Exactly one merged pull request has the merge commit C (no-pull, many-pulls). Its base is the default branch
 //      (pull-base-not-default). Its head is a branch of the same repository, not of a fork (pull-head-fork).
-//   3. The tree of C is the tree of the head commit H of that pull request (tree-differs).
-//   4. P is H or an ancestor of H: the compare P...H gives behind_by 0 (head-behind-parent).
-//   5. Of the runs of the workflow file with the event pull_request on H from the same repository, the newest run (the
-//      highest run_number, then the highest run_attempt) is completed (run-not-completed) with the conclusion success
-//      (run-not-success). A newer run that is in progress, failed, cancelled or held is a no. No such run is a no (no-run).
-//   6. Each required job is in that run (job-missing), with the conclusion success (job-not-success). The script reads the
+//   3. Of the pull requests of that head branch (state=all), exactly one has the head commit H, and it is the pull request
+//      of rule 2 (many-pulls-of-head).
+//   4. The tree of C is the tree of H (tree-differs).
+//   5. P is H or an ancestor of H: the compare P...H gives behind_by 0 (head-behind-parent).
+//   6. Of the runs of the workflow file with the event pull_request on H from the head branch of the same repository, the
+//      newest run (the highest run_number, then the highest run_attempt) is completed (run-not-completed) with the
+//      conclusion success (run-not-success). A newer run that is in progress, failed, cancelled or held is a no. No such
+//      run is a no (no-run).
+//   7. The newest run was made before the merge: its created_at is a second before merged_at, or earlier (run-after-merge).
+//   8. No base change of the pull request came at the second of the newest run or after it (base-changed-after-run). The
+//      timeline events are base_ref_changed, automatic_base_change_succeeded and base_ref_force_pushed.
+//   9. Each required job is in that run (job-missing), with the conclusion success (job-not-success). The script reads the
 //      jobs of the newest attempt (filter=latest), page by page. A skipped job is not a pass.
+// The created_at of a run is the time of its event. A new attempt keeps it, so rules 7 and 8 also hold for a rerun.
 //
-// Why rules 3 and 4 prove that CI tested the released tree: a pull_request run does not test H alone. It tests the merge
-// of the base branch into H, with the base commit B of the time of the run. The default branch only moves forward, so B
-// is P or an ancestor of P. Rule 4 makes P an ancestor of H (or H itself), so B is an ancestor of H too. A merge of an
-// ancestor of H into H gives the tree of H with no change. Thus the run tested the tree of H, and rule 3 makes that tree
-// the tree of C.
+// Why the rules prove that CI tested the released tree: a pull_request run does not test H alone. It tests the merge of
+// the base branch into H, with the base commit B of the time of its event.
+//   - Rule 8: no base change came after the run, so the base of the run is the base of the merge, the default branch.
+//   - Rules 3 and 6: the run is of the head branch of this pull request, and no other pull request of that branch has H.
+//   - Rule 7: the run is older than the merge, so B is a commit of the default branch before the merge.
+//   - The default branch only moves forward, so B is P or an ancestor of P. Rule 5 makes P an ancestor of H, so B is an
+//     ancestor of H too. A merge of an ancestor of H into H gives the tree of H with no change, and rule 4 makes that tree
+//     the tree of C.
 //
 // The fail-safe direction: each HTTP error, each missing or malformed field and each fact that the script cannot read
 // gives verified=false, with a reason that starts with no-read-. A case that the script cannot read is never a pass. Each
-// sha must match /^[0-9a-f]{40}$/ before the script puts it in a URL or an output. Each value in GITHUB_OUTPUT and in the
-// summary is a fixed text of this file, a checked sha or an integer. No text from the API (a branch, a title) goes out.
+// sha must match /^[0-9a-f]{40}$/ before the script puts it in a URL or an output. Each time must be an ISO time in UTC.
+// Each value in GITHUB_OUTPUT and in the summary is a fixed text of this file, a checked sha or an integer. No text from
+// the API (a branch, a title) goes out. The head branch goes only into a URL, through encodeURIComponent.
 //
 // The limits:
 //   - The run of the pull request has the event pull_request, and verify of a release has the event of the release (push
 //     or workflow_dispatch). A job of ci.yml with a condition on the event is not the same in the two runs. The required
 //     jobs are the tool for this: the owner of the release names each job that must have passed.
-//   - The proof needs a default branch that only moves forward (a ruleset blocks a force push). It also needs the base of
-//     the run to be the default branch. A pull request whose base changed after its last run breaks this. A second pull
-//     request of the same head into a different base breaks it too. The API does not give the base of a run.
+//   - The proof needs a default branch that only moves forward (a ruleset blocks a force push).
+//   - Rules 7 and 8 compare the times of GitHub to the second. A base change in the time between an event and its run is
+//     not seen. Rule 3 sees the head of each pull request at the time of the read.
 import { appendFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -70,20 +81,25 @@ export type Reason =
   | "many-pulls"
   | "pull-base-not-default"
   | "pull-head-fork"
+  | "many-pulls-of-head"
   | "tree-differs"
   | "head-behind-parent"
   | "no-run"
   | "run-not-completed"
   | "run-not-success"
+  | "run-after-merge"
+  | "base-changed-after-run"
   | "job-missing"
   | "job-not-success"
   | "no-read-input"
   | "no-read-commit"
   | "no-read-pulls"
   | "no-read-repo"
+  | "no-read-head-pulls"
   | "no-read-head"
   | "no-read-compare"
   | "no-read-runs"
+  | "no-read-timeline"
   | "no-read-jobs"
   | "no-read-error";
 
@@ -98,20 +114,25 @@ export const REASONS: Readonly<Record<Reason, string>> = {
   "many-pulls": "More than one merged pull request has this commit as its merge commit.",
   "pull-base-not-default": "The base of the pull request is not the default branch.",
   "pull-head-fork": "The head of the pull request is not a branch of this repository.",
+  "many-pulls-of-head": "More than one pull request of the head branch has the head commit.",
   "tree-differs": "The tree of the commit is not the tree of the head of the pull request.",
   "head-behind-parent": "The head of the pull request does not contain the parent of the commit.",
-  "no-run": "No pull request run of the workflow from this repository is on the head.",
+  "no-run": "No pull request run of the workflow from the head branch of this repository is on the head.",
   "run-not-completed": "The newest run on the head is not completed.",
   "run-not-success": "The newest run on the head did not end with success.",
+  "run-after-merge": "The newest run on the head is not older than the merge.",
+  "base-changed-after-run": "The base of the pull request changed at the time of the newest run or after it.",
   "job-missing": "A required job is not in the newest run.",
   "job-not-success": "A required job of the newest run did not end with success.",
   "no-read-input": "An input is missing or not valid.",
   "no-read-commit": "The script cannot read the commit.",
   "no-read-pulls": "The script cannot read the pull requests of the commit.",
   "no-read-repo": "The script cannot read the default branch.",
+  "no-read-head-pulls": "The script cannot read the pull requests of the head branch.",
   "no-read-head": "The script cannot read the head commit of the pull request.",
   "no-read-compare": "The script cannot read the compare of the parent and the head.",
   "no-read-runs": "The script cannot read the runs of the workflow on the head.",
+  "no-read-timeline": "The script cannot read the timeline of the pull request.",
   "no-read-jobs": "The script cannot read the jobs of the newest run.",
   "no-read-error": "The script stopped with an error before a verdict.",
 };
@@ -125,15 +146,38 @@ export interface CommitFact {
 
 /** A pull request of a commit, from `GET /repos/{o}/{r}/commits/{sha}/pulls`. */
 export interface PullFact {
-  /** True when the field `merged_at` has a time. */
-  readonly merged: boolean;
+  /** The number of the pull request. The script puts it only in a URL. */
+  readonly number: number;
+  /** The time of the merge in whole seconds since 1970, from `merged_at`, or null when the pull request is not merged. */
+  readonly mergedAt: number | null;
   readonly mergeCommit: string | null;
   readonly baseRef: string;
   /** The full name of the repository of the base branch. */
   readonly baseRepository: string;
+  /** The name of the head branch. The script puts it only in a URL, and compares it. It does not go to an output. */
+  readonly headRef: string;
   readonly headSha: string;
   /** The full name of the repository of the head branch. */
   readonly headRepository: string;
+}
+
+/** A pull request of a head branch, from `GET /repos/{o}/{r}/pulls?state=all&head={owner}:{branch}`. */
+export interface HeadPullFact {
+  readonly number: number;
+  readonly headSha: string;
+}
+
+/** The pull requests of one head branch, in each state. */
+export interface HeadPullsFact {
+  readonly ref: string;
+  readonly pulls: readonly HeadPullFact[];
+}
+
+/** The base changes of one pull request, from `GET /repos/{o}/{r}/issues/{number}/timeline`. */
+export interface TimelineFact {
+  readonly pull: number;
+  /** The time of each base change, in whole seconds since 1970. */
+  readonly changes: readonly number[];
 }
 
 /** The repository, from `GET /repos/{o}/{r}`. */
@@ -159,8 +203,12 @@ export interface RunFact {
   readonly path: string;
   readonly event: string;
   readonly headSha: string;
+  /** The name of the head branch, or null. The script only compares it. */
+  readonly headBranch: string | null;
   /** The full name of the repository of the head branch. */
   readonly headRepository: string;
+  /** The time that GitHub made the run, in whole seconds since 1970. A rerun keeps this time. */
+  readonly createdAt: number;
   readonly status: string;
   readonly conclusion: string | null;
 }
@@ -195,9 +243,11 @@ export interface Facts {
   readonly commit?: Read<CommitFact>;
   readonly pulls?: Read<readonly PullFact[]>;
   readonly repo?: Read<RepoFact>;
+  readonly headPulls?: Read<HeadPullsFact>;
   readonly head?: Read<CommitFact>;
   readonly compare?: Read<CompareFact>;
   readonly runs?: Read<readonly RunFact[]>;
+  readonly timeline?: Read<TimelineFact>;
   readonly jobs?: Read<JobsFact>;
 }
 
@@ -206,9 +256,11 @@ export type Need =
   | { readonly fact: "commit"; readonly sha: string }
   | { readonly fact: "pulls"; readonly sha: string }
   | { readonly fact: "repo" }
+  | { readonly fact: "headPulls"; readonly owner: string; readonly ref: string }
   | { readonly fact: "head"; readonly sha: string }
   | { readonly fact: "compare"; readonly base: string; readonly head: string }
   | { readonly fact: "runs"; readonly head: string }
+  | { readonly fact: "timeline"; readonly pull: number }
   | { readonly fact: "jobs"; readonly run: number };
 
 /** The answer of the script. */
@@ -246,13 +298,13 @@ export function validJobs(names: readonly string[]): boolean {
 }
 
 /**
- * This function gives the newest run of the workflow file with the event `pull_request` on a head from the repository.
- * The newest run has the highest `run_number`, then the highest `run_attempt`. The function gives "none" when no run fits.
- * It gives "tie" when two runs have the same `run_number` and `run_attempt`.
+ * This function gives the newest run of the workflow file with the event `pull_request` on a head commit, from a head
+ * branch of the repository. The newest run has the highest `run_number`, then the highest `run_attempt`. The function
+ * gives "none" when no run fits. It gives "tie" when two runs have the same `run_number` and `run_attempt`.
  */
-export function newestRun(runs: readonly RunFact[], head: string, repository: string, workflow: string): RunFact | "none" | "tie" {
+export function newestRun(runs: readonly RunFact[], head: string, branch: string, repository: string, workflow: string): RunFact | "none" | "tie" {
   const path = `.github/workflows/${workflow}`;
-  const fit = runs.filter((run) => run.event === "pull_request" && run.headSha === head && run.headRepository === repository && run.path === path);
+  const fit = runs.filter((run) => run.event === "pull_request" && run.headSha === head && run.headBranch === branch && run.headRepository === repository && run.path === path);
   const [first, second] = [...fit].sort((a, b) => b.runNumber - a.runNumber || b.runAttempt - a.runAttempt);
   if (first === undefined) return "none";
   if (second !== undefined && second.runNumber === first.runNumber && second.runAttempt === first.runAttempt) return "tie";
@@ -282,7 +334,7 @@ export function decide(facts: Facts): Step {
   const pulls = facts.pulls;
   if (pulls === undefined) return need({ fact: "pulls", sha: facts.sha });
   if (failed(pulls)) return no(pulls.noRead);
-  const [pull, ...more] = pulls.filter((each) => each.merged && each.mergeCommit === facts.sha);
+  const [pull, ...more] = pulls.filter((each): each is PullFact & { readonly mergedAt: number } => each.mergedAt !== null && each.mergeCommit === facts.sha);
   if (pull === undefined) return no("no-pull");
   if (more.length > 0) return no("many-pulls");
   const repo = facts.repo;
@@ -293,14 +345,25 @@ export function decide(facts: Facts): Step {
   if (!SHA.test(pull.headSha)) return no("no-read-pulls");
   head = pull.headSha;
 
-  // Rule 3: the same tree
+  // Rule 3: no other pull request of the head branch has the head commit
+  const [owner = ""] = facts.repository.split("/");
+  const headPulls = facts.headPulls;
+  if (headPulls === undefined) return need({ fact: "headPulls", owner, ref: pull.headRef });
+  if (failed(headPulls)) return no(headPulls.noRead);
+  if (headPulls.ref !== pull.headRef) return no("no-read-head-pulls");
+  const ofHead = headPulls.pulls.filter((each) => each.headSha === head);
+  // The list must contain the pull request of rule 2. A list without it did not give the fact
+  if (!ofHead.some((each) => each.number === pull.number)) return no("no-read-head-pulls");
+  if (ofHead.length > 1) return no("many-pulls-of-head");
+
+  // Rule 4: the same tree
   const headCommit = facts.head;
   if (headCommit === undefined) return need({ fact: "head", sha: head });
   if (failed(headCommit)) return no(headCommit.noRead);
   if (headCommit.sha !== head) return no("no-read-head");
   if (headCommit.tree !== commit.tree) return no("tree-differs");
 
-  // Rule 4: the head has the parent
+  // Rule 5: the head has the parent
   const compare = facts.compare;
   if (compare === undefined) return need({ fact: "compare", base: parent, head });
   if (failed(compare)) return no(compare.noRead);
@@ -309,18 +372,28 @@ export function decide(facts: Facts): Step {
   // With behind_by 0, the merge base is the parent. A different merge base is a contradiction, not a pass
   if (compare.mergeBase !== parent) return no("no-read-compare");
 
-  // Rule 5: the newest run passed
+  // Rule 6: the newest run of the head branch passed
   const runs = facts.runs;
   if (runs === undefined) return need({ fact: "runs", head });
   if (failed(runs)) return no(runs.noRead);
-  const newest = newestRun(runs, head, facts.repository, facts.workflow);
+  const newest = newestRun(runs, head, pull.headRef, facts.repository, facts.workflow);
   if (newest === "none") return no("no-run");
   if (newest === "tie") return no("no-read-runs");
   run = newest.id;
   if (newest.status !== "completed") return no("run-not-completed");
   if (newest.conclusion !== "success") return no("run-not-success");
 
-  // Rule 6: each required job passed
+  // Rule 7: the run is older than the merge. The same second is a no
+  if (newest.createdAt >= pull.mergedAt) return no("run-after-merge");
+
+  // Rule 8: no base change at the second of the run or after it
+  const timeline = facts.timeline;
+  if (timeline === undefined) return need({ fact: "timeline", pull: pull.number });
+  if (failed(timeline)) return no(timeline.noRead);
+  if (timeline.pull !== pull.number) return no("no-read-timeline");
+  if (timeline.changes.some((time) => time >= newest.createdAt)) return no("base-changed-after-run");
+
+  // Rule 9: each required job passed
   const jobs = facts.jobs;
   if (jobs === undefined) return need({ fact: "jobs", run: newest.id });
   if (failed(jobs)) return no(jobs.noRead);
@@ -405,6 +478,23 @@ const textOf = (value: unknown): string | null => (typeof value === "string" ? v
 /** This function gives a conclusion: a text, or null. It gives undefined for each other value, so a missing field is not null. */
 const conclusionOf = (value: unknown): string | null | undefined => (value === null || typeof value === "string" ? value : undefined);
 
+/** The form of a time of the API: an ISO time in UTC, for example `2026-11-16T12:02:47Z`. */
+const TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
+
+/**
+ * This function gives a time of the API in whole seconds since 1970, or null for each other value. A date that does not
+ * exist, for example February 30, is null. The script compares times only to the second.
+ */
+export function timeOf(value: unknown): number | null {
+  if (typeof value !== "string" || !TIME.test(value)) return null;
+  const milliseconds = Date.parse(value);
+  if (!Number.isFinite(milliseconds) || new Date(milliseconds).toISOString().slice(0, 19) !== value.slice(0, 19)) return null;
+  return Math.floor(milliseconds / 1000);
+}
+
+/** This function gives the name of a branch: a text that is not empty, with no control character, or null. */
+const branchOf = (value: unknown): string | null => (typeof value === "string" && value.length > 0 && value.length <= 255 && !/[\u0000-\u001f\u007f]/.test(value) ? value : null);
+
 /** This function gives the facts of a commit, or null when a field is missing or malformed. */
 export function parseCommit(body: unknown): CommitFact | null {
   const sha = shaOf(field(body, "sha"));
@@ -422,17 +512,40 @@ export function parseCommit(body: unknown): CommitFact | null {
 
 /** This function gives the facts of a pull request, or null when a field is missing or malformed. */
 export function parsePull(item: unknown): PullFact | null {
-  const mergedAt = field(item, "merged_at");
+  const number = positiveOf(field(item, "number"));
+  const mergedField = field(item, "merged_at");
+  const mergedAt = mergedField === null ? null : timeOf(mergedField);
   const mergeField = field(item, "merge_commit_sha");
   const mergeCommit = mergeField === null ? null : shaOf(mergeField);
   const baseRef = textOf(field(item, "base", "ref"));
   const baseRepository = textOf(field(item, "base", "repo", "full_name"));
+  const headRef = textOf(field(item, "head", "ref"));
   const headSha = shaOf(field(item, "head", "sha"));
   const headRepository = textOf(field(item, "head", "repo", "full_name"));
-  if (mergedAt !== null && typeof mergedAt !== "string") return null;
-  if (mergeField !== null && mergeCommit === null) return null;
-  if (baseRef === null || baseRepository === null || headSha === null || headRepository === null) return null;
-  return { merged: typeof mergedAt === "string", mergeCommit, baseRef, baseRepository, headSha, headRepository };
+  if (number === null || (mergedField !== null && mergedAt === null) || (mergeField !== null && mergeCommit === null)) return null;
+  if (baseRef === null || baseRepository === null || headRef === null || headSha === null || headRepository === null) return null;
+  return { number, mergedAt, mergeCommit, baseRef, baseRepository, headRef, headSha, headRepository };
+}
+
+/** This function gives the number and the head commit of a pull request of a head branch, or null when one is malformed. */
+export function parseHeadPull(item: unknown): HeadPullFact | null {
+  const number = positiveOf(field(item, "number"));
+  const headSha = shaOf(field(item, "head", "sha"));
+  return number === null || headSha === null ? null : { number, headSha };
+}
+
+/** The timeline events that change the base of a pull request, or its history. */
+const BASE_CHANGES: readonly string[] = ["base_ref_changed", "automatic_base_change_succeeded", "base_ref_force_pushed"];
+
+/**
+ * This function gives the time of a base change in a timeline, in whole seconds since 1970. It gives "other" for an item
+ * of a different event. It gives null for a base change with no valid `created_at`, and for an item that is not an object.
+ */
+export function parseTimelineItem(item: unknown): number | "other" | null {
+  if (record(item) === null) return null;
+  const event = field(item, "event");
+  if (typeof event !== "string" || !BASE_CHANGES.includes(event)) return "other";
+  return timeOf(field(item, "created_at"));
 }
 
 /** This function gives the facts of a run, or null when a field is missing or malformed. */
@@ -443,13 +556,16 @@ export function parseRun(item: unknown): RunFact | null {
   const path = textOf(field(item, "path"));
   const event = textOf(field(item, "event"));
   const headSha = shaOf(field(item, "head_sha"));
+  const branchField = field(item, "head_branch");
+  const headBranch = branchField === null ? null : textOf(branchField);
   const headRepository = textOf(field(item, "head_repository", "full_name"));
+  const createdAt = timeOf(field(item, "created_at"));
   const status = textOf(field(item, "status"));
   const conclusion = conclusionOf(field(item, "conclusion"));
   if (id === null || runNumber === null || runAttempt === null || path === null || event === null || headSha === null) return null;
-  if (headRepository === null || status === null || conclusion === undefined) return null;
+  if ((branchField !== null && headBranch === null) || headRepository === null || createdAt === null || status === null || conclusion === undefined) return null;
   // A path can end with the ref of a called file, for example ".github/workflows/ci.yml@refs/heads/main"
-  return { id, runNumber, runAttempt, path: path.replace(/@.*$/, ""), event, headSha, headRepository, status, conclusion };
+  return { id, runNumber, runAttempt, path: path.replace(/@.*$/, ""), event, headSha, headBranch, headRepository, createdAt, status, conclusion };
 }
 
 /**
@@ -525,6 +641,32 @@ export async function readRepo(api: Api, repository: string): Promise<Read<RepoF
   return orNoRead(branch === null || branch === "" ? null : { defaultBranch: branch }, "no-read-repo");
 }
 
+/**
+ * This function reads the pull requests of a head branch in each state, page by page. The name of the branch goes only
+ * into the URL, through `encodeURIComponent`.
+ */
+export async function readHeadPulls(api: Api, repository: string, owner: string, ref: string): Promise<Read<HeadPullsFact>> {
+  const branch = branchOf(ref);
+  if (branch === null || !/^[A-Za-z0-9_.-]{1,100}$/.test(owner)) return { noRead: "no-read-head-pulls" };
+  const path = `repos/${repository}/pulls?state=all&head=${owner}:${encodeURIComponent(branch)}`;
+  const pulls = parseAll(await readList(api, path, null), parseHeadPull);
+  return orNoRead(pulls === null ? null : { ref, pulls }, "no-read-head-pulls");
+}
+
+/** This function reads the times of the base changes in the timeline of a pull request, page by page. */
+export async function readTimeline(api: Api, repository: string, pull: number): Promise<Read<TimelineFact>> {
+  if (!Number.isSafeInteger(pull) || pull <= 0) return { noRead: "no-read-timeline" };
+  const items = await readList(api, `repos/${repository}/issues/${String(pull)}/timeline`, null);
+  if (items === null) return { noRead: "no-read-timeline" };
+  const changes: number[] = [];
+  for (const item of items) {
+    const time = parseTimelineItem(item);
+    if (time === null) return { noRead: "no-read-timeline" };
+    if (time !== "other") changes.push(time);
+  }
+  return { pull, changes };
+}
+
 /** This function reads the compare of two commits: the number of commits of the base that the head does not have. */
 export async function readCompare(api: Api, repository: string, base: string, head: string): Promise<Read<CompareFact>> {
   if (!SHA.test(base) || !SHA.test(head)) return { noRead: "no-read-compare" };
@@ -559,19 +701,23 @@ async function gather(api: Api, facts: Facts, need: Need): Promise<Facts> {
       return { ...facts, pulls: await readPulls(api, repository, need.sha) };
     case "repo":
       return { ...facts, repo: await readRepo(api, repository) };
+    case "headPulls":
+      return { ...facts, headPulls: await readHeadPulls(api, repository, need.owner, need.ref) };
     case "head":
       return { ...facts, head: await readCommit(api, repository, need.sha, "no-read-head") };
     case "compare":
       return { ...facts, compare: await readCompare(api, repository, need.base, need.head) };
     case "runs":
       return { ...facts, runs: await readRuns(api, repository, facts.workflow, need.head) };
+    case "timeline":
+      return { ...facts, timeline: await readTimeline(api, repository, need.pull) };
     case "jobs":
       return { ...facts, jobs: await readJobs(api, repository, need.run) };
   }
 }
 
 /** The number of facts. Each step of verify() reads one fact that was absent, so it ends after this number of reads. */
-const FACTS = 7;
+const FACTS = 9;
 
 /** This function reads the facts that decide() asks for, one at a time, and gives the verdict. */
 export async function verify(api: Api, input: Facts): Promise<Verdict> {
