@@ -21,6 +21,9 @@ export const SECURITY_TIMEOUT_MINUTES = 30;
 
 const REUSABLE = /(^|\/)\.github\/workflows\/reusable-security\.ya?ml(@|$)/;
 
+/** The id of the one job when the file has no summary job of the scans. */
+const ONE_JOB_ID = "security-ok";
+
 /** The keys that a job of the shared workflow can have, and that the fix can replace. */
 const CALLER_KEYS = new Set(["uses", "permissions", "with", "name"]);
 
@@ -71,9 +74,10 @@ function needsOf(lines: readonly string[], job: number): string[] {
 }
 
 /**
- * This function puts one job in place of the job of the shared workflow and its summary job. If it cannot, it gives the
- * reason that a person must change the file. The new job keeps the id of the summary job and the name `Security OK`, which the ruleset
- * needs. It gives the inputs of the caller to the action, and `timeout-minutes` to the job.
+ * This function puts one job in place of the job of the shared workflow and its summary job, if the file has a summary job.
+ * If it cannot, it gives the reason that a person must change the file. The new job has the name `Security OK`, which the
+ * ruleset needs. It keeps the id of the summary job, or with no summary job, it gets the id `security-ok`. It gives the
+ * inputs of the caller to the action, and `timeout-minutes` to the job.
  */
 export function withOneJob(text: string, commit: string = SECURITY_SCAN_COMMIT): { text: string } | { reason: string } {
   const lines = workflowLines(text);
@@ -83,15 +87,22 @@ export function withOneJob(text: string, commit: string = SECURITY_SCAN_COMMIT):
   if (caller === undefined) return { reason: "no job uses reusable-security.yml" };
   const jobs = lines.findIndex((line) => indentOf(line) === 0 && keyValue(line, "jobs") !== undefined);
   const dependents = childKeys(lines, jobs).filter((job) => needsOf(lines, job).includes(caller.id));
-  if (dependents.length !== 1) return { reason: `${String(dependents.length)} jobs need the job ${caller.id}, and the fix needs exactly one summary job` };
+  if (dependents.length > 1) return { reason: `${String(dependents.length)} jobs need the job ${caller.id}, and the fix replaces one summary job or none` };
   const summary = dependents[0];
-  if (summary === undefined) return { reason: "no summary job" };
-  const summaryNeeds = needsOf(lines, summary);
-  if (summaryNeeds.length !== 1) return { reason: `the summary job needs ${summaryNeeds.join(", ")}, and the fix replaces only a summary job of the scans` };
-  const summaryName = childKeys(lines, summary)
-    .map((at) => keyValue(lines[at] ?? "", "name"))
-    .find((value) => value !== undefined);
-  if (summaryName !== "Security OK") return { reason: `the summary job has the name ${summaryName ?? "(none)"}, not Security OK, which the ruleset needs` };
+  let id = ONE_JOB_ID;
+  if (summary === undefined) {
+    // With no summary job, the one job gets the id security-ok. Another job with that id is not a summary of the scans.
+    const taken = childKeys(lines, jobs).some((job) => job !== caller.line && idOf(lines[job] ?? "") === ONE_JOB_ID);
+    if (taken) return { reason: `the file has a job ${ONE_JOB_ID} that does not need the job ${caller.id}, and the fix does not merge two jobs` };
+  } else {
+    const summaryNeeds = needsOf(lines, summary);
+    if (summaryNeeds.length !== 1) return { reason: `the summary job needs ${summaryNeeds.join(", ")}, and the fix replaces only a summary job of the scans` };
+    const summaryName = childKeys(lines, summary)
+      .map((at) => keyValue(lines[at] ?? "", "name"))
+      .find((value) => value !== undefined);
+    if (summaryName !== "Security OK") return { reason: `the summary job has the name ${summaryName ?? "(none)"}, not Security OK, which the ruleset needs` };
+    id = idOf(lines[summary] ?? "");
+  }
 
   const inputs: string[] = [];
   let timeout = String(SECURITY_TIMEOUT_MINUTES);
@@ -114,7 +125,7 @@ export function withOneJob(text: string, commit: string = SECURITY_SCAN_COMMIT):
   const withLines = childKeys(lines, caller.line).find((at) => idOf(lines[at] ?? "") === "with");
   const inputLines = withLines === undefined ? [] : childKeys(lines, withLines).filter((at) => inputs.includes(idOf(lines[at] ?? ""))).map((at) => `${pad}        ${(raw[at] ?? "").trim()}`);
   const job = [
-    `${pad}${idOf(lines[summary] ?? "")}:`,
+    `${pad}${id}:`,
     `${pad}  name: Security OK`,
     `${pad}  runs-on: ubuntu-latest`,
     `${pad}  timeout-minutes: ${timeout}`,
@@ -127,11 +138,13 @@ export function withOneJob(text: string, commit: string = SECURITY_SCAN_COMMIT):
     ...(inputLines.length > 0 ? [`${pad}      with:`, ...inputLines] : []),
   ];
   const splices: Splice[] = [{ at: caller.line, remove: trimmedEnd(lines, caller.line) - caller.line, insert: job }];
-  // The summary job goes, with the empty line before it, or else with the empty line after it.
-  const blank = (at: number): boolean => at >= 0 && at < raw.length - 1 && (raw[at] ?? "").trim() === "";
-  const start = blank(summary - 1) ? summary - 1 : summary;
-  const end = trimmedEnd(lines, summary) + (start === summary && blank(trimmedEnd(lines, summary)) ? 1 : 0);
-  splices.push({ at: start, remove: end - start, insert: [] });
+  if (summary !== undefined) {
+    // The summary job goes, with the empty line before it, or else with the empty line after it.
+    const blank = (at: number): boolean => at >= 0 && at < raw.length - 1 && (raw[at] ?? "").trim() === "";
+    const start = blank(summary - 1) ? summary - 1 : summary;
+    const end = trimmedEnd(lines, summary) + (start === summary && blank(trimmedEnd(lines, summary)) ? 1 : 0);
+    splices.push({ at: start, remove: end - start, insert: [] });
+  }
   return { text: applySplices(text, splices) };
 }
 
@@ -140,7 +153,7 @@ export const securityOneJob: Rule = {
   title: "The security scans run in one job: the action `security-scan`, not the shared workflow `reusable-security.yml`.",
   reason:
     "Each job of a run asks for its own runner. reusable-security.yml gives three scan jobs, and the caller adds the summary job Security OK, so each run waits in the queue for four runners, and the summary job waits again after the scans. On 2026-11-06, in a full queue, the scan jobs of systems waited 23 to 40 minutes each. The action security-scan runs the same scans with the same inputs in one job, which is the check Security OK.",
-  fix: "Replace the job that uses reusable-security.yml and its summary job with one job Security OK that runs the action security-scan (CI.md, Security). Give the inputs to the action, and timeout-minutes to the job.",
+  fix: "Replace the job that uses reusable-security.yml and its summary job, if it has one, with one job Security OK that runs the action security-scan (CI.md, Security). Give the inputs to the action, and timeout-minutes to the job.",
   sources: [
     { repo: "template", rule: "security", doc: "pull request 206 (2026-11-05): the action security-scan, and reusable-security.yml deprecated" },
     { repo: "template", rule: "ci", doc: "CI.md, Security: the job of a caller of security-scan, and the change from the old workflow" },
