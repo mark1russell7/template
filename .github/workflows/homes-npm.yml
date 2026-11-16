@@ -68,7 +68,9 @@ jobs:
   # home-package reads it to say "import the name from the home" or "add the name to the home". A release of a home
   # with new exports makes the index old. On 2026-11-15 it named conventions 0.32.0 (npm: 0.41.10), and 18 home packages
   # were not in it. This job runs each day and by hand, not on a pull request: a release of a home is not a fault of a
-  # pull request. A red run on main goes to the owner of the map, who runs pnpm homes:exports and releases conventions.
+  # pull request. A red run on main goes to the owner of the map, who commits the new index and releases conventions. The
+  # homes release each day, so the job writes the new index itself and uploads it as the artifact home-exports. Then the
+  # owner needs no install and no build on their computer: the summary gives the command that downloads the file.
   exports:
     name: The index of the exports of the homes against npm
     if: github.event_name != 'pull_request'
@@ -87,4 +89,36 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Compare the index with npm
+        id: compare
         run: node scripts/homes/exports.ts --check
+      # Only an old index writes a new one: a failed read of npm also fails the compare, and then the write fails too
+      - name: Write the index again
+        id: write
+        if: failure() && steps.compare.outcome == 'failure'
+        env:
+          RUN_ID: ${{ github.run_id }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          node scripts/homes/exports.ts
+          if git diff --quiet -- packages/conventions/src/home-exports.ts; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "### The index of the exports of the homes"
+            echo
+            echo "The job wrote \`packages/conventions/src/home-exports.ts\` again, in the artifact \`home-exports\`. To commit it, start this command at the root of the repository, and examine the diff:"
+            echo
+            echo '```sh'
+            echo "gh run download $RUN_ID -R $REPOSITORY -n home-exports -D packages/conventions/src"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload the index
+        if: failure() && steps.write.outputs.changed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: home-exports
+          path: packages/conventions/src/home-exports.ts
+          retention-days: 7
+          if-no-files-found: error
