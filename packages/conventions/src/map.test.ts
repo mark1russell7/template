@@ -81,6 +81,11 @@ describe("the search", () => {
     expect(findHomes("lens timeline")[0]?.area).toBe("3d-stages");
     expect(findHomes("gltf")[0]?.area).toBe("room-view");
     expect(findHomes("apartment model")[0]?.area).toBe("room-view");
+    expect(findHomes("viewer")[0]?.area).toBe("3d-stages");
+    expect(findHomes("3d marks")[0]?.area).toBe("3d-stages");
+    expect(findHomes("heat map")[0]?.area).toBe("3d-stages");
+    expect(findHomes("anchor add-on")[0]?.area).toBe("room-view");
+    expect(findHomes("circuit breaker")[0]?.area).toBe("electrical");
     expect(findHomes("nothing-like-this")).toEqual([]);
     expect(findHomes("")).toBe(HOMES);
   });
