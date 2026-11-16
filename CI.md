@@ -127,7 +127,7 @@ On a pull request, the job `changesets` examines the changesets (`.github/action
 
 In a fixed group, a changeset of one member sets the version of all members. The other members that change get a note, not an error. The summary shows each package, its changeset and the release of each fixed group. Before `1.0`, a `minor` of a group is a breaking change, and the note asks for a migration note.
 
-A change with no release has an empty changeset (`pnpm changeset --empty`) or the label `no-changeset`. The version pull request of changesets (`changeset-release/*`) is skipped.
+A change with no release has an empty changeset (`pnpm changeset --empty`) or the label `no-changeset`. The version pull request of changesets (`changeset-release/*`) is skipped. The check also knows a version pull request on each other branch, for example `release/<version>`: the pull request deletes changesets and adds none. In such a pull request, a `package.json` change of only the version and the ranges of the packages of the repository needs no changeset. Each other change of a package still needs a changeset.
 
 A repository with more checks adds its own jobs next to the job `ci`. An example with inputs:
 
