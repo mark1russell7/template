@@ -77,9 +77,9 @@ export {
 export { releasesLead, renderReleasesPage, RELEASES_SCRIPT } from "./render/releases.ts";
 export { classCounts, openGroups, renderStatusPage, sectionsOf, slugOf, statusLead, STATUS_SCRIPT, type BoardSection, type ItemGroup } from "./render/status.ts";
 export { probeScript, TYPESCRIPT_PROBE } from "./check/probe.ts";
+export { cronLines, type CronLine } from "./check/schedule.ts";
 export {
   checkFreshness,
-  cronLines,
   DATA_STAMP_SCHEMA,
   failingCases,
   latestAt,
@@ -92,7 +92,6 @@ export {
   parseDataStamps,
   VERSION_GRACE_DAYS,
   WORKSPACE_RULE_START,
-  type CronLine,
   type DataLimit,
   type DataRun,
   type DataStamps,
