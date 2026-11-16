@@ -39,6 +39,7 @@ import { tsconfigTest } from "./tsconfig-test.ts";
 import { typedFiles } from "./typed-files.ts";
 import { typedScripts } from "./typed-scripts.ts";
 import { trustPolicy } from "./trust-policy.ts";
+import { securityOverrides } from "./security-overrides.ts";
 import { unreleasedChange } from "./unreleased-change.ts";
 import { versionTitle } from "./version-title.ts";
 import { workflowParses } from "./workflow-parses.ts";
@@ -49,6 +50,7 @@ export const RULES: readonly Rule[] = [
   pinnedGitDeps,
   workspaceProtocol,
   trustPolicy,
+  securityOverrides,
   sourceMain,
   serviceRunMain,
   tsconfigTest,
@@ -90,4 +92,4 @@ export const RULES: readonly Rule[] = [
 ];
 
 export { publishedMinor };
-export { apiReportScript, changelogVersion, coverageProvider, cuePreset, exportsRequire, gateAfterCancel, gateTrigger, securityOneJob, serviceRunMain, setupCue, sharedCi, homeModule, homePackage, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, packNoBuildinfo, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, siteCheckInCi, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, versionTitle, workflowParses, workspaceProtocol };
+export { apiReportScript, changelogVersion, coverageProvider, cuePreset, exportsRequire, gateAfterCancel, gateTrigger, securityOneJob, securityOverrides, serviceRunMain, setupCue, sharedCi, homeModule, homePackage, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, packNoBuildinfo, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, siteCheckInCi, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, versionTitle, workflowParses, workspaceProtocol };
