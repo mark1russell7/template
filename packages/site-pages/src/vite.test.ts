@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { build as viteBuild, resolveConfig, type InlineConfig, type Plugin, type Rolldown } from "vite";
 import { applyTheme } from "./chrome.ts";
+import { iconLink, SITE_ICON_HREF } from "./render/icon.ts";
 import type { DataStamps } from "./check/freshness.ts";
 import { buildInfo, commitTime, rehypeScrollCue, type RehypeNode, siteBase, siteKpi, siteShell, siteStamps, STAMP_MARK, STAMPS_FILE, themeScript } from "./vite.ts";
 
@@ -94,6 +95,27 @@ describe("buildInfo", () => {
   });
 });
 
+describe("the icon of siteShell", () => {
+  const tags = (html: string, icon?: string | false) => siteShell({ themeKey: "k", packageFile: false, icon }).transformIndexHtml(html);
+  const icons = (html: string, icon?: string | false) => tags(html, icon).filter((tag) => tag.tag === "link");
+
+  it("adds the default icon to a page with no icon link", () => {
+    expect(icons("<head><title>t</title></head>")).toEqual([{ tag: "link", attrs: { rel: "icon", href: SITE_ICON_HREF }, injectTo: "head" }]);
+    expect(icons("")).toHaveLength(1);
+  });
+
+  it("keeps the icon link of the page, and adds no second one", () => {
+    expect(icons('<head><link rel="icon" href="/own.svg"></head>')).toEqual([]);
+    expect(icons("<head><link rel='shortcut icon' href=/own.ico></head>")).toEqual([]);
+  });
+
+  it("uses the icon of the option, and adds none for false", () => {
+    expect(icons("<head></head>", "/site/icon.svg")).toEqual([{ tag: "link", attrs: { rel: "icon", href: "/site/icon.svg" }, injectTo: "head" }]);
+    expect(icons("<head></head>", false)).toEqual([]);
+    expect(tags("<head></head>", false)).toHaveLength(1);
+  });
+});
+
 describe("siteShell in a real Vite", () => {
   let dir: string;
   let site: string;
@@ -131,6 +153,7 @@ describe("siteShell in a real Vite", () => {
     const code = (file(".js") as Rolldown.OutputChunk).code;
 
     expect(html.slice(0, html.indexOf("</head>"))).toContain(`<script>${themeScript("site-theme")}</script>`);
+    expect(html.slice(0, html.indexOf("</head>"))).toContain(iconLink());
     expect(html).toMatch(/src="\/name\/assets\//);
     expect(code).toContain("0123456");
     expect(code).toContain("1.2.3");

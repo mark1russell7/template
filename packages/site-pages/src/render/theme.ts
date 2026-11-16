@@ -5,6 +5,7 @@
 
 import { longDate } from "./dates.ts";
 import { escapeHtml, link } from "./html.ts";
+import { iconLink } from "./icon.ts";
 
 /** The options of each page. */
 export interface PageOptions {
@@ -20,6 +21,8 @@ export interface PageOptions {
   generatedAt: string;
   /** The commit of the build, or null. */
   commit: string | null;
+  /** The `href` of the icon of the page. The default is `SITE_ICON_HREF`. */
+  icon?: string | undefined;
 }
 
 // The dark colors: for [data-theme="dark"], and for the dark system theme without [data-theme="light"]
@@ -209,6 +212,7 @@ export function pageShell(parts: PageParts, options: PageOptions): string {
 <meta name="color-scheme" content="light dark">
 <title>${escapeHtml(`${parts.title} · ${name}`)}</title>
 <meta name="description" content="${escapeHtml(parts.description)}">
+${iconLink(options.icon)}
 <style>${BASE_CSS}${options.extraCss ? `\n${options.extraCss}` : ""}</style>
 <noscript><style>${NO_SCRIPT_CSS}</style></noscript>
 </head>
