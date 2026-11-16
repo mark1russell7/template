@@ -22,6 +22,7 @@ export const SHARED_WORKFLOWS: readonly string[] = [
   "reusable-queue.yml",
   "reusable-release-build.yml",
   "reusable-release-tag.yml",
+  "reusable-release-tree.yml",
   "reusable-security.yml",
 ];
 
