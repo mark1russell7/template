@@ -87,7 +87,12 @@ export function versionsOf(text: string): Map<string, string> {
   return versions;
 }
 
-/** The days that a home can have new names on npm before the check fails. */
+/**
+ * The days that a home can have new names on npm before the check fails. This grace is a tolerance. In it, a release
+ * of conventions can carry an index up to 7 days old, and the rule home-package misses the new names of a home.
+ * The grace ends when the job opens the pull request of the refresh itself, with a token that starts CI. Then the
+ * grace goes to 1 day, or goes away.
+ */
 export const GRACE_DAYS: number = 7;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -153,18 +158,36 @@ export function changedPackages(current: string, next: string): string[] {
   return [...new Set([...before.keys(), ...after.keys()])].filter((name) => before.get(name) !== after.get(name)).sort();
 }
 
+/** This function tells if two lists have the same names, in any order. */
+export function sameNames(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  const left = [...a].sort();
+  const right = [...b].sort();
+  return left.every((name, i) => name === right[i]);
+}
+
 /**
  * This function gives the publish time of the first version after the version of the index with other names. It
- * reads the names of each version between from its tarball. It gives undefined when npm has no time for the package.
+ * reads the names of each version with namesAt, in the order of the publish times, and stops at the first change.
+ * It gives undefined when no later version has other names. An error of namesAt goes to the caller, so the check fails.
  */
-async function changeStart(name: string, version: string, latest: PackageExports, names: string, temp: string): Promise<string | undefined> {
-  const time = await timesOf(name);
-  if (time === undefined) return undefined;
-  for (const candidate of laterVersions(time, version, latest.version)) {
-    const candidateNames = candidate === latest.version ? latest.names : (await exportsOf(name, candidate, temp)).names;
-    if (JSON.stringify(candidateNames) !== names) return time[candidate];
+export async function firstChange(
+  time: Readonly<Record<string, string>>,
+  version: string,
+  latest: string,
+  names: readonly string[],
+  namesAt: (version: string) => Promise<readonly string[]>,
+): Promise<string | undefined> {
+  for (const candidate of laterVersions(time, version, latest)) {
+    if (!sameNames(await namesAt(candidate), names)) return time[candidate];
   }
   return undefined;
+}
+
+async function changeStart(name: string, version: string, latest: PackageExports, names: readonly string[], temp: string): Promise<string | undefined> {
+  const time = await timesOf(name);
+  if (time === undefined) return undefined;
+  return firstChange(time, version, latest.version, names, async (candidate) => (candidate === latest.version ? latest.names : (await exportsOf(name, candidate, temp)).names));
 }
 
 async function main(args: readonly string[]): Promise<number> {
@@ -201,7 +224,7 @@ async function mainIn(args: readonly string[], temp: string): Promise<number> {
       const latest = index[name];
       const before = names.get(name);
       if (version === undefined || latest === undefined || before === undefined) continue;
-      const start = await changeStart(name, version, latest, before, temp);
+      const start = await changeStart(name, version, latest, JSON.parse(before) as string[], temp);
       if (start !== undefined) starts.set(name, start);
     }
     const verdict = verdictOf(current, next, changed, starts, new Date());

@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { GRACE_DAYS, changedPackages, indexModule, laterVersions, namesOf, valueNames, verdictOf, versionsOf } from "./exports.ts";
+import { GRACE_DAYS, changedPackages, firstChange, indexModule, laterVersions, namesOf, sameNames, valueNames, verdictOf, versionsOf } from "./exports.ts";
 
 test("valueNames gives the values of a report, with no types and no default", () => {
   const report = ["# The public API of p", "", "## . (build/index.d.ts): 4 names", "", "median: build/index.d.ts#median", "type Options: build/index.d.ts#Options", "default: build/index.d.ts#default", "QUANTILES: build/index.d.ts#QUANTILES", "median: build/b.d.ts#median"].join("\n");
@@ -48,6 +48,54 @@ test("laterVersions gives the versions after a version up to the latest, in the 
   assert.deepEqual(laterVersions(time, "0.4.0", "0.4.0"), []);
   assert.deepEqual(laterVersions(time, "9.9.9", "0.4.0"), []);
   assert.deepEqual(laterVersions(time, "0.3.0", "0.4.0-rc.1"), ["0.4.0-rc.1"]);
+});
+
+test("sameNames compares two lists of names in any order", () => {
+  assert.equal(sameNames(["b", "a"], ["a", "b"]), true);
+  assert.equal(sameNames(["a"], ["a", "b"]), false);
+  assert.equal(sameNames(["a", "c"], ["a", "b"]), false);
+  assert.equal(sameNames([], []), true);
+});
+
+const releases = {
+  "1.0.0": "2026-11-01T00:00:00.000Z",
+  "1.0.1": "2026-11-03T00:00:00.000Z",
+  "1.1.0": "2026-11-05T00:00:00.000Z",
+  "1.2.0": "2026-11-07T00:00:00.000Z",
+};
+
+/** A namesAt that gives the names of a table, and records each version that it reads. */
+function namesFrom(table: Readonly<Record<string, readonly string[]>>, reads: string[]): (version: string) => Promise<readonly string[]> {
+  return async (version) => {
+    reads.push(version);
+    const names = table[version];
+    if (names === undefined) throw new Error(`no tarball for ${version}`);
+    return names;
+  };
+}
+
+test("firstChange skips a later version with the same names, and stops at the first version with other names", async () => {
+  const reads: string[] = [];
+  const at = namesFrom({ "1.0.1": ["x"], "1.1.0": ["y", "x"], "1.2.0": ["x", "y"] }, reads);
+  assert.equal(await firstChange(releases, "1.0.0", "1.2.0", ["x"], at), "2026-11-05T00:00:00.000Z");
+  assert.deepEqual(reads, ["1.0.1", "1.1.0"]);
+});
+
+test("firstChange gives undefined when each later version has the same names", async () => {
+  const reads: string[] = [];
+  const at = namesFrom({ "1.0.1": ["x"], "1.1.0": ["x"], "1.2.0": ["x"] }, reads);
+  assert.equal(await firstChange(releases, "1.0.0", "1.2.0", ["x"], at), undefined);
+  assert.deepEqual(reads, ["1.0.1", "1.1.0", "1.2.0"]);
+});
+
+test("firstChange gives the time of the latest version when only the latest version has other names", async () => {
+  const at = namesFrom({ "1.0.1": ["x"], "1.1.0": ["x"], "1.2.0": ["x", "z"] }, []);
+  assert.equal(await firstChange(releases, "1.0.0", "1.2.0", ["x"], at), "2026-11-07T00:00:00.000Z");
+});
+
+test("firstChange fails when the read of a tarball fails, so the check does not pass", async () => {
+  const at = namesFrom({ "1.0.1": ["x"], "1.2.0": ["x", "z"] }, []);
+  await assert.rejects(firstChange(releases, "1.0.0", "1.2.0", ["x"], at), /no tarball for 1\.1\.0/u);
 });
 
 test("verdictOf gives a changed home its grace from the start of its new names, and fails a new or gone package at once", () => {
