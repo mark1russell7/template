@@ -1,7 +1,8 @@
 /**
  * The rule `publish-text-safe`: the text that npm puts in the publish document of a public package has no line in the
  * shape of an attack. This text is each README file of the package folder, the field `description` and the field
- * `keywords`. The registry screens the document, and it refuses a document with the shape of a SQL probe (E403).
+ * `keywords`. The registry screens the document. On 2026-11-15 it refused a document with the shape of a SQL probe
+ * (E403), and the error did not name the cause.
  *
  * This rule does not wait `RULE_WARN_DAYS`: it fails from its release day. The wait gives the owners time to fix the
  * breaks of a new rule. On 2026-11-16 a measure of the shapes of this file read 448 README files and 660 manifests of
@@ -12,24 +13,42 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { inFolder, lineOf, versionedPackages, type Break, type Rule } from "../rule.ts";
 
-/** A shape of an attack in a text: an id, the words for the message, and the pattern. */
+/** A shape of an attack in a text: an id, the words for the message, the pattern and the evidence of a refusal. */
 export interface AttackShape {
   readonly id: string;
   /** The shape in words, for the message of a break. */
   readonly what: string;
   readonly pattern: RegExp;
+  /**
+   * The evidence that the npm registry refused a publish with this shape: the error, the package and the day. The
+   * value is `null` when no refusal of the shape is on record.
+   */
+  readonly seen: string | null;
 }
 
 /**
- * The shapes of the attacks, as the screen of a web application finds them (the SQL rules of the OWASP Core Rule Set).
- * The first shape stopped each publish of @mark1russell7/text 0.0.7. The other shapes come from the same rule set.
+ * The shapes of the attacks. Only the shape `sql-boolean` has a refusal on record: it stopped each publish of
+ * @mark1russell7/text 0.0.7. The other three shapes are patterns that follow the SQL rules of the OWASP Core Rule Set,
+ * and no refusal of them is on record. They are breaks too. A false break names its line and costs one reword. A miss
+ * costs an E403 that does not name its cause, and on 2026-11-15 this cost hours.
+ *
  * A script tag is not here: @mark1russell7/site-pages 0.5.4 has one in its README, and its publish passed.
  */
 export const ATTACK_SHAPES: readonly AttackShape[] = Object.freeze([
-  { id: "sql-boolean", what: "a SQL probe: AND or OR, a number, a comparison and a number", pattern: /\b(?:and|or)\s+\d+\s*(?:=|<>|!=)\s*\d+(?!\w)/i },
-  { id: "sql-tautology", what: "a SQL tautology: a quote, AND or OR, and two equal values", pattern: /(['"])\s*(?:or|and)\s+(['"]?)(\w+)\2\s*=\s*\2\3(?!\w)/i },
-  { id: "sql-union", what: "a SQL UNION SELECT", pattern: /\bunion\s+(?:all\s+)?select\b/i },
-  { id: "sql-drop", what: "a SQL DROP after a semicolon", pattern: /;\s*drop\s+(?:table|database)\b/i },
+  {
+    id: "sql-boolean",
+    what: "a SQL probe: AND or OR, a number, a comparison and a number",
+    pattern: /\b(?:and|or)\s+\d+\s*(?:=|<>|!=)\s*\d+(?!\w)/i,
+    seen: "E403, @mark1russell7/text 0.0.7, 2026-11-15",
+  },
+  {
+    id: "sql-tautology",
+    what: "a SQL tautology: a quote, AND or OR, and two equal values",
+    pattern: /(['"])\s*(?:or|and)\s+(['"]?)(\w+)\2\s*=\s*\2\3(?!\w)/i,
+    seen: null,
+  },
+  { id: "sql-union", what: "a SQL UNION SELECT", pattern: /\bunion\s+(?:all\s+)?select\b/i, seen: null },
+  { id: "sql-drop", what: "a SQL DROP after a semicolon", pattern: /;\s*drop\s+(?:table|database)\b/i, seen: null },
 ]);
 
 /** A line of a text with the shape of an attack: the line (from 1), the shape and the matched text. */
@@ -57,11 +76,17 @@ const README = /^readme(?:\.[\w-]+)?$/i;
 /** This function gives a matched text for a message, with no line end and at most 60 characters. */
 const shown = (text: string): string => JSON.stringify(text.length > 60 ? `${text.slice(0, 57)}...` : text);
 
+/** This function gives the end of the message of an attack shape: the refusal on record, or the source of the shape. */
+const refusalOf = (shape: AttackShape): string =>
+  shape.seen === null
+    ? "The shape follows a SQL rule of the OWASP Core Rule Set, so the npm registry can refuse the publish (E403). No refusal of it is on record."
+    : `The npm registry refused a publish with this shape (${shape.seen}).`;
+
 export const publishTextSafe: Rule = {
   id: "publish-text-safe",
   title: "The text that npm puts in the publish document of a public package (each README, `description` and `keywords`) has no line in the shape of an attack.",
   reason:
-    "The npm registry screens the publish document, and it refuses a document with the shape of a SQL probe. On 2026-11-15 and 2026-11-16, each publish of @mark1russell7/text 0.0.7 failed with E403. An example in its README had AND, a number, an equal sign and a number. The error does not name the cause, so the release looked like a fault of the trust of the package. A new README example went out, and the same trust published 0.0.7.",
+    "The npm registry screens the publish document, and it refused a document with the shape of a SQL probe. On 2026-11-15 and 2026-11-16, each publish of @mark1russell7/text 0.0.7 failed with E403. An example in its README had AND, a number, an equal sign and a number. The error does not name the cause, so the release looked like a fault of the trust of the package. A new README example went out, and the same trust published 0.0.7.",
   fix: "Write the example with other words or values, for example `partsAt(\"A wide river\", [[2, 6]])`. A changed README of a released package needs a PATCH version.",
   sources: [{ repo: "text", rule: "publish-text-safe", doc: "packages/text/README.md (0.0.7, pull request 32)" }],
   options: {},
@@ -87,7 +112,7 @@ export const publishTextSafe: Rule = {
           breaks.push({
             file: inFolder(pkg.folder, file),
             line: hit.line,
-            message: `The README of ${name} has ${shown(hit.text)}, ${hit.shape.what} (${hit.shape.id}). The npm registry can refuse the publish (E403).`,
+            message: `The README of ${name} has ${shown(hit.text)}, ${hit.shape.what} (${hit.shape.id}). ${refusalOf(hit.shape)}`,
           });
         }
       }
@@ -102,7 +127,7 @@ export const publishTextSafe: Rule = {
           breaks.push({
             file: pkg.file,
             ...(line === undefined ? {} : { line }),
-            message: `The field "${field}" of ${name} has ${shown(hit.text)}, ${hit.shape.what} (${hit.shape.id}). The npm registry can refuse the publish (E403).`,
+            message: `The field "${field}" of ${name} has ${shown(hit.text)}, ${hit.shape.what} (${hit.shape.id}). ${refusalOf(hit.shape)}`,
           });
         }
       }

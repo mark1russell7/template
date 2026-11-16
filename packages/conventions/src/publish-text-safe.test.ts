@@ -1,8 +1,8 @@
 /**
  * The rule `publish-text-safe` on fixture repositories. The README of @mark1russell7/text 0.0.7 is the planted case.
  *
- * The corpus of the measure, on 2026-11-16: the README.md and package.json files at D:/git/<repo> and
- * D:/git/<repo>/packages/<p> of the local clones (448 README files, 660 manifests). The shapes of the rule file found
+ * The corpus of the measure, on 2026-11-16: the README.md and package.json files at the root and in packages/<p> of
+ * the local clones (448 README files, 660 manifests). The shapes of the rule file found
  * 1 true example (the text 0.0.7 README, in 2 old clones) and 0 false hits. A first pattern of quoted words with `or`
  * gave 8 false hits on the text `role="table"` or `role="grid"`. The clean cases below are lines of that corpus.
  * A change of a pattern runs again against the same corpus: the script reads the two levels, no walk.
@@ -68,6 +68,7 @@ describe("publish-text-safe", () => {
     expect(planted.breaks[0]?.message).toContain('"And 11=2"');
     expect(planted.breaks[0]?.message).toContain("(sql-boolean)");
     expect(planted.breaks[0]?.message).toContain("@x/text");
+    expect(planted.breaks[0]?.message).toContain("The npm registry refused a publish with this shape (E403, @mark1russell7/text 0.0.7, 2026-11-15).");
     expect(check(repo({ "package.json": LIB, "README.md": NEW_TEXT_README })).status).toBe("pass");
   });
 
@@ -102,6 +103,16 @@ describe("publish-text-safe", () => {
       [5, "sql-union"],
     ]);
     expect(result.breaks[0]?.message).toContain('The field "description" of @x/q');
+    expect(result.breaks[0]?.message).toContain("The npm registry refused a publish with this shape");
+    expect(result.breaks[1]?.message).toContain("No refusal of it is on record.");
+    expect(result.breaks[1]?.message).not.toContain("refused a publish");
+  });
+
+  it("gives each shape its evidence: the refusal on record, or null, and only sql-boolean has a refusal on record", () => {
+    for (const shape of ATTACK_SHAPES) expect(shape.seen === null || (typeof shape.seen === "string" && shape.seen.startsWith("E403, ")), shape.id).toBe(true);
+    expect(ATTACK_SHAPES.filter((shape) => shape.seen !== null).map((shape) => [shape.id, shape.seen])).toEqual([
+      ["sql-boolean", "E403, @mark1russell7/text 0.0.7, 2026-11-15"],
+    ]);
   });
 
   it("finds each shape in its planted line", () => {
