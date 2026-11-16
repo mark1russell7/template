@@ -305,13 +305,13 @@ export const HOMES: readonly Home[] = [
   },
   {
     area: "3d-stages",
-    title: "3D stages and viewers",
-    covers: "three.js stages for any scene: camera and named views, picking, themes, markers, a globe of areas and places over time",
+    title: "3D stages, viewers and composable views",
+    covers: "three.js stages for any scene: camera and named views, picking, themes, markers, a globe of areas and places over time; composable views: lenses with named knobs, a pure model, lanes and one shared timeline",
     packages: ["@mark1russell7/visuals"],
     repo: "mark1russell7/visuals",
     pending: ["@mark1russell7/visuals"],
     state: "unpublished",
-    words: ["3d", "three.js", "threejs", "webgl", "globe", "scene", "camera", "picking", "viewer", "markers", "stage"],
+    words: ["3d", "three.js", "threejs", "webgl", "globe", "scene", "camera", "picking", "viewer", "markers", "stage", "lens", "lanes", "timeline", "osi"],
     note: "3D geometry records go to layout-contract. Points on the Earth and great circles go to geo.",
   },
   {

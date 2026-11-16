@@ -78,6 +78,7 @@ describe("the search", () => {
     expect(findHomes("dns lookup jitter")[0]?.area).toBe("network-diagnosis");
     expect(findHomes("three.js")[0]?.area).toBe("3d-stages");
     expect(findHomes("camera picking")[0]?.area).toBe("3d-stages");
+    expect(findHomes("lens timeline")[0]?.area).toBe("3d-stages");
     expect(findHomes("gltf")[0]?.area).toBe("room-view");
     expect(findHomes("apartment model")[0]?.area).toBe("room-view");
     expect(findHomes("nothing-like-this")).toEqual([]);
