@@ -3,14 +3,14 @@
 # Several writers merge into one main with gh pr merge --auto. With strict status checks in the ruleset of main, GitHub
 # merges a pull request only when its branch has the newest main and the required checks passed on that head. This job
 # keeps each such pull request up to date. It merges main into each pull request with auto-merge whose merge state is
-# BEHIND (update-branch), and then starts the workflows of the required checks on the new head with workflow_dispatch.
-# An update with GITHUB_TOKEN starts no pull_request run, but GITHUB_TOKEN can start workflow_dispatch.
+# BEHIND (update-branch). A push with GITHUB_TOKEN makes the pull_request runs of the new head, but GitHub holds each one
+# (the conclusion action_required). The job starts each held run with approve, or with rerun when approve refuses.
 #
-# A summary check such as "CI OK" gets its check run only when the jobs that it needs end. When a required check has no
-# check run on the old head, the job reads the workflows that are still in progress on that head, and starts each one that
-# has a job of that name.
+# The job starts only a held run of the repository itself, on the head of a queued pull request, whose actor is the bot
+# of GITHUB_TOKEN. It also starts such runs on the head of each other queued pull request, so a run that came late starts
+# at the next run of the queue. A held run that the job cannot start fails the job, with the id of the run.
 #
-# With strict off, no pull request is BEHIND, and the job changes nothing. The logic is in scripts/workflows/queue.ts of
+# With strict off, no pull request is BEHIND, and the job updates no branch. The logic is in scripts/workflows/queue.ts of
 # the template commit of this workflow. The job does no checkout of the repository and starts none of its code. In a
 # private repository, the job starts only when the input private is true, because a private repository pays for each job.
 #
@@ -23,7 +23,6 @@
 #         contents: write
 #         pull-requests: write
 #         actions: write
-#         checks: read
 name: Reusable queue
 
 on:
@@ -31,8 +30,8 @@ on:
     inputs:
       wait-seconds:
         description: >-
-          The longest time in seconds (0 to 300) that the job waits for the new heads of the updated pull requests. The
-          job starts the workflows of a pull request only after its head changed.
+          The longest time in seconds (0 to 300) that the job waits for the new heads of the updated pull requests and for
+          their pull_request runs. The job reads the runs of a head until the set is stable.
         type: number
         default: 90
       private:
@@ -60,12 +59,11 @@ jobs:
       && (!github.event.repository.private || inputs.private)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # contents and pull-requests: update-branch. actions: workflow_dispatch and the workflow runs. checks: the check runs.
+    # contents and pull-requests: update-branch. actions: the read of the workflow runs, approve and rerun.
     permissions:
       contents: write
       pull-requests: write
       actions: write
-      checks: read
     steps:
       # The script comes from the commit of this workflow, as the actions of reusable-ci.yml do
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -85,7 +83,7 @@ jobs:
       - name: Install the package of the script
         shell: bash
         run: npm install --no-save --no-package-lock --ignore-scripts --prefix .queue-template/scripts/workflows "@mark1russell7/text@${TEXT_VERSION}"
-      - name: Update each pull request that is behind, and start its gates
+      - name: Update each pull request that is behind, and start its held runs
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}

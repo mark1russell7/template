@@ -18,6 +18,7 @@ const { values, positionals } = parseArgs({
     out: { type: "string" },
     ref: { type: "string", default: "origin/main" },
     check: { type: "string" },
+    link: { type: "boolean", default: false },
   },
 });
 const template = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -33,12 +34,13 @@ if (values.check !== undefined) {
 
 const [name] = positionals;
 if (!name || !values.description) {
-  throw new Error('Usage: node scripts/stamp/main.ts <name> --description "<one line>" [--npm <package>] [--out <folder>] [--ref <commit>], or --check <folder> [--ref <commit>]');
+  throw new Error('Usage: node scripts/stamp/main.ts <name> --description "<one line>" [--npm <package>] [--out <folder>] [--ref <commit>] [--link], or --check <folder> [--ref <commit>]');
 }
 const out = resolve(values.out ?? join(template, "..", name));
-// The default takes the newest main, whichever branch the clone has
+// The default takes the newest main, whichever branch the clone has.
+// --link gives each package of the template from this clone, for the test of ci.yml with --ref HEAD.
 if (values.ref === "origin/main") execFileSync("git", ["-C", template, "fetch", "-q", "origin", "main"], { stdio: "inherit" });
-const sha = await stamp({ name, description: values.description, npm: values.npm, template, out, ref: values.ref, latest: npmLatest });
+const sha = await stamp({ name, description: values.description, npm: values.npm, template, out, ref: values.ref, latest: npmLatest, link: values.link });
 console.log(`Created ${out} from the template commit ${sha}.`);
 console.log("Next: pnpm install, then commit. Then gh repo create, and set the Pages source:");
 console.log(`  gh api -X POST repos/mark1russell7/${name}/pages -f build_type=workflow`);
