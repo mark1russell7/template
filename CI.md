@@ -417,6 +417,52 @@ The queue does not do these things:
 - When the head does not change in the wait time, the queue starts no run. The next run of the queue does not see that pull request as `BEHIND`, but it starts the held runs of its head (step 6).
 - Each merge updates each other pull request that is behind, and starts its gates again. With N pull requests in the queue, the merge of all of them starts about N × N / 2 runs of each gate.
 
+## A tree that passed CI
+
+`release.yml` starts `verify`, the gates of `ci.yml`, on the commit on `main`. When the pull request passed CI on the same tree, `verify` does the same work again. `scripts/workflows/verified-tree.ts` tells if the tree of a commit already passed CI in its pull request. No workflow uses it yet.
+
+```sh
+node scripts/workflows/verified-tree.ts [--sha <commit>] [--workflow <file>] [--job <name>]...
+```
+
+| Input | Default |
+|---|---|
+| The repository | `GITHUB_REPOSITORY` |
+| `--sha` | `GITHUB_SHA` |
+| `--workflow` | `WORKFLOW_FILE`, else `ci.yml` |
+| `--job`, one time for each job that must pass | The lines of `REQUIRED_JOBS`, else `CI OK` |
+| The token | `GH_TOKEN`, else `GITHUB_TOKEN` |
+
+The script writes `verified=true` or `verified=false`, and `reason=<code>`, to `GITHUB_OUTPUT`. It writes one line to the step summary and the same line to stdout. The exit code is 0 for a yes and for a no. A no is not an error. Then the caller starts the full checks.
+
+The answer is yes only when each rule holds. Each rule that fails has its own reason code:
+
+1. The commit has exactly one parent (`not-one-parent`).
+2. Exactly one merged pull request has this commit as its merge commit (`no-pull`, `many-pulls`). Its base is the default branch (`pull-base-not-default`). Its head is a branch of the same repository (`pull-head-fork`).
+3. The tree of the commit is the tree of the head of the pull request (`tree-differs`).
+4. The parent of the commit is the head, or an ancestor of the head (`head-behind-parent`). The compare of the parent and the head gives `behind_by` 0.
+5. Of the runs of the workflow with the event `pull_request` on the head from the same repository, the newest run passed. Its status is `completed` (`run-not-completed`), and its conclusion is `success` (`run-not-success`). The newest run has the highest `run_number`, then the highest `run_attempt`. With no such run, the answer is no (`no-run`).
+6. Each job that must pass is in that run (`job-missing`) with the conclusion `success` (`job-not-success`). A skipped job is not a pass.
+
+Rules 3 and 4 prove that CI tested the tree of the release:
+
+- A `pull_request` run tests the merge of the base branch into the head. The base commit is the newest commit of the base branch at the time of the run.
+- `main` only moves forward. Thus that base commit is the parent of the release commit, or an ancestor of the parent.
+- Rule 4 makes the parent an ancestor of the head. Thus the base commit is also an ancestor of the head.
+- The merge of an ancestor into the head gives the tree of the head. Rule 3 makes that tree the tree of the release commit.
+
+Each HTTP error, each missing or malformed field and each fact that the script cannot read gives `verified=false`. Its reason starts with `no-read-`. A no read is not a pass at any time.
+
+- Each sha must match `^[0-9a-f]{40}$` before the script puts it in a URL or an output.
+- Each value in the outputs is a fixed text of the script, a checked sha or a number. A text of the API, for example a branch name, does not go to an output.
+- The script imports only the built-in modules of Node.js, so it needs no install.
+
+The script has these limits:
+
+- The run of the pull request has the event `pull_request`. `verify` of a release has the event `push` or `workflow_dispatch`. A job of `ci.yml` with a condition on the event is not the same in the two runs. For example, `ci / changesets` starts only for a pull request. The list of jobs is the tool for this: the owner of the release names each job that must pass.
+- The proof needs a `main` that only moves forward. A ruleset that blocks a force push gives this.
+- The proof needs the default branch as the base of the run. A pull request whose base changed after its last run breaks this. A second pull request of the same head into a different base also breaks it. The API does not give the base of a run.
+
 ## The lockfile of a branch
 
 A dependency update needs a new `pnpm-lock.yaml`. On a computer with low memory, a local install can fail. `reusable-lockfile.yml` makes the file on a runner. A repository uses it in its `lockfile.yml`:
