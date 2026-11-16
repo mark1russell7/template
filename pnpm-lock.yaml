@@ -336,7 +336,7 @@ importers:
         version: 0.1.16
       '@mark1russell7/rigor-statistics':
         specifier: ^0.2.4
-        version: 0.2.4
+        version: 0.2.7
       '@mark1russell7/site-pages':
         specifier: workspace:*
         version: link:../site-pages
@@ -363,7 +363,7 @@ importers:
     dependencies:
       '@mark1russell7/rigor-statistics':
         specifier: ^0.2.4
-        version: 0.2.4
+        version: 0.2.7
     devDependencies:
       '@mark1russell7/cue':
         specifier: ^2.0.0
@@ -657,8 +657,8 @@ packages:
     resolution: {integrity: sha512-C94Q4C31aZ8UXx1R0JSBV7DiQFl5tVpbFxHxHzHaSqr3dTgmCkEvLrvlUV8/0/GZqPhQYG9cbX6GOlqfRj/h4g==}
     engines: {node: '>=22'}
 
-  '@mark1russell7/rigor-statistics@0.2.4':
-    resolution: {integrity: sha512-0L075rT+toD6edxEwDdZHiFzHP4+dJrI64Pw5gh9V33VwCfNRUMQY90AooDpMgVcC9cuxHNXegDLSOYU9ZMIlA==}
+  '@mark1russell7/rigor-statistics@0.2.7':
+    resolution: {integrity: sha512-XJ2igHIhxiXEhPIJQjHa0YerAP4g7cJi/NkLphICdPCMhrD5Vwc8CnL9PPxOIz1+oJ0MTJ8eX7Jickcwz269wQ==}
     engines: {node: '>=22'}
 
   '@mark1russell7/service@0.8.20':
@@ -2009,7 +2009,7 @@ snapshots:
     dependencies:
       '@mark1russell7/algebra': 0.8.10(zod@4.6.7)
       '@mark1russell7/optional': 1.2.0
-      '@mark1russell7/rigor-statistics': 0.2.4
+      '@mark1russell7/rigor-statistics': 0.2.7
     transitivePeerDependencies:
       - zod
 
@@ -2039,7 +2039,7 @@ snapshots:
 
   '@mark1russell7/rigor-generators@0.1.16': {}
 
-  '@mark1russell7/rigor-statistics@0.2.4':
+  '@mark1russell7/rigor-statistics@0.2.7':
     dependencies:
       '@mark1russell7/rigor-generators': 0.1.16
 

@@ -504,4 +504,26 @@ describe("the action and its job in reusable-ci.yml", () => {
     assert.equal(pins("upload-artifact").size, 1);
     assert.equal(pins("download-artifact").size, 1);
   });
+
+  it("writes the API reports again and uploads them only when check:api fails", () => {
+    const job = jobText("checks");
+    const scripts = job.slice(job.indexOf("- name: Scripts"));
+    assert.match(scripts, /^- name: Scripts\n {8}id: scripts\n/u);
+    // The output has only names that passed the check of the name, so it cannot hold a line end
+    assert.match(scripts, /\n {12}echo "failed=\$\{failed\[\*\]\}" >> "\$GITHUB_OUTPUT"\n {12}echo "::error::These scripts failed/u);
+    const reports = job.slice(job.indexOf("- name: API reports of a failed check:api"));
+    assert.match(reports, /^- name: API reports of a failed check:api\n {8}id: api-reports\n/u);
+    assert.equal(condition(reports, 8), "failure() && contains(format(' {0} ', steps.scripts.outputs.failed), ' check:api ')");
+    assert.match(reports, /\n {8}continue-on-error: true\n/u);
+    // The arguments of check:api go to update only in a plain form: no quote, no glob and no character of the shell
+    assert.match(reports, /\[\[ "\$check" =~ \^api-report\\ check\(\\ \+\[A-Za-z0-9@\/\._:=-\]\+\)\*\\ \*\$ \]\]/u);
+    assert.doesNotMatch(reports.slice(0, reports.indexOf("- name: Upload the API reports")), /::notice::[^\n]*\$check/u);
+    const upload = job.slice(job.indexOf("- name: Upload the API reports"));
+    assert.equal(condition(upload, 8), "failure() && steps.api-reports.outputs.count > 0");
+    assert.match(upload, /\n {8}uses: actions\/upload-artifact@[0-9a-f]{40} # v\d+\.\d+\.\d+\n {8}with:\n {10}name: api-reports-\$\{\{ matrix\.os \}\}-node-\$\{\{ matrix\.node \}\}\n {10}path: \$\{\{ runner\.temp \}\}\/api-reports\n/u);
+    // The name of the artifact in the summary is the name of the upload
+    assert.match(reports, /\n {10}ARTIFACT: api-reports-\$\{\{ matrix\.os \}\}-node-\$\{\{ matrix\.node \}\}\n/u);
+    // The job has only read permissions: the upload needs no permission of the token
+    assert.match(job, /\n {4}permissions:\n {6}contents: read\n {4}strategy:/u);
+  });
 });

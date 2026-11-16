@@ -562,9 +562,7 @@ A home page shows the package at work: a visitor types or clicks, and the page s
 | `examples(row, items, pick)` | Fills a row with one button for each example `[label, value]`. A click starts `pick` with the value. |
 | `verdict(pass, title, ...reason)` | Makes the line of a verdict: a check or a cross, a title in bold and a reason. The mark has the label "Pass" or "Fail". |
 | `setField(field, value)` | Sets the value of a field and sends an `input` event, as typing does. |
-| `partsAt(text, ranges)` | Divides a text into parts at ranges `[start, end)`. Ranges that overlap become one part. |
-| `partsOf(text, find)` | Divides a text into parts at each copy of `find`. |
-| `markedText(parts, label)` | Shows a text in a box, with a `mark` element on each part with `hit`. |
+| `markedText(parts, label)` | Shows a text in a box, with a `mark` element on each part with `hit`. `partsAt` and `partsOf` of `@mark1russell7/text/parts` give the parts. |
 
 The style gives these classes:
 
@@ -580,7 +578,8 @@ The style gives these classes:
 ```ts
 import "@mark1russell7/site-pages/demo.css";
 import { byId } from "@mark1russell7/site-pages/chrome";
-import { examples, markedText, partsOf, setField, verdict } from "@mark1russell7/site-pages/demo";
+import { examples, markedText, setField, verdict } from "@mark1russell7/site-pages/demo";
+import { partsOf } from "@mark1russell7/text/parts";
 
 const input = byId<HTMLInputElement>("find");
 const result = byId("result");
