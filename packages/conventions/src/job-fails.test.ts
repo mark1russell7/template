@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { runChecks, type RuleResult } from "./index.ts";
 import { hiddenFailures, jobFails, parseAdvisory, startsTests, swallowsTests } from "./rules/job-fails.ts";
+import { shellCode } from "./workflow.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-job-fails-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -49,6 +50,22 @@ describe("the rule job-fails", () => {
     for (const line of ["pnpm install --frozen-lockfile", 'echo "pnpm test"', "pnpm build # then pnpm test", "npm run check-types", "pnpm run testing"]) {
       expect(startsTests(line), line).toBe(false);
     }
+  });
+
+  it("reads a line with each quote as an empty quote and with no comment, in one pass", () => {
+    expect(shellCode('echo "pnpm test" && pnpm build # then pnpm test')).toBe('echo "" && pnpm build');
+    expect(shellCode(`echo 'a b' "c \\" d" e`)).toBe('echo "" "" e');
+    expect(shellCode("echo \"it's\" 'x'")).toBe('echo "" ""');
+    expect(shellCode("a#b c")).toBe("a#b c");
+    // A quote that does not close stays as it is, and a later quote of the other kind still closes.
+    expect(shellCode(`echo "abc 'x'`)).toBe('echo "abc ""');
+    expect(shellCode("echo 'abc \"x\"")).toBe("echo 'abc \"\"");
+    expect(shellCode('echo "a\\')).toBe('echo "a\\');
+    // CodeQL js/polynomial-redos: many \" with no closing quote. The old regular expression read this line again from each ".
+    const long = `"${'\\"'.repeat(200_000)}`;
+    const started = performance.now();
+    expect(shellCode(long)).toBe(long);
+    expect(performance.now() - started).toBeLessThan(2_000);
   });
 
   it("finds a || after a test that does not fail, and not one that fails or one before the test", () => {

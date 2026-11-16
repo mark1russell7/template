@@ -12,6 +12,39 @@ export const indentOf = (line: string): number => line.length - line.trimStart()
 /** This function gives the lines of a workflow, with each line of a comment made empty. */
 export const workflowLines = (text: string): string[] => text.split(/\r?\n/).map((line) => (line.trimStart().startsWith("#") ? "" : line));
 
+/**
+ * This function gives a line of a shell script with each quoted text as `""` and with no comment. A word in a quote or a
+ * comment is thus not a command. A double quote can hold `\"`. A quote that does not close stays as it is.
+ *
+ * The function reads the line one time. The regular expression `"(?:[^"\\]|\\.)*"` starts a new search at each `"`.
+ * On a line of many `\"` with no closing quote, its time is the square of the length (CodeQL `js/polynomial-redos`).
+ * Here, a failed search for the closing `"` reads the line to its end. Each later `"` then has no closing quote too.
+ * Thus each kind of quote fails at most one time.
+ */
+export function shellCode(line: string): string {
+  let out = "";
+  let open: { readonly double: boolean; readonly single: boolean } = { double: true, single: true };
+  let i = 0;
+  while (i < line.length) {
+    const char = line.charAt(i);
+    const double = char === '"' && open.double;
+    if (double || (char === "'" && open.single)) {
+      let end = i + 1;
+      while (end < line.length && line.charAt(end) !== char) end += double && line.charAt(end) === "\\" ? 2 : 1;
+      if (end < line.length) {
+        out += '""';
+        i = end + 1;
+        continue;
+      }
+      open = double ? { ...open, double: false } : { ...open, single: false };
+    }
+    out += char;
+    i += 1;
+  }
+  const comment = out.search(/(?:^|\s)#/);
+  return comment >= 0 ? out.slice(0, comment) : out;
+}
+
 /** This function removes a comment at the end of a value, and the quotes around it. */
 export function valueOf(raw: string): string {
   // YAML starts a comment at a "#" after a space or a tab.

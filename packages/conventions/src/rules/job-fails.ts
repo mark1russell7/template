@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { byCode } from "../workspace.ts";
 import { lineOf, type Break, type Rule } from "../rule.ts";
-import { WORKFLOW, blockEnd, childKeys, indentOf, keyValue, listEnd, listItems, workflowLines } from "../workflow.ts";
+import { WORKFLOW, blockEnd, childKeys, indentOf, keyValue, listEnd, listItems, shellCode, workflowLines } from "../workflow.ts";
 
 /**
  * A command that starts tests or checks. It is vitest, jest, mocha, pytest, `playwright test` or `node --test`. It can
@@ -23,21 +23,14 @@ const SWALLOW = /\|\|\s*(?:(?:true|:|exit\s+0)(?=\s*(?:$|[;&|)]))|(?:echo|printf
 /** An entry of the option `advisory`: `<file>#<job> until <YYYY-MM-DD>: <reason>`. */
 const ENTRY = /^([^\s#/]+\.ya?ml)#([\w-]+)\s+until\s+(\d{4}-\d{2}-\d{2})\s*:\s*(\S.*)$/;
 
-/** This function gives a line of a script with no quoted text and no comment. A word in them starts no test. */
-function code(line: string): string {
-  const bare = line.replace(/"(?:[^"\\]|\\.)*"|'[^']*'/g, '""');
-  const comment = bare.search(/(?:^|\s)#/);
-  return comment >= 0 ? bare.slice(0, comment) : bare;
-}
-
-/** This function tells if a line of a script starts tests or checks. */
+/** This function tells if a line of a script starts tests or checks. A word in a quote or a comment starts no test. */
 export function startsTests(line: string): boolean {
-  return TEST_COMMAND.test(code(line));
+  return TEST_COMMAND.test(shellCode(line));
 }
 
 /** This function tells if a line of a script starts tests and then hides their failure with `||`. */
 export function swallowsTests(line: string): boolean {
-  const text = code(line);
+  const text = shellCode(line);
   const test = TEST_COMMAND.exec(text);
   return test !== null && SWALLOW.test(text.slice(test.index + test[0].length));
 }
