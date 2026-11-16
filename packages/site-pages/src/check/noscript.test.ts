@@ -36,6 +36,21 @@ describe("noScriptText", () => {
   it("keeps the text after a script whose text has a tag", () => {
     expect(noScriptText(doc('<script>const s = "<p>x</p>";</script><h1>After</h1>'))).toEqual({ h1: true, chars: 5 });
   });
+
+  it("finds the end tag after a space, and keeps the text of an element with no end tag", () => {
+    expect(noScriptText(doc("<SCRIPT>x</script ><h1>T</h1>"))).toEqual({ h1: true, chars: 1 });
+    expect(noScriptText("<h1>T</h1><script>a</scripts>b")).toEqual({ h1: true, chars: "T a b".length });
+    expect(noScriptText("<p>a</p><!-- b")).toEqual({ h1: false, chars: "a <!-- b".length });
+  });
+
+  it("is linear: many starts of a comment, a script or a tag with no end do not stop the scan", () => {
+    const n = 100_000;
+    expect(noScriptText("<!--".repeat(n))).toEqual({ h1: false, chars: 4 * n });
+    expect(noScriptText(`${"<script>".repeat(n)}<h1>T</h1>`)).toEqual({ h1: true, chars: 1 });
+    // Each script has only a wrong end tag, so the scan looks for its end tag once. The text is n letters x with a space between.
+    expect(noScriptText("<script>x</scriptx>".repeat(n)).chars).toBe(2 * n - 1);
+    expect(noScriptText(`a${"<".repeat(n)}`).chars).toBe(n + 1);
+  });
 });
 
 describe("noScriptProblems", () => {

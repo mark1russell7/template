@@ -3,7 +3,8 @@
  * and many of them start no script. An app that writes all its text with a script gives them an empty page.
  *
  * The site check reads the HTML of each page and fails a page with no `h1` or with less than `NO_SCRIPT_MIN_CHARS` characters of text.
- * These functions have no I/O, so the tests call them with no browser.
+ * These functions have no I/O, so the tests call them with no browser. The scan is linear in the length of the HTML. Thus a page
+ * with many starts of a comment and no end does not stop the check.
  */
 
 /** The least number of characters of text in the HTML of a page, with no script. */
@@ -21,14 +22,79 @@ export interface NoScriptText {
  * The elements whose content does not count. The head is not on the page. A script and a template show no text. The text in
  * `noscript` is often only "Turn on JavaScript", so it does not count either.
  */
-const NOT_TEXT = /<(head|script|style|template|noscript)\b[^>]*>[\s\S]*?<\/\1\s*>/gi;
+const NOT_TEXT: readonly string[] = ["head", "script", "style", "template", "noscript"];
 
-/** This function gives the `h1` and the number of characters of text of an HTML document, with no script. */
+/** A search for the first index of a text at or after a position, or -1. */
+type Search = (needle: string, from: number) => number;
+
+/**
+ * This function gives a search in a source. A text that is not after a position is not after a later position either. Thus
+ * the search keeps each failure and does not do it again, and a scan with many searches stays linear.
+ */
+function searchIn(source: string): Search {
+  const missing = new Map<string, number>();
+  return (needle, from) => {
+    const least = missing.get(needle);
+    if (least !== undefined && from >= least) return -1;
+    const index = source.indexOf(needle, from);
+    if (index === -1) missing.set(needle, from);
+    return index;
+  };
+}
+
+/**
+ * This function gives the end of the comment or of the element of `NOT_TEXT` that starts at `lt`, or undefined. An element
+ * with no end tag gives undefined. The names in `unclosed` have no end tag after this position, so the function does not look again.
+ */
+function partEnd(lower: string, lt: number, search: Search, unclosed: Set<string>): number | undefined {
+  if (lower.startsWith("<!--", lt)) {
+    const close = search("-->", lt + 4);
+    return close === -1 ? undefined : close + 3;
+  }
+  for (const name of NOT_TEXT) {
+    const after = lt + 1 + name.length;
+    if (!lower.startsWith(name, lt + 1) || /\w/u.test(lower.charAt(after))) continue;
+    if (unclosed.has(name)) return undefined;
+    const gt = search(">", after);
+    if (gt === -1) return undefined;
+    for (let close = search(`</${name}`, gt + 1); close !== -1; close = search(`</${name}`, close + 1)) {
+      let end = close + 2 + name.length;
+      while (/\s/u.test(lower.charAt(end))) end += 1;
+      if (lower.charAt(end) === ">") return end + 1;
+    }
+    unclosed.add(name);
+    return undefined;
+  }
+  return undefined;
+}
+
+/**
+ * This function gives the `h1` and the number of characters of text of an HTML document, with no script. It removes the
+ * comments, the elements of `NOT_TEXT` and the tags in one scan, from the left to the right.
+ */
 export function noScriptText(html: string): NoScriptText {
-  const body = html.replace(/<!--[\s\S]*?-->/g, " ").replace(NOT_TEXT, " ");
-  const h1 = /<h1[\s/>]/i.test(body);
-  const text = body
-    .replace(/<[^>]*>/g, " ")
+  // Only A to Z go to lower case, so each index of the copy is an index of the HTML.
+  const lower = html.replace(/[A-Z]+/g, (upper) => upper.toLowerCase());
+  const search = searchIn(lower);
+  const unclosed = new Set<string>();
+  const parts: string[] = [];
+  let h1 = false;
+  let at = 0;
+  for (let lt = search("<", 0); lt !== -1; lt = search("<", Math.max(at, lt + 1))) {
+    let end = partEnd(lower, lt, search, unclosed);
+    if (end === undefined) {
+      // A tag. A "<" with no ">" after it is text, and so is the rest of the HTML.
+      const gt = search(">", lt + 1);
+      if (gt === -1) break;
+      if (lower.startsWith("<h1", lt) && /[\s/>]/u.test(lower.charAt(lt + 3))) h1 = true;
+      end = gt + 1;
+    }
+    parts.push(html.slice(at, lt), " ");
+    at = end;
+  }
+  parts.push(html.slice(at));
+  const text = parts
+    .join("")
     .replace(/&(?:#\d+|#x[\da-f]+|[a-z][a-z\d]*);/gi, "x")
     .replace(/\s+/g, " ")
     .trim();

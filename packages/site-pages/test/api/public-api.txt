@@ -59,8 +59,10 @@ MAX_LIMIT_DAYS_WITHOUT_RULING: build/chunks/freshness.d.ts#MAX_LIMIT_DAYS_WITHOU
 MAX_MINORS_BEHIND: build/chunks/freshness.d.ts#MAX_MINORS_BEHIND
 MAX_STUDY_LIMIT_DAYS: build/chunks/freshness.d.ts#MAX_STUDY_LIMIT_DAYS
 type MarkdownTable: build/index.d.ts#MarkdownTable
+NO_SCRIPT_MIN_CHARS: build/index.d.ts#NO_SCRIPT_MIN_CHARS
 NPM_REGISTRY: build/index.d.ts#NPM_REGISTRY
 type NoAgeLimit: build/chunks/freshness.d.ts#NoAgeLimit
+type NoScriptText: build/index.d.ts#NoScriptText
 type NpmOptions: build/index.d.ts#NpmOptions
 type NpmPublishTimes: build/chunks/freshness.d.ts#NpmPublishTimes
 type NpmVersionTime: build/chunks/freshness.d.ts#NpmVersionTime
@@ -136,6 +138,8 @@ longDate: build/index.d.ts#longDate
 markdownTables: build/index.d.ts#markdownTables
 mergeReleases: build/index.d.ts#mergeReleases
 minorsBehind: build/chunks/freshness.d.ts#minorsBehind
+noScriptProblems: build/index.d.ts#noScriptProblems
+noScriptText: build/index.d.ts#noScriptText
 npmPublishTimes: build/index.d.ts#npmPublishTimes
 oldestFirst: build/index.d.ts#oldestFirst
 openGroups: build/index.d.ts#openGroups
@@ -1140,8 +1144,17 @@ interface MarkdownTable {
   }>;
 }
 
+### build/index.d.ts#NO_SCRIPT_MIN_CHARS
+export declare const NO_SCRIPT_MIN_CHARS = 200;
+
 ### build/index.d.ts#NPM_REGISTRY
 export declare const NPM_REGISTRY = "https://registry.npmjs.org";
+
+### build/index.d.ts#NoScriptText
+interface NoScriptText {
+  readonly h1: boolean;
+  readonly chars: number;
+}
 
 ### build/index.d.ts#NpmOptions
 interface NpmOptions {
@@ -1467,6 +1480,12 @@ export declare function markdownTables(markdown: string): MarkdownTable[];
 
 ### build/index.d.ts#mergeReleases
 export declare function mergeReleases(sources: ReleaseSources): Release[];
+
+### build/index.d.ts#noScriptProblems
+export declare function noScriptProblems(html: string, minChars?: number): string[];
+
+### build/index.d.ts#noScriptText
+export declare function noScriptText(html: string): NoScriptText;
 
 ### build/index.d.ts#npmPublishTimes
 export declare function npmPublishTimes(options: NpmOptions): Promise<NpmPublishTimes>;
