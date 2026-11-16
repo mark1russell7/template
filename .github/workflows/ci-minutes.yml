@@ -31,7 +31,7 @@ on:
         default: true
   # Each Monday, so each run reads one week of pull requests
   schedule:
-    - cron: "30 7 * * 1"
+    - cron: "56 7 * * 1"
 
 permissions: {}
 
