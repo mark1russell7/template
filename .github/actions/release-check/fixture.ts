@@ -41,10 +41,10 @@ async function fromRegistry(url: string, type?: RegExp): Promise<Buffer> {
     if (attempt > 1) await new Promise((done) => setTimeout(done, 5000 * (attempt - 1)));
     try {
       const response = await fetch(url);
-      const kind = response.headers.get("content-type") ?? "";
+      const contentType = response.headers.get("content-type") ?? "";
       const body = Buffer.from(await response.arrayBuffer());
-      if (response.ok && (type === undefined || type.test(kind))) return body;
-      last = `HTTP ${response.status}, ${kind === "" ? "no content type" : kind}: ${body.toString("utf8", 0, 200).replace(/\s+/gu, " ")}`;
+      if (response.ok && (type === undefined || type.test(contentType))) return body;
+      last = `HTTP ${response.status}, ${contentType === "" ? "no content type" : contentType}: ${body.toString("utf8", 0, 200).replace(/\s+/gu, " ")}`;
     } catch (error) {
       last = error instanceof Error ? error.message : String(error);
     }
