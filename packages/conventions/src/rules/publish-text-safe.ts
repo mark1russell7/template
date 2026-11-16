@@ -5,9 +5,12 @@
  * (E403), and the error did not name the cause.
  *
  * This rule does not wait `RULE_WARN_DAYS`: it fails from its release day. The wait gives the owners time to fix the
- * breaks of a new rule. On 2026-11-16 a measure of the shapes of this file read 448 README files and 660 manifests of
- * the local clones. It found 1 true example, the README of text 0.0.7 (in 2 old clones), and 0 false hits. Thus the
- * wait protects no repository. A wait of 14 days lets a repeat of the text case pass with only a warning.
+ * breaks of a new rule. On 2026-11-16 a first read of the local clones used the shapes of this file. It found 1 true
+ * example, the README of text 0.0.7 (in 2 old clones), and 0 false hits. Thus the wait protects no repository. A wait
+ * of 14 days lets a repeat of the text case pass with only a warning.
+ *
+ * At 11:32 UTC of the same day, one read of 446 README files and 664 manifests of the local clones found 0 hits. The
+ * sessions add, pull and remove clones during a day, so each count is the count of one read.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -88,7 +91,10 @@ export const publishTextSafe: Rule = {
   reason:
     "The npm registry screens the publish document, and it refused a document with the shape of a SQL probe. On 2026-11-15 and 2026-11-16, each publish of @mark1russell7/text 0.0.7 failed with E403. An example in its README had AND, a number, an equal sign and a number. The error does not name the cause, so the release looked like a fault of the trust of the package. A new README example went out, and the same trust published 0.0.7.",
   fix: "Write the example with other words or values, for example `partsAt(\"A wide river\", [[2, 6]])`. A changed README of a released package needs a PATCH version.",
-  sources: [{ repo: "text", rule: "publish-text-safe", doc: "packages/text/README.md (0.0.7, pull request 32)" }],
+  sources: [
+    { repo: "text", rule: "publish-text-safe", doc: "packages/text/README.md (0.0.7, pull request 32)" },
+    { repo: "private", rule: "publish-text-safe", doc: "docs/STRATEGY.md (2026-11-16, the publish document has no attack shape and no token)" },
+  ],
   options: {},
   failsFrom: "2026-11-16",
   check(context) {

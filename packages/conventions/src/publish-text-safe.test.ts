@@ -2,8 +2,11 @@
  * The rule `publish-text-safe` on fixture repositories. The README of @mark1russell7/text 0.0.7 is the planted case.
  *
  * The corpus of the measure, on 2026-11-16: the README.md and package.json files at the root and in packages/<p> of
- * the local clones (448 README files, 660 manifests). The shapes of the rule file found
- * 1 true example (the text 0.0.7 README, in 2 old clones) and 0 false hits. A first pattern of quoted words with `or`
+ * the local clones. A first read with the shapes of the rule file found 1 true example (the text 0.0.7 README, in 2
+ * old clones) and 0 false hits. A read at 11:32 UTC took 446 README files and 664 manifests, and it found no hit. The
+ * sessions add, pull and remove clones during a day, so each count is the count of one read.
+ *
+ * A first pattern of quoted words with `or`
  * gave 8 false hits on the text `role="table"` or `role="grid"`. The clean cases below are lines of that corpus.
  * A change of a pattern runs again against the same corpus: the script reads the two levels, no walk.
  */
