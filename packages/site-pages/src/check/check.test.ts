@@ -353,7 +353,9 @@ describe.skipIf(browser === undefined)("checkSite in a browser", () => {
   }, 60_000);
 
   it("passes a view whose page hangs only at the first try, and marks it as retried", async () => {
-    // The first answer gives a page that blocks itself after its load. Each later answer gives a good page.
+    // The first answer gives a page that blocks itself after its load. Each later answer gives a good page. The check
+    // does not read the HTML (noScriptChars: false): that read also comes after the load, so the first call that waits
+    // is then Network.getResponseBody or Runtime.evaluate, by a race.
     let answers = 0;
     const server = createServer((request, response) => {
       if (request.url !== "/") {
@@ -368,7 +370,7 @@ describe.skipIf(browser === undefined)("checkSite in a browser", () => {
     try {
       const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
       const lines: string[] = [];
-      const result = await checkSite({ url, pages: ["/"], widths: [360], schemes: ["light"], settleMs: 0, timeoutMs: 30_000, callMs: 2_000, noScriptChars: 0, log: (line) => lines.push(line) });
+      const result = await checkSite({ url, pages: ["/"], widths: [360], schemes: ["light"], settleMs: 0, timeoutMs: 30_000, callMs: 2_000, noScriptChars: false, log: (line) => lines.push(line) });
       expect(result.ok).toBe(true);
       expect(result.views).toHaveLength(1);
       expect(result.views[0]).toMatchObject({ page: "/", width: 360, ok: true, problems: [] });
