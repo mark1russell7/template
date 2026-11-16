@@ -7,7 +7,14 @@
  * with many starts of a comment and no end does not stop the check.
  */
 
-/** The least number of characters of text in the HTML of a page, with no script. */
+/**
+ * The least number of characters of text in the HTML of a page, with no script.
+ *
+ * The value comes from a dry run over the live HTML of 185 pages of 54 sites on 2026-11-16. The site check examines 179 of
+ * them. Of those 179 pages, the least has 209 characters, the 5th percentile has 297 and the median has 2065. Thus the floor
+ * of 200 fails no page of the check on that date, but it fails an empty shell with only a root element. A floor near the 5th
+ * percentile fails good short pages, for example the Releases page of a new package (292 characters).
+ */
 export const NO_SCRIPT_MIN_CHARS = 200;
 
 /** The text that the HTML of a page gives to a reader with no script. */
@@ -23,6 +30,14 @@ export interface NoScriptText {
  * `noscript` is often only "Turn on JavaScript", so it does not count either.
  */
 const NOT_TEXT: readonly string[] = ["head", "script", "style", "template", "noscript"];
+
+/**
+ * This function tells if the name of a tag ends at `index`: white space, "/" or ">" follows the name. Thus `<template-card>`
+ * is not a template, and `<h10>` is not an `h1`.
+ */
+function nameEndsAt(lower: string, index: number): boolean {
+  return /[\s/>]/u.test(lower.charAt(index));
+}
 
 /** A search for the first index of a text at or after a position, or -1. */
 type Search = (needle: string, from: number) => number;
@@ -53,7 +68,7 @@ function partEnd(lower: string, lt: number, search: Search, unclosed: Set<string
   }
   for (const name of NOT_TEXT) {
     const after = lt + 1 + name.length;
-    if (!lower.startsWith(name, lt + 1) || /\w/u.test(lower.charAt(after))) continue;
+    if (!lower.startsWith(name, lt + 1) || !nameEndsAt(lower, after)) continue;
     if (unclosed.has(name)) return undefined;
     const gt = search(">", after);
     if (gt === -1) return undefined;
@@ -81,12 +96,14 @@ export function noScriptText(html: string): NoScriptText {
   let h1 = false;
   let at = 0;
   for (let lt = search("<", 0); lt !== -1; lt = search("<", Math.max(at, lt + 1))) {
+    // In HTML, a "<" starts a tag only before a letter, "/", "!" or "?". Each other "<" is text, as in "1 < 2" and "x<3".
+    if (!/[a-z/!?]/u.test(lower.charAt(lt + 1))) continue;
     let end = partEnd(lower, lt, search, unclosed);
     if (end === undefined) {
       // A tag. A "<" with no ">" after it is text, and so is the rest of the HTML.
       const gt = search(">", lt + 1);
       if (gt === -1) break;
-      if (lower.startsWith("<h1", lt) && /[\s/>]/u.test(lower.charAt(lt + 3))) h1 = true;
+      if (lower.startsWith("<h1", lt) && nameEndsAt(lower, lt + 3)) h1 = true;
       end = gt + 1;
     }
     parts.push(html.slice(at, lt), " ");

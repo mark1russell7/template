@@ -43,6 +43,18 @@ describe("noScriptText", () => {
     expect(noScriptText("<p>a</p><!-- b")).toEqual({ h1: false, chars: "a <!-- b".length });
   });
 
+  it("keeps a \"<\" that does not start a tag as text", () => {
+    expect(noScriptText(doc("<h1>T</h1><p>1 < 2 and 3 > 2</p>"))).toEqual({ h1: true, chars: "T 1 < 2 and 3 > 2".length });
+    expect(noScriptText(doc("<p>x<3, a <= b, <- go</p>"))).toEqual({ h1: false, chars: "x<3, a <= b, <- go".length });
+    // A "<" before a letter, "/", "!" or "?" starts a tag, so these give no text.
+    expect(noScriptText(doc('<?xml version="1.0"?><!doctype html></p>'))).toEqual({ h1: false, chars: 0 });
+  });
+
+  it("reads a custom element with the name of a raw-text element and a dash as an element with text", () => {
+    const body = "<template-card><h1>Card</h1></template-card><style-guide>Guide</style-guide><script-box>Box</script-box><head-line>Line</head-line>";
+    expect(noScriptText(doc(body))).toEqual({ h1: true, chars: "Card Guide Box Line".length });
+  });
+
   it("is linear: many starts of a comment, a script or a tag with no end do not stop the scan", () => {
     const n = 100_000;
     expect(noScriptText("<!--".repeat(n))).toEqual({ h1: false, chars: 4 * n });
