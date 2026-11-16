@@ -425,8 +425,10 @@ jobs:
         with:
           name: pull-request-of-run
           path: ${{ runner.temp }}/pull-request-of-run
-      # CONVENTIONS_BASE and CONVENTIONS_PULL_REQUEST are empty, except on a run of the job pull that found a pull request
+      # CONVENTIONS_BASE and CONVENTIONS_PULL_REQUEST are empty, except on a run of the job pull that found a pull request.
+      # The output failed has the names of the failed scripts, separated by spaces.
       - name: Scripts
+        id: scripts
         env:
           CONVENTIONS_BASE: ${{ needs.pull.outputs.base-sha }}
           CONVENTIONS_PULL_REQUEST: ${{ needs.pull.outputs.found == 'true' && format('{0}/pull-request-of-run/pull-request.json', runner.temp) || '' }}
@@ -472,9 +474,74 @@ jobs:
             printf '%s\n' "${rows[@]}"
           } >> "$GITHUB_STEP_SUMMARY"
           if [ ${#failed[@]} -gt 0 ]; then
+            echo "failed=${failed[*]}" >> "$GITHUB_OUTPUT"
             echo "::error::These scripts failed: ${failed[*]}"
             exit 1
           fi
+      # When check:api fails, this step writes the API reports again, and the next step uploads them as an artifact. A
+      # person with no build on their computer can then download the reports and commit them. The log and the summary of
+      # check:api show at most 400 lines of a diff, so a large change of an API needs the files. The step starts the script
+      # update:api when package.json has it. Else, when check:api is "api-report check" with plain arguments, it starts
+      # "api-report update" with the same arguments. The job fails anyway, so a failure of these steps changes nothing.
+      - name: API reports of a failed check:api
+        id: api-reports
+        if: failure() && contains(format(' {0} ', steps.scripts.outputs.failed), ' check:api ')
+        continue-on-error: true
+        env:
+          DEST: ${{ runner.temp }}/api-reports
+          ARTIFACT: api-reports-${{ matrix.os }}-node-${{ matrix.node }}
+          CELL: ${{ matrix.os }}, node ${{ matrix.node }}
+          RUN_ID: ${{ github.run_id }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          check=$(node -p 'require("./package.json").scripts?.["check:api"] ?? ""')
+          report=test/api/public-api.txt
+          if node -e 'process.exit(require("./package.json").scripts?.["update:api"] ? 0 : 1)'; then
+            pnpm run update:api
+          elif [[ "$check" =~ ^api-report\ check(\ +[A-Za-z0-9@/._:=-]+)*\ *$ ]]; then
+            read -ra args <<< "${check#api-report check}"
+            for ((i = 0; i < ${#args[@]}; i++)); do
+              case "${args[i]}" in
+                --report) report="${args[i + 1]:-$report}" ;;
+                --report=*) report="${args[i]#--report=}" ;;
+              esac
+            done
+            pnpm exec api-report update "${args[@]}"
+          else
+            echo "::notice::The script check:api is not \"api-report check\" with plain arguments, and package.json has no script update:api. The job cannot write the API reports again."
+            exit 0
+          fi
+          # A deleted report is not a file to upload. The count does not use ((count++)), which fails at 0 under set -e
+          count=0
+          while IFS= read -r file; do
+            [ -f "$file" ] || continue
+            mkdir -p "$DEST/$(dirname "$file")"
+            cp "$file" "$DEST/$file"
+            count=$((count + 1))
+          done < <(git ls-files -m -o --exclude-standard -- ":(glob)**/$report")
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          {
+            echo "### API reports ($CELL)"
+            echo
+            if [ "$count" -eq 0 ]; then
+              echo "The update changed no file \`$report\`."
+            else
+              echo "The job wrote $count API reports again, in the artifact \`$ARTIFACT\`. To commit them, start this command in the folder of \`package.json\`, and examine the diff:"
+              echo
+              echo '```sh'
+              echo "gh run download $RUN_ID -R $REPOSITORY -n $ARTIFACT"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload the API reports
+        if: failure() && steps.api-reports.outputs.count > 0
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: api-reports-${{ matrix.os }}-node-${{ matrix.node }}
+          path: ${{ runner.temp }}/api-reports
+          retention-days: 7
+          if-no-files-found: error
       - name: Extra command
         if: inputs.run != ''
         env:
