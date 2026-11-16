@@ -59,7 +59,7 @@ on:
   # Each pull request starts this workflow, so the check "Actions OK" of the ruleset is always there. The job
   # changes skips the tests when the pull request changes no file of them (CI.md, "A gate with paths").
   pull_request:
-  # A run on the branch of an open pull request, for example a run of the queue, reads the files of that pull request
+  # A run on the branch of an open pull request, for example a run by hand, reads the files of that pull request
   # as a pull_request run does. A run on a branch with no open pull request, for example main, runs the tests.
   workflow_dispatch:
 
@@ -85,7 +85,7 @@ jobs:
         with:
           sparse-checkout: .github/actions
           persist-credentials: false
-      # A run that workflow_dispatch starts on the branch of a pull request, for example a run of the queue, reads the
+      # A run that workflow_dispatch starts on the branch of a pull request, for example a run by hand, reads the
       # files of that pull request (CI.md, "A dispatched run of a gate"). pull-of-run is TypeScript, so it needs Node 22.18
       # or later. A lookup that fails does not stop the job: with no number, the gate runs.
       - if: github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/') && github.ref != format('refs/heads/{0}', github.event.repository.default_branch)

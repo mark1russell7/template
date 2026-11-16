@@ -20,7 +20,7 @@
 # release check"). It fails when the release build fails on the same commit, for example when a shipped file changes and its
 # version is already on npm.
 #
-# A run that workflow_dispatch starts on a branch has no pull request in its event, for example a gate of the queue. For
+# A run that workflow_dispatch starts on a branch has no pull request in its event, for example a run by hand. For
 # such a run, the job pull finds the open pull request of the branch (actions/pull-of-run). The jobs changesets and
 # release-check then examine its change, and the job checks gives its base and its text to check:conventions.
 name: Reusable CI
@@ -164,9 +164,9 @@ on:
         required: false
 
 jobs:
-  # A run that workflow_dispatch starts has no pull request in its event, for example a gate of the queue (CI.md "The
-  # queue"). This job finds the open pull request of the branch, and gives its base, its head, its labels and its text to
-  # the other jobs. A failure of this job fails the CI: the other jobs do not pass a change that they cannot read. A run on
+  # A run that workflow_dispatch starts has no pull request in its event, for example a run by hand (CI.md "A
+  # dispatched run of a pull request"). This job finds the open pull request of the branch, and gives its base, its head,
+  # its labels and its text to the other jobs. A failure of this job fails the CI: the other jobs do not pass a change that they cannot read. A run on
   # the default branch, for example the gate of release.yml, has no pull request, so the job does not start. In a private
   # repository, the job starts only with the input pull-request-private, because only then can the token of the job read
   # the pull requests.

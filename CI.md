@@ -12,7 +12,7 @@ The template holds the CI, the release and the Pages workflows of the repositori
 | `.github/workflows/reusable-pages.yml` | Workflow | Builds a site, adds the Releases page and the Status page, and deploys it to GitHub Pages. |
 | `.github/actions/security-scan` | Action | Scans the dependencies and the code with the dependency review, osv-scanner and CodeQL, in one job. |
 | `.github/workflows/reusable-security.yml` | Workflow | Deprecated. The same scans in three jobs ("Security", "The old workflow"). |
-| `.github/workflows/reusable-queue.yml` | Workflow | Merges `main` into each pull request with auto-merge that is behind, and starts its gates again ("The queue"). |
+| `.github/workflows/reusable-queue.yml` | Workflow | Merges `main` into each pull request with auto-merge that is behind, and starts the held runs of its new head ("The queue"). |
 | `.github/workflows/reusable-ai-review.yml` | Workflow | Gives a pull request a review by Claude on request (the `ai-review` label), comment only (`AI-REVIEW.md`). |
 | `.github/workflows/reusable-codex-review.yml` | Workflow | Gives a pull request a second review by an OpenAI model, comment only (`CODEX-REVIEW.md`). |
 
@@ -136,7 +136,7 @@ jobs:
 On a pull request, the job `release-check` starts the release build on the commit (`.github/actions/release-check`). It does the same steps as the build job of `reusable-release-build.yml`: the install with the lockfile, the build, `scripts/release/pack.ts` and `scripts/release/tags.ts`. Thus a pull request fails when its merge makes the release on `main` fail. An example: a shipped file of a package changes, and the version of that package is already on npm. The error names the package, its version and each file that differs.
 
 - The job uses the merge commit of the pull request, not its head. That commit is the `main` of the release after the merge.
-- On a dispatched run of a pull request, the job uses the commit of the run, that is the head of the pull request. After the queue merges `main` into the branch, that head has the newest `main` (refer to "The queue").
+- On a dispatched run of a pull request, the job uses the commit of the run, that is the head of the pull request.
 - The job does not compare with the base branch. When `main` already has such a change, each pull request fails until a pull request raises the version.
 - A repository with no published package passes at once, with a notice. The job does no install.
 - In a private repository, the job starts only with `release-check-private: true`. A private repository pays for each job start, also for a job with no published package.
@@ -221,7 +221,7 @@ A run from `workflow_dispatch` on another branch examines the open pull request 
 
 ### A dispatched run of a pull request
 
-A run from `workflow_dispatch` on a branch has no pull request in its event. The queue starts the gates of a pull request in this way (refer to "The queue"). The owner can also start `ci.yml` on the branch of the pull request (`workflow_dispatch`, from the Actions tab of the repository). The job `pull` of `reusable-ci.yml` finds the pull request of the run (`.github/actions/pull-of-run`):
+A run from `workflow_dispatch` on a branch has no pull request in its event. The owner can start `ci.yml` on the branch of the pull request (`workflow_dispatch`, from the Actions tab of the repository). The job `pull` of `reusable-ci.yml` finds the pull request of the run (`.github/actions/pull-of-run`):
 
 1. It lists the open pull requests whose head is the branch of the run. It keeps only those of the same repository.
 2. It reads the pull request again until its head is the commit of the run, at most 3 more times, 10 s apart. GitHub can update the head some seconds after a push.
@@ -331,7 +331,7 @@ A `push` filter can stay, because the ruleset reads only pull requests. With the
 
 ### A dispatched run of a gate
 
-The queue starts the gates of a pull request with `workflow_dispatch` (refer to "The queue"). Such a run has no pull request in its event. Without the input `pull-request`, `changes` gives a match, and each gate job runs. The steps `pull` and `changes` of the example give the pull request of the run to `changes`:
+A person can start the gates of a pull request with `workflow_dispatch`. Such a run has no pull request in its event. Without the input `pull-request`, `changes` gives a match, and each gate job runs. The steps `pull` and `changes` of the example give the pull request of the run to `changes`:
 
 1. The action `pull-of-run` finds the open pull request of the branch of the run (refer to "A dispatched run of a pull request").
 2. Its output `number` goes to the input `pull-request` of `changes`, when its output `found` is `true`.
@@ -376,34 +376,34 @@ jobs:
       contents: write
       pull-requests: write
       actions: write
-      checks: read
 ```
 
 A run of the queue does these steps (`scripts/workflows/queue.ts`):
 
 1. It reads the checks that the rules of the default branch need (`GET /repos/{owner}/{repo}/rules/branches/{branch}`).
 2. It reads the open pull requests into the default branch. It takes only a pull request with auto-merge on, not a draft, and not from a fork. When GitHub did not compute a merge state (`UNKNOWN`), it reads them again, at most 6 times, 5 s apart.
-3. For each pull request with the merge state `BEHIND`, it reads the results of these checks on the old head. It finds the workflow file that gave each check. It joins the checks of one workflow. A summary check, for example "CI OK", gets its result only when the jobs that it needs end. When a check has no result yet, the queue reads the workflows that are still in progress on the old head (`GET /repos/{owner}/{repo}/actions/runs?head_sha=`). It reads the job names of their files at that head. Each workflow in progress with a job of that name gives the check.
-4. It merges `main` into each of these pull requests with `PUT /repos/{owner}/{repo}/pulls/{number}/update-branch` and `expected_head_sha`.
-5. It waits for the new heads, at most `wait-seconds` (90 s). An update with `GITHUB_TOKEN` starts no `pull_request` run. Thus the queue starts each workflow of these checks with `workflow_dispatch` on the branch of the pull request. These workflows give the checks on the new head.
+3. It merges `main` into each pull request with the merge state `BEHIND`. It uses `PUT /repos/{owner}/{repo}/pulls/{number}/update-branch` with `expected_head_sha`.
+4. It waits for the new heads, at most `wait-seconds` (90 s). A push with `GITHUB_TOKEN` makes the `pull_request` runs of the new head, but GitHub holds each one. A held run has the conclusion `action_required`, and it starts no job.
+5. It reads the `pull_request` runs of each new head until the set is stable (`GET /repos/{owner}/{repo}/actions/runs?head_sha=`). It starts each held run with `POST /repos/{owner}/{repo}/actions/runs/{id}/approve`. When approve refuses, it uses `POST /repos/{owner}/{repo}/actions/runs/{id}/rerun`. These runs give the checks on the new head, as a push of a person does.
+6. It reads the runs of the head of each other queued pull request one time. It starts each held run of that head in the same way.
 
+- The queue starts only a held run of the repository itself, on the head that it read, whose actor is `github-actions[bot]`. Each other held run is a no read in the summary. A held run of a fork waits for a person.
+- The documents of GitHub name approve only for a run of a fork. The queue uses it for a run of its own token. A measurement found that approve gave HTTP 201 and started such a run at once. Rerun also started such a run.
+- When GitHub changes this behavior, approve and rerun refuse, and the job fails with the id of each held run. Thus the change shows as a failed run, not as a pull request that waits with no sign.
 - A push to `main` makes the other pull requests behind. A pull request can be behind when it gets auto-merge (`auto_merge_enabled`). A person can start a run from the Actions tab. The queue does not use `pull_request_target`.
 - One run at a time operates in a repository (`cancel-in-progress: false`). GitHub keeps only the newest run that waits. Each run reads all the pull requests, so the newest run does the work of a cancelled run.
-- A check of the ruleset can have no result on the old head and no workflow in progress with a job of that name. Then it is a no read in the summary. A workflow file that the queue cannot read gives no job names, so its checks are a no read too. A check of a different app, or of a workflow that is not a file of `.github/workflows`, is a no read too. A no read is not a pass.
 - A refused update (HTTP 422, for example a merge conflict) skips only that pull request, with a warning. Each other pull request gets its turn. A pull request with a merge conflict (`DIRTY`) waits for a person.
-- The job fails for a different failure of an update and for a refused dispatch. It also fails when a head does not change in the wait time. A failed read changes nothing and fails the job.
-- Each workflow of a check of the ruleset must start on `workflow_dispatch`. Otherwise GitHub refuses the dispatch, and the job fails.
-- With strict off, GitHub merges a pull request that is behind. Then no pull request is `BEHIND`, and the queue changes nothing. Set strict in the ruleset to use the queue.
+- The job fails for a different failure of an update, for a failed read and for a held run that approve and rerun both refuse. It also fails when a head does not change in the wait time. It also fails when GitHub makes no `pull_request` run on a new head in the wait time.
+- A failed read of the rules or of the pull requests changes nothing and fails the job.
+- GitHub can make a run after the end of the wait. That run stays held until the next run of the queue starts it (step 6).
+- With strict off, GitHub merges a pull request that is behind. Then no pull request is `BEHIND`, and the queue updates no branch. Set strict in the ruleset to use the queue.
 - In a private repository, the job starts only when the caller gives the input `private: true`. A private repository pays for each job start, and the queue starts on each push to `main`, also when no pull request is behind. When the input is false, the job skips, and a skipped job costs nothing.
-- A workflow that `workflow_dispatch` starts is not a `pull_request` run. In `reusable-ci.yml`, the job `pull` finds the pull request of the branch. Thus the changeset check, the release check and the rules of the conventions check examine the new head (refer to "A dispatched run of a pull request").
-- A gate with paths that gives the pull request to `changes` skips its jobs when the pull request changes no file of the gate. Without it, each dispatched run of the gate starts each gate job (refer to "A dispatched run of a gate").
 - An example: two pull requests set the same version, and the first one merges. The queue merges `main` into the second one. Then its change sets no version that `main` does not have. Its gate fails when its title names the version (`version-title`). It also fails when npm has the version and the repository sets `versionEachChange` (`unreleased-change`).
 
 The queue does not do these things:
 
-- A gate with its own jobs that operate only on a `pull_request` run skips these jobs on a dispatched run. The security scans operate as on a push.
 - `GITHUB_TOKEN` cannot write a workflow file. When the new commits of `main` change a file of `.github/workflows`, GitHub can refuse the update. Then a person updates the branch.
-- When the head does not change in the wait time, the queue starts no workflow. The new head has no checks, and the next run does not see it as `BEHIND`. A person starts the gates on the branch.
+- When the head does not change in the wait time, the queue starts no run. The next run of the queue does not see that pull request as `BEHIND`, but it starts the held runs of its head (step 6).
 - Each merge updates each other pull request that is behind, and starts its gates again. With N pull requests in the queue, the merge of all of them starts about N × N / 2 runs of each gate.
 
 ## Release

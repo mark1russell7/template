@@ -1,6 +1,6 @@
 # The queue of the pull requests with auto-merge (reusable-queue.yml, CI.md "The queue"). With strict status checks in
-# the ruleset of main, it merges main into each pull request with auto-merge that is behind, and starts its gates on the
-# new head. With strict off, no pull request is behind, and the job changes nothing.
+# the ruleset of main, it merges main into each pull request with auto-merge that is behind, and starts the held
+# pull_request runs of the new head. With strict off, no pull request is behind, and the job updates no branch.
 # Other repositories call mark1russell7/template/.github/workflows/reusable-queue.yml@<commit> # main
 name: Queue
 
@@ -29,4 +29,3 @@ jobs:
       contents: write
       pull-requests: write
       actions: write
-      checks: read
