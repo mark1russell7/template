@@ -11,7 +11,7 @@ export const SITE_ICON_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#2346c4"/><path d="M10 7h8l5 5v13H10z" fill="#fff"/><path d="M18 7v5h5z" fill="#e7ecfd"/></svg>';
 
 /** The `href` of the default icon: a data URL of `SITE_ICON_SVG`. The icon needs no file and no request. */
-export const SITE_ICON_HREF = `data:image/svg+xml,${encodeURIComponent(SITE_ICON_SVG)}`;
+export const SITE_ICON_HREF: string = `data:image/svg+xml,${encodeURIComponent(SITE_ICON_SVG)}`;
 
 /**
  * This function tells if an HTML page has an icon link: a `link` element with the word `icon` in its `rel`.
