@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { Script } from "node:vm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { findBrowser } from "./browser.ts";
-import { cell, checkSite, cutProblems, pageProbes, pageSlug, PHONE_WIDTH, runCheckCli, scrollGaps, summary, type CheckOptions, type ViewResult } from "./check.ts";
+import { cell, checkSite, cutProblems, noScriptFloor, pageProbes, pageSlug, PHONE_WIDTH, runCheckCli, scrollGaps, summary, type CheckOptions, type ViewResult } from "./check.ts";
 import { MEASURE, type Cut } from "./measure.ts";
 import { resolveFile, serve } from "./serve.ts";
 
@@ -246,6 +246,19 @@ describe("pageProbes", () => {
   });
 });
 
+describe("noScriptFloor", () => {
+  it("reads a whole number, 0 and off", () => {
+    expect([noScriptFloor(undefined), noScriptFloor("120"), noScriptFloor(" 0 "), noScriptFloor("off")]).toEqual([undefined, 120, 0, false]);
+  });
+  it("gives an Error with the reason for a value that is not a whole number or off", () => {
+    for (const value of ["", "-1", "1.5", "2e3", "ten", "OFF", "99999999999999999999"]) {
+      const floor = noScriptFloor(value);
+      expect(floor, value).toBeInstanceOf(Error);
+      expect(floor instanceof Error ? floor.message : "", value).toContain("--no-script-chars must be a whole number of characters or off");
+    }
+  });
+});
+
 describe("runCheckCli", () => {
   const io = () => {
     const out: string[] = [];
@@ -256,9 +269,10 @@ describe("runCheckCli", () => {
     const run = io();
     expect(await runCheckCli(["--help"], run.io)).toBe(0);
     expect(run.out.join("")).toContain("Usage: site-pages check");
+    expect(run.out.join("")).toContain("--no-script-chars <n|off>");
   });
   it("refuses a wrong command line with code 2", async () => {
-    for (const argv of [[], ["--out", ".", "--url", "http://x/"], ["--out", "."], ["--url", "http://x/", "--widths", "10"], ["--url", "http://x/", "--schemes", "blue"], ["--url", "http://x/", "--probe", "no-such-file.js"], ["--nope"]]) {
+    for (const argv of [[], ["--out", ".", "--url", "http://x/"], ["--out", "."], ["--url", "http://x/", "--widths", "10"], ["--url", "http://x/", "--schemes", "blue"], ["--url", "http://x/", "--probe", "no-such-file.js"], ["--url", "http://x/", "--no-script-chars", "some"], ["--nope"]]) {
       const run = io();
       expect(await runCheckCli(argv, run.io), argv.join(" ")).toBe(2);
       expect(run.err.join("")).toContain("site-pages check:");

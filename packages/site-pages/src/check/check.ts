@@ -478,7 +478,8 @@ scroll or to clip.
 The check also reads the HTML that the server sent for each page, before any script started. It fails
 a page whose HTML has no h1, or less than 200 characters of text outside the head, script, style,
 template and noscript elements. A search robot or a reader app that starts no script reads only
-that text.
+that text. The option --no-script-chars changes the floor. The shared workflows keep the floor of
+200 for each site.
 
 Options:
   --out <dir>          The built site folder. The check serves it at --base.
@@ -501,10 +502,27 @@ Options:
                        Playwright, else Chrome or Edge)
   --settle <ms>        The wait after the load event (default: 1500)
   --timeout <ms>       The time limit of a page load (default: 30000)
+  --no-script-chars <n|off>
+                       The least characters of text in the HTML of each page (default: 200). With 0,
+                       only the rule of the h1 stays. With off, the check does not read the HTML.
   --help               Shows this text
 
 With $GITHUB_STEP_SUMMARY, the check adds its table to the job summary.
 `;
+
+/**
+ * This function reads the value of `--no-script-chars`. The result is the option `noScriptChars` of `checkSite`.
+ * The word `off` gives `false`. A whole number from 0 gives that number. No value gives undefined, the default floor.
+ * A different value gives an Error with the reason.
+ */
+export function noScriptFloor(value: string | undefined): number | false | undefined | Error {
+  if (value === undefined) return undefined;
+  const word = value.trim();
+  if (word === "off") return false;
+  const chars = /^\d+$/.test(word) ? Number(word) : Number.NaN;
+  if (!Number.isSafeInteger(chars)) return new Error(`--no-script-chars must be a whole number of characters or off, not "${value}"`);
+  return chars;
+}
 
 /** This function runs the `check` command with its arguments, without the word `check`. */
 export async function runCheckCli(argv: readonly string[], io: CheckIo): Promise<number> {
@@ -527,6 +545,7 @@ export async function runCheckCli(argv: readonly string[], io: CheckIo): Promise
         browser: { type: "string" },
         settle: { type: "string" },
         timeout: { type: "string" },
+        "no-script-chars": { type: "string" },
         help: { type: "boolean" },
       },
     }));
@@ -559,6 +578,8 @@ export async function runCheckCli(argv: readonly string[], io: CheckIo): Promise
   const settleMs = Number(text("settle") ?? 1500);
   const timeoutMs = Number(text("timeout") ?? 30000);
   if (!(settleMs >= 0) || !(timeoutMs > 0)) return usage("--settle and --timeout must be numbers of milliseconds");
+  const floor = noScriptFloor(text("no-script-chars"));
+  if (floor instanceof Error) return usage(floor.message);
   let base = text("base");
   if (out !== undefined && base === undefined) {
     const name = (text("repo") ?? io.env["GITHUB_REPOSITORY"] ?? "").split("/")[1];
@@ -619,6 +640,7 @@ export async function runCheckCli(argv: readonly string[], io: CheckIo): Promise
     browser: text("browser"),
     settleMs,
     timeoutMs,
+    noScriptChars: floor,
     log: (line) => io.stdout(`${line}\n`),
   });
   const failed = result.views.filter((view) => !view.ok).length;

@@ -78,6 +78,8 @@ The first view of each page also reads the HTML that the server sent, before any
 
 A search robot, a link preview and a reader app often start no script. An app that writes all its text with a script gives them an empty page. To correct it, put the title in an `h1` and a short text in the HTML of the page. The app can replace them when it starts. `noScriptText` and `noScriptProblems` give the same measure with no browser.
 
+The option `--no-script-chars <n|off>` changes the floor. With `0`, only the rule of the `h1` stays. With `off`, the check does not read the HTML. The shared workflows keep the floor of 200 for each site.
+
 The text of the problem has the element, the box, the two widths, the width of the view and the start of the text. For example:
 
 ```text
