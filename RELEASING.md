@@ -86,7 +86,9 @@ The owner (Mark) and one Claude session that the owner names are responsible for
 4. Change `version` in the `package.json` of the package. In the pull request, give the SemVer reason.
 5. Merge the change to `main`.
 
-The push to `main` starts `release.yml`. The workflow starts the CI gates, builds and packs each published package, and publishes each version that is not on npm. Then it makes a git tag and a GitHub release for each new version. A version with a hyphen, for example `1.2.0-rc.1`, gets the dist-tag `next`. The other versions get `latest`.
+The push to `main` starts `release.yml`. The workflow starts the CI gates, builds and packs each published package, and publishes each version that is not on npm. Then it makes a git tag and a GitHub release for each new version.
+
+A version with a hyphen, for example `1.2.0-rc.1`, gets the dist-tag `next`. A version above the `latest` of npm gets `latest`. A lower version gets `latest-<major>.<minor>`, and `latest` stays. Thus two releases in either sequence do not move `latest` back. The summary of the run lists each version that did not get `latest`.
 
 `scripts/release/pack.ts` stops the release when a version is not SemVer. It also stops when a version is not greater than the `latest` version on npm. The registry does not accept a version two times, also after a removal. Thus a bad release gets a new PATCH, and `npm deprecate` marks the bad version.
 
