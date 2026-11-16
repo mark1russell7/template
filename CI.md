@@ -31,6 +31,13 @@ jobs:
 
 The job starts all the scripts, also after a failure. Then it fails with the names of the failed scripts. The summary of the run shows a table of the scripts.
 
+When `check:api` fails, the job writes the API reports again and uploads them as the artifact `api-reports-<os>-node-<version>`. A person with no build on their computer can then commit the reports. The log of `check:api` shows at most 400 lines of a diff, so a large change of an API needs the files.
+
+- The job starts the script `update:api` when `package.json` has it. Else it starts `api-report update` with the arguments of `api-report check`.
+- The job uses only plain arguments: no quote, no glob and no character of the shell. For a different `check:api`, add a script `update:api`.
+- The summary of the run gives the command that downloads the reports: `gh run download <run> -R <owner>/<repo> -n <artifact>`. Start it in the folder of `package.json`, and examine the diff before the commit.
+- GitHub keeps the artifact for 7 days.
+
 | Input | Default | What it sets |
 |---|---|---|
 | `scripts` | `format:check typecheck lint check:conventions test build check:boundaries check:api lint:ste` | The scripts, in sequence. `check:conventions` is the conventions check of `@mark1russell7/conventions`. `check:boundaries` is the import check of `@mark1russell7/boundaries`. `check:api` is the check of the public API of `@mark1russell7/api-report`. |
