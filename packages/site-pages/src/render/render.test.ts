@@ -8,7 +8,7 @@ import { buildStatusBoard, roadmapItems } from "../data/status.ts";
 import type { BoardPullRequest, Release, StatusBoardData } from "../data/types.ts";
 import { dayRange, longDate, shortDate } from "./dates.ts";
 import { escapeHtml, inlineMarkdown, safeUrl } from "./html.ts";
-import { iconLink } from "./icon.ts";
+import { iconLink, SITE_ICON_HREF } from "./icon.ts";
 import { releasesLead, renderReleasesPage, RELEASES_SCRIPT } from "./releases.ts";
 import { classCounts, openGroups, renderStatusPage, sectionsOf, slugOf, statusLead, STATUS_SCRIPT, STATUS_SCRIPT_HELPERS } from "./status.ts";
 import { BASE_CSS, type PageOptions } from "./theme.ts";
@@ -47,7 +47,10 @@ function absoluteUrls(html: string): Array<{ attribute: string; url: string }> {
 /** This function checks that a page makes no request to another server. */
 function expectNoExternalRequest(html: string, allowed: (url: string) => boolean): void {
   expect(html).not.toMatch(/\ssrc=/);
-  expect(html).not.toMatch(/<link\b/);
+  // The only link element is the icon of the page, as a data URL: the browser asks no server for it
+  const links = [...html.matchAll(/<link\b[^>]*>/g)].map(([tag]) => tag);
+  expect(links).toEqual([iconLink()]);
+  expect(SITE_ICON_HREF.startsWith("data:")).toBe(true);
   expect(html).not.toMatch(/@import|url\(/);
   for (const { attribute, url } of absoluteUrls(html)) {
     expect(attribute).toBe("href");
