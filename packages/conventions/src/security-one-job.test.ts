@@ -114,6 +114,20 @@ describe("the rule security-one-job", () => {
     expect(withOneJob(crlf)).toEqual({ text: file(oneJob()).replaceAll("\n", "\r\n") });
   });
 
+  it("puts one job Security OK in place of a job of the shared workflow with no summary job", () => {
+    expect(withOneJob(file(scans()))).toEqual({ text: file(oneJob()) });
+    expect(withOneJob(file(scans(["codeql: false"])))).toEqual({ text: file(oneJob("30", ["codeql: false"])) });
+    const build = ["  build:", "    runs-on: ubuntu-latest", "    steps:", "      - run: echo build"];
+    expect(withOneJob(file(build, scans()))).toEqual({ text: file(build, oneJob()) });
+  });
+
+  it("leaves a job security-ok that is not a summary, and a second job that needs the scans, to a person", () => {
+    const other = ["  security-ok:", "    runs-on: ubuntu-latest", "    steps:", "      - run: echo other"];
+    expect(reasonOf(file(scans(), other))).toContain("a job security-ok that does not need the job security");
+    const report = ["  report:", "    needs: [security]", "    runs-on: ubuntu-latest", "    steps:", "      - run: echo report"];
+    expect(reasonOf(file(scans(), summary(), report))).toContain("2 jobs need the job security");
+  });
+
   it("reads each form of needs", () => {
     expect("text" in withOneJob(file(scans(), summary("security")))).toBe(true);
     expect("text" in withOneJob(file(scans(), summary('["security"]')))).toBe(true);
@@ -122,7 +136,6 @@ describe("the rule security-one-job", () => {
   it("leaves each other form to a person, with the reason", () => {
     expect(reasonOf(file(scans(), summary("[security, build]")))).toContain("the summary job needs security, build");
     expect(reasonOf(file(scans(), summary("[security]", "Scans OK")))).toContain("not Security OK");
-    expect(reasonOf(file(scans()))).toContain("0 jobs need the job security");
     expect(reasonOf(file(scans(["extra: true"]), summary()))).toContain("no input extra");
     expect(reasonOf(file(scans(["codeql-languages: >-", "  javascript-typescript"]), summary()))).toContain("more than one line");
     expect(reasonOf(file([...scans(), "    secrets: inherit"], summary()))).toContain("the key secrets");
@@ -135,6 +148,13 @@ describe("the rule security-one-job", () => {
     expect(readFileSync(join(root, FILE), "utf8")).toBe(file(oneJob("30", ["codeql: false"])));
     expect(check(root).breaks).toEqual([]);
     expect(runFix({ root, only: [ID] }).changed).toEqual([]);
+  });
+
+  it("fixes a file with no summary job, and the fix passes on its second run", () => {
+    const root = repository(file(scans()));
+    expect(runFix({ root, only: [ID] }).changed).toEqual([FILE]);
+    expect(readFileSync(join(root, FILE), "utf8")).toBe(file(oneJob()));
+    expect(check(root).breaks).toEqual([]);
   });
 
   it("does not change a file that needs a person", () => {

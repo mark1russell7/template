@@ -29,6 +29,8 @@
 #   release-tag     reusable-release-tag.yml examines the plan, the tarballs and the tags with "dry-run".
 #                   Its log shows the flags of each release: --latest for the entry with "latest",
 #                   and --latest=false for the others.
+#   release-tree    reusable-release-tree.yml gets the script of this commit and gives its outputs. The commit of a
+#                   pull request run is a merge with two parents, so its answer is no with the reason not-one-parent.
 #   release-check   The action release-check on a test repository of each case (release-check/fixture.ts): a shipped
 #                   change at a version on npm fails and names the package and the file. The same files pass, a greater
 #                   version passes, no published package passes with a notice, and Changesets pass only with a changeset.
@@ -49,13 +51,21 @@ on:
       - ".github/workflows/reusable-ci.yml"
       - ".github/workflows/reusable-lockfile.yml"
       - "scripts/release/**"
+      - "scripts/workflows/verified-tree.ts"
       # The test site installs the workspace, so a change of a package file can break it
       - "package.json"
       - "pnpm-lock.yaml"
       - "packages/*/package.json"
-      # The site check and the site config of reusable-pages.yml run from these folders
+      # The site config, the Releases and Status pages, the site check and the bar of reusable-pages.yml start from
+      # these files, the sparse checkout of its shared actions. The test site is the only test that starts them with
+      # the type stripping of Node.js.
+      - "packages/site-pages/src/*.ts"
+      - "packages/site-pages/src/bar/**"
       - "packages/site-pages/src/check/**"
       - "packages/site-pages/src/config/**"
+      - "packages/site-pages/src/data/**"
+      - "packages/site-pages/src/render/**"
+      - "packages/site-pages/styles/**"
   # Each pull request starts this workflow, so the check "Actions OK" of the ruleset is always there. The job
   # changes skips the tests when the pull request changes no file of them (CI.md, "A gate with paths").
   pull_request:
@@ -110,11 +120,17 @@ jobs:
             .github/workflows/reusable-ci.yml
             .github/workflows/reusable-lockfile.yml
             scripts/release/**
+            scripts/workflows/verified-tree.ts
             package.json
             pnpm-lock.yaml
             packages/*/package.json
+            packages/site-pages/src/*.ts
+            packages/site-pages/src/bar/**
             packages/site-pages/src/check/**
             packages/site-pages/src/config/**
+            packages/site-pages/src/data/**
+            packages/site-pages/src/render/**
+            packages/site-pages/styles/**
 
   green-main:
     needs: changes
@@ -701,6 +717,36 @@ jobs:
       published: ""
       dry-run: true
 
+  release-tree:
+    needs: changes
+    if: needs.changes.outputs.match == 'true'
+    uses: ./.github/workflows/reusable-release-tree.yml
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
+
+  # The outputs of release-tree get to a later job. Each answer of a run is a fixed value of the script, and a pull
+  # request run gives no, because its commit is the merge of the base into the head.
+  release-tree-check:
+    needs: release-tree
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: The answer of the tree job
+        env:
+          VERIFIED: ${{ needs.release-tree.outputs.verified }}
+          REASON: ${{ needs.release-tree.outputs.reason }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          echo "verified=$VERIFIED reason=$REASON event=$EVENT"
+          [ "$VERIFIED" = true ] || [ "$VERIFIED" = false ]
+          [[ "$REASON" =~ ^[a-z]+(-[a-z]+)*$ ]]
+          if [ "$VERIFIED" = true ]; then [ "$REASON" = passed ]; fi
+          if [ "$EVENT" = pull_request ]; then [ "$VERIFIED" = false ] && [ "$REASON" = not-one-parent ]; fi
+
   # The action release-check on a test repository of each case (release-check/fixture.ts). Each case runs the action
   # with continue-on-error, and the next step asserts its outcome, its message and its outputs. Thus a case with an
   # expected failure is a green job when the action fails as expected.
@@ -830,7 +876,7 @@ jobs:
   actions-ok:
     name: Actions OK
     if: ${{ !cancelled() }}
-    needs: [changes, green-main, setup-cue, setup-playwright, setup-playwright-warning, cue-ci, coverage-deadline, data-stamps, pages, pages-check, lockfile, release-build, release-publish, release-tag, release-check, gate-summary-last]
+    needs: [changes, green-main, setup-cue, setup-playwright, setup-playwright-warning, cue-ci, coverage-deadline, data-stamps, pages, pages-check, lockfile, release-build, release-publish, release-tag, release-tree, release-tree-check, release-check, gate-summary-last]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}
