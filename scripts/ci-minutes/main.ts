@@ -4,8 +4,10 @@
 //
 // For each public repository of the owner that is not archived (or each one of --repos), the script reads the
 // pull-request runs that started in the last --days days (1 to 30). It reads the jobs, with their steps, of --sample
-// completed runs spread over the window, and the changed files of the pull requests of those runs. It writes
-// ci-minutes.json (each record, the reads of each repository and the summary) and summary.md into --out.
+// completed runs spread over the window, and the changed files of the pull requests of those runs. For each job with a
+// step that starts the input scripts of the shared CI, it reads the log of the job, and it splits that step into one
+// part for each script. It writes ci-minutes.json (each record, the reads of each repository and the summary) and
+// summary.md into --out. Each read of the API tries again after a transient error (scripts/lib/gh.ts).
 // Before each repository it reads the rate limit of the token, and that read does not count against the limit. When
 // the reads that are left are too few for one repository, the script waits for the reset if the reset comes in 65
 // minutes or less, so a read of more than 1000 calls waits for the next hour of the token. Else it stops, and it names each repository that it did not read. With --strict, a repository with
@@ -13,16 +15,22 @@
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { lines, page, pool, rateLimit } from "../lib/gh.ts";
+import { errorText, lines, page, pool, rateLimit, text } from "../lib/gh.ts";
 import {
+  type Group,
   type Job,
   type JobRecord,
   type PrRecord,
+  type QueueRecord,
   type RepoRead,
   type Run,
   PAGE,
   changeOf,
+  hasScripts,
   jobRecord,
+  logGroups,
+  queueRecord,
+  queuedOut,
   ran,
   render,
   sampleable,
@@ -53,8 +61,16 @@ const since = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10
 const RESERVE = 100;
 /** The longest wait for the reset of the rate limit. */
 const WAIT_MAX_MS = 65 * 60_000;
-/** The most reads of one repository: 10 pages of runs, the packages, and the jobs and the files of each run of the sample. */
-const PER_REPO = 11 + 2 * sample;
+/**
+ * The log reads of each run of the sample. On 2026-11-16 the 415 runs of one read had 171 jobs with a step of the input
+ * scripts, at most 9 in one run and at most 27 in one repository. A repository that reads more uses the reserve.
+ */
+const LOGS_PER_RUN = 3;
+/**
+ * The reads of one repository: 10 pages of runs, the packages, and the jobs, the files and the logs of each run of the
+ * sample.
+ */
+const PER_REPO = 11 + (2 + LOGS_PER_RUN) * sample;
 
 /** The read stops: the rate limit has too few reads, and its reset is not near. */
 class Stop extends Error {}
@@ -73,21 +89,36 @@ async function budget(): Promise<void> {
   await new Promise((done) => setTimeout(done, Math.max(0, wait)));
 }
 
-const errorText = (error: unknown): string => {
-  const stderr = (error as { stderr?: unknown } | null)?.stderr;
-  const text = `${error instanceof Error ? error.message : String(error)}\n${typeof stderr === "string" ? stderr : ""}`;
-  return text.split("\n").find((line) => line.trim() !== "" && !line.startsWith("Command failed")) ?? text;
+/** This function gives the first line of an error that tells the cause. */
+const firstLine = (error: unknown): string => {
+  const all = errorText(error);
+  return all.split("\n").find((line) => line.trim() !== "" && !line.startsWith("Command failed")) ?? all;
 };
+
+/** The logs that the read could not read: the job, and the cause. The step of such a job keeps its time as one part. */
+const noLog: string[] = [];
+
+/** This function gives the groups of the log of a job, or none when the log is gone, for example after 90 days. */
+async function groupsOf(full: string, job: Job): Promise<Group[]> {
+  calls++;
+  try {
+    return logGroups(await text(`repos/${full}/actions/jobs/${job.id}/logs`));
+  } catch (error) {
+    noLog.push(`${full} job ${job.id} (${firstLine(error).slice(0, 120)})`);
+    return [];
+  }
+}
 
 type Repo = { name: string; default_branch: string };
 
 /** This function reads one repository: its pull-request runs, its packages, and the jobs and changes of its sample. */
-async function readRepo(repo: Repo): Promise<{ read: RepoRead; jobs: JobRecord[]; prs: PrRecord[] }> {
+async function readRepo(repo: Repo): Promise<{ read: RepoRead; jobs: JobRecord[]; prs: PrRecord[]; queued: QueueRecord[] }> {
   await budget();
   const full = `${owner}/${repo.name}`;
+  // Each page of the list has the count of all runs of the query, also of the runs after the 1000 runs of the list.
   const runs = await lines<Run>(
     `repos/${full}/actions/runs?event=pull_request&created=%3E%3D${since}&per_page=100`,
-    ".workflow_runs[] | {id, name, event, status, conclusion, created_at, pull_requests: [.pull_requests[] | {number}]} | tojson",
+    ".total_count as $n | .workflow_runs[] | {id, name, event, status, conclusion, created_at, pull_requests: [.pull_requests[] | {number}], total_count: $n} | tojson",
   );
   calls += Math.max(1, Math.ceil(runs.length / 100));
   const chosen = spread(sampleable(runs), sample);
@@ -108,14 +139,18 @@ async function readRepo(repo: Repo): Promise<{ read: RepoRead; jobs: JobRecord[]
     }
   }
   const jobs: JobRecord[] = [];
+  const queued: QueueRecord[] = [];
   for (const run of chosen) {
     const list = await lines<Job>(
       `repos/${full}/actions/runs/${run.id}/jobs?filter=latest&per_page=100`,
-      ".jobs[] | {name, conclusion, created_at, started_at, completed_at, steps: [(.steps // [])[] | {name, conclusion, started_at, completed_at}]} | tojson",
+      ".jobs[] | {id, name, runner_name, conclusion, created_at, started_at, completed_at, steps: [(.steps // [])[] | {name, conclusion, started_at, completed_at}]} | tojson",
     );
     calls++;
     const pr = run.pull_requests[0]?.number ?? 0;
-    for (const job of list.filter(ran)) jobs.push(jobRecord(repo.name, run.name, run.id, pr, job));
+    for (const job of list) {
+      if (ran(job)) jobs.push(jobRecord(repo.name, run.name, run.id, pr, job, hasScripts(job) ? await groupsOf(full, job) : []));
+      else if (queuedOut(job)) queued.push(queueRecord(repo.name, run.name, run.id, job));
+    }
   }
   const prs: PrRecord[] = [];
   for (const pr of [...new Set(chosen.map((run) => run.pull_requests[0]?.number ?? 0))].filter((n) => n > 0)) {
@@ -124,7 +159,8 @@ async function readRepo(repo: Repo): Promise<{ read: RepoRead; jobs: JobRecord[]
     prs.push({ repo: repo.name, pr, change: changeOf(paths) });
   }
   const pullRequests = new Set(runs.flatMap((run) => run.pull_requests.map((p) => p.number))).size;
-  return { read: { repo: repo.name, packages, runs: runs.length, pullRequests, sampled: chosen.length }, jobs, prs };
+  const count = Math.max(runs.length, runs[0]?.total_count ?? 0);
+  return { read: { repo: repo.name, packages, runs: count, listed: runs.length, pullRequests, sampled: chosen.length }, jobs, prs, queued };
 }
 
 const all = await lines<Repo>(
@@ -145,13 +181,14 @@ const results = await pool(repos, 2, async (repo) => {
     return { repo: repo.name, ...(await readRepo(repo)) };
   } catch (error) {
     if (error instanceof Stop) stopped = error.message;
-    return { repo: repo.name, error: errorText(error).slice(0, 160) };
+    return { repo: repo.name, error: firstLine(error).slice(0, 160) };
   }
 });
 
 const reads: RepoRead[] = [];
 const jobs: JobRecord[] = [];
 const prs: PrRecord[] = [];
+const queued: QueueRecord[] = [];
 for (const result of results) {
   if ("error" in result) {
     notRead.push(`${result.repo} (${result.error})`);
@@ -160,19 +197,22 @@ for (const result of results) {
   reads.push(result.read);
   jobs.push(...result.jobs);
   prs.push(...result.prs);
+  queued.push(...result.queued);
 }
 
-const summary = summarize(reads, jobs, prs);
+const summary = summarize(reads, jobs, prs, queued);
 const out = resolve(values.out);
 mkdirSync(out, { recursive: true });
 writeFileSync(
   join(out, "ci-minutes.json"),
-  `${JSON.stringify({ date: new Date().toISOString(), owner, since, days, sample, calls, notRead, repos: reads, summary, jobs, prs }, null, 2)}\n`,
+  `${JSON.stringify({ date: new Date().toISOString(), owner, since, days, sample, calls, notRead, noLog, repos: reads, summary, jobs, queued, prs }, null, 2)}\n`,
 );
-const text = render(summary, days, notRead);
-writeFileSync(join(out, "summary.md"), `${text.join("\n")}\n`);
-if (process.env["GITHUB_STEP_SUMMARY"]) appendFileSync(process.env["GITHUB_STEP_SUMMARY"], `${text.join("\n")}\n`);
+const summaryText = render(summary, days, notRead);
+if (noLog.length > 0) summaryText.push("", `The read could not read ${noLog.length} logs, so their steps stay whole: ${noLog.slice(0, 5).join(", ")}.`);
+writeFileSync(join(out, "summary.md"), `${summaryText.join("\n")}\n`);
+if (process.env["GITHUB_STEP_SUMMARY"]) appendFileSync(process.env["GITHUB_STEP_SUMMARY"], `${summaryText.join("\n")}\n`);
 for (const repo of notRead) console.log(`::error title=CI minutes%3A no read::The read could not read ${repo}.`);
-console.log(text.join("\n"));
+for (const log of noLog) console.log(`::warning title=CI minutes%3A no log::The read could not read the log of ${log}.`);
+console.log(summaryText.join("\n"));
 console.log(`${calls} API reads.`);
 process.exit(values.strict && notRead.length > 0 ? 1 : 0);

@@ -1,7 +1,8 @@
 # The read of the CI minutes: the baseline of a test selector, which runs only the jobs and tests that a change can
 # affect. `scripts/ci-minutes/main.ts` reads the pull-request runs of the last 7 days of each public repository of the
 # account. For a sample of 10 runs of each repository, spread over the week, it reads each job with the time of its
-# steps, and the changed files of the pull request. The summary of the run tells where the minutes go (each job by
+# steps, and the changed files of the pull request. For each job with the step of the input scripts of the shared CI,
+# it reads the log, and it gives the time of each script. The summary of the run tells where the minutes go (each job by
 # name, and the setup, install, build, test and check steps), what the pull requests change (docs only, the lockfile, a
 # workflow, a root file or the folders of packages), and what each part of a selector can save. The artifact ci-minutes
 # has ci-minutes.json with each record, so a later study takes its quantiles from the records with no new read.
@@ -48,15 +49,16 @@ jobs:
       contents: read
       pull-requests: read
     steps:
+      # A full checkout and the install of the root: scripts/lib/gh.ts takes its retry from @mark1russell7/service.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          sparse-checkout: |
-            scripts/ci-minutes
-            scripts/lib
           persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - name: CI minutes
         shell: bash
         env:
