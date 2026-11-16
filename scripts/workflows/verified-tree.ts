@@ -16,28 +16,34 @@
 //   1. The commit C has exactly one parent P (not-one-parent).
 //   2. Exactly one merged pull request has the merge commit C (no-pull, many-pulls). Its base is the default branch
 //      (pull-base-not-default). Its head is a branch of the same repository, not of a fork (pull-head-fork).
-//   3. Of the pull requests of that head branch (state=all), exactly one has the head commit H, and it is the pull request
-//      of rule 2 (many-pulls-of-head).
-//   4. The tree of C is the tree of H (tree-differs).
-//   5. P is H or an ancestor of H: the compare P...H gives behind_by 0 (head-behind-parent).
-//   6. Of the runs of the workflow file with the event pull_request on H from the head branch of the same repository, the
+//   3. The tree of C is the tree of H (tree-differs).
+//   4. P is H or an ancestor of H: the compare P...H gives behind_by 0 (head-behind-parent).
+//   5. Of the runs of the workflow file with the event pull_request on H from the head branch of the same repository, the
 //      newest run (the highest run_number, then the highest run_attempt) is completed (run-not-completed) with the
 //      conclusion success (run-not-success). A newer run that is in progress, failed, cancelled or held is a no. No such
 //      run is a no (no-run).
-//   7. The newest run was made before the merge: its created_at is a second before merged_at, or earlier (run-after-merge).
+//   6. The newest run was made before the merge: its created_at is a second before merged_at, or earlier (run-after-merge).
+//   7. At the second of the newest run, no other pull request of the head branch was open (other-pull-at-run). The script
+//      reads the pull requests of the head branch in each state (state=all). Another pull request was open at that second
+//      when its created_at is at that second or earlier, and its closed_at is null or at that second or later. Also, no
+//      other pull request of the head branch has H (many-pulls-of-head). The pull request of rule 2 must be in the list,
+//      with H, and with a created_at at the second of the run or earlier. Else the facts do not agree (no-read-head-pulls).
 //   8. No base change of the pull request came at the second of the newest run or after it (base-changed-after-run). The
 //      timeline events are base_ref_changed, automatic_base_change_succeeded and base_ref_force_pushed.
 //   9. Each required job is in that run (job-missing), with the conclusion success (job-not-success). The script reads the
 //      jobs of the newest attempt (filter=latest), page by page. A skipped job is not a pass.
-// The created_at of a run is the time of its event. A new attempt keeps it, so rules 7 and 8 also hold for a rerun.
+// The created_at of a run is the time of its event. A rerun keeps it, so rules 6, 7 and 8 also hold for a rerun.
 //
 // Why the rules prove that CI tested the released tree: a pull_request run does not test H alone. It tests the merge of
 // the base branch into H, with the base commit B of the time of its event.
+//   - Rule 5: the run is a run of the head branch of this pull request.
+//   - Rule 7: at the second of the newest run, no other pull request of the head branch was open. Thus the run is a run
+//     of this pull request. A workflow with the type closed can make a run after the close of a pull request. That pull
+//     request has the head of its close, so the check of H stops that run.
 //   - Rule 8: no base change came after the run, so the base of the run is the base of the merge, the default branch.
-//   - Rules 3 and 6: the run is of the head branch of this pull request, and no other pull request of that branch has H.
-//   - Rule 7: the run is older than the merge, so B is a commit of the default branch before the merge.
-//   - The default branch only moves forward, so B is P or an ancestor of P. Rule 5 makes P an ancestor of H, so B is an
-//     ancestor of H too. A merge of an ancestor of H into H gives the tree of H with no change, and rule 4 makes that tree
+//   - Rule 6: the run is older than the merge, so B is a commit of the default branch before the merge.
+//   - The default branch only moves forward, so B is P or an ancestor of P. Rule 4 makes P an ancestor of H, so B is an
+//     ancestor of H too. A merge of an ancestor of H into H gives the tree of H with no change, and rule 3 makes that tree
 //     the tree of C.
 //
 // The fail-safe direction: each HTTP error, each missing or malformed field and each fact that the script cannot read
@@ -51,8 +57,8 @@
 //     or workflow_dispatch). A job of ci.yml with a condition on the event is not the same in the two runs. The required
 //     jobs are the tool for this: the owner of the release names each job that must have passed.
 //   - The proof needs a default branch that only moves forward (a ruleset blocks a force push).
-//   - Rules 7 and 8 compare the times of GitHub to the second. A base change in the time between an event and its run is
-//     not seen. Rule 3 sees the head of each pull request at the time of the read.
+//   - Rules 6, 7 and 8 compare the times of GitHub to the second. A change in the time between an event and its run is
+//     not seen.
 import { appendFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -81,13 +87,14 @@ export type Reason =
   | "many-pulls"
   | "pull-base-not-default"
   | "pull-head-fork"
-  | "many-pulls-of-head"
   | "tree-differs"
   | "head-behind-parent"
   | "no-run"
   | "run-not-completed"
   | "run-not-success"
   | "run-after-merge"
+  | "other-pull-at-run"
+  | "many-pulls-of-head"
   | "base-changed-after-run"
   | "job-missing"
   | "job-not-success"
@@ -114,13 +121,14 @@ export const REASONS: Readonly<Record<Reason, string>> = {
   "many-pulls": "More than one merged pull request has this commit as its merge commit.",
   "pull-base-not-default": "The base of the pull request is not the default branch.",
   "pull-head-fork": "The head of the pull request is not a branch of this repository.",
-  "many-pulls-of-head": "More than one pull request of the head branch has the head commit.",
   "tree-differs": "The tree of the commit is not the tree of the head of the pull request.",
   "head-behind-parent": "The head of the pull request does not contain the parent of the commit.",
   "no-run": "No pull request run of the workflow from the head branch of this repository is on the head.",
   "run-not-completed": "The newest run on the head is not completed.",
   "run-not-success": "The newest run on the head did not end with success.",
   "run-after-merge": "The newest run on the head is not older than the merge.",
+  "other-pull-at-run": "Another pull request of the head branch was open at the time of the newest run.",
+  "many-pulls-of-head": "Another pull request of the head branch has the head commit.",
   "base-changed-after-run": "The base of the pull request changed at the time of the newest run or after it.",
   "job-missing": "A required job is not in the newest run.",
   "job-not-success": "A required job of the newest run did not end with success.",
@@ -165,6 +173,10 @@ export interface PullFact {
 export interface HeadPullFact {
   readonly number: number;
   readonly headSha: string;
+  /** The time that the pull request was opened, in whole seconds since 1970. */
+  readonly createdAt: number;
+  /** The time of its close or its merge in whole seconds since 1970, or null when it is open. */
+  readonly closedAt: number | null;
 }
 
 /** The pull requests of one head branch, in each state. */
@@ -243,10 +255,10 @@ export interface Facts {
   readonly commit?: Read<CommitFact>;
   readonly pulls?: Read<readonly PullFact[]>;
   readonly repo?: Read<RepoFact>;
-  readonly headPulls?: Read<HeadPullsFact>;
   readonly head?: Read<CommitFact>;
   readonly compare?: Read<CompareFact>;
   readonly runs?: Read<readonly RunFact[]>;
+  readonly headPulls?: Read<HeadPullsFact>;
   readonly timeline?: Read<TimelineFact>;
   readonly jobs?: Read<JobsFact>;
 }
@@ -256,10 +268,10 @@ export type Need =
   | { readonly fact: "commit"; readonly sha: string }
   | { readonly fact: "pulls"; readonly sha: string }
   | { readonly fact: "repo" }
-  | { readonly fact: "headPulls"; readonly owner: string; readonly ref: string }
   | { readonly fact: "head"; readonly sha: string }
   | { readonly fact: "compare"; readonly base: string; readonly head: string }
   | { readonly fact: "runs"; readonly head: string }
+  | { readonly fact: "headPulls"; readonly owner: string; readonly ref: string }
   | { readonly fact: "timeline"; readonly pull: number }
   | { readonly fact: "jobs"; readonly run: number };
 
@@ -345,25 +357,14 @@ export function decide(facts: Facts): Step {
   if (!SHA.test(pull.headSha)) return no("no-read-pulls");
   head = pull.headSha;
 
-  // Rule 3: no other pull request of the head branch has the head commit
-  const [owner = ""] = facts.repository.split("/");
-  const headPulls = facts.headPulls;
-  if (headPulls === undefined) return need({ fact: "headPulls", owner, ref: pull.headRef });
-  if (failed(headPulls)) return no(headPulls.noRead);
-  if (headPulls.ref !== pull.headRef) return no("no-read-head-pulls");
-  const ofHead = headPulls.pulls.filter((each) => each.headSha === head);
-  // The list must contain the pull request of rule 2. A list without it did not give the fact
-  if (!ofHead.some((each) => each.number === pull.number)) return no("no-read-head-pulls");
-  if (ofHead.length > 1) return no("many-pulls-of-head");
-
-  // Rule 4: the same tree
+  // Rule 3: the same tree
   const headCommit = facts.head;
   if (headCommit === undefined) return need({ fact: "head", sha: head });
   if (failed(headCommit)) return no(headCommit.noRead);
   if (headCommit.sha !== head) return no("no-read-head");
   if (headCommit.tree !== commit.tree) return no("tree-differs");
 
-  // Rule 5: the head has the parent
+  // Rule 4: the head has the parent
   const compare = facts.compare;
   if (compare === undefined) return need({ fact: "compare", base: parent, head });
   if (failed(compare)) return no(compare.noRead);
@@ -372,7 +373,7 @@ export function decide(facts: Facts): Step {
   // With behind_by 0, the merge base is the parent. A different merge base is a contradiction, not a pass
   if (compare.mergeBase !== parent) return no("no-read-compare");
 
-  // Rule 6: the newest run of the head branch passed
+  // Rule 5: the newest run of the head branch passed
   const runs = facts.runs;
   if (runs === undefined) return need({ fact: "runs", head });
   if (failed(runs)) return no(runs.noRead);
@@ -383,8 +384,24 @@ export function decide(facts: Facts): Step {
   if (newest.status !== "completed") return no("run-not-completed");
   if (newest.conclusion !== "success") return no("run-not-success");
 
-  // Rule 7: the run is older than the merge. The same second is a no
+  // Rule 6: the run is older than the merge. The same second is a no
   if (newest.createdAt >= pull.mergedAt) return no("run-after-merge");
+
+  // Rule 7: at the second of the run, no other pull request of the head branch was open
+  const [owner = ""] = facts.repository.split("/");
+  const headPulls = facts.headPulls;
+  if (headPulls === undefined) return need({ fact: "headPulls", owner, ref: pull.headRef });
+  if (failed(headPulls)) return no(headPulls.noRead);
+  // The list must contain the pull request of rule 2, with the head commit, open at the second of the run or before it.
+  // A list without it did not give the fact. A run of this pull request older than its open is a contradiction
+  if (headPulls.ref !== pull.headRef) return no("no-read-head-pulls");
+  const own = headPulls.pulls.find((each) => each.number === pull.number);
+  if (own === undefined || own.headSha !== head || own.createdAt > newest.createdAt) return no("no-read-head-pulls");
+  const otherPulls = headPulls.pulls.filter((each) => each.number !== pull.number);
+  // The second of the open and the second of the close both count as open
+  if (otherPulls.some((each) => each.createdAt <= newest.createdAt && (each.closedAt === null || each.closedAt >= newest.createdAt))) return no("other-pull-at-run");
+  // A run of the event closed comes after the close. The pull request of that close has the head of the close
+  if (otherPulls.some((each) => each.headSha === head)) return no("many-pulls-of-head");
 
   // Rule 8: no base change at the second of the run or after it
   const timeline = facts.timeline;
@@ -527,11 +544,19 @@ export function parsePull(item: unknown): PullFact | null {
   return { number, mergedAt, mergeCommit, baseRef, baseRepository, headRef, headSha, headRepository };
 }
 
-/** This function gives the number and the head commit of a pull request of a head branch, or null when one is malformed. */
+/**
+ * This function gives the number, the head commit and the times of a pull request of a head branch. It gives null when a
+ * field is missing or malformed, and when the close comes before the open.
+ */
 export function parseHeadPull(item: unknown): HeadPullFact | null {
   const number = positiveOf(field(item, "number"));
   const headSha = shaOf(field(item, "head", "sha"));
-  return number === null || headSha === null ? null : { number, headSha };
+  const createdAt = timeOf(field(item, "created_at"));
+  const closedField = field(item, "closed_at");
+  const closedAt = closedField === null ? null : timeOf(closedField);
+  if (number === null || headSha === null || createdAt === null || (closedField !== null && closedAt === null)) return null;
+  if (closedAt !== null && closedAt < createdAt) return null;
+  return { number, headSha, createdAt, closedAt };
 }
 
 /** The timeline events that change the base of a pull request, or its history. */
@@ -701,14 +726,14 @@ async function gather(api: Api, facts: Facts, need: Need): Promise<Facts> {
       return { ...facts, pulls: await readPulls(api, repository, need.sha) };
     case "repo":
       return { ...facts, repo: await readRepo(api, repository) };
-    case "headPulls":
-      return { ...facts, headPulls: await readHeadPulls(api, repository, need.owner, need.ref) };
     case "head":
       return { ...facts, head: await readCommit(api, repository, need.sha, "no-read-head") };
     case "compare":
       return { ...facts, compare: await readCompare(api, repository, need.base, need.head) };
     case "runs":
       return { ...facts, runs: await readRuns(api, repository, facts.workflow, need.head) };
+    case "headPulls":
+      return { ...facts, headPulls: await readHeadPulls(api, repository, need.owner, need.ref) };
     case "timeline":
       return { ...facts, timeline: await readTimeline(api, repository, need.pull) };
     case "jobs":

@@ -36,12 +36,15 @@ const TREE = "d".repeat(40);
 const RUN = 7001;
 const PULL = 5;
 const GATE = "CI OK";
-/** The time that GitHub made the run, and the time of the merge, one hour later. */
+/** The open of the pull request, the time that GitHub made the run one hour later, and the time of the merge. */
+const OPENED = "2026-11-16T08:00:00Z";
 const MADE = "2026-11-16T09:00:00Z";
 const MERGED = "2026-11-16T10:00:00Z";
+/** The head commit of a different pull request of the head branch. */
+const OTHER = "9".repeat(40);
 
-type Kind = "repo" | "commit" | "pulls" | "head-pulls" | "head" | "compare" | "runs" | "timeline" | "jobs";
-const KINDS: readonly Kind[] = ["commit", "pulls", "repo", "head-pulls", "head", "compare", "runs", "timeline", "jobs"];
+type Kind = "repo" | "commit" | "pulls" | "head" | "compare" | "runs" | "head-pulls" | "timeline" | "jobs";
+const KINDS: readonly Kind[] = ["commit", "pulls", "repo", "head", "compare", "runs", "head-pulls", "timeline", "jobs"];
 
 /** The answers of the fake API. Each test changes the fields that it needs. */
 interface World {
@@ -67,7 +70,20 @@ type Json = Record<string, unknown>;
 const commitBody = (sha: string, over: Json = {}): Json => ({ sha, commit: { tree: { sha: TREE }, message: "a change" }, parents: [{ sha: P }], ...over });
 const baseOf = (over: Json = {}): Json => ({ ref: "main", sha: P, repo: { full_name: repo }, ...over });
 const headOf = (over: Json = {}): Json => ({ ref: "feature", sha: H, repo: { full_name: repo }, ...over });
-const pullBody = (over: Json = {}): Json => ({ number: PULL, title: "feat: a change", state: "closed", merged_at: MERGED, merge_commit_sha: C, base: baseOf(), head: headOf(), ...over });
+const pullBody = (over: Json = {}): Json => ({
+  number: PULL,
+  title: "feat: a change",
+  state: "closed",
+  created_at: OPENED,
+  closed_at: MERGED,
+  merged_at: MERGED,
+  merge_commit_sha: C,
+  base: baseOf(),
+  head: headOf(),
+  ...over,
+});
+/** A different pull request of the head branch, with a different head commit, that is not merged. */
+const otherPull = (over: Json = {}): Json => pullBody({ number: 6, merged_at: null, merge_commit_sha: null, head: headOf({ sha: OTHER }), ...over });
 const runBody = (over: Json = {}): Json => ({
   id: RUN,
   run_number: 10,
@@ -209,10 +225,10 @@ describe("verified tree: the rules", () => {
       `repos/${repo}/commits/${C}`,
       `repos/${repo}/commits/${C}/pulls?per_page=100&page=1`,
       `repos/${repo}`,
-      `repos/${repo}/pulls?state=all&head=owner:feature&per_page=100&page=1`,
       `repos/${repo}/commits/${H}`,
       `repos/${repo}/compare/${P}...${H}?per_page=1`,
       `repos/${repo}/actions/workflows/ci.yml/runs?head_sha=${H}&event=pull_request&per_page=100&page=1`,
+      `repos/${repo}/pulls?state=all&head=owner:feature&per_page=100&page=1`,
       `repos/${repo}/issues/${String(PULL)}/timeline?per_page=100&page=1`,
       `repos/${repo}/actions/runs/${String(RUN)}/jobs?filter=latest&per_page=100&page=1`,
     ]);
@@ -243,9 +259,19 @@ describe("verified tree: the rules", () => {
       },
     },
     {
-      name: "an older pull request of the same branch into a different base, with a different head commit",
-      change: (w) => void w.headPulls.push(pullBody({ number: 3, merged_at: null, merge_commit_sha: null, base: baseOf({ ref: "release" }), head: headOf({ sha: "9".repeat(40) }) })),
+      name: "an older pull request of the same branch into a different base, closed days before",
+      change: (w) => void w.headPulls.push(otherPull({ number: 3, created_at: "2026-11-01T08:00:00Z", closed_at: "2026-11-02T08:00:00Z", base: baseOf({ ref: "release" }) })),
     },
+    {
+      name: "an older merged pull request of the same branch, closed days before (a branch that a release tool uses again)",
+      change: (w) =>
+        void w.headPulls.unshift(
+          pullBody({ number: 2, created_at: "2026-11-10T08:00:00Z", closed_at: "2026-11-11T08:00:00Z", merged_at: "2026-11-11T08:00:00Z", merge_commit_sha: "8".repeat(40), head: headOf({ sha: "7".repeat(40) }) }),
+        ),
+    },
+    { name: "another pull request of the head branch, closed one second before the run", change: (w) => void w.headPulls.push(otherPull({ created_at: "2026-11-16T07:00:00Z", closed_at: "2026-11-16T08:59:59Z" })) },
+    { name: "another pull request of the head branch, opened one second after the run", change: (w) => void w.headPulls.push(otherPull({ state: "open", created_at: "2026-11-16T09:00:01Z", closed_at: null })) },
+    { name: "a run made in the second of the open of the pull request", change: (w) => (w.headPulls = [pullBody({ created_at: MADE })]) },
     { name: "a newer run on the head commit from a different branch that failed", change: (w) => void w.runs.push(runBody({ id: 7002, run_number: 11, head_branch: "copy", conclusion: "failure" })) },
     { name: "a run made in the second before the second of the merge", change: (w) => (w.runs = [runBody({ created_at: "2026-11-16T09:59:59.999Z" })]) },
     { name: "a rerun after the merge of a run made before it (created_at decides, not run_started_at)", change: (w) => (w.runs = [runBody({ run_attempt: 3, run_started_at: "2026-11-16T11:00:00Z" })]) },
@@ -287,12 +313,28 @@ describe("verified tree: the rules", () => {
     { name: "a required job that failed", change: (w) => (w.jobs = [jobBody(GATE, { conclusion: "failure" })]), reason: "job-not-success" },
     { name: "a second required job that is missing", change: () => undefined, reason: "job-missing", over: { required: [GATE, "Xplat OK"] } },
     { name: "two runs with the same number and attempt", change: (w) => void w.runs.push(runBody({ id: 7002 })), reason: "no-read-runs" },
+    { name: "another pull request of the head branch, open at the run", change: (w) => void w.headPulls.push(otherPull({ state: "open", created_at: "2026-11-16T08:30:00Z", closed_at: null })), reason: "other-pull-at-run" },
+    { name: "another pull request of the head branch, closed in the second of the run", change: (w) => void w.headPulls.push(otherPull({ closed_at: MADE })), reason: "other-pull-at-run" },
     {
-      name: "a second pull request of the head branch with the head commit, into a different base",
-      change: (w) => void w.headPulls.push(pullBody({ number: 6, state: "open", merged_at: null, merge_commit_sha: null, base: baseOf({ ref: "release" }) })),
+      name: "another pull request of the head branch, closed some milliseconds before the run, in the same second",
+      change: (w) => {
+        w.runs = [runBody({ created_at: "2026-11-16T09:00:00.900Z" })];
+        w.headPulls.push(otherPull({ closed_at: "2026-11-16T09:00:00.100Z" }));
+      },
+      reason: "other-pull-at-run",
+    },
+    { name: "another pull request of the head branch, opened in the second of the run", change: (w) => void w.headPulls.push(otherPull({ state: "open", created_at: MADE, closed_at: null })), reason: "other-pull-at-run" },
+    { name: "another pull request of the head branch, open from before the run to after the merge", change: (w) => void w.headPulls.push(otherPull({ closed_at: "2026-11-16T11:00:00Z" })), reason: "other-pull-at-run" },
+    {
+      name: "another open pull request of the head branch with the head commit, into a different base",
+      change: (w) => void w.headPulls.push(otherPull({ state: "open", closed_at: null, base: baseOf({ ref: "release" }), head: headOf() })),
+      reason: "other-pull-at-run",
+    },
+    {
+      name: "another pull request with the head commit, closed before the run (a run of its event closed)",
+      change: (w) => void w.headPulls.unshift(otherPull({ number: 4, created_at: "2026-11-16T07:00:00Z", closed_at: "2026-11-16T08:30:00Z", head: headOf() })),
       reason: "many-pulls-of-head",
     },
-    { name: "a second closed pull request of the head branch with the head commit", change: (w) => void w.headPulls.unshift(pullBody({ number: 4, merged_at: null, merge_commit_sha: null })), reason: "many-pulls-of-head" },
     { name: "only a run of a different branch on the head commit", change: (w) => (w.runs = [runBody({ head_branch: "copy" })]), reason: "no-run" },
     { name: "only a run with no head branch", change: (w) => (w.runs = [runBody({ head_branch: null })]), reason: "no-run" },
     { name: "a run made after the merge", change: (w) => (w.runs = [runBody({ created_at: "2026-11-16T10:00:01Z" })]), reason: "run-after-merge" },
@@ -356,9 +398,25 @@ describe("verified tree: a fact that the script cannot read is never a pass", ()
     { name: "a merged_at on a date that does not exist", change: (w) => (w.pulls = [pullBody({ merged_at: "2026-02-30T10:00:00Z" })]), reason: "no-read-pulls" },
     { name: "a list of the head branch without the pull request", change: (w) => (w.headPulls = []), reason: "no-read-head-pulls" },
     { name: "a list of the head branch with only a different number on the head commit", change: (w) => (w.headPulls = [pullBody({ number: 6 })]), reason: "no-read-head-pulls" },
-    { name: "a pull request of the head branch with no number", change: (w) => void w.headPulls.push({ head: { sha: H } }), reason: "no-read-head-pulls" },
-    { name: "a pull request of the head branch with a head that is not a sha", change: (w) => void w.headPulls.push(pullBody({ number: 6, head: headOf({ sha: "main" }) })), reason: "no-read-head-pulls" },
-    { name: "a head branch with a control character", change: (w) => (w.pulls = [pullBody({ head: headOf({ ref: "feature\n" }) })]), reason: "no-read-head-pulls" },
+    { name: "a list of the head branch with a different head commit for the pull request", change: (w) => (w.headPulls = [pullBody({ head: headOf({ sha: OTHER }) })]), reason: "no-read-head-pulls" },
+    { name: "a pull request opened after its newest run", change: (w) => (w.headPulls = [pullBody({ created_at: "2026-11-16T09:00:01Z" })]), reason: "no-read-head-pulls" },
+    { name: "a pull request of the head branch with no number", change: (w) => void w.headPulls.push({ head: { sha: H }, created_at: OPENED, closed_at: null }), reason: "no-read-head-pulls" },
+    { name: "a pull request of the head branch with a head that is not a sha", change: (w) => void w.headPulls.push(otherPull({ head: headOf({ sha: "main" }) })), reason: "no-read-head-pulls" },
+    { name: "a pull request of the head branch with no created_at", change: (w) => void w.headPulls.push(otherPull({ created_at: undefined })), reason: "no-read-head-pulls" },
+    { name: "a pull request of the head branch with a created_at that is not an ISO time", change: (w) => void w.headPulls.push(otherPull({ created_at: "2026-11-16 08:00" })), reason: "no-read-head-pulls" },
+    { name: "the pull request in the list of its head branch with a created_at that is null", change: (w) => (w.headPulls = [pullBody({ created_at: null })]), reason: "no-read-head-pulls" },
+    { name: "a pull request of the head branch with no closed_at", change: (w) => void w.headPulls.push(otherPull({ closed_at: undefined })), reason: "no-read-head-pulls" },
+    { name: "a pull request of the head branch with a closed_at on a date that does not exist", change: (w) => void w.headPulls.push(otherPull({ closed_at: "2026-02-30T08:00:00Z" })), reason: "no-read-head-pulls" },
+    { name: "a pull request of the head branch with a closed_at that is a number", change: (w) => void w.headPulls.push(otherPull({ closed_at: 1794826800 })), reason: "no-read-head-pulls" },
+    { name: "a pull request of the head branch closed before its open", change: (w) => void w.headPulls.push(otherPull({ created_at: "2026-11-16T08:00:00Z", closed_at: "2026-11-16T07:59:59Z" })), reason: "no-read-head-pulls" },
+    {
+      name: "a head branch with a control character",
+      change: (w) => {
+        w.pulls = [pullBody({ head: headOf({ ref: "feature\n" }) })];
+        w.runs = [runBody({ head_branch: "feature\n" })];
+      },
+      reason: "no-read-head-pulls",
+    },
     { name: "no default branch", change: (w) => (w.repo = { full_name: repo }), reason: "no-read-repo" },
     { name: "an empty default branch", change: (w) => (w.repo = { full_name: repo, default_branch: "" }), reason: "no-read-repo" },
     { name: "a head commit that is not the head of the pull request", change: (w) => (w.head = commitBody("f".repeat(40))), reason: "no-read-head" },
@@ -440,12 +498,13 @@ describe("verified tree: a fact that the script cannot read is never a pass", ()
 
 describe("verified tree: decide is a pure function over the facts", () => {
   const made = Date.parse(MADE) / 1000;
+  const merged = Date.parse(MERGED) / 1000;
+  const own = { number: PULL, headSha: H, createdAt: Date.parse(OPENED) / 1000, closedAt: merged };
   const facts: Facts = {
     ...input(),
     commit: { sha: C, tree: TREE, parents: [P] },
-    pulls: [{ number: PULL, mergedAt: Date.parse(MERGED) / 1000, mergeCommit: C, baseRef: "main", baseRepository: repo, headRef: "feature", headSha: H, headRepository: repo }],
+    pulls: [{ number: PULL, mergedAt: merged, mergeCommit: C, baseRef: "main", baseRepository: repo, headRef: "feature", headSha: H, headRepository: repo }],
     repo: { defaultBranch: "main" },
-    headPulls: { ref: "feature", pulls: [{ number: PULL, headSha: H }] },
     head: { sha: H, tree: TREE, parents: [P] },
     compare: { base: P, head: H, behindBy: 0, mergeBase: P },
     runs: [
@@ -463,6 +522,7 @@ describe("verified tree: decide is a pure function over the facts", () => {
         conclusion: "success",
       },
     ],
+    headPulls: { ref: "feature", pulls: [own] },
     timeline: { pull: PULL, changes: [made - 1] },
     jobs: { run: RUN, jobs: [{ name: GATE, status: "completed", conclusion: "success" }] },
   };
@@ -478,8 +538,29 @@ describe("verified tree: decide is a pure function over the facts", () => {
     assert.deepEqual(decide(input()), { kind: "read", need: { fact: "commit", sha: C } });
     assert.deepEqual(decide(without(["jobs"])), { kind: "read", need: { fact: "jobs", run: RUN } });
     assert.deepEqual(decide(without(["timeline", "jobs"])), { kind: "read", need: { fact: "timeline", pull: PULL } });
-    assert.deepEqual(decide(without(["compare", "runs", "jobs"])), { kind: "read", need: { fact: "compare", base: P, head: H } });
-    assert.deepEqual(decide(without(["headPulls", "head", "compare", "runs", "timeline", "jobs"])), { kind: "read", need: { fact: "headPulls", owner: "owner", ref: "feature" } });
+    assert.deepEqual(decide(without(["headPulls", "timeline", "jobs"])), { kind: "read", need: { fact: "headPulls", owner: "owner", ref: "feature" } });
+    assert.deepEqual(decide(without(["runs", "headPulls", "timeline", "jobs"])), { kind: "read", need: { fact: "runs", head: H } });
+    assert.deepEqual(decide(without(["compare", "runs", "headPulls", "jobs"])), { kind: "read", need: { fact: "compare", base: P, head: H } });
+  });
+
+  it("gives no for another pull request of the head branch that was open at the second of the run", () => {
+    const reason = (pulls: NonNullable<Facts["headPulls"]>): Reason | null => {
+      const step = decide({ ...facts, headPulls: pulls });
+      return step.kind === "verdict" ? step.verdict.reason : null;
+    };
+    const other = (createdAt: number, closedAt: number | null, headSha = OTHER) => ({ number: 6, headSha, createdAt, closedAt });
+    assert.equal(reason({ ref: "feature", pulls: [own, other(made - 60, null)] }), "other-pull-at-run");
+    assert.equal(reason({ ref: "feature", pulls: [own, other(made - 60, made)] }), "other-pull-at-run");
+    assert.equal(reason({ ref: "feature", pulls: [own, other(made, null)] }), "other-pull-at-run");
+    assert.equal(reason({ ref: "feature", pulls: [own, other(made - 60, made - 1)] }), "passed");
+    assert.equal(reason({ ref: "feature", pulls: [own, other(made + 1, null)] }), "passed");
+    assert.equal(reason({ ref: "feature", pulls: [other(made - 60, made - 1, H), own] }), "many-pulls-of-head");
+    assert.equal(reason({ ref: "feature", pulls: [{ ...own, createdAt: made }] }), "passed");
+    assert.equal(reason({ ref: "feature", pulls: [{ ...own, createdAt: made + 1 }] }), "no-read-head-pulls");
+    assert.equal(reason({ ref: "feature", pulls: [{ ...own, headSha: OTHER }] }), "no-read-head-pulls");
+    assert.equal(reason({ ref: "feature", pulls: [other(made - 60, made - 1)] }), "no-read-head-pulls");
+    assert.equal(reason({ ref: "other", pulls: [own] }), "no-read-head-pulls");
+    assert.equal(reason({ noRead: "no-read-head-pulls" }), "no-read-head-pulls");
   });
 
   it("gives a no read for a fact of a different commit or run, and for inputs that are not valid", () => {
@@ -491,7 +572,6 @@ describe("verified tree: decide is a pure function over the facts", () => {
     assert.equal(reason({ compare: { base: H, head: P, behindBy: 0, mergeBase: P } }), "no-read-compare");
     assert.equal(reason({ jobs: { run: 1, jobs: [{ name: GATE, status: "completed", conclusion: "success" }] } }), "no-read-jobs");
     assert.equal(reason({ commit: { noRead: "no-read-commit" } }), "no-read-commit");
-    assert.equal(reason({ headPulls: { ref: "other", pulls: [{ number: PULL, headSha: H }] } }), "no-read-head-pulls");
     assert.equal(reason({ timeline: { pull: PULL + 1, changes: [] } }), "no-read-timeline");
     assert.equal(reason({ timeline: { pull: PULL, changes: [made - 1, made] } }), "base-changed-after-run");
     assert.equal(reason({ timeline: { pull: PULL, changes: [] } }), "passed");
