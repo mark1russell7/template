@@ -226,6 +226,8 @@ The gate has three rules. A fault of one rule gives the exit code 1.
 2. The data of a page is at most 3 days old (`MAX_DATA_AGE_DAYS`), or a run on newer engines is in flight. The stamp of that run is at most 3 days old, so an old stamp does not hold the gate open.
 3. The engines of the newest run are at most 1 minor version behind npm at the start of the run (`MAX_MINORS_BEHIND`). A release during a long run does not fail the gate. An engine that is a package of the same repository has its version from its `package.json` at the build commit, not from npm. The gate reads each `package.json` that git tracks.
 
+For an engine of the same repository, a break of rule 3 is a warning for 3 days (`VERSION_GRACE_DAYS`). The 3 days start at the commit that raised the version past the limit. Then the break is a fault, and the failing case is the end of the grace. The rule starts on 2026-11-30 (`WORKSPACE_RULE_START`). Before that start, each break is a warning. In a shallow clone, the gate cannot find the commit, so a break has no grace.
+
 Stamps that pass also show one failing case for each page, in the log of each build. The case is the first time at which the gate fails on the page. A measured page must fail one day after the limit of its data. When the data is old at the start of the limit, it fails at that start. A study with no limit must fail before the date of its run. A page with no failing case gives the exit code 1, so each site that uses the gate shows that the gate holds it.
 
 Two fields of a stamp change the age rule:

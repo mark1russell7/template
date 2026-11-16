@@ -14,7 +14,7 @@ import { isAbsolute, join } from "node:path";
 import { parseArgs } from "node:util";
 import { workspaceVersions } from "../data/git.ts";
 import { npmPublishTimes } from "../data/npm.ts";
-import type { NpmVersionTime } from "../data/types.ts";
+import type { NpmVersionTime, WorkspaceVersion } from "../data/types.ts";
 import { compareVersions, parseVersion } from "../data/versions.ts";
 import type { CheckIo } from "./check.ts";
 
@@ -35,6 +35,12 @@ export const MAX_STUDY_LIMIT_DAYS = 30;
 
 /** The last time at which a limit can start. A limit turns on at this time if its site did not turn it on before. */
 export const LAST_LIMIT_START = "2026-12-07T00:00:00Z";
+
+/** The days after the commit that raised a package of the repository past the limit, before a fault. A rerun needs that time. */
+export const VERSION_GRACE_DAYS = 3;
+
+/** The start of the version rule for an engine of the same repository. Before it, a break of that rule is a warning. */
+export const WORKSPACE_RULE_START = "2026-11-30T00:00:00Z";
 
 const DAY_MS = 86_400_000;
 
@@ -114,10 +120,14 @@ export interface FreshnessOptions {
   /** The schedule of each workflow of a limit. A number is the largest gap between its starts in days. A text tells why the gate cannot read it. */
   readonly schedules?: Readonly<Record<string, number | string>>;
   /**
-   * The version of each package of the repository at the build commit, by its npm name. An engine with a name here is a
-   * package of the same repository, so the gate reads its version here and not on npm.
+   * The versions of each package of the repository, by its npm name. The first version is the version at the build commit.
+   * An engine with a name here is a package of the same repository, so the gate reads its version here and not on npm.
    */
-  readonly workspace?: Readonly<Record<string, string>>;
+  readonly workspace?: Readonly<Record<string, readonly WorkspaceVersion[]>>;
+  /** The days of grace after the commit that raised a package of the repository past the limit. The default is `VERSION_GRACE_DAYS`. */
+  readonly versionGraceDays?: number;
+  /** The start of the version rule for an engine of the same repository. The default is `WORKSPACE_RULE_START`. */
+  readonly workspaceStartsAt?: string;
 }
 
 /** The result of `checkFreshness`. */
@@ -126,7 +136,7 @@ export interface FreshnessCheck {
   readonly faults: readonly string[];
   /** Each rule that the gate could not run, with the reason. */
   readonly notRun: readonly string[];
-  /** Each break of the age rule or of the commit rule before the start of its limit. A warning does not fail the gate. */
+  /** Each break before the gate fails on it, with the time from which it fails. A warning does not fail the gate. */
   readonly warnings: readonly string[];
 }
 
@@ -351,12 +361,55 @@ function hasNewerEngine(run: DataRun, than: DataRun): boolean {
   });
 }
 
+/** This function gives the newest run of a stamp: the run in flight, or else the run with the latest date. */
+function newestRun(stamp: PageStamp): DataRun | undefined {
+  return stamp.inFlight ?? [...stamp.runs].sort((a, b) => Date.parse(a.date) - Date.parse(b.date)).at(-1);
+}
+
+/** A break of the version rule by an engine that is a package of the repository. */
+interface OwnBreak {
+  readonly name: string;
+  readonly version: string;
+  readonly own: string;
+  /** The time from which the gate fails on the break. */
+  readonly failsAt: number;
+  /** This value is true when the history gives the commit that raised the package past the limit. */
+  readonly known: boolean;
+}
+
+/**
+ * This function gives each engine of a run that is more than `maxMinorsBehind` behind its package in the repository. The
+ * gate fails on a break `graceDays` after the commit that raised the package past the limit, and not before `startsAt`.
+ */
+function ownBreaks(run: DataRun, workspace: Readonly<Record<string, readonly WorkspaceVersion[]>>, maxMinorsBehind: number, graceDays: number, startsAt: string): OwnBreak[] {
+  const breaks: OwnBreak[] = [];
+  for (const [name, version] of Object.entries(run.engines)) {
+    // A key of the object prototype, for example "constructor", is not a package of the repository.
+    const history = Object.hasOwn(workspace, name) ? (workspace[name] ?? []) : [];
+    const own = history[0];
+    if (own === undefined || minorsBehind(version, own.version) <= maxMinorsBehind) continue;
+    // The break starts at the oldest version of the newest versions that are all past the limit.
+    let raised: string | undefined;
+    for (const entry of history) {
+      if (minorsBehind(version, entry.version) <= maxMinorsBehind) break;
+      raised = entry.since;
+      if (raised === undefined) break;
+    }
+    const start = Date.parse(startsAt);
+    const failsAt = raised === undefined ? start : Math.max(start, Date.parse(raised) + graceDays * DAY_MS);
+    breaks.push({ name, version, own: own.version, failsAt, known: raised !== undefined });
+  }
+  return breaks;
+}
+
 /**
  * This function applies the rules of the gate to the stamps.
  *
  * - The data of each page is at most `maxAgeDays` old, or a run on newer engines is in flight.
  * - The engines of the newest run are at most `maxMinorsBehind` behind npm at the start of that run.
  * - An engine that is a package of the repository is at most `maxMinorsBehind` behind its version at the build commit.
+ *   The gate fails on a break `versionGraceDays` after the commit that raised the version, and not before `workspaceStartsAt`.
+ *   Before that time, the break is a warning.
  * - A run in flight has the same age limit, so an old stamp does not hold the gate open.
  * - A page with its own limit uses that limit, and the schedule of its workflow meets the limit.
  * - A study has no limit of the engines, because it tells about the versions that it names.
@@ -366,6 +419,7 @@ function hasNewerEngine(run: DataRun, than: DataRun): boolean {
  */
 export function checkFreshness(stamps: DataStamps, options: FreshnessOptions): FreshnessCheck {
   const { times, maxAgeDays: defaultAge = MAX_DATA_AGE_DAYS, maxMinorsBehind = MAX_MINORS_BEHIND, schedules = {}, workspace = {} } = options;
+  const { versionGraceDays = VERSION_GRACE_DAYS, workspaceStartsAt = WORKSPACE_RULE_START } = options;
   const now = Date.parse(options.now);
   const faults: string[] = [];
   const notRun: string[] = [];
@@ -401,17 +455,17 @@ export function checkFreshness(stamps: DataStamps, options: FreshnessOptions): F
       for (const run of stamp.runs) if (run.commit === undefined) atStart(`${stamp.page}: the run ${run.id} names no commit.`);
       continue;
     }
-    const newest = flight ?? [...stamp.runs].sort((a, b) => Date.parse(a.date) - Date.parse(b.date)).at(-1);
+    const newest = newestRun(stamp);
     if (newest === undefined) continue;
+    for (const own of ownBreaks(newest, workspace, maxMinorsBehind, versionGraceDays, workspaceStartsAt)) {
+      const text = `${stamp.page}: the run ${newest.id} used ${own.name} ${own.version}, and the repository has ${own.own} at the build commit. The limit is ${maxMinorsBehind} minor version behind.`;
+      if (now < own.failsAt) warnings.push(`${text} The gate fails on it from ${new Date(own.failsAt).toISOString()}.`);
+      else if (own.known) faults.push(text);
+      else faults.push(`${text} The clone has no commit that tells when the version passed the limit, so the page has no grace.`);
+    }
     for (const [name, version] of Object.entries(newest.engines)) {
       // A key of the object prototype, for example "constructor", is not a package of the repository.
-      const own = Object.hasOwn(workspace, name) ? workspace[name] : undefined;
-      if (own !== undefined) {
-        if (minorsBehind(version, own) > maxMinorsBehind) {
-          faults.push(`${stamp.page}: the run ${newest.id} used ${name} ${version}, and the repository has ${own} at the build commit. The limit is ${maxMinorsBehind} minor version behind.`);
-        }
-        continue;
-      }
+      if (Object.hasOwn(workspace, name)) continue;
       const latest = latestAt(times, name, newest.date);
       if (latest === undefined) {
         notRun.push(`${stamp.page}: npm gives no version of ${name} at the start of the run ${newest.id}, and no package of the repository has that name.`);
@@ -436,7 +490,8 @@ export interface FailingCase {
 /**
  * This function gives one failing case for each page, from the stamps of the site itself. The case is the first time at
  * which the gate fails on the page. That time is one day after the limit of a run or of the run in flight. When the data is
- * old at the start of the limit, the time is that start. The age always counts from the date of the data.
+ * old at the start of the limit, the time is that start. The age always counts from the date of the data. For a version
+ * break of an engine of the same repository, the time is the end of its grace.
  *
  * A study with no limit must fail before the date of its run. Stamps that pass and give a case with no fault tell that the
  * gate does not examine that page.
@@ -448,10 +503,13 @@ export function failingCases(stamps: DataStamps, options: FreshnessOptions): rea
     const days = stamp.limit?.days ?? options.maxAgeDays ?? MAX_DATA_AGE_DAYS;
     // The gate examines the page from the time of the check, and the age rule is in force from the start of the limit.
     const from = Math.max(Date.parse(options.now), Date.parse(stamp.limit?.startsAt ?? options.now));
-    const candidates =
-      stamp.study === true && stamp.limit === undefined
-        ? [Math.min(...dates) - DAY_MS]
-        : [from, ...dates.map((date) => date + (days + 1) * DAY_MS).filter((time) => time > from).sort((a, b) => a - b)];
+    const newest = newestRun(stamp);
+    const graces =
+      stamp.study === true || newest === undefined
+        ? []
+        : ownBreaks(newest, options.workspace ?? {}, options.maxMinorsBehind ?? MAX_MINORS_BEHIND, options.versionGraceDays ?? VERSION_GRACE_DAYS, options.workspaceStartsAt ?? WORKSPACE_RULE_START).map((one) => one.failsAt);
+    const later = [...dates.map((date) => date + (days + 1) * DAY_MS), ...graces].filter((time) => time > from).sort((a, b) => a - b);
+    const candidates = stamp.study === true && stamp.limit === undefined ? [Math.min(...dates) - DAY_MS] : [from, ...later];
     let at = "";
     for (const time of candidates) {
       at = new Date(time).toISOString();
@@ -474,6 +532,8 @@ Examine the data stamps of the measured pages of a site.
 The exit code is 0 when the stamps pass, 1 for a fault, and 2 for an incorrect command line.
 Stamps that pass also show one failing case for each page. A page with no failing case is a fault.
 An engine that is a package of the repository has its version from its package.json at the build commit, not from npm.
+A version break of such an engine warns until ${VERSION_GRACE_DAYS} days after the commit that raised the version.
+That rule starts at ${WORKSPACE_RULE_START}. Before it, each break of that rule is a warning.
 Old data before the start of its limit gives a warning, and the gate fails on it from that start.
 `;
 

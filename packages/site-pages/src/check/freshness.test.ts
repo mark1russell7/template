@@ -2,9 +2,10 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-import type { NpmVersionTime } from "../data/types.ts";
-import { checkFreshness, cronLines, DATA_STAMP_SCHEMA, failingCases, latestAt, minorsBehind, parseDataStamps, runFreshnessCli, scheduleGapDays, type DataLimit, type NoAgeLimit, type FreshnessCheck, type FreshnessOptions, type DataRun, type DataStamps, type PageStamp } from "./freshness.ts";
+import type { NpmVersionTime, WorkspaceVersion } from "../data/types.ts";
+import { checkFreshness, cronLines, DATA_STAMP_SCHEMA, failingCases, latestAt, minorsBehind, parseDataStamps, runFreshnessCli, scheduleGapDays, VERSION_GRACE_DAYS, WORKSPACE_RULE_START, type DataLimit, type NoAgeLimit, type FreshnessCheck, type FreshnessOptions, type DataRun, type DataStamps, type PageStamp } from "./freshness.ts";
 
 const ENGINE = "@scope/engine";
 const NOW = "2026-11-10T12:00:00Z";
@@ -18,6 +19,10 @@ const times: readonly NpmVersionTime[] = [
 const run = (over: Partial<DataRun> = {}): DataRun => ({ id: "7", url: "https://example.com/7", date: "2026-11-09T00:00:00Z", engines: { [ENGINE]: "0.9.0" }, ...over });
 const stamps = (runs: readonly DataRun[], inFlight?: DataRun): DataStamps => ({ schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", runs, ...(inFlight === undefined ? {} : { inFlight }) }] });
 const check = (s: DataStamps) => checkFreshness(s, { now: NOW, times });
+// A start of the version rule before NOW, so that a version break with no grace is a fault.
+const STARTED = "2026-11-01T00:00:00Z";
+const OWN_TEXT = "index.html: the run 7 used @scope/own 0.4.0, and the repository has 0.6.0 at the build commit. The limit is 1 minor version behind.";
+const ownRun = (): DataStamps => stamps([run({ engines: { [ENGINE]: "0.9.0", "@scope/own": "0.4.0" } })]);
 
 describe("parseDataStamps", () => {
   const faults = (raw: unknown): readonly string[] => {
@@ -137,17 +142,45 @@ describe("checkFreshness", () => {
 
   it("reads an engine of the same repository from the workspace at the build commit, not from npm", () => {
     const own = (used: string, version: string): FreshnessCheck =>
-      checkFreshness(stamps([run({ engines: { [ENGINE]: "0.9.0", "@scope/own": used } })]), { now: NOW, times, workspace: { "@scope/own": version } });
+      checkFreshness(stamps([run({ engines: { [ENGINE]: "0.9.0", "@scope/own": used } })]), { now: NOW, times, workspace: { "@scope/own": [{ version, since: "2026-10-01T00:00:00Z" }] }, workspaceStartsAt: STARTED });
     expect(own("0.4.0", "0.5.0")).toEqual({ faults: [], notRun: [], warnings: [] });
     expect(own("0.4.0", "0.6.0").faults).toEqual(["index.html: the run 7 used @scope/own 0.4.0, and the repository has 0.6.0 at the build commit. The limit is 1 minor version behind."]);
     // The workspace and not npm gives the version of an engine of the repository.
     const behindNpm = run({ date: "2026-11-09T12:00:00Z", engines: { [ENGINE]: "0.7.0" } });
-    expect(checkFreshness(stamps([behindNpm]), { now: NOW, times, workspace: { [ENGINE]: "0.7.1" } }).faults).toEqual([]);
-    expect(checkFreshness(stamps([run()]), { now: NOW, times, workspace: { [ENGINE]: "0.11.0" } }).faults[0]).toContain("the repository has 0.11.0 at the build commit");
+    expect(checkFreshness(stamps([behindNpm]), { now: NOW, times, workspace: { [ENGINE]: [{ version: "0.7.1" }] } }).faults).toEqual([]);
+    const ahead = { [ENGINE]: [{ version: "0.11.0", since: "2026-10-01T00:00:00Z" }] };
+    expect(checkFreshness(stamps([run()]), { now: NOW, times, workspace: ahead, workspaceStartsAt: STARTED }).faults[0]).toContain("the repository has 0.11.0 at the build commit");
+  });
+
+  it("warns on a version break until the grace after the commit that raised the version ends, and fails from then", () => {
+    const at = (now: string, history: readonly WorkspaceVersion[], more: Partial<FreshnessOptions> = {}): FreshnessCheck =>
+      checkFreshness(ownRun(), { now, times, workspace: { "@scope/own": history }, workspaceStartsAt: STARTED, ...more });
+    const raised: readonly WorkspaceVersion[] = [
+      { version: "0.6.0", since: "2026-11-09T00:00:00Z" },
+      { version: "0.5.0", since: "2026-10-01T00:00:00Z" },
+    ];
+    expect(VERSION_GRACE_DAYS).toBe(3);
+    expect(at(NOW, raised)).toEqual({ faults: [], notRun: [], warnings: [`${OWN_TEXT} The gate fails on it from 2026-11-12T00:00:00.000Z.`] });
+    expect(at("2026-11-12T00:00:00Z", raised)).toEqual({ faults: [OWN_TEXT], notRun: [], warnings: [] });
+    expect(at(NOW, raised, { versionGraceDays: 0 }).faults).toEqual([OWN_TEXT]);
+    // The grace counts from the first version past the limit, not from a later raise.
+    const twice: readonly WorkspaceVersion[] = [{ version: "0.7.0", since: "2026-11-10T00:00:00Z" }, ...raised];
+    expect(at(NOW, twice).warnings).toEqual([`${OWN_TEXT.replace("0.6.0", "0.7.0")} The gate fails on it from 2026-11-12T00:00:00.000Z.`]);
+  });
+
+  it("gives no grace when the clone does not have the commit that raised the version", () => {
+    const result = checkFreshness(ownRun(), { now: NOW, times, workspace: { "@scope/own": [{ version: "0.6.0" }] }, workspaceStartsAt: STARTED });
+    expect(result.faults).toEqual([`${OWN_TEXT} The clone has no commit that tells when the version passed the limit, so the page has no grace.`]);
+  });
+
+  it("warns on each version break before the start of the rule", () => {
+    expect(WORKSPACE_RULE_START).toBe("2026-11-30T00:00:00Z");
+    const result = checkFreshness(ownRun(), { now: NOW, times, workspace: { "@scope/own": [{ version: "0.6.0" }] } });
+    expect(result).toEqual({ faults: [], notRun: [], warnings: [`${OWN_TEXT} The gate fails on it from 2026-11-30T00:00:00.000Z.`] });
   });
 
   it("says that a rule did not run only for an engine that neither npm nor the workspace has", () => {
-    const result = checkFreshness(stamps([run({ engines: { constructor: "1.0.0" } })]), { now: NOW, times: [], workspace: { "@scope/other": "1.0.0" } });
+    const result = checkFreshness(stamps([run({ engines: { constructor: "1.0.0" } })]), { now: NOW, times: [], workspace: { "@scope/other": [{ version: "1.0.0" }] } });
     expect(result.faults).toEqual([]);
     expect(result.notRun).toEqual(["index.html: npm gives no version of constructor at the start of the run 7, and no package of the repository has that name."]);
   });
@@ -411,6 +444,15 @@ describe("failingCases", () => {
     expect(one?.fault).toContain("has a date after the check");
   });
 
+  it("fails a version break at the end of its grace, and not before the start of the rule", () => {
+    const workspace = { "@scope/own": [{ version: "0.6.0", since: "2026-11-09T00:00:00Z" }] };
+    const [one] = cases(ownRun(), { workspace, workspaceStartsAt: STARTED });
+    expect(one).toEqual({ page: "index.html", at: "2026-11-12T00:00:00.000Z", fault: OWN_TEXT });
+    // With a long age limit, the start of the rule is the first fault.
+    const [late] = cases(ownRun(), { workspace, maxAgeDays: 60 });
+    expect(late).toEqual({ page: "index.html", at: "2026-11-30T00:00:00.000Z", fault: OWN_TEXT });
+  });
+
   it("gives one case for each page", () => {
     const pages = [{ page: "a.html", runs: [run()] }, { page: "b.html", runs: [run()] }];
     expect(cases({ schema: DATA_STAMP_SCHEMA, pages }).map((one) => one.page)).toEqual(["a.html", "b.html"]);
@@ -521,28 +563,47 @@ describe("runFreshnessCli", () => {
   it("reads an engine of the same repository from its package.json in git, and does not ask npm for it", async () => {
     const repo = mkdtempSync(join(tmpdir(), "stamps-repo-"));
     writeFileSync(join(repo, ".gitconfig-empty"), "");
-    const git = (...args: string[]): void => {
-      execFileSync("git", args, { cwd: repo, stdio: "ignore", env: { ...process.env, GIT_CONFIG_GLOBAL: join(repo, ".gitconfig-empty"), GIT_CONFIG_NOSYSTEM: "1" } });
+    const git = (date: string, ...args: string[]): void => {
+      const who = { GIT_AUTHOR_NAME: "Test", GIT_AUTHOR_EMAIL: "test@example.com", GIT_COMMITTER_NAME: "Test", GIT_COMMITTER_EMAIL: "test@example.com" };
+      const env = { ...process.env, ...who, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date, GIT_CONFIG_GLOBAL: join(repo, ".gitconfig-empty"), GIT_CONFIG_NOSYSTEM: "1" };
+      execFileSync("git", args, { cwd: repo, stdio: "ignore", env });
     };
     mkdirSync(join(repo, "packages", "own"), { recursive: true });
     mkdirSync(join(repo, "packages", "loose"), { recursive: true });
     writeFileSync(join(repo, "package.json"), JSON.stringify({ name: "root", private: true }));
     writeFileSync(join(repo, "packages", "own", "package.json"), JSON.stringify({ name: "@scope/own", version: "0.4.1" }));
-    git("init", "-q");
-    git("add", "package.json", "packages/own/package.json");
+    git(STARTED, "init", "-q");
+    git(STARTED, "add", "package.json", "packages/own/package.json");
+    git(STARTED, "commit", "-q", "-m", "one");
     // A file that git does not track is not a file of the build commit, so its higher version does not count.
     writeFileSync(join(repo, "packages", "loose", "package.json"), JSON.stringify({ name: "@scope/own", version: "0.9.0" }));
-    const page = (used: string) => ({ schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", runs: [run({ engines: { [ENGINE]: "0.9.0", "@scope/own": used } })] }] });
+    // The check is after the start of the version rule, and the data is one day old.
+    const now = "2026-12-01T00:00:00Z";
+    const page = (used: string) => ({ schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", runs: [run({ date: "2026-11-30T00:00:00Z", engines: { [ENGINE]: "0.9.0", "@scope/own": used } })] }] });
     writeFileSync(join(repo, "same.json"), JSON.stringify(page("0.4.0")));
     writeFileSync(join(repo, "behind.json"), JSON.stringify(page("0.2.0")));
-    const same = await start(["--stamps", "same.json", "--now", NOW], {}, repo);
+    const same = await start(["--stamps", "same.json", "--now", now], {}, repo);
     expect(same.code).toBe(0);
     expect(same.out).not.toContain("Not run");
     expect(same.asked.some((url) => url.includes("@scope/own"))).toBe(false);
     expect(same.asked.some((url) => url.includes(ENGINE))).toBe(true);
-    const behind = await start(["--stamps", "behind.json", "--now", NOW], {}, repo);
+    const behind = await start(["--stamps", "behind.json", "--now", now], {}, repo);
     expect(behind.code).toBe(1);
-    expect(behind.err).toContain("index.html: the run 7 used @scope/own 0.2.0, and the repository has 0.4.1 at the build commit.");
+    expect(behind.err).toContain("index.html: the run 7 used @scope/own 0.2.0, and the repository has 0.4.1 at the build commit. The limit is 1 minor version behind.\n");
+    // A commit of 2026-11-29 raises the version past the limit, so the grace ends on 2026-12-02.
+    writeFileSync(join(repo, "packages", "own", "package.json"), JSON.stringify({ name: "@scope/own", version: "0.6.0" }));
+    git("2026-11-29T00:00:00Z", "commit", "-q", "-a", "-m", "two");
+    const raised = await start(["--stamps", "same.json", "--now", now], {}, repo);
+    expect(raised.code).toBe(0);
+    expect(raised.out).toContain(`Warning: ${OWN_TEXT} The gate fails on it from 2026-12-02T00:00:00.000Z.\n`);
+    expect(raised.out).toContain(`Failing case at 2026-12-02T00:00:00.000Z: ${OWN_TEXT}\n`);
+    // A shallow clone does not have the commit that raised the version, so the page has no grace.
+    const shallow = mkdtempSync(join(tmpdir(), "stamps-shallow-"));
+    git(now, "clone", "-q", "--depth", "1", pathToFileURL(repo).href, shallow);
+    writeFileSync(join(shallow, "same.json"), JSON.stringify(page("0.4.0")));
+    const clone = await start(["--stamps", "same.json", "--now", now], {}, shallow);
+    expect(clone.code).toBe(1);
+    expect(clone.err).toContain(`${OWN_TEXT} The clone has no commit that tells when the version passed the limit, so the page has no grace.\n`);
   });
 
   it("exits with 2 on an incorrect command line, and gives the help", async () => {

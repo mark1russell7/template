@@ -90,6 +90,8 @@ export {
   MAX_STUDY_LIMIT_DAYS,
   minorsBehind,
   parseDataStamps,
+  VERSION_GRACE_DAYS,
+  WORKSPACE_RULE_START,
   type CronLine,
   type DataLimit,
   type DataRun,
