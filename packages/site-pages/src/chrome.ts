@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 /**
- * The small helpers of a page in the browser: the element helper, the element lookup, the theme
+ * The small helpers of a page in the browser: the element helpers, the element lookup, the theme
  * button, the copy button and the build stamp. It also has a radio group with one focus stop.
  * This module imports no Node.js module, so a site can bundle it. Import it from
  * `@mark1russell7/site-pages/chrome`, because the package root also has Node.js code.
@@ -22,9 +22,40 @@ export function h<K extends keyof HTMLElementTagNameMap>(
   ...children: readonly (Child | readonly Child[])[]
 ): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag);
+  return fill(el, attrs, children, (value) => {
+    el.className = value;
+  });
+}
+
+/** The namespace of the SVG elements. */
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/**
+ * This function makes an SVG element with attributes and children, with the rules of `h`. The
+ * attribute `class` sets the attribute `class`, because the class name of an SVG element is
+ * read-only.
+ */
+export function svg<K extends keyof SVGElementTagNameMap>(
+  tag: K,
+  attrs: Readonly<Record<string, AttributeValue>> = {},
+  ...children: readonly (Child | readonly Child[])[]
+): SVGElementTagNameMap[K] {
+  const el = document.createElementNS(SVG_NS, tag);
+  return fill(el, attrs, children, (value) => {
+    el.setAttribute("class", value);
+  });
+}
+
+/** This function sets the attributes and adds the children of an element of `h` or `svg`. */
+function fill<E extends Element>(
+  el: E,
+  attrs: Readonly<Record<string, AttributeValue>>,
+  children: readonly (Child | readonly Child[])[],
+  setClass: (value: string) => void,
+): E {
   for (const [name, value] of Object.entries(attrs)) {
     if (value === false || value === null || value === undefined) continue;
-    if (name === "class") el.className = String(value);
+    if (name === "class") setClass(String(value));
     else el.setAttribute(name, value === true ? "" : String(value));
   }
   for (const child of children.flat()) {

@@ -1,11 +1,12 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyTheme, byId, copyText, copyToClipboard, currentTheme, h, nextTheme, setupTheme, showBuild, THEMES } from "./chrome.ts";
+import { applyTheme, byId, copyText, copyToClipboard, currentTheme, h, nextTheme, setupTheme, showBuild, svg, THEMES } from "./chrome.ts";
 
 // The package has no DOM for its tests. These fakes have only the members that the helpers use.
 
 class FakeElement {
   readonly tagName: string;
+  namespace: string | null = null;
   className = "";
   textContent: string | null = "";
   value = "";
@@ -78,6 +79,12 @@ beforeEach(() => {
       created.push(el);
       return el;
     },
+    createElementNS: (namespace: string, tag: string) => {
+      const el = new FakeElement(tag);
+      el.namespace = namespace;
+      created.push(el);
+      return el;
+    },
     getElementById: (id: string) => ids.get(id) ?? null,
     execCommand: () => {
       if (execResult === "throw") throw new Error("The command is not available.");
@@ -115,6 +122,27 @@ describe("h", () => {
 
   it("skips false, null and undefined attributes and children, and flattens arrays of children", () => {
     const el = fake(h("ul", { open: false, title: null, lang: undefined }, ["a", null, "b"], false, undefined, "c"));
+    expect(el.attributes.size).toBe(0);
+    expect(el.children).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("svg", () => {
+  it("makes an element in the SVG namespace, and sets the class as an attribute", () => {
+    const title = svg("title", {}, "A zone");
+    const el = fake(svg("path", { class: "area", d: "M0,0L10,0Z", "stroke-width": 2, hidden: true }, title, "text"));
+    expect(el.namespace).toBe("http://www.w3.org/2000/svg");
+    expect(el.tagName).toBe("path");
+    expect(el.getAttribute("class")).toBe("area");
+    expect(el.className).toBe("");
+    expect(el.getAttribute("d")).toBe("M0,0L10,0Z");
+    expect(el.getAttribute("stroke-width")).toBe("2");
+    expect(el.getAttribute("hidden")).toBe("");
+    expect(el.children).toEqual([title, "text"]);
+  });
+
+  it("skips false, null and undefined attributes and children, and flattens arrays of children", () => {
+    const el = fake(svg("g", { opacity: false, fill: null, stroke: undefined }, ["a", null, "b"], false, undefined, "c"));
     expect(el.attributes.size).toBe(0);
     expect(el.children).toEqual(["a", "b", "c"]);
   });
