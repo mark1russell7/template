@@ -40,6 +40,7 @@ pnpm package add site --preset=site --description="One line about the project." 
 
 - Without `--npm`, the page gives `git clone`, because a command on the page must work today.
 - The CLI also writes `.github/workflows/pages.yml`, with the template commit that the other workflows pin. It keeps a file that exists.
+- The CLI also writes `.github/site.json`, the site config. `pages.yml` and the job `site` of `ci.yml` read it, so a pull request checks the site that `main` deploys.
 
 The preset `service` makes an HTTP server on the one service runner, [`@mark1russell7/service`](https://www.npmjs.com/package/@mark1russell7/service). The server does not start with a bare `listen()`.
 
