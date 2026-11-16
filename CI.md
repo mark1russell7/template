@@ -233,7 +233,7 @@ Then the run examines that change, as a `pull_request` run does:
 - The job `release-check` starts the release build on the commit of the run.
 - The job `checks` deepens the checkout to the merge base. It gives the tip of the base branch to `check:conventions` in the variable `CONVENTIONS_BASE`.
 - The job `pull` saves the pull request as the artifact `pull-request-of-run`: its title, its body and its number of commits, in a JSON file. The job `checks` downloads it, and the variable `CONVENTIONS_PULL_REQUEST` gives its path. The job uses a file, not an output: a step gets an output of a job through an environment variable. On Windows, an environment variable takes at most 32,767 characters, and a body can be longer.
-- Thus the rules `release-files`, `unreleased-change`, `home-package`, `version-title` and `no-local-paths` examine the change. The README of `@mark1russell7/conventions` tells how.
+- Thus the rules `release-files`, `unreleased-change`, `home-package`, `home-module`, `version-title` and `no-local-paths` examine the change. The README of `@mark1russell7/conventions` tells how.
 - A gate with paths finds the pull request with the same action. It skips its jobs when no file of the gate changes (refer to "A dispatched run of a gate").
 
 The job `pull` fails when it cannot tell the change, and a failure of the job `pull` fails `CI OK`:
