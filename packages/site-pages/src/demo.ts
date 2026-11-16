@@ -48,50 +48,13 @@ export function setField(field: HTMLInputElement | HTMLTextAreaElement, value: s
   field.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-/** A part of a text. `markedText` puts a `mark` element on a part with `hit`. */
+/**
+ * A part of a text. `markedText` puts a `mark` element on a part with `hit`. The functions `partsAt` and `partsOf` of
+ * `@mark1russell7/text/parts` give the parts of a text.
+ */
 export interface TextPart {
   readonly text: string;
   readonly hit: boolean;
-}
-
-/**
- * This function divides a text into parts at ranges of code units, `[start, end)`. Each range gives a
- * part with `hit`, and the text between the ranges gives parts with no `hit`. The function sorts the
- * ranges, joins the ranges that overlap, and clamps each range to the text. Two ranges that touch stay
- * two parts. An empty range gives no part.
- */
-export function partsAt(text: string, ranges: readonly (readonly [start: number, end: number])[]): TextPart[] {
-  const clamp = (n: number): number => Math.min(Math.max(Math.trunc(n), 0), text.length);
-  const sorted = ranges
-    .map(([start, end]) => [clamp(start), clamp(end)] as const)
-    .filter(([start, end]) => end > start)
-    .sort((a, b) => a[0] - b[0]);
-  const parts: TextPart[] = [];
-  let at = 0;
-  for (const [start, end] of sorted) {
-    if (end <= at) continue;
-    if (start < at) {
-      const last = parts[parts.length - 1]!;
-      parts[parts.length - 1] = { text: last.text + text.slice(at, end), hit: true };
-    } else {
-      if (start > at) parts.push({ text: text.slice(at, start), hit: false });
-      parts.push({ text: text.slice(start, end), hit: true });
-    }
-    at = end;
-  }
-  if (at < text.length) parts.push({ text: text.slice(at), hit: false });
-  return parts;
-}
-
-/**
- * This function divides a text into parts at each copy of `find`, from the start, with no overlap.
- * Each copy gives a part with `hit`. An empty `find` gives one part with no `hit`.
- */
-export function partsOf(text: string, find: string): TextPart[] {
-  if (find === "") return partsAt(text, []);
-  const ranges: (readonly [number, number])[] = [];
-  for (let at = text.indexOf(find); at >= 0; at = text.indexOf(find, at + find.length)) ranges.push([at, at + find.length]);
-  return partsAt(text, ranges);
 }
 
 /**
