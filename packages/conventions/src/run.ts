@@ -324,11 +324,15 @@ export const USAGE: string = `Usage: conventions check [options]
 
   --root <folder>       The root of the repository. The default is the current folder.
   --rule <id>           Only this rule. Use it again for more rules.
-  --base <ref>          The base commit of the change, for the rules that examine a change. On a pull request, the
-                        rules find it. Outside CI, the default is the default branch of origin.
-  --no-base             Do not use the default base.
+  --base <ref>          The base commit of the change, for the rules that examine a change. The first default is the
+                        variable CONVENTIONS_BASE, when it is not empty. Outside CI, the next default is the default
+                        branch of origin. With no base, the rules find the base in the merge commit of a pull request.
+  --no-base             Do not use a default base.
   --json                Write the result as JSON.
   -h, --help            Show this text.
+
+The variable CONVENTIONS_PULL_REQUEST names a JSON file with the pull request of the run (title, body,
+commits). The rules then read that file, not the event file. The shared CI writes it on a dispatched run.
 
 The field "conventions" of the root package.json turns a rule off with a reason, keeps an exception
 with a reason, and sets the options of a rule with a reason:
@@ -350,6 +354,16 @@ export function localBase(root: string, env: Readonly<Record<string, string | un
     if (ref !== undefined && ref !== "" && runGit(root, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]) !== undefined) return ref;
   }
   return undefined;
+}
+
+/**
+ * This function gives the base of the variable CONVENTIONS_BASE, or undefined when it is empty or not set. The event of a
+ * run that `workflow_dispatch` starts gives no base. For such a run of a pull request, the shared CI sets the variable to
+ * the tip of the base branch.
+ */
+function environmentBase(env: Readonly<Record<string, string | undefined>>): string | undefined {
+  const base = env["CONVENTIONS_BASE"]?.trim();
+  return base === undefined || base === "" ? undefined : base;
 }
 
 /** An error of the arguments: exit code 2 and the help text. */
@@ -409,7 +423,7 @@ export function runCli(args: readonly string[], io: CliIo): number {
   let result: CheckResult;
   let fixed: FixResult | undefined;
   try {
-    const change = noBase ? undefined : (base ?? localBase(root, io.env));
+    const change = noBase ? undefined : (base ?? environmentBase(io.env) ?? localBase(root, io.env));
     const options = { root, only, env: io.env, ...(change === undefined ? {} : { base: change }) };
     if (fix) {
       fixed = runFix(options);

@@ -12,7 +12,7 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { findBrowser, launch, type Browser, type Page } from "./browser.ts";
+import { findBrowser, launch, NoReplyError, type Browser, type Page } from "./browser.ts";
 import { MEASURE, probeExpression, type Cut, type Measure, type ProbeCheck } from "./measure.ts";
 import { probeScript, TYPESCRIPT_PROBE } from "./probe.ts";
 import { serve } from "./serve.ts";
@@ -49,6 +49,11 @@ export interface CheckOptions {
   settleMs: number;
   /** The time limit of a page load. */
   timeoutMs: number;
+  /**
+   * The time limit of one call of the browser. The default is `CALL_LIMIT_MS`. After a call with no reply, the check tries the view
+   * again in a new browser. When the second try also gets no reply, the view fails, and the next view gets a new browser.
+   */
+  callMs?: number | undefined;
   /** The time limit of the scroll and of the islands of a view, for `revealExpression`. The default is `ISLAND_LIMIT_MS`. */
   islandMs?: number | undefined;
   log?: ((line: string) => void) | undefined;
@@ -108,6 +113,8 @@ export interface ViewResult {
   probe?: ProbeCheck[] | undefined;
   /** The file of the screenshot. */
   shot?: string | undefined;
+  /** The problems of the first try, when the browser did not answer and the check tried the view again in a new browser. */
+  retried?: string[] | undefined;
 }
 
 /** The result of `checkSite`. */
@@ -132,6 +139,38 @@ export function cutProblems(cuts: readonly Cut[], width: number): string[] {
     if (width < PHONE_WIDTH) return [`${what} goes out of view at ${width} px: ${widths(cut)}. Make ${cut.kind === "code" ? "the lines" : "the table"} fit, give the box the class scroll-cue, or add data-overflow-ok to the box.`];
     return [];
   });
+}
+
+/** A code block or a table that goes out of view on a phone with no scroll cue that shows. */
+export interface ScrollGap {
+  page: string;
+  /** The box that scrolls. */
+  box: string;
+  /** The code block or the table. */
+  element: string;
+  /** The smallest width of a view with the gap, in CSS pixels. */
+  width: number;
+  /** True when the box has the class `scroll-cue`, but the served CSS gives it no animation and no shade. */
+  deadCue: boolean;
+}
+
+/**
+ * This function gives each code block and each table of a check that goes out of view on a phone with no cue that shows.
+ * It gives each block one time, also when more views (widths and schemes) find it. The site audit fails on a gap.
+ */
+export function scrollGaps(result: Pick<CheckResult, "views">): ScrollGap[] {
+  const gaps = new Map<string, ScrollGap>();
+  for (const view of result.views) {
+    if (view.width >= PHONE_WIDTH) continue;
+    for (const cut of view.measure?.cut ?? []) {
+      if (cut.kind === "clip") continue;
+      const key = JSON.stringify([view.page, cut.box, cut.element]);
+      const seen = gaps.get(key);
+      if (seen === undefined) gaps.set(key, { page: view.page, box: cut.box, element: cut.element, width: view.width, deadCue: cut.deadCue === true });
+      else if (view.width < seen.width) seen.width = view.width;
+    }
+  }
+  return [...gaps.values()];
 }
 
 /** This function gives the file name part of a page: `/` is `home`, `/releases/` is `releases`. */
@@ -176,20 +215,45 @@ export async function checkSite(options: CheckOptions): Promise<CheckResult> {
   try {
     const home = server?.url ?? options.url ?? "";
     homeUrl = new URL(home.endsWith("/") ? home : `${home}/`);
-    browser = await launch(executable, options.timeoutMs);
-    const { page } = browser;
-    const events = watch(page, homeUrl.origin);
-    await Promise.all([page.send("Page.enable"), page.send("Runtime.enable"), page.send("Network.enable")]);
-    await page.send("Page.addScriptToEvaluateOnNewDocument", { source: LOAD_WATCH });
+    const origin = homeUrl.origin;
+    const start = async (): Promise<{ page: Page; events: Events }> => {
+      browser = await launch(executable, options.timeoutMs, options.callMs);
+      const { page } = browser;
+      const events = watch(page, origin);
+      await Promise.all([page.send("Page.enable"), page.send("Runtime.enable"), page.send("Network.enable")]);
+      await page.send("Page.addScriptToEvaluateOnNewDocument", { source: LOAD_WATCH });
+      return { page, events };
+    };
+    let { page, events } = await start();
+    const restart = async (): Promise<{ page: Page; events: Events }> => {
+      await browser?.close();
+      browser = undefined;
+      return start();
+    };
     if (options.shots) mkdirSync(options.shots, { recursive: true });
     for (const [index, path] of options.pages.entries()) {
       const target = new URL(path.replace(/^\/+/, ""), homeUrl).href;
       for (const width of options.widths) {
         for (const scheme of options.schemes) {
           const probe = scheme === options.schemes[0] ? probes[index] : undefined;
-          const view = await checkView(page, events, { target, path, width, scheme, probe, options });
+          const input: ViewInput = { target, path, width, scheme, probe, options };
+          let { view, hung } = await checkView(page, events, input);
+          // A page that does not answer can hold the browser. The check tries the view again in a new browser.
+          // Then one hang of the browser does not fail a deploy, and a page that hangs each time fails.
+          if (hung) {
+            log(`the browser did not answer at ${path} ${width} ${scheme}: the check starts a new browser and tries the view again`);
+            ({ page, events } = await restart());
+            const first = view.problems;
+            ({ view, hung } = await checkView(page, events, input));
+            view.retried = first;
+            // The next view gets a new browser, so a page that hangs each time fails alone.
+            if (hung) {
+              log(`the browser did not answer again at ${path} ${width} ${scheme}: the check starts a new browser`);
+              ({ page, events } = await restart());
+            }
+          }
           views.push(view);
-          log(`${view.ok ? "PASS" : "FAIL"} ${path} ${width} ${scheme}${view.measure ? ` scrollWidth=${view.measure.scrollWidth} innerWidth=${view.measure.innerWidth}` : ""}${view.probe ? ` probe ${view.probe.filter((c) => c.ok).length}/${view.probe.length}` : ""}${view.problems.length > 0 ? `\n  - ${view.problems.join("\n  - ")}` : ""}`);
+          log(`${view.ok ? "PASS" : "FAIL"}${view.retried ? " (retried)" : ""} ${path} ${width} ${scheme}${view.measure ? ` scrollWidth=${view.measure.scrollWidth} innerWidth=${view.measure.innerWidth}` : ""}${view.probe ? ` probe ${view.probe.filter((c) => c.ok).length}/${view.probe.length}` : ""}${view.problems.length > 0 ? `\n  - ${view.problems.join("\n  - ")}` : ""}`);
         }
       }
     }
@@ -282,10 +346,11 @@ interface ViewInput {
   options: CheckOptions;
 }
 
-async function checkView(page: Page, events: Events, input: ViewInput): Promise<ViewResult> {
+async function checkView(page: Page, events: Events, input: ViewInput): Promise<{ view: ViewResult; hung: boolean }> {
   const { target, path, width, scheme, probe, options } = input;
   const view: ViewResult = { page: path, width, scheme, ok: false, problems: [] };
   let other: RegExp | undefined;
+  let hung = false;
   try {
     await page.send("Emulation.setDeviceMetricsOverride", { width, height: 900, deviceScaleFactor: 1, mobile: width < PHONE_WIDTH });
     await page.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: scheme }] });
@@ -326,11 +391,12 @@ async function checkView(page: Page, events: Events, input: ViewInput): Promise<
       for (const check of checks.filter((entry) => !entry.ok)) view.problems.push(`probe: ${check.name}${check.detail ? ` (${check.detail})` : ""}`);
     }
   } catch (error) {
+    hung = error instanceof NoReplyError;
     view.problems.push(error instanceof Error ? error.message : String(error));
   }
   view.problems.push(...events.problems(other));
   view.ok = view.problems.length === 0;
-  return view;
+  return { view, hung };
 }
 
 /** This function makes a text safe for a cell of a Markdown table. It escapes `\`, `|`, `<` and `>`. It changes each new line to a space. */
@@ -341,16 +407,18 @@ export function cell(text: string): string {
 /** This function gives the Markdown summary of a result, for the job summary of a workflow. */
 export function summary(result: CheckResult): string {
   const failed = result.views.filter((view) => !view.ok);
+  const retried = result.views.filter((view) => view.ok && view.retried !== undefined);
   const lines = [
     `### Site check: ${result.ok ? "passed" : "failed"}`,
     "",
-    `${result.views.length - failed.length} of ${result.views.length} views passed, at ${result.url}.`,
+    `${result.views.length - failed.length} of ${result.views.length} views passed, at ${result.url}.` +
+      (retried.length > 0 ? ` ${retried.length} of them passed only on a second try, after the browser did not answer.` : ""),
     "",
     "| Page | Width | Scheme | Result | Problems |",
     "| --- | ---: | --- | --- | --- |",
     ...result.views.map(
       (view) =>
-        `| \`${view.page}\` | ${view.width} | ${view.scheme} | ${view.ok ? "pass" : "**fail**"}${view.probe ? ` (probe ${view.probe.filter((c) => c.ok).length}/${view.probe.length})` : ""} | ${view.problems.map(cell).join("<br>")} |`,
+        `| \`${view.page}\` | ${view.width} | ${view.scheme} | ${view.ok ? "pass" : "**fail**"}${view.retried ? " (retried)" : ""}${view.probe ? ` (probe ${view.probe.filter((c) => c.ok).length}/${view.probe.length})` : ""} | ${view.problems.map(cell).join("<br>")} |`,
     ),
     "",
   ];

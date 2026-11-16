@@ -8,7 +8,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { blockHash, sharedDocsRule, type HomeFetch } from "./rules/shared-docs.ts";
 import { lockedVersions, minorOf, publishedMinorRule, reachOf } from "./rules/published-minor.ts";
 import type { RegistryLookup } from "./rules/unreleased-change.ts";
-import { authorOf, convertGate, declaredName, hasTests, HOMES, mitText, pagesCalls, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, unreleasedChangeRule, type CheckOptions, type RegistryAnswer, type RuleResult } from "./index.ts";
+import { authorOf, convertGate, declaredName, hasTests, HOMES, mitText, modulesOf, moduleUses, pagesCalls, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, unreleasedChangeRule, type CheckOptions, type RegistryAnswer, type RuleResult } from "./index.ts";
 import { API_REPORT_RANGE } from "./rules/api-report-script.ts";
 import { minuteField } from "./rules/runner-budget.ts";
 import { runsOnMain, startsOnPush } from "./rules/main-runs-finish.ts";
@@ -377,6 +377,21 @@ describe("no-local-paths", () => {
     // With no base and no pull request, the rule reads only the files: the first commit message is not a break
     expect(rule(root, "no-local-paths", { env: { CONVENTIONS_PRIVATE_PATTERNS: "hidden-name" } }).breaks).toEqual([]);
   });
+
+  it("reads the pull request of a dispatched run from the file of CONVENTIONS_PULL_REQUEST, not from the event file", () => {
+    const root = fixture({ "package.json": { name: "one" }, "notes.md": "1\n" });
+    commitAll(root);
+    git(root, "tag", "base");
+    const event = join(root, "..", `event-${String(fixtures++)}.json`);
+    writeFileSync(event, JSON.stringify({ ref: "refs/heads/topic", pull_request: { title: "a hidden-name title in the event file" } }));
+    const file = join(root, "..", `pull-request-${String(fixtures++)}.json`);
+    writeFileSync(file, JSON.stringify({ number: 7, title: "a plain title", body: `line one\nthe hidden-name\n`, commits: 1 }));
+    const env = { CONVENTIONS_PRIVATE_PATTERNS: "hidden-name", GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_EVENT_PATH: event, CONVENTIONS_PULL_REQUEST: file };
+    expect(rule(root, "no-local-paths", { env, base: "base" }).breaks.map((item) => `${item.file}:${String(item.line)}`)).toEqual(["pull request body:2"]);
+    // A file that does not parse has no pull request, and the rule does not read the event file then
+    writeFileSync(file, "{ not json");
+    expect(rule(root, "no-local-paths", { env, base: "base" }).breaks).toEqual([]);
+  });
 });
 
 describe("release-files", () => {
@@ -407,6 +422,15 @@ describe("release-files", () => {
     const event = join(root, "..", `event-${fixtures++}.json`);
     writeFileSync(event, JSON.stringify({ pull_request: { body: "Text\n\nRelease-Edit: the release session asked for it\n" } }));
     expect(rule(root, "release-files", { base: "base", env: { GITHUB_EVENT_PATH: event } }).status).toBe("pass");
+  });
+
+  it("reads the body of the pull request of a dispatched run from the file of CONVENTIONS_PULL_REQUEST", () => {
+    const root = changed("scripts/release/x.mjs", "change");
+    const file = join(root, "..", `pull-request-${fixtures++}.json`);
+    writeFileSync(file, JSON.stringify({ number: 3, title: "a change", body: "Text\n\nRelease-Edit: the owner asked for it\n", commits: 1 }));
+    expect(rule(root, "release-files", { base: "base", env: { GITHUB_EVENT_NAME: "workflow_dispatch", CONVENTIONS_PULL_REQUEST: file } }).status).toBe("pass");
+    writeFileSync(file, JSON.stringify({ number: 3, title: "a change", body: null, commits: 1 }));
+    expect(rule(root, "release-files", { base: "base", env: { GITHUB_EVENT_NAME: "workflow_dispatch", CONVENTIONS_PULL_REQUEST: file } }).breaks.map((item) => item.file)).toEqual(["scripts/release/x.mjs"]);
   });
 
   it("finds the base in the merge commit of a pull request", () => {
@@ -930,6 +954,18 @@ describe("home-package", () => {
     expect(localBase(fixture({ "package.json": { name: "two" } }), {})).toBeUndefined();
   });
 
+  it("takes the base of CONVENTIONS_BASE in CI, and --base and --no-base have priority", () => {
+    const root = changed("function medianOf(xs: number[]): number {\n  return xs[0] ?? 0;\n}\n");
+    const base = git(root, "rev-parse", "base").trim();
+    const code = (args: string[], env: Record<string, string>): number =>
+      runCli(["check", "--rule", "home-package", ...args], { cwd: root, env: { CI: "true", ...env }, stdout: () => undefined, stderr: () => undefined });
+    expect(code([], { CONVENTIONS_BASE: base })).toBe(1);
+    expect(code([], { CONVENTIONS_BASE: ` ${base}\n` })).toBe(1);
+    expect(code([], { CONVENTIONS_BASE: "" })).toBe(0);
+    expect(code(["--no-base"], { CONVENTIONS_BASE: base })).toBe(0);
+    expect(code(["--base", "HEAD"], { CONVENTIONS_BASE: base })).toBe(0);
+  });
+
   it("knows the forms of a declaration", () => {
     expect(declaredName("export async function quantile(xs: number[], q: number) {")).toBe("quantile");
     expect(declaredName("function* draws(seed: number) {")).toBe("draws");
@@ -981,7 +1017,85 @@ describe("home-package", () => {
     // A word of another area after a statistics prefix: bootstrapRepo is the npm bootstrap of the release scripts (codeatlas, 2026-11-02)
     for (const name of ["bootstrapRepo", "bootstrapApp", "wilsonInterval", "bootstrapMedian", "bootstrap"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(!name.endsWith("Repo") && !name.endsWith("App"));
     // A planned home has no package to import yet, so its signatures do not break
-    for (const name of ["greatCircleKm", "parseArgs"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(false);
+    expect(signatures.some((item) => item.pattern.test("parseArgs")), "parseArgs").toBe(false);
+    // geography is on npm since @mark1russell7/geo 0.1.0, so its signatures break, in one home only
+    expect(signatures.filter((item) => item.pattern.test("greatCircleKm")).map((item) => item.home.area)).toEqual(["geography"]);
+  });
+});
+
+describe("home-module", () => {
+  // The module comes from a variable, so the lines of this file are not imports of it
+  const M = ["node", "sqlite"].join(":");
+  const TODAY = "2026-12-01";
+
+  /** A repository of `repo` with a first commit, and a second commit that adds `added` to src/a.ts. */
+  function changed(added: string, repo = "mark1russell7/other", manifest: Record<string, unknown> = { name: "one" }): string {
+    const root = fixture({ "package.json": manifest, "src/a.ts": `import { DatabaseSync } from "${M}";\n` });
+    commitAll(root);
+    git(root, "remote", "add", "origin", `https://github.com/${repo}.git`);
+    git(root, "tag", "base");
+    writeFileSync(join(root, "src/a.ts"), `import { DatabaseSync } from "${M}";\n${added}`);
+    git(root, "commit", "-q", "-am", "change");
+    return root;
+  }
+
+  it("finds each form of a use at run time, and not a type", () => {
+    const text = [
+      `import { DatabaseSync } from "${M}";`,
+      `import type { StatementSync } from "${M}";`,
+      "import {",
+      "  type SQLInputValue,",
+      `} from '${M}';`,
+      `export type { DatabaseSync as Db } from "${M}";`,
+      `export * from "${M}";`,
+      `import "${M}";`,
+      `const lazy = await import("${M}");`,
+      `const required = require("${M}");`,
+      `const builtin = process.getBuiltinModule("${M}");`,
+      `type Module = typeof import("${M}");`,
+      `let db: import("${M}").DatabaseSync;`,
+      `void import("${M}").then((module) => module);`,
+      `// const old = require("${M}");`,
+      ` * const doc = require("${M}");`,
+      `export const name = "${M}";`,
+      "export enum Mode {",
+      "  A,",
+      "}",
+      `import type { DatabaseSync as Other } from "${M}";`,
+      `import type Sqlite = require("${M}");`,
+      `import Lib = require("${M}");`,
+    ].join("\n");
+    expect(moduleUses(text)).toEqual([1, 5, 7, 8, 9, 10, 11, 14, 23].map((line) => ({ specifier: M, line })));
+  });
+
+  it("breaks on an added value import out of the home, and not on the import that exists or on import type", () => {
+    const result = rule(changed(`import type { StatementSync } from "${M}";\nconst lazy = await import("${M}");\n`), "home-module", { base: "base", env: {}, today: TODAY });
+    expect(result.status).toBe("break");
+    expect(result.breaks).toHaveLength(1);
+    expect(result.breaks[0]).toMatchObject({ file: "src/a.ts", line: 3 });
+    expect(result.breaks[0]?.message).toContain("Use `@mark1russell7/sqlite` in place of the module");
+  });
+
+  it("warns before its day, and passes in the home", () => {
+    const code = `const required = require("${M}");\n`;
+    expect(rule(changed(code), "home-module", { base: "base", env: {}, today: "2026-11-16" }).status).toBe("warn");
+    expect(rule(changed(code, "mark1russell7/sqlite"), "home-module", { base: "base", env: {}, today: TODAY }).status).toBe("pass");
+  });
+
+  it("passes a file of ignore with a reason, and examines each line with the option scope all", () => {
+    const code = `const required = require("${M}");\n`;
+    const ignored = { name: "one", conventions: { rules: { "home-module": { ignore: ["src/a.ts"], reason: "the backup reads a file of a phone" } } } };
+    expect(rule(changed(code, "mark1russell7/other", ignored), "home-module", { base: "base", env: {}, today: TODAY }).status).toBe("pass");
+    const root = changed("// the end\n");
+    expect(rule(root, "home-module", { env: {}, today: TODAY }).status).toBe("skipped");
+    writeFileSync(join(root, "package.json"), JSON.stringify({ name: "one", conventions: { rules: { "home-module": { scope: "all", reason: "a sweep of the imports" } } } }));
+    expect(rule(root, "home-module", { env: {}, today: TODAY }).breaks.map((item) => item.line)).toEqual([1]);
+  });
+
+  it("knows the modules of the homes on npm", () => {
+    expect(modulesOf(HOMES).map((item) => `${item.specifier} ${item.home.area}`)).toContain(`${M} local-database`);
+    const planned = HOMES.map((home) => ({ ...home, state: "planned" as const, modules: ["x"] }));
+    expect(modulesOf(planned)).toEqual([]);
   });
 });
 

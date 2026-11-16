@@ -95,6 +95,13 @@ describe("the stamp", () => {
     assert.doesNotMatch(security, /\b(dependency-review|codeql|osv-upload): /);
   });
 
+  it("gives the queue, pinned to the shared workflow (CI.md, \"The queue\")", async () => {
+    const { out, sha } = await stamped();
+    const queue = read(out, ".github/workflows/queue.yml");
+    assert.ok(queue.includes(`uses: mark1russell7/template/.github/workflows/reusable-queue.yml@${sha} # main`));
+    assert.match(queue, /types: \[auto_merge_enabled\]/);
+  });
+
   it("stops when the folder exists", async () => {
     const { out } = await stamped();
     await assert.rejects(stamp({ name: "demo-repo", description: "x", template, out, ref: "HEAD", latest: () => "1.0.0" }), /The folder exists/);

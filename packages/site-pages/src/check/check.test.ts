@@ -1,10 +1,12 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Script } from "node:vm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { findBrowser } from "./browser.ts";
-import { cell, checkSite, cutProblems, pageProbes, pageSlug, PHONE_WIDTH, runCheckCli, summary, type CheckOptions } from "./check.ts";
+import { cell, checkSite, cutProblems, pageProbes, pageSlug, PHONE_WIDTH, runCheckCli, scrollGaps, summary, type CheckOptions, type ViewResult } from "./check.ts";
 import { MEASURE, type Cut } from "./measure.ts";
 import { resolveFile, serve } from "./serve.ts";
 
@@ -153,6 +155,32 @@ describe("serve", () => {
   });
 });
 
+describe("scrollGaps", () => {
+  const code: Cut = { kind: "code", box: "pre#a", element: "pre#a", scrollWidth: 736, clientWidth: 302, text: "pnpm add" };
+  const table: Cut = { kind: "table", box: "div.card", element: "table.api", scrollWidth: 736, clientWidth: 302, text: "run", deadCue: true };
+  const clip: Cut = { kind: "clip", box: "div.x", element: "p", scrollWidth: 736, clientWidth: 302, text: "cut" };
+  const view = (page: string, width: number, scheme: "light" | "dark", cut: Cut[]): ViewResult => ({
+    page, width, scheme, ok: cut.length === 0, problems: [],
+    measure: { innerWidth: width, scrollWidth: width, height: 900, text: 400, past: [], clipped: [], cut } as ViewResult["measure"],
+  });
+
+  it("gives each block one time, at its smallest width, and keeps the dead cue", () => {
+    const gaps = scrollGaps({ views: [view("/", 400, "light", [code, table]), view("/", 360, "dark", [code]), view("/", 360, "light", [code, table])] });
+    expect(gaps).toEqual([
+      { page: "/", box: "pre#a", element: "pre#a", width: 360, deadCue: false },
+      { page: "/", box: "div.card", element: "table.api", width: 360, deadCue: true },
+    ]);
+  });
+
+  it("counts the same block on two pages two times", () => {
+    expect(scrollGaps({ views: [view("/", 360, "light", [code]), view("/docs/", 360, "light", [code])] })).toHaveLength(2);
+  });
+
+  it("does not count a clip, a desktop view, or a view with no measure", () => {
+    expect(scrollGaps({ views: [view("/", 360, "light", [clip]), view("/", PHONE_WIDTH, "light", [code]), { ...view("/", 360, "light", []), measure: undefined }] })).toEqual([]);
+  });
+});
+
 describe("pageSlug", () => {
   it("names the pages", () => {
     expect(pageSlug("/")).toBe("home");
@@ -284,6 +312,55 @@ describe.skipIf(browser === undefined)("checkSite in a browser", () => {
     const problems = (page: string) => result.views.find((view) => view.page === page)?.problems;
     expect(problems("/dead-cue/")?.join(" ")).toContain("The box has the class scroll-cue, but its computed style has no animation and no shade.");
     expect(problems("/live-cue/")).toEqual([]);
+  }, 60_000);
+
+  it("tries a view whose page does not answer again in a new browser, fails it when it hangs again, and checks the next view in a new browser", async () => {
+    // The probe blocks the page at each try, so each later call of that browser gets no reply.
+    const lines: string[] = [];
+    const result = await checkSite(options(["/", "/scroller/"], { widths: [360], schemes: ["light"], probes: { "/": "for (;;) {}" }, callMs: 2_000, log: (line) => lines.push(line) }));
+    expect(result.views).toHaveLength(2);
+    const [hung, next] = result.views;
+    expect(hung).toMatchObject({ page: "/", width: 360, ok: false });
+    expect(hung?.problems.join(" ")).toContain("the browser did not answer Runtime.evaluate in 2000 ms");
+    expect(hung?.retried?.join(" ")).toContain("the browser did not answer Runtime.evaluate in 2000 ms");
+    expect(next).toMatchObject({ page: "/scroller/", width: 360, ok: true, problems: [] });
+    expect(next?.retried).toBeUndefined();
+    expect(lines).toContain("the browser did not answer at / 360 light: the check starts a new browser and tries the view again");
+    expect(lines).toContain("the browser did not answer again at / 360 light: the check starts a new browser");
+    expect(summary(result)).toContain("1 of 2 views passed, at ");
+    expect(summary(result)).not.toContain("on a second try");
+    expect(summary(result)).toContain("| `/` | 360 | light | **fail** (retried) |");
+  }, 60_000);
+
+  it("passes a view whose page hangs only at the first try, and marks it as retried", async () => {
+    // The first answer gives a page that blocks itself after its load. Each later answer gives a good page.
+    let answers = 0;
+    const server = createServer((request, response) => {
+      if (request.url !== "/") {
+        response.writeHead(204).end();
+        return;
+      }
+      answers += 1;
+      const hang = answers === 1 ? `<script>addEventListener("load", () => setTimeout(() => { for (;;) {} }));</script>` : "";
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(page(`<h1>Home</h1><p>A page</p>${hang}`, `<link rel="icon" href="data:,">`));
+    });
+    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+    try {
+      const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
+      const lines: string[] = [];
+      const result = await checkSite({ url, pages: ["/"], widths: [360], schemes: ["light"], settleMs: 0, timeoutMs: 30_000, callMs: 2_000, log: (line) => lines.push(line) });
+      expect(result.ok).toBe(true);
+      expect(result.views).toHaveLength(1);
+      expect(result.views[0]).toMatchObject({ page: "/", width: 360, ok: true, problems: [] });
+      expect(result.views[0]?.retried?.join(" ")).toMatch(/the browser did not answer Runtime\.evaluate in 2000 ms/);
+      expect(answers).toBe(2);
+      expect(lines).toContain("the browser did not answer at / 360 light: the check starts a new browser and tries the view again");
+      expect(lines.some((line) => line.startsWith("PASS (retried) / 360 light"))).toBe(true);
+      expect(summary(result)).toContain(`1 of 1 views passed, at ${url}. 1 of them passed only on a second try, after the browser did not answer.`);
+      expect(summary(result)).toContain("| `/` | 360 | light | pass (retried) |");
+    } finally {
+      await new Promise((done) => server.close(done));
+    }
   }, 60_000);
 
   it("passes a good page and writes a screenshot of each view", async () => {

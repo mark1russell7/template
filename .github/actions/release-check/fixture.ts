@@ -28,11 +28,34 @@ if (kind === undefined || folder === undefined || !CASES.includes(kind)) {
   process.exit(2);
 }
 
+const TRIES = 3;
+
+/**
+ * At times the registry gives an HTML page in place of the data, for a short time. This function tries the request again
+ * after 5 s and after 10 s. It gives the body of the first answer with a good status and, when `type` is given, a matching
+ * content type. After the last try, it stops with the status, the content type and the start of the last answer.
+ */
+async function fromRegistry(url: string, type?: RegExp): Promise<Buffer> {
+  let last = "";
+  for (let attempt = 1; attempt <= TRIES; attempt += 1) {
+    if (attempt > 1) await new Promise((done) => setTimeout(done, 5000 * (attempt - 1)));
+    try {
+      const response = await fetch(url);
+      const contentType = response.headers.get("content-type") ?? "";
+      const body = Buffer.from(await response.arrayBuffer());
+      if (response.ok && (type === undefined || type.test(contentType))) return body;
+      last = `HTTP ${response.status}, ${contentType === "" ? "no content type" : contentType}: ${body.toString("utf8", 0, 200).replace(/\s+/gu, " ")}`;
+    } catch (error) {
+      last = error instanceof Error ? error.message : String(error);
+    }
+    process.stderr.write(`Try ${attempt} of ${TRIES}: the registry gave no good answer for ${url}. ${last}\n`);
+  }
+  throw new Error(`The registry gave no good answer for ${url} in ${TRIES} tries. The last answer: ${last}`);
+}
+
 const registry = `https://registry.npmjs.org/${NAME.replaceAll("/", "%2f")}`;
-const latest = (await (await fetch(`${registry}/latest`)).json()) as { version: string; dist: { tarball: string } };
-const response = await fetch(latest.dist.tarball);
-if (!response.ok) throw new Error(`The registry gave HTTP ${response.status} for ${latest.dist.tarball}.`);
-const files = tarballFiles(Buffer.from(await response.arrayBuffer()));
+const latest = JSON.parse((await fromRegistry(`${registry}/latest`, /json/u)).toString("utf8")) as { version: string; dist: { tarball: string } };
+const files = tarballFiles(await fromRegistry(latest.dist.tarball));
 
 const write = (path: string, content: string | Buffer): void => {
   mkdirSync(dirname(join(folder, path)), { recursive: true });
