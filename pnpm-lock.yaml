@@ -364,6 +364,9 @@ importers:
       '@mark1russell7/rigor-statistics':
         specifier: ^0.2.4
         version: 0.2.7
+      '@mark1russell7/text':
+        specifier: ^0.0.10
+        version: 0.0.10
     devDependencies:
       '@mark1russell7/cue':
         specifier: ^2.0.0
@@ -695,6 +698,10 @@ packages:
     resolution: {integrity: sha512-0WRNon1oYKX1mmTP/AhrPnpoGAGolmpkJWHaTkHXc4SKe1tQhUvPrY/0TQ4gvu7aN+TEPpypiZDIkOjYZG8qBA==}
     engines: {node: '>=22'}
     hasBin: true
+
+  '@mark1russell7/text@0.0.10':
+    resolution: {integrity: sha512-ugLHCAcllSOlNZ0oz5Q8Wf3OkqfnSvwxgx8FL2gQ3EX7K1IS9oW9k2Jq77Obwa2ZtpzhNV47lJL2bGgvFVB14A==}
+    engines: {node: '>=22.12'}
 
   '@mark1russell7/text@0.0.6':
     resolution: {integrity: sha512-IwKQHx9U+k5AbEzZ8q4CxImQCuYXSFhvzMOSgy5UGYrZRIBO9RES7SYrXDrKqQFtMl5qD2QbibffevUPsrUW+A==}
@@ -2057,6 +2064,8 @@ snapshots:
   '@mark1russell7/ste-lint@0.3.2':
     dependencies:
       typescript: 6.0.3
+
+  '@mark1russell7/text@0.0.10': {}
 
   '@mark1russell7/text@0.0.6': {}
 
