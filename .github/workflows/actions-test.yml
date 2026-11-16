@@ -575,9 +575,12 @@ jobs:
       build: |
         test "$TEST_SITE" = actions-test
         mkdir -p test-site
+        # The site check needs an h1 and 200 characters of text in the HTML of each page, for a reader with no script.
         cat > test-site/index.html <<'HTML'
         <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Test site</title></head><body><p>The test site of actions-test.yml.</p>
+        <title>Test site</title></head><body><h1>Test site</h1>
+        <p>This page is the test site of actions-test.yml. The shared workflow reusable-pages.yml builds it and adds the Releases page and the Status page.
+        The site check then opens each page in a headless Chromium. The probe of the check clicks the button, and the button writes the word done.</p>
         <button id="go">Go</button> <output id="out"></output>
         <script>document.getElementById("go").addEventListener("click", () => { document.getElementById("out").textContent = "done"; });</script>
         </body></html>
