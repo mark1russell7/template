@@ -8,10 +8,13 @@ The workflow `.github/workflows/release.yml` publishes the packages of this repo
 
 | Job | What it uses |
 |---|---|
-| `verify` | The `ci.yml` of the repository. |
+| `tree` | `reusable-release-tree.yml` of the template, with `scripts/workflows/verified-tree.ts` of the same template commit. |
+| `verify` | The `ci.yml` of the repository. It starts only when `tree` gives no yes. |
 | `build` | `reusable-release-build.yml` of the template, with `scripts/release/pack.ts` and `scripts/release/tags.ts` of the same template commit. |
 | `publish` | A job of `release.yml`. Its step is the action `npm-publish` of the template. |
 | `tag` | `reusable-release-tag.yml` of the template. |
+
+The job `tree` tells if the tree of the release commit already passed CI in its pull request (`CI.md`, "A tree that passed CI"). With a yes, `verify` does not start, and `build` starts at once. A no, a no read and a failure of `tree` start `verify`, as before. Each file that changed after the CI run of the pull request gives a no.
 
 The job `publish` stays in `release.yml`. The trusted publisher of each package names this repository and `release.yml`. A composite action operates in the job that uses it, so npm sees the same workflow as before. `CI.md` tells the reasons.
 
@@ -89,6 +92,8 @@ The owner (Mark) and one Claude session that the owner names are responsible for
 The push to `main` starts `release.yml`. The workflow starts the CI gates, builds and packs each published package, and publishes each version that is not on npm. Then it makes a git tag and a GitHub release for each new version.
 
 A version with a hyphen, for example `1.2.0-rc.1`, gets the dist-tag `next`. A version above the `latest` of npm gets `latest`. A lower version gets `latest-<major>.<minor>`, and `latest` stays. Thus two releases in either sequence do not move `latest` back. The summary of the run lists each version that did not get `latest`.
+
+`pack.ts` stops a lower version before the publish. Thus a lower version comes to the publish only when a different release published a higher version after the pack of this release.
 
 `scripts/release/pack.ts` stops the release when a version is not SemVer. It also stops when a version is not greater than the `latest` version on npm. The registry does not accept a version two times, also after a removal. Thus a bad release gets a new PATCH, and `npm deprecate` marks the bad version.
 

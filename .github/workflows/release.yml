@@ -1,6 +1,9 @@
 # The standard npm release of a repository made from mark1russell7/template (RELEASING.md, CI.md).
 #
-#   verify    The gates of ci.yml.
+#   tree      reusable-release-tree.yml: tells if the tree of the commit already passed the CI of
+#             its pull request (scripts/workflows/verified-tree.ts, CI.md "A tree that passed CI").
+#   verify    The gates of ci.yml. They start when tree gives no yes: a no, a no read or a failure
+#             of the job tree. With a yes, the same tree passed the same gates in its pull request.
 #   build     reusable-release-build.yml: stops when the commit is not on main, builds and packs
 #             each published package (scripts/release/pack.ts), and writes the plan of the git tags
 #             and the GitHub releases (scripts/release/tags.ts).
@@ -59,15 +62,36 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The answer is yes only when the tree of this commit is the tree of the head of its pull request,
+  # and the newest CI run of that head passed (CI.md, "A tree that passed CI"). Thus a file that
+  # changed after that run gives a no, and the gates start.
+  tree:
+    name: Tree
+    uses: ./.github/workflows/reusable-release-tree.yml
+    permissions:
+      actions: read
+      contents: read
+      # The timeline of the pull request is an issue endpoint
+      issues: read
+      pull-requests: read
+
   verify:
     name: CI
+    needs: tree
+    # !cancelled(): a failed tree job also starts the gates. Only the output "true" skips them.
+    if: ${{ !cancelled() && needs.tree.outputs.verified != 'true' }}
     uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
 
   build:
     name: Build and pack
-    needs: verify
+    needs: [tree, verify]
+    # The gates passed, or they did not start because the tree passed them in its pull request.
+    # A failed or cancelled verify stops the release.
+    if: >-
+      ${{ !cancelled() && (needs.verify.result == 'success'
+      || (needs.verify.result == 'skipped' && needs.tree.result == 'success' && needs.tree.outputs.verified == 'true')) }}
     uses: ./.github/workflows/reusable-release-build.yml
     permissions:
       contents: read
@@ -75,6 +99,9 @@ jobs:
   publish:
     name: Publish to npm
     needs: build
+    # A skipped verify is an ancestor of this job, and the default condition success() skips a job
+    # after a skipped ancestor. Thus the condition names the result of build.
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # One publish at a time, over all runs of this workflow
@@ -97,7 +124,7 @@ jobs:
       # the pin. Renovate does not move it: the release session moves it at a quiet time, because a
       # workflow change between a version merge and its tag job makes GitHub refuse the tag (HTTP 403).
       - id: publish
-        uses: mark1russell7/template/.github/actions/npm-publish@40b0fbd09ca4c07c451a5f9ca72d40eb62128d99 # main
+        uses: mark1russell7/template/.github/actions/npm-publish@b563776ddfc138707b1d5b3d716594874e1010cf # main
 
   tag:
     name: Git tag and GitHub release

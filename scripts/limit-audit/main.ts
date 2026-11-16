@@ -9,11 +9,10 @@
 // With --strict, exit code 1 tells that the script could not read a repository (a no-read is never a pass), or that a
 // job stopped at a limit on or after the day --fails-from. Before that day, a stop gives a warning. An empty
 // --fails-from fails at once. Without --strict, the audit is a report, and only a wrong command line fails (exit code 2).
-import { execFile } from "node:child_process";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { promisify } from "node:util";
 import { parseArgs } from "node:util";
+import { lines, pool } from "../lib/gh.ts";
 import {
   type Finding,
   type Job,
@@ -27,35 +26,6 @@ import {
   readsRun,
   render,
 } from "./limit-audit.ts";
-
-const run = promisify(execFile);
-
-/** This function gives one JSON value for each line that `gh api --paginate` writes with a `tojson` filter. */
-async function lines<T>(path: string, jq: string): Promise<T[]> {
-  const { stdout } = await run("gh", ["api", "--paginate", path, "--jq", jq], {
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-    env: { ...process.env, MSYS_NO_PATHCONV: "1" },
-  });
-  return stdout
-    .split("\n")
-    .filter((line) => line.trim() !== "")
-    .map((line) => JSON.parse(line) as T);
-}
-
-/** This function starts `work` on each item, with at most `width` at the same time, and keeps the order. */
-async function pool<T, R>(items: readonly T[], width: number, work: (item: T) => Promise<R>): Promise<R[]> {
-  const out = new Array<R>(items.length);
-  let next = 0;
-  const lane = async (): Promise<void> => {
-    while (next < items.length) {
-      const i = next++;
-      out[i] = await work(items[i] as T);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(width, items.length) }, lane));
-  return out;
-}
 
 const { values } = parseArgs({
   options: {
