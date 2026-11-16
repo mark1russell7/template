@@ -1,8 +1,8 @@
 /**
  * The rule `publish-text-safe` on fixture repositories. The README of @mark1russell7/text 0.0.7 is the planted case.
  *
- * The corpus of the measure, on 2026-11-16: the README.md and package.json files at D:/git/<repo> and
- * D:/git/<repo>/packages/<p> of the local clones (448 README files, 660 manifests). The shapes of the rule file found
+ * The corpus of the measure, on 2026-11-16: the README.md and package.json files at the root and in packages/<p> of
+ * the local clones (448 README files, 660 manifests). The shapes of the rule file found
  * 1 true example (the text 0.0.7 README, in 2 old clones) and 0 false hits. A first pattern of quoted words with `or`
  * gave 8 false hits on the text `role="table"` or `role="grid"`. The clean cases below are lines of that corpus.
  * A change of a pattern runs again against the same corpus: the script reads the two levels, no walk.
@@ -11,9 +11,9 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { findSecretShapes } from "@mark1russell7/text/redact";
+import { findSecretShapes, findSecretShapesInValue } from "@mark1russell7/text/redact";
 import { runChecks, type RuleResult } from "./index.ts";
-import { ATTACK_SHAPES, attackLines, secretLines } from "./rules/publish-text-safe.ts";
+import { ATTACK_SHAPES, attackLines, attacksInValue, fieldOf, pathLine, secretLines } from "./rules/publish-text-safe.ts";
 
 // The sample tokens come from parts at run time, so this file holds no text in the shape of a token. A scan of the
 // repository, for example the push protection of GitHub, finds no token here.
@@ -75,6 +75,7 @@ describe("publish-text-safe", () => {
     expect(planted.breaks[0]?.message).toContain('"And 11=2"');
     expect(planted.breaks[0]?.message).toContain("(sql-boolean)");
     expect(planted.breaks[0]?.message).toContain("@x/text");
+    expect(planted.breaks[0]?.message).toContain("The npm registry refused a publish with this shape (E403, @mark1russell7/text 0.0.7, 2026-11-15).");
     expect(check(repo({ "package.json": LIB, "README.md": NEW_TEXT_README })).status).toBe("pass");
   });
 
@@ -101,14 +102,25 @@ describe("publish-text-safe", () => {
     expect(result.breaks.map((item) => `${item.file}:${item.line}`)).toEqual(["packages/a/readme.markdown:5"]);
   });
 
-  it("breaks on the field description and on an entry of keywords, at the line of the field", () => {
+  it("breaks on the field description and on an entry of keywords, at the line of the string", () => {
     const manifest = `${JSON.stringify({ name: "@x/q", version: "1.0.0", description: "Rows where a = a or 1=1", keywords: ["sql", "union select"] }, null, 2)}\n`;
     const result = check(repo({ "package.json": manifest }));
     expect(result.breaks.map((item) => [item.line, /\((sql-[a-z]+)\)/.exec(item.message)?.[1]])).toEqual([
       [4, "sql-boolean"],
-      [5, "sql-union"],
+      [7, "sql-union"],
     ]);
-    expect(result.breaks[0]?.message).toContain('The field "description" of @x/q');
+    expect(result.breaks[0]?.message).toContain('The field "description" of @x/q has "or 1=1"');
+    expect(result.breaks[1]?.message).toContain('The field "keywords[1]" of @x/q has "union select"');
+    expect(result.breaks[0]?.message).toContain("The npm registry refused a publish with this shape");
+    expect(result.breaks[1]?.message).toContain("No refusal of it is on record.");
+    expect(result.breaks[1]?.message).not.toContain("refused a publish");
+  });
+
+  it("gives each shape its evidence: the refusal on record, or null, and only sql-boolean has a refusal on record", () => {
+    for (const shape of ATTACK_SHAPES) expect(shape.seen === null || (typeof shape.seen === "string" && shape.seen.startsWith("E403, ")), shape.id).toBe(true);
+    expect(ATTACK_SHAPES.filter((shape) => shape.seen !== null).map((shape) => [shape.id, shape.seen])).toEqual([
+      ["sql-boolean", "E403, @mark1russell7/text 0.0.7, 2026-11-15"],
+    ]);
   });
 
   it("finds each shape in its planted line", () => {
@@ -139,14 +151,69 @@ describe("publish-text-safe", () => {
     for (const line of clean) expect(attackLines(line), line).toEqual([]);
   });
 
-  it("finds no shape and no token in the README and the manifest of this package, so its own publish passes", () => {
+  it("finds no shape and no token in the README and the whole manifest of this package, so its own publish passes", () => {
     const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
     expect(attackLines(readme)).toEqual([]);
     expect(secretLines(readme)).toEqual([]);
-    const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { description?: string; keywords?: string[] };
-    const fields = [manifest.description ?? "", ...(manifest.keywords ?? [])].join("\n");
-    expect(attackLines(fields)).toEqual([]);
-    expect(secretLines(fields)).toEqual([]);
+    const manifest: unknown = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+    expect(attacksInValue(manifest)).toEqual([]);
+    expect(findSecretShapesInValue(manifest)).toEqual([]);
+  });
+
+  it("breaks on a shape in each key and string of the manifest: scripts, a key of config, and an entry of an array of objects", () => {
+    const manifest = `${JSON.stringify(
+      {
+        name: "@x/q",
+        version: "1.0.0",
+        description: "A build tool",
+        keywords: ["build"],
+        scripts: { test: "vitest", build: "echo a and 1 = 1" },
+        config: { "x; drop table t": "on" },
+        contributors: [{ name: "A" }, { name: "B", url: "https://example.com/?q=1 union select 2" }],
+      },
+      null,
+      2,
+    )}\n`;
+    const result = check(repo({ "package.json": manifest }));
+    const lines = manifest.split("\n");
+    const lineWith = (text: string): number => lines.findIndex((line) => line.includes(text)) + 1;
+    expect(result.breaks.map((item) => [item.line, /^The (?:field|key) "(.+?)" of /.exec(item.message)?.[1], /\((sql-[a-z]+)\)/.exec(item.message)?.[1]])).toEqual([
+      [lineWith('"build": "echo'), "scripts.build", "sql-boolean"],
+      [lineWith('"x; drop table t"'), "config[\"x; drop table t\"]", "sql-drop"],
+      [lineWith("union select 2"), "contributors[1].url", "sql-union"],
+    ]);
+    expect(result.breaks[0]?.message).toContain('The field "scripts.build" of @x/q has "and 1 = 1"');
+    expect(result.breaks[1]?.message).toContain('The key "config["x; drop table t"]" of @x/q');
+    // The text "build" comes first in description and keywords, and the line is still the key under scripts.
+    expect(lineWith('"build": "echo')).toBeGreaterThan(lineWith('"build"'));
+  });
+
+  it("breaks one time for each shape of a string of the manifest", () => {
+    const result = check(repo({ "package.json": { name: "@x/q", version: "1.0.0", description: "x or 1=1 and 2=2" } }));
+    expect(result.breaks).toHaveLength(1);
+  });
+
+  it("breaks on a token in repository.url, and the message names the shape and the field, not the token", () => {
+    const manifest = `${JSON.stringify({ name: "@x/q", version: "1.0.0", repository: { type: "git", url: `https://user:${CLASSIC}@github.com/x/y.git` } }, null, 2)}\n`;
+    const result = check(repo({ "package.json": manifest }));
+    expect(result.status).toBe("break");
+    expect(result.breaks.map((item) => [item.line, /\(([a-z-]+)\)\. npm/.exec(item.message)?.[1]])).toEqual([[6, "github-classic"]]);
+    expect(result.breaks[0]?.message).toContain('The field "repository.url" of @x/q has a classic personal access token of GitHub');
+    expect(result.breaks[0]?.message).not.toContain(CLASSIC);
+    expect(result.breaks[0]?.message).not.toContain("a1a1");
+  });
+
+  it("gives the path of a string in words and the line of the string in the text", () => {
+    expect(fieldOf(["scripts", "build"])).toBe("scripts.build");
+    expect(fieldOf(["keywords", 1])).toBe("keywords[1]");
+    expect(fieldOf(["exports", "./redact", "import"])).toBe('exports["./redact"].import');
+    expect(fieldOf(["scripts", "lint:ste"])).toBe('scripts["lint:ste"]');
+    const text = ["{", '  "test": "a",', '  "scripts": {', '    "build": "b",', '    "test": "c"', "  }", "}"].join("\n");
+    expect(pathLine(text, ["scripts", "test"], "c")).toBe(5);
+    expect(pathLine(text, ["scripts", "test"])).toBe(5);
+    // A part that is not in the text keeps the line of the part before it.
+    expect(pathLine(text, ["scripts", "lint"])).toBe(3);
+    expect(pathLine(text, ["missing"])).toBeUndefined();
   });
 
   it("breaks on a token in a README at the line of its start, and the message names the shape, not the token", () => {
@@ -165,14 +232,15 @@ describe("publish-text-safe", () => {
     }
   });
 
-  it("breaks on a token in the field description and in an entry of keywords, at the line of the field", () => {
+  it("breaks on a token in the field description and in an entry of keywords, at the line of the string", () => {
     const manifest = `${JSON.stringify({ name: "@x/q", version: "1.0.0", description: `Set ${NPM} first`, keywords: ["cli", NPM] }, null, 2)}\n`;
     const result = check(repo({ "package.json": manifest }));
     expect(result.breaks.map((item) => [item.line, /\(([a-z-]+)\)\. npm/.exec(item.message)?.[1]])).toEqual([
       [4, "npm"],
-      [5, "npm"],
+      [7, "npm"],
     ]);
     expect(result.breaks[0]?.message).toContain('The field "description" of @x/q has an access token of npm');
+    expect(result.breaks[1]?.message).toContain('The field "keywords[1]" of @x/q has an access token of npm');
     for (const item of result.breaks) expect(item.message).not.toContain(NPM);
   });
 
