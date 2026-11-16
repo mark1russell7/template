@@ -253,6 +253,8 @@ conventions map --overlay homes.json --markdown   # with more homes from a JSON 
 
 Each home can give `signatures`: the names of functions that only the home has, as regular expressions of a whole name. The rule `home-package` breaks on a new function with such a name in another repository. Its message says if the home already exports the name. The index of the exports is `src/home-exports.ts`. The script `scripts/homes/exports.ts` of the template writes it from the latest version of each home on npm.
 
+The job `exports` of the workflow Homes npm compares the index with npm each day. When the index is old, the job uploads a new index as the artifact `home-exports`.
+
 A home can also give `modules`: the modules that only the home imports at run time. The home of local databases gives `node:sqlite`. The rule `home-module` breaks on a new value import of such a module in another repository. An `import type` gives only types, so it does not break.
 
 A home can give `pending`: the names of its packages that are not on npm yet. The table marks such a package "(not on npm)". A planned home has no packages, so its `pending` names are its planned packages.
