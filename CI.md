@@ -430,7 +430,7 @@ The queue does not do these things:
 
 ## A tree that passed CI
 
-`release.yml` starts `verify`, the gates of `ci.yml`, on the commit on `main`. When the pull request passed CI on the same tree, `verify` does the same work again. `scripts/workflows/verified-tree.ts` tells if the tree of a commit already passed CI in its pull request. No workflow uses it yet.
+`release.yml` starts `verify`, the gates of `ci.yml`, on the commit on `main`. When the pull request passed CI on the same tree, `verify` does the same work again. `scripts/workflows/verified-tree.ts` tells if the tree of a commit already passed CI in its pull request. The job `tree` of `release.yml` starts it through `reusable-release-tree.yml`, and `verify` starts only when the answer is not yes.
 
 ```sh
 node scripts/workflows/verified-tree.ts [--sha <commit>] [--workflow <file>] [--job <name>]...
@@ -443,6 +443,8 @@ node scripts/workflows/verified-tree.ts [--sha <commit>] [--workflow <file>] [--
 | `--workflow` | `WORKFLOW_FILE`, else `ci.yml` |
 | `--job`, one time for each job that must pass | The lines of `REQUIRED_JOBS`, else `CI OK` |
 | The token | `GH_TOKEN`, else `GITHUB_TOKEN` |
+
+`reusable-release-tree.yml` gets the script from the template commit of the workflow, so a repository needs no copy. Its inputs are `workflow` (default `ci.yml`) and `jobs` (default `CI OK`, one name on each line). Its outputs are `verified` and `reason`. The caller job gives it `actions: read`, `contents: read`, `issues: read` and `pull-requests: read`. The timeline of a pull request is an issue endpoint.
 
 The script writes `verified=true` or `verified=false`, and `reason=<code>`, to `GITHUB_OUTPUT`. It writes one line to the step summary and the same line to stdout. The exit code is 0 for a yes and for a no. A no is not an error. Then the caller starts the full checks.
 
