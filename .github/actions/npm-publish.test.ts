@@ -7,26 +7,11 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { describe, it } from "node:test";
+import { runBlock } from "../../scripts/workflows/run-block.ts";
 import { compareVersions, distTag, latestOf, parseVersion, type Version } from "./npm-publish/dist-tag.ts";
 
 const script = join(import.meta.dirname, "npm-publish", "dist-tag.ts");
 const action = readFileSync(join(import.meta.dirname, "npm-publish", "action.yml"), "utf8");
-
-/** The lines of the "run: |" block of a step, with the indent of the block removed. */
-function runBlock(text: string, step: string): string {
-  const start = text.indexOf(step);
-  assert.ok(start >= 0, `The action has the line ${step.trim()}.`);
-  const run = text.indexOf("run: |\n", start);
-  assert.ok(run >= 0, `A run block follows ${step.trim()}.`);
-  const lines = text.slice(run + "run: |\n".length).split("\n");
-  const indent = /^ */u.exec(lines[0] ?? "")?.[0].length ?? 0;
-  const block: string[] = [];
-  for (const line of lines) {
-    if (line.trim() !== "" && line.length - line.trimStart().length < indent) break;
-    block.push(line.slice(indent));
-  }
-  return block.join("\n").trimEnd();
-}
 
 /** This function reads a version that the test knows is correct. */
 const version = (text: string): Version => {
@@ -181,7 +166,7 @@ describe("the step Publish", { skip: process.platform === "win32" ? "the step ne
       writeFileSync(join(bin, "npm"), ["#!/usr/bin/env bash", 'echo "$*" >> "$NPM_LOG"', ""].join("\n"));
       for (const tool of ["curl", "npm"]) chmodSync(join(bin, tool), 0o755);
       const step = join(folder, "step.sh");
-      writeFileSync(step, `${runBlock(action, "    - name: Publish\n")}\n`);
+      writeFileSync(step, runBlock(action, "    - name: Publish\n"));
       const files = { npm: join(folder, "npm.log"), output: join(folder, "output"), summary: join(folder, "summary") };
       for (const file of Object.values(files)) writeFileSync(file, "");
       const run = spawnSync("bash", ["--noprofile", "--norc", "-eo", "pipefail", step], {
