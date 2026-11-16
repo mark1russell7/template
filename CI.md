@@ -10,9 +10,12 @@ The template holds the CI, the release and the Pages workflows of the repositori
 | `.github/workflows/reusable-release-tag.yml` | Workflow | Makes a git tag and a GitHub release for each published version. |
 | `.github/workflows/reusable-mutation.yml` | Workflow | Starts the mutation tests of each package with Stryker, with a gate for each package. |
 | `.github/workflows/reusable-pages.yml` | Workflow | Builds a site, adds the Releases page and the Status page, and deploys it to GitHub Pages. |
+| `.github/workflows/reusable-pages-check.yml` | Workflow | Builds and checks the site of a pull request in the job `site` of CI, with no deploy. |
+| `.github/actions/site-config` | Action | Reads `.github/site.json`, the one home of the values of the site, and gives them as JSON. |
+| `.github/actions/pages-build` | Action | Builds the site from the site config, adds the pages of `site-pages`, checks it and uploads the artifacts. |
 | `.github/actions/security-scan` | Action | Scans the dependencies and the code with the dependency review, osv-scanner and CodeQL, in one job. |
 | `.github/workflows/reusable-security.yml` | Workflow | Deprecated. The same scans in three jobs ("Security", "The old workflow"). |
-| `.github/workflows/reusable-queue.yml` | Workflow | Merges `main` into each pull request with auto-merge that is behind, and starts its gates again ("The queue"). |
+| `.github/workflows/reusable-queue.yml` | Workflow | Merges `main` into each pull request with auto-merge that is behind, and starts the held runs of its new head ("The queue"). |
 | `.github/workflows/reusable-ai-review.yml` | Workflow | Gives a pull request a review by Claude on request (the `ai-review` label), comment only (`AI-REVIEW.md`). |
 | `.github/workflows/reusable-codex-review.yml` | Workflow | Gives a pull request a second review by an OpenAI model, comment only (`CODEX-REVIEW.md`). |
 
@@ -27,6 +30,13 @@ jobs:
 ```
 
 The job starts all the scripts, also after a failure. Then it fails with the names of the failed scripts. The summary of the run shows a table of the scripts.
+
+When `check:api` fails, the job writes the API reports again and uploads them as the artifact `api-reports-<os>-node-<version>`. A person with no build on their computer can then commit the reports. The log of `check:api` shows at most 400 lines of a diff, so a large change of an API needs the files.
+
+- The job starts the script `update:api` when `package.json` has it. Else it starts `api-report update` with the arguments of `api-report check`.
+- The job uses only plain arguments: no quote, no glob and no character of the shell. For a different `check:api`, add a script `update:api`.
+- The summary of the run gives the command that downloads the reports: `gh run download <run> -R <owner>/<repo> -n <artifact>`. Start it in the folder of `package.json`, and examine the diff before the commit.
+- GitHub keeps the artifact for 7 days.
 
 | Input | Default | What it sets |
 |---|---|---|
@@ -136,7 +146,7 @@ jobs:
 On a pull request, the job `release-check` starts the release build on the commit (`.github/actions/release-check`). It does the same steps as the build job of `reusable-release-build.yml`: the install with the lockfile, the build, `scripts/release/pack.ts` and `scripts/release/tags.ts`. Thus a pull request fails when its merge makes the release on `main` fail. An example: a shipped file of a package changes, and the version of that package is already on npm. The error names the package, its version and each file that differs.
 
 - The job uses the merge commit of the pull request, not its head. That commit is the `main` of the release after the merge.
-- On a dispatched run of a pull request, the job uses the commit of the run, that is the head of the pull request. After the queue merges `main` into the branch, that head has the newest `main` (refer to "The queue").
+- On a dispatched run of a pull request, the job uses the commit of the run, that is the head of the pull request.
 - The job does not compare with the base branch. When `main` already has such a change, each pull request fails until a pull request raises the version.
 - A repository with no published package passes at once, with a notice. The job does no install.
 - In a private repository, the job starts only with `release-check-private: true`. A private repository pays for each job start, also for a job with no published package.
@@ -221,7 +231,7 @@ A run from `workflow_dispatch` on another branch examines the open pull request 
 
 ### A dispatched run of a pull request
 
-A run from `workflow_dispatch` on a branch has no pull request in its event. The queue starts the gates of a pull request in this way (refer to "The queue"). The owner can also start `ci.yml` on the branch of the pull request (`workflow_dispatch`, from the Actions tab of the repository). The job `pull` of `reusable-ci.yml` finds the pull request of the run (`.github/actions/pull-of-run`):
+A run from `workflow_dispatch` on a branch has no pull request in its event. The owner can start `ci.yml` on the branch of the pull request (`workflow_dispatch`, from the Actions tab of the repository). The job `pull` of `reusable-ci.yml` finds the pull request of the run (`.github/actions/pull-of-run`):
 
 1. It lists the open pull requests whose head is the branch of the run. It keeps only those of the same repository.
 2. It reads the pull request again until its head is the commit of the run, at most 3 more times, 10 s apart. GitHub can update the head some seconds after a push.
@@ -331,7 +341,7 @@ A `push` filter can stay, because the ruleset reads only pull requests. With the
 
 ### A dispatched run of a gate
 
-The queue starts the gates of a pull request with `workflow_dispatch` (refer to "The queue"). Such a run has no pull request in its event. Without the input `pull-request`, `changes` gives a match, and each gate job runs. The steps `pull` and `changes` of the example give the pull request of the run to `changes`:
+A person can start the gates of a pull request with `workflow_dispatch`. Such a run has no pull request in its event. Without the input `pull-request`, `changes` gives a match, and each gate job runs. The steps `pull` and `changes` of the example give the pull request of the run to `changes`:
 
 1. The action `pull-of-run` finds the open pull request of the branch of the run (refer to "A dispatched run of a pull request").
 2. Its output `number` goes to the input `pull-request` of `changes`, when its output `found` is `true`.
@@ -376,34 +386,34 @@ jobs:
       contents: write
       pull-requests: write
       actions: write
-      checks: read
 ```
 
 A run of the queue does these steps (`scripts/workflows/queue.ts`):
 
 1. It reads the checks that the rules of the default branch need (`GET /repos/{owner}/{repo}/rules/branches/{branch}`).
 2. It reads the open pull requests into the default branch. It takes only a pull request with auto-merge on, not a draft, and not from a fork. When GitHub did not compute a merge state (`UNKNOWN`), it reads them again, at most 6 times, 5 s apart.
-3. For each pull request with the merge state `BEHIND`, it reads the results of these checks on the old head. It finds the workflow file that gave each check. It joins the checks of one workflow. A summary check, for example "CI OK", gets its result only when the jobs that it needs end. When a check has no result yet, the queue reads the workflows that are still in progress on the old head (`GET /repos/{owner}/{repo}/actions/runs?head_sha=`). It reads the job names of their files at that head. Each workflow in progress with a job of that name gives the check.
-4. It merges `main` into each of these pull requests with `PUT /repos/{owner}/{repo}/pulls/{number}/update-branch` and `expected_head_sha`.
-5. It waits for the new heads, at most `wait-seconds` (90 s). An update with `GITHUB_TOKEN` starts no `pull_request` run. Thus the queue starts each workflow of these checks with `workflow_dispatch` on the branch of the pull request. These workflows give the checks on the new head.
+3. It merges `main` into each pull request with the merge state `BEHIND`. It uses `PUT /repos/{owner}/{repo}/pulls/{number}/update-branch` with `expected_head_sha`.
+4. It waits for the new heads, at most `wait-seconds` (90 s). A push with `GITHUB_TOKEN` makes the `pull_request` runs of the new head, but GitHub holds each one. A held run has the conclusion `action_required`, and it starts no job.
+5. It reads the `pull_request` runs of each new head until the set is stable (`GET /repos/{owner}/{repo}/actions/runs?head_sha=`). It starts each held run with `POST /repos/{owner}/{repo}/actions/runs/{id}/approve`. When approve refuses, it uses `POST /repos/{owner}/{repo}/actions/runs/{id}/rerun`. These runs give the checks on the new head, as a push of a person does.
+6. It reads the runs of the head of each other queued pull request one time. It starts each held run of that head in the same way.
 
+- The queue starts only a held run of the repository itself, on the head that it read, whose actor is `github-actions[bot]`. Each other held run is a no read in the summary. A held run of a fork waits for a person.
+- The documents of GitHub name approve only for a run of a fork. The queue uses it for a run of its own token. A measurement found that approve gave HTTP 201 and started such a run at once. Rerun also started such a run.
+- When GitHub changes this behavior, approve and rerun refuse, and the job fails with the id of each held run. Thus the change shows as a failed run, not as a pull request that waits with no sign.
 - A push to `main` makes the other pull requests behind. A pull request can be behind when it gets auto-merge (`auto_merge_enabled`). A person can start a run from the Actions tab. The queue does not use `pull_request_target`.
 - One run at a time operates in a repository (`cancel-in-progress: false`). GitHub keeps only the newest run that waits. Each run reads all the pull requests, so the newest run does the work of a cancelled run.
-- A check of the ruleset can have no result on the old head and no workflow in progress with a job of that name. Then it is a no read in the summary. A workflow file that the queue cannot read gives no job names, so its checks are a no read too. A check of a different app, or of a workflow that is not a file of `.github/workflows`, is a no read too. A no read is not a pass.
 - A refused update (HTTP 422, for example a merge conflict) skips only that pull request, with a warning. Each other pull request gets its turn. A pull request with a merge conflict (`DIRTY`) waits for a person.
-- The job fails for a different failure of an update and for a refused dispatch. It also fails when a head does not change in the wait time. A failed read changes nothing and fails the job.
-- Each workflow of a check of the ruleset must start on `workflow_dispatch`. Otherwise GitHub refuses the dispatch, and the job fails.
-- With strict off, GitHub merges a pull request that is behind. Then no pull request is `BEHIND`, and the queue changes nothing. Set strict in the ruleset to use the queue.
+- The job fails for a different failure of an update, for a failed read and for a held run that approve and rerun both refuse. It also fails when a head does not change in the wait time. It also fails when GitHub makes no `pull_request` run on a new head in the wait time.
+- A failed read of the rules or of the pull requests changes nothing and fails the job.
+- GitHub can make a run after the end of the wait. That run stays held until the next run of the queue starts it (step 6).
+- With strict off, GitHub merges a pull request that is behind. Then no pull request is `BEHIND`, and the queue updates no branch. Set strict in the ruleset to use the queue.
 - In a private repository, the job starts only when the caller gives the input `private: true`. A private repository pays for each job start, and the queue starts on each push to `main`, also when no pull request is behind. When the input is false, the job skips, and a skipped job costs nothing.
-- A workflow that `workflow_dispatch` starts is not a `pull_request` run. In `reusable-ci.yml`, the job `pull` finds the pull request of the branch. Thus the changeset check, the release check and the rules of the conventions check examine the new head (refer to "A dispatched run of a pull request").
-- A gate with paths that gives the pull request to `changes` skips its jobs when the pull request changes no file of the gate. Without it, each dispatched run of the gate starts each gate job (refer to "A dispatched run of a gate").
 - An example: two pull requests set the same version, and the first one merges. The queue merges `main` into the second one. Then its change sets no version that `main` does not have. Its gate fails when its title names the version (`version-title`). It also fails when npm has the version and the repository sets `versionEachChange` (`unreleased-change`).
 
 The queue does not do these things:
 
-- A gate with its own jobs that operate only on a `pull_request` run skips these jobs on a dispatched run. The security scans operate as on a push.
 - `GITHUB_TOKEN` cannot write a workflow file. When the new commits of `main` change a file of `.github/workflows`, GitHub can refuse the update. Then a person updates the branch.
-- When the head does not change in the wait time, the queue starts no workflow. The new head has no checks, and the next run does not see it as `BEHIND`. A person starts the gates on the branch.
+- When the head does not change in the wait time, the queue starts no run. The next run of the queue does not see that pull request as `BEHIND`, but it starts the held runs of its head (step 6).
 - Each merge updates each other pull request that is behind, and starts its gates again. With N pull requests in the queue, the merge of all of them starts about N × N / 2 runs of each gate.
 
 ## Release
@@ -551,6 +561,23 @@ The gates are in the lane file, not in an input. Thus a local run and CI use the
 
 The job `build` checks out the commit of the event, with no ref of its own. It installs, builds the site, adds the pages of `site-pages` and uploads the Pages artifact. It gets only read permissions. The job `deploy` deploys the artifact. It starts no code of the repository. Its action cancels a deployment after 606 s, before the job limit of 12 minutes.
 
+The job `build` uses two actions. `site-config` reads the site config, and `pages-build` builds the site. The check of a pull request uses the same two actions ("The site config").
+
+The site values are in `.github/site.json`:
+
+```json
+{
+  "build": "pnpm --filter @crawler/site run build",
+  "out": "packages/site/dist",
+  "env": { "SITE_BASE": "/{repo}", "ASTRO_TELEMETRY_DISABLED": "1" },
+  "roadmap": "docs/ROADMAP.md",
+  "packages": "polite-crawler,polite-crawler-mcp",
+  "site-check": true
+}
+```
+
+The caller `pages.yml` gives only the permissions:
+
 ```yaml
 on:
   push:
@@ -583,12 +610,15 @@ jobs:
       statuses: read
       pages: write
       id-token: write
-    with:
-      build: pnpm --filter @crawler/site run build
-      out: packages/site/dist
-      env: '{"SITE_BASE": "/${{ github.event.repository.name }}", "ASTRO_TELEMETRY_DISABLED": "1"}'
-      roadmap: docs/ROADMAP.md
-      packages: polite-crawler,polite-crawler-mcp
+```
+
+The job `site` of `ci.yml` checks the site of each pull request, and "CI OK" needs it:
+
+```yaml
+  site:
+    uses: mark1russell7/template/.github/workflows/reusable-pages-check.yml@<commit> # main
+    permissions:
+      contents: read
 ```
 
 - A repository that publishes a package also starts Pages after a release, with `workflow_run` of `Release`, and on each day. A release starts no Pages run by itself, so the Releases page is behind npm until the next build. The rule `pages-after-release` of `@mark1russell7/conventions` examines both triggers, and `conventions fix` writes them.
@@ -601,7 +631,7 @@ jobs:
 - The input `pending` is `head` by default. With `pending: green`, a head whose CI runs deploys nothing.
 - The inputs of `site-pages` go to the action: `site-pages-version`, `roadmap`, `base`, `packages`, `changesets`, `group`, `css`, `site-name` and `data-only`.
 - `site-pages: false` builds the site without the Releases page and the Status page.
-- Without `roadmap`, the Status page shows only the open pull requests and issues. The rule `roadmap-parses` of `@mark1russell7/conventions` thus needs `roadmap` in each call, or `site-pages: false`.
+- Without `roadmap`, the Status page shows only the open pull requests and issues. The rule `roadmap-parses` of `@mark1russell7/conventions` thus needs `roadmap` in the site config or in each call, or `site-pages: false`.
 - `site-check: true` checks the built pages in a headless Chromium before the upload. A failed check stops the deploy. The next list tells the check.
 - The check opens each page of `site-check-pages` (default: the home) at the widths 360, 400 and 1280, in light and dark.
 - A page fails when it is wider than the screen, or an element goes past the right edge.
@@ -635,6 +665,26 @@ jobs:
 - The workflow gets the actions of the same template commit as the workflow file. A second checkout gets them.
 - Each public repository has a site. The rule `pages-site` of `@mark1russell7/conventions` needs a call of this workflow without `deploy: false`.
 - The Pages source of the repository is "GitHub Actions". To set it, start `gh api -X POST repos/<owner>/<repo>/pages -f build_type=workflow` one time.
+
+### The site config
+
+The file `.github/site.json` is the one home of the values of the site. The deploy of `main` and the check of each pull request read it. Thus a pull request checks the site that `main` deploys.
+
+- The keys of the file are the site inputs of `reusable-pages.yml`, with the same names and the same defaults. The file needs `build` and `out`.
+- The inputs `pending`, `deploy`, `fetch-depth`, `ci-workflow`, `artifact-prefix`, `page-url` and `timeout-minutes` stay in the call. They are not keys of the file.
+- In each string value, `{owner}` is the owner of the repository and `{repo}` is its name. For example, `"SITE_BASE": "/{repo}"`.
+- A boolean key takes `true` or `false`. The key `env` is an object of strings.
+- An unknown key, a value of the wrong type or a file that is not JSON stops the build with a message.
+- When the repository has the file, a call that also gives a site input with a value different from its default fails. Give each site value in one place.
+- A repository with no file keeps its site inputs in the call of `reusable-pages.yml`. The check of a pull request needs the file.
+- The job `site` of `ci.yml` uses `reusable-pages-check.yml`. "CI OK" needs the job, so a pull request with a bad site does not merge.
+- The check builds the site and starts the site check and the probe, as the deploy does. It uploads the artifacts and deploys nothing.
+- GitHub counts the permissions of a called workflow against the grant of the caller job. A CI job of a pull request has no write permission.
+- Thus `reusable-pages-check.yml` gets only `contents: read`. On a public repository, each read of `site-pages` works with this token.
+- The rule `roadmap-parses` of `@mark1russell7/conventions` reads the file. It reports a bad file on the pull request, before the deploy reads it.
+- The rule `site-check-in-ci` of `@mark1russell7/conventions` holds this form. It needs the file and a job that checks the site, in the needs of "CI OK".
+- The rule also finds a site input in the call of the deploy. It finds a deploy that a pull request starts, directly or through a call.
+- The preset `site` of `template-cli` writes `.github/site.json`, and the stamp writes the job `site` into `ci.yml`.
 
 ## Security
 
@@ -751,9 +801,10 @@ The workflows of the template call the shared workflows and actions by a local p
 - `security.yml` tests the action `security-scan`. The tests of `scripts/workflows/security-scan.test.ts` start no scan. They examine the choice of the scans, the last step, the step that finds the new CodeQL alerts and the query of the suppression comments.
 - Before the action, `security.yml` checks out the folder `.github/actions` of the template. This step operates only in the template. In a private repository, its partial clone makes the checkout of the base fail.
 - `actions-test.yml` tests the actions, `reusable-pages.yml` and the release workflows, with `dry-run`. It publishes nothing. On a pull request, it sets the input `require-main` of the release build to `false`.
-- On each pull request, the job `site` of `actions-test.yml` calls `pages.yml`. It builds the site of the template and starts its probe, with no deploy.
-- "Actions OK" is a check of the ruleset of `main`, and it needs the job `site`. Thus `gh pr merge --auto` waits for the probe of the site.
-- `ci.yml` cannot call `pages.yml`, because `release.yml` calls `ci.yml` with only `contents: read`.
+- On each pull request, the job `site` of `ci.yml` uses `reusable-pages-check.yml`. It builds the site of the template and starts its probe, with no deploy.
+- "CI OK" needs the job `site`. Thus `gh pr merge --auto` waits for the probe of the site.
+- `release.yml` uses `ci.yml` with only `contents: read`. The job `site` needs no more permissions.
+- The job `pages` of `actions-test.yml` uses `reusable-pages.yml` with no site config. It tests the site inputs of a repository with no `.github/site.json`.
 - `ai-review.yml` tests `reusable-ai-review.yml`, and `codex-review.yml` tests `reusable-codex-review.yml`. Without its API key, a review stops at once with a note.
 - The tests of `scripts/ai-review/` examine the request, the redaction and the post of the second review, with no network.
 - `queue.yml` uses `reusable-queue.yml`, so each push to `main` of the template starts the queue. The tests of `scripts/workflows/queue.test.ts` examine the plan, the calls of the API, the summary and the two workflow files, with a fake API.
@@ -761,3 +812,5 @@ The workflows of the template call the shared workflows and actions by a local p
 The job `publish` of `release.yml` uses the pinned form of `npm-publish`, also in the template. A local action needs a checkout, and that job does no checkout.
 
 The stamp (`scripts/stamp/main.ts`, started by `new-repo.ps1`) copies only the files that its list `KEEP` names. It does not copy the shared workflows, the actions or `actions-test.yml`. It changes each local path and each pin of the template to the pinned form, with the commit of the template that it copies. The job `stamp` of `ci.yml` makes a repository. With no hand edit, that repository must pass its install, its checks, its Pages build and the site check.
+
+The job starts the stamp with `--link`. Then each package of the template in that repository is a `link:` to its folder in the commit, not a range from npm. Thus a pull request can change a rule and the files that the stamp writes together. Without `--link`, the repository gets the rule from npm, which does not have the change before the release.

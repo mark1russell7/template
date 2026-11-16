@@ -19,13 +19,19 @@ describe("the reader of the shared workflows", () => {
     expect(pages?.jobs.map((j) => j.id)).toEqual(["ref", "build", "deploy", "indexnow"]);
     expect(pages?.jobs[1]).toMatchObject({ if: "needs.ref.outputs.build == 'true'", needs: ["ref"] });
     expect(pages?.jobs[2]).toMatchObject({ if: "inputs.deploy && needs.ref.outputs.deploy == 'true'", needs: ["ref", "build"] });
-    expect(pages?.jobs[3]).toMatchObject({ if: "inputs.deploy && inputs.indexnow-key != '' && github.event_name != 'schedule'", needs: ["deploy"] });
+    expect(pages?.jobs[3]).toMatchObject({ if: "inputs.deploy && needs.build.outputs.indexnow-key != '' && github.event_name != 'schedule'", needs: ["build", "deploy"] });
     const steps = pages?.jobs[1]?.steps ?? [];
-    expect(steps.find((s) => s.label === "Site check")?.if).toBe("inputs.site-check || inputs.site-bar");
-    expect(steps.find((s) => s.label === "Scroll cue")?.if).toBe("inputs.scroll-cue");
-    expect(pages?.inputs.find((i) => i.name === "scroll-cue")).toMatchObject({ type: "boolean", default: "true" });
     expect(steps.find((s) => s.label === "actions/checkout")).toBeDefined();
+    expect(steps.map((s) => s.uses)).toEqual(expect.arrayContaining(["./.shared-actions/.github/actions/site-config", "./.shared-actions/.github/actions/pages-build"]));
+    expect(pages?.inputs.find((i) => i.name === "scroll-cue")).toMatchObject({ type: "boolean", default: "true" });
     expect(pages?.summary).toMatch(/^The shared GitHub Pages deployment/);
+  });
+
+  it("reads the conditions of the site check and the scroll cue in the action pages-build", () => {
+    const build = workflows.find((w) => w.file === "actions/pages-build/action.yml");
+    const steps = build?.jobs[0]?.steps ?? [];
+    expect(steps.find((s) => s.label === "Site check")?.if).toBe("fromJSON(inputs.config)['site-check'] || fromJSON(inputs.config)['site-bar']");
+    expect(steps.find((s) => s.label === "Scroll cue")?.if).toBe("fromJSON(inputs.config)['scroll-cue']");
   });
 
   it("reads block scalars, inline lists and quoted keys", () => {
