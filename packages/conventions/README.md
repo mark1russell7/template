@@ -175,7 +175,7 @@ An unknown rule, an unknown option, or an exception or a changed option without 
 | `pre-push <remote> [<url>]` | Examine the new commits of a push with the private name list. The git hook `pre-push` starts it. |
 | `hook install` | Write the git hook `pre-push`. In CI, or outside a git repository, the command does nothing. |
 
-A run that `workflow_dispatch` starts has no pull request in its event file. The queue of the template starts the gates of a pull request in this way. For such a run, the shared CI finds the pull request of the branch, and gives two environment variables to the check:
+A run that `workflow_dispatch` starts has no pull request in its event file. A person can start the gates of a pull request in this way. For such a run, the shared CI finds the pull request of the branch, and gives two environment variables to the check:
 
 | Variable | What it gives |
 |---|---|
