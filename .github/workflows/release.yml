@@ -26,6 +26,11 @@
 # version that is already on npm. A release publishes only a commit on main: the first step of the
 # build job stops a run on a commit that main does not have (RELEASING.md).
 #
+# Two runs do not wait for each other before the publish: each commit has its own concurrency group.
+# Only the job publish waits, in the group release-publish. GitHub keeps only the newest publish that
+# waits, and cancels the older one. The newer run publishes the versions of the older run too,
+# because its tree has them, and its job tag tags them (RELEASING.md, "Two releases at one time").
+#
 # npm trusted publishing uses the OIDC token of GitHub Actions: no npm token, and each version
 # gets a provenance statement. The trusted publisher of each package names this repository and
 # the workflow file release.yml, with NO environment (npm refused an environment for a repository
@@ -51,8 +56,9 @@ on:
 
 permissions: {}
 
+# The group of the commit: a second run of the same commit waits for the first run.
 concurrency:
-  group: release
+  group: release-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
@@ -98,6 +104,10 @@ jobs:
     if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # One publish at a time, over all runs of this workflow
+    concurrency:
+      group: release-publish
+      cancel-in-progress: false
     permissions:
       id-token: write
     outputs:
@@ -114,7 +124,7 @@ jobs:
       # the pin. Renovate does not move it: the release session moves it at a quiet time, because a
       # workflow change between a version merge and its tag job makes GitHub refuse the tag (HTTP 403).
       - id: publish
-        uses: mark1russell7/template/.github/actions/npm-publish@40b0fbd09ca4c07c451a5f9ca72d40eb62128d99 # main
+        uses: mark1russell7/template/.github/actions/npm-publish@b563776ddfc138707b1d5b3d716594874e1010cf # main
 
   tag:
     name: Git tag and GitHub release

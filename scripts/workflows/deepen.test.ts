@@ -14,26 +14,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { after, before, describe, it } from "node:test";
+import { runBlock } from "./run-block.ts";
 
 const root = resolve(import.meta.dirname, "..", "..");
 
-/** The lines of the "run: |" block of a step, with the indent of the block removed. */
-function runBlock(text: string, step: string): string {
-  const start = text.indexOf(`- name: ${step}\n`);
-  assert.ok(start >= 0, `The workflow has the step ${step}.`);
-  const run = text.indexOf("run: |\n", start);
-  assert.ok(run >= 0, `A run block follows the step ${step}.`);
-  const lines = text.slice(run + "run: |\n".length).split("\n");
-  const indent = /^ */u.exec(lines[0] ?? "")?.[0].length ?? 0;
-  const block: string[] = [];
-  for (const line of lines) {
-    if (line.trim() !== "" && line.length - line.trimStart().length < indent) break;
-    block.push(line.slice(indent));
-  }
-  return `${block.join("\n").trimEnd()}\n`;
-}
-
-const STEP = runBlock(readFileSync(join(root, ".github", "workflows", "reusable-ci.yml"), "utf8"), "Deepen to the merge base");
+const STEP = runBlock(readFileSync(join(root, ".github", "workflows", "reusable-ci.yml"), "utf8"), "- name: Deepen to the merge base\n");
 
 let folder = "";
 /** The environment of each git command: no system or global settings of the computer. */

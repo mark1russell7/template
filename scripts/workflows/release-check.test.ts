@@ -7,25 +7,10 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { runBlock } from "./run-block.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const read = (path: string): string => readFileSync(resolve(root, path), "utf-8");
-
-/** The lines of a "run: |" block after a line, with the indent of the block removed. */
-function runBlock(text: string, after: string): string {
-  const start = text.indexOf(after);
-  assert.ok(start >= 0, `The file has the line ${after.trim()}.`);
-  const run = text.indexOf("run: |\n", start);
-  assert.ok(run >= 0, `A run block follows ${after.trim()}.`);
-  const lines = text.slice(run + "run: |\n".length).split("\n");
-  const indent = /^ */u.exec(lines[0] ?? "")?.[0].length ?? 0;
-  const block: string[] = [];
-  for (const line of lines) {
-    if (line.trim() !== "" && line.length - line.trimStart().length < indent) break;
-    block.push(line.slice(indent));
-  }
-  return block.join("\n").trimEnd();
-}
 
 /** The text of a job, from its key to the key of the next job. */
 function jobText(workflow: string, name: string): string {
