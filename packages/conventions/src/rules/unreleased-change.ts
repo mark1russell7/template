@@ -37,6 +37,12 @@ export const UNSHIPPED_FILES: readonly string[] = [
   "pnpm-workspace.yaml",
 ];
 
+/**
+ * The globs of the inputs of a build output, relative to the folder of the package. They are each file of `src/`, and
+ * each script, module and JSON file. The rule counts no other file as an input, for example `go.mod` or a `Dockerfile`.
+ */
+export const BUILD_INPUTS: readonly string[] = ["src/**", "**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,json}"];
+
 /** The fields of `package.json` that change what the package gives to a user. A change of the dependencies is not here. */
 export const SHIPPED_FIELDS: readonly string[] = ["main", "module", "types", "typings", "exports", "imports", "bin", "files", "type", "publishConfig", "sideEffects", "browser"];
 
@@ -92,6 +98,13 @@ const entryGlobs = (entry: string): readonly string[] => {
   return [glob, `${glob}/**`];
 };
 
+/** This function gives the files that npm packs for each value of the field `files`: the file of `main` and each file of `bin`. */
+const alwaysPacked = (manifest: Manifest): string[] => {
+  const bin = manifest["bin"];
+  const values = typeof bin === "string" ? [bin] : bin !== null && typeof bin === "object" ? Object.values(bin) : [];
+  return [manifest["main"], ...values].filter((path): path is string => typeof path === "string").map(cleanPath);
+};
+
 /** This function reads the manifest of the text of a `package.json` file, or gives undefined. */
 function parseManifest(text: string | undefined): Manifest | undefined {
   if (text === undefined) return undefined;
@@ -140,14 +153,16 @@ function shippedFiles(pkg: PackageInfo, changed: readonly string[], before: Mani
   // The root package does not have the files of the packages of the workspace
   const own = (path: string): boolean => inside(pkg.folder, path) && (pkg.folder !== "" || !folders.some((folder) => inside(folder, path)));
   const relative = (path: string): string => (pkg.folder === "" ? path : path.slice(pkg.folder.length + 1));
-  // An entry of `files` that git does not track is build output, which comes from each source file
+  // A tracked entry of `files` ships its own files. An entry that git does not track is build output: its inputs ship
   const entries = stringsOf(pkg.manifest, "files");
   const positive = entries.filter((entry) => !entry.startsWith("!"));
   const negative = entries.filter((entry) => entry.startsWith("!")).flatMap((entry) => entryGlobs(entry.slice(1)));
   const ownTracked = (context.gitFiles() ?? []).filter(own).map(relative);
-  const whitelist = positive.length > 0 && positive.every((entry) => ownTracked.some((path) => matchesAny(path, entryGlobs(entry))));
-  const ships = (path: string): boolean =>
-    path !== "package.json" && !matchesAny(path, unshipped) && (!whitelist || (positive.some((entry) => matchesAny(path, entryGlobs(entry))) && !matchesAny(path, negative)));
+  const tracked = positive.filter((entry) => ownTracked.some((path) => matchesAny(path, entryGlobs(entry))));
+  const whitelist = [...tracked.flatMap(entryGlobs), ...(tracked.length < positive.length ? BUILD_INPUTS : [])];
+  const packed = alwaysPacked(pkg.manifest);
+  const listed = (path: string): boolean => packed.includes(path) || (matchesAny(path, whitelist) && !matchesAny(path, negative));
+  const ships = (path: string): boolean => path !== "package.json" && !matchesAny(path, unshipped) && (positive.length === 0 || listed(path));
   const files = changed.filter(own).map(relative).filter(ships);
   if (changed.includes(pkg.file) && before !== undefined && fields.some((field) => JSON.stringify(before[field]) !== JSON.stringify(pkg.manifest[field]))) files.push("package.json");
   return files;
