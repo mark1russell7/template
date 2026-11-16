@@ -43,11 +43,6 @@ on:
 
 permissions: {}
 
-env:
-  # The version of @mark1russell7/text that the script imports. It is the version that pnpm-lock.yaml of the template
-  # resolves, and a test of scripts/workflows/queue.test.ts fails when the two differ.
-  TEXT_VERSION: "0.0.6"
-
 jobs:
   queue:
     name: Queue
@@ -65,24 +60,30 @@ jobs:
       pull-requests: write
       actions: write
     steps:
-      # The script comes from the commit of this workflow, as the actions of reusable-ci.yml do
+      # The script comes from the commit of this workflow, as the actions of reusable-ci.yml do. The folder of the action
+      # pull-of-run has locked-version.ts, which reads the version of the package of the script.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           path: .queue-template
-          sparse-checkout: scripts/workflows
+          sparse-checkout: |
+            scripts/workflows
+            .github/actions/pull-of-run
           persist-credentials: false
       # The script is TypeScript: Node 24 runs it with its type stripping
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
-      # The script imports the escapes of Markdown and of workflow commands from @mark1russell7/text. The sparse checkout
-      # also has the root package.json of the template, so the install goes to the folder of the script, which has no
-      # package.json. Node finds that node_modules first. No install script starts.
+      # The script imports the escapes of Markdown and of workflow commands from @mark1russell7/text, at the version that
+      # pnpm-lock.yaml of the template gives (CI.md, "The packages of the workflow scripts"). The sparse checkout also has
+      # the root package.json of the template, so the install goes to the folder of the script, which has no package.json.
+      # Node finds that node_modules first. No install script starts.
       - name: Install the package of the script
         shell: bash
-        run: npm install --no-save --no-package-lock --ignore-scripts --prefix .queue-template/scripts/workflows "@mark1russell7/text@${TEXT_VERSION}"
+        run: |
+          version="$(node .queue-template/.github/actions/pull-of-run/locked-version.ts .queue-template/pnpm-lock.yaml @mark1russell7/text)"
+          npm install --no-save --no-package-lock --ignore-scripts --prefix .queue-template/scripts/workflows "@mark1russell7/text@${version}"
       - name: Update each pull request that is behind, and start its held runs
         shell: bash
         env:
