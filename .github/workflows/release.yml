@@ -30,7 +30,8 @@
 # gets a provenance statement. The trusted publisher of each package names this repository and
 # the workflow file release.yml, with NO environment (npm refused an environment for a repository
 # with the immutable OIDC subject, npm/cli#9969). A version with a hyphen (1.2.0-rc.1) gets the
-# dist-tag "next". The others get "latest".
+# dist-tag "next". A version above the "latest" of npm gets "latest", and a lower version gets
+# "latest-<major>.<minor>", so "latest" never goes back (.github/actions/npm-publish/dist-tag.ts).
 #
 # npm trusts a workflow only for a package that exists. The owner bootstraps a new package once:
 # scripts/release/npm-bootstrap.ts (RELEASING.md tells the procedure). Without it, this workflow
