@@ -641,6 +641,10 @@ The shell is the part of a page that is not its content. The package has two par
 
 The entry `@mark1russell7/site-pages/vite` is for `vite.config.ts`. The plugin `siteShell` sets `base` from `SITE_BASE`, sets `build.target` to `es2022`, defines `__BUILD__`, and adds the theme script to the `head` of each HTML page.
 
+The plugin also adds an icon link to each HTML page with no icon link. Without an icon link, the browser asks for `/favicon.ico`. A project site on GitHub Pages has no such file, so the console shows a 404 error. The option `icon` sets the `href` of the icon. The value `false` adds no icon.
+
+The releases page and the status page have the same icon. `PageOptions.icon` sets its `href`. The root entry exports `SITE_ICON_HREF`, `iconLink(href)` and `hasIconLink(html)`, for a page without the plugin.
+
 ```ts
 import { defineConfig } from "vite";
 import { siteShell } from "@mark1russell7/site-pages/vite";
@@ -662,7 +666,7 @@ showBuild(byId("build"), __BUILD__, "owner/my-site");
 
 | Export of `./vite` | Operation |
 | --- | --- |
-| `siteShell({ themeKey, packageFile })` | Makes the plugin. A `base` or a `build.target` in the config of the site has priority. |
+| `siteShell({ themeKey, packageFile, icon })` | Makes the plugin. A `base` or a `build.target` in the config of the site has priority. |
 | `siteStamps(input)` | Makes the plugin of the data stamps of a site. |
 | `themeScript(storageKey)` | Gives the text of the theme script, for a page without the plugin. |
 | `siteBase(env)` | Gives `SITE_BASE` with one `/` at the end, or `/`. |

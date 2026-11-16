@@ -72,7 +72,7 @@ on:
         type: boolean
         default: true
       site-pages-version:
-        description: The version range of @mark1russell7/site-pages. Empty gives the default range of the site-pages action.
+        description: An npm version range of @mark1russell7/site-pages for its pages. Empty starts the source of site-pages at the template commit of this workflow.
         type: string
         default: ""
       roadmap:
@@ -244,10 +244,11 @@ jobs:
         with:
           fetch-depth: ${{ inputs.fetch-depth }}
           persist-credentials: false
-      # The actions site-config and pages-build, and the source of the site config, the site check, the site bar, the
-      # scroll cue and the freshness gate, from the same template commit. packages/site-pages/src/check and src/bar
-      # import only Node.js, src/data and src/render/html.ts, and the cue reads styles/scroll-cue.css, so they need no
-      # npm release of site-pages.
+      # The actions site-config and pages-build, and the source of the site config, the Releases and Status pages, the
+      # site check, the site bar, the scroll cue and the freshness gate, from the same template commit. The cone mode
+      # also gives the files directly in packages/site-pages/src, with the bin src/cli.ts. src/cli.ts imports only
+      # Node.js and the folders below, and the cue reads styles/scroll-cue.css. Thus they need no npm release of
+      # site-pages. src/cli.test.ts holds the rule.
       - name: Shared actions (the site config, site-pages and the site check)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

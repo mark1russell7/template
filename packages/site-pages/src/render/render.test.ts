@@ -8,6 +8,7 @@ import { buildStatusBoard, roadmapItems } from "../data/status.ts";
 import type { BoardPullRequest, Release, StatusBoardData } from "../data/types.ts";
 import { dayRange, longDate, shortDate } from "./dates.ts";
 import { escapeHtml, inlineMarkdown, safeUrl } from "./html.ts";
+import { iconLink, SITE_ICON_HREF } from "./icon.ts";
 import { releasesLead, renderReleasesPage, RELEASES_SCRIPT } from "./releases.ts";
 import { classCounts, openGroups, renderStatusPage, sectionsOf, slugOf, statusLead, STATUS_SCRIPT, STATUS_SCRIPT_HELPERS } from "./status.ts";
 import { BASE_CSS, type PageOptions } from "./theme.ts";
@@ -46,7 +47,10 @@ function absoluteUrls(html: string): Array<{ attribute: string; url: string }> {
 /** This function checks that a page makes no request to another server. */
 function expectNoExternalRequest(html: string, allowed: (url: string) => boolean): void {
   expect(html).not.toMatch(/\ssrc=/);
-  expect(html).not.toMatch(/<link\b/);
+  // The only link element is the icon of the page, as a data URL: the browser asks no server for it
+  const links = [...html.matchAll(/<link\b[^>]*>/g)].map(([tag]) => tag);
+  expect(links).toEqual([iconLink()]);
+  expect(SITE_ICON_HREF.startsWith("data:")).toBe(true);
   expect(html).not.toMatch(/@import|url\(/);
   for (const { attribute, url } of absoluteUrls(html)) {
     expect(attribute).toBe("href");
@@ -163,6 +167,13 @@ describe("the timeline layout", () => {
 
 describe("the releases page", () => {
   const html = renderReleasesPage(RELEASES, PAGE);
+
+  it("has an icon link in its head, so the browser does not ask for /favicon.ico", () => {
+    expect(html.slice(0, html.indexOf("</head>"))).toContain(iconLink());
+    const own = renderReleasesPage(RELEASES, { ...PAGE, icon: "/widgets/icon.svg" });
+    expect(own).toContain('<link rel="icon" href="/widgets/icon.svg">');
+    expect(own).not.toContain(iconLink());
+  });
 
   it("has the lead line from the data", () => {
     expect(releasesLead(RELEASES)).toBe("4 versions from Oct 12 to Oct 18, 2026. 2 MINOR releases and 1 PATCH release came after the first release.");

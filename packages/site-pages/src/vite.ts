@@ -13,6 +13,7 @@ import { parseDataStamps, type DataStamps } from "./check/freshness.ts";
 import { git, headCommit } from "./data/git.ts";
 import { KPI_FILE, kpiFile, kpiText, type KpiInput } from "./data/kpi.ts";
 import { renderDataStamp } from "./render/data-stamp.ts";
+import { hasIconLink, SITE_ICON_HREF } from "./render/icon.ts";
 
 export type { BuildInfo } from "./chrome.ts";
 
@@ -28,6 +29,11 @@ export interface SiteShellOptions {
    * `../package.json`. The value `false` gives a build with no version.
    */
   readonly packageFile?: string | false | undefined;
+  /**
+   * The `href` of the icon of each page with no icon link. The default is `SITE_ICON_HREF`. The value `false` adds no
+   * icon, and the browser then asks for `/favicon.ico`.
+   */
+  readonly icon?: string | false | undefined;
 }
 
 /** The value of `build.target` in a Vite config. */
@@ -47,10 +53,17 @@ export interface SiteShellConfig {
   readonly define: Readonly<Record<string, string>>;
 }
 
-/** A tag for the `head` of each HTML page. */
+/** A tag for the `head` of each HTML page: the theme script. */
 export interface SiteShellTag {
   readonly tag: "script";
   readonly children: string;
+  readonly injectTo: "head";
+}
+
+/** The icon link for the `head` of an HTML page with no icon link. */
+export interface SiteShellIconTag {
+  readonly tag: "link";
+  readonly attrs: { readonly rel: "icon"; readonly href: string };
   readonly injectTo: "head";
 }
 
@@ -58,7 +71,8 @@ export interface SiteShellTag {
 export interface SiteShellPlugin {
   readonly name: string;
   config(config: SiteShellConfigInput): SiteShellConfig;
-  transformIndexHtml(): SiteShellTag[];
+  /** This function gives the tags of the page `html`: the theme script, and the icon link when the page has no icon link. */
+  transformIndexHtml(html?: string): (SiteShellTag | SiteShellIconTag)[];
 }
 
 /** The input of `siteKpi`. Without a commit, the plugin takes `GITHUB_SHA`, else the head of the repository. */
@@ -234,12 +248,13 @@ function versionIn(file: string): string | undefined {
 }
 
 /**
- * This function makes the Vite plugin of a site. The plugin does these four operations:
+ * This function makes the Vite plugin of a site. The plugin does these five operations:
  *
  * - It sets `base` from `SITE_BASE`.
  * - It sets `build.target` to `es2022`.
  * - It defines `__BUILD__`, the value that `showBuild` shows.
  * - It adds `themeScript` to the `head` of each HTML page.
+ * - It adds an icon link to the `head` of each HTML page with no icon link. Without it, the browser asks for `/favicon.ico`.
  *
  * A `base` or a `build.target` in the config of the site has priority. The other values of `build`
  * and `define` in that config stay, because Vite merges them.
@@ -256,8 +271,11 @@ export function siteShell(options: SiteShellOptions): SiteShellPlugin {
         define: { __BUILD__: JSON.stringify(buildInfo(version)) },
       };
     },
-    transformIndexHtml() {
-      return [{ tag: "script", children: themeScript(options.themeKey), injectTo: "head" }];
+    transformIndexHtml(html = "") {
+      const tags: (SiteShellTag | SiteShellIconTag)[] = [{ tag: "script", children: themeScript(options.themeKey), injectTo: "head" }];
+      const icon = options.icon ?? SITE_ICON_HREF;
+      if (icon !== false && !hasIconLink(html)) tags.push({ tag: "link", attrs: { rel: "icon", href: icon }, injectTo: "head" });
+      return tags;
     },
   };
 }
