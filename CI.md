@@ -678,6 +678,7 @@ The job `site` of `ci.yml` checks the site of each pull request, and "CI OK" nee
 - A caller on `workflow_run` after CI is also correct. A failed CI run, a CI run of a pull request and a CI run of a push to a different branch build nothing. The job `build` examines the branch, so the filter `branches: [main]` of the caller is not necessary.
 - The input `pending` is `head` by default. With `pending: green`, a head whose CI runs deploys nothing.
 - The inputs of `site-pages` go to the action: `site-pages-version`, `roadmap`, `base`, `packages`, `changesets`, `group`, `css`, `site-name` and `data-only`.
+- An empty `site-pages-version` (the default) builds the Releases page and the Status page from the source of site-pages at the template commit of the workflow. A version range installs that version from npm.
 - `site-pages: false` builds the site without the Releases page and the Status page.
 - Without `roadmap`, the Status page shows only the open pull requests and issues. The rule `roadmap-parses` of `@mark1russell7/conventions` thus needs `roadmap` in the site config or in each call, or `site-pages: false`.
 - `site-check: true` checks the built pages in a headless Chromium before the upload. A failed check stops the deploy. The next list tells the check.
