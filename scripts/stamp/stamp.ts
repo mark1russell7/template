@@ -8,7 +8,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { writePackage } from "../../packages/cli/src/commands/package/add.ts";
 
 /** The files that a new repository gets from the template: a path, or a folder with `/` at the end. */
@@ -94,6 +94,11 @@ export interface StampOptions {
   readonly ref: string;
   /** This function gives the newest version of an npm package. */
   readonly latest: (name: string) => string;
+  /**
+   * With `link`, each package of the template is a `link:` to its folder in the clone, not a range from npm. The job
+   * `stamp` of `ci.yml` uses it with `--ref HEAD`. Thus the files of a commit run with the packages of the same commit.
+   */
+  readonly link?: boolean | undefined;
 }
 
 const git = (cwd: string, ...args: string[]): Buffer => execFileSync("git", ["-C", cwd, ...args], { maxBuffer: 1 << 28, stdio: ["ignore", "pipe", "inherit"] });
@@ -106,20 +111,20 @@ export interface RootManifest {
   readonly [field: string]: unknown;
 }
 
-/** This function gives the npm name of each package of the template at a commit. */
-function templatePackages(template: string, sha: string, tracked: readonly string[]): Set<string> {
-  const names = new Set<string>();
+/** This function gives the folder of each package of the template at a commit, by its npm name. */
+function templatePackages(template: string, sha: string, tracked: readonly string[]): Map<string, string> {
+  const folders = new Map<string, string>();
   for (const path of tracked.filter((file) => /^packages\/[^/]+\/package\.json$/.test(file))) {
-    names.add((JSON.parse(git(template, "show", `${sha}:${path}`).toString("utf8")) as { name: string }).name);
+    folders.set((JSON.parse(git(template, "show", `${sha}:${path}`).toString("utf8")) as { name: string }).name, dirname(path));
   }
-  return names;
+  return folders;
 }
 
 /**
  * This function gives the root package.json of a repository from the one of the template. A package of the template
- * gets the range of its newest npm version, because the repository does not have the workspace of the template.
+ * gets the range that `range` gives, because the repository does not have the workspace of the template.
  */
-export function stampRoot(template: RootManifest, name: string, packages: ReadonlySet<string>, latest: (name: string) => string): RootManifest {
+export function stampRoot(template: RootManifest, name: string, packages: ReadonlySet<string> | ReadonlyMap<string, string>, range: (name: string) => string): RootManifest {
   const dev = { ...template.devDependencies, "@mark1russell7/template-cli": "workspace:*" };
   return {
     ...template,
@@ -128,7 +133,7 @@ export function stampRoot(template: RootManifest, name: string, packages: Readon
     devDependencies: Object.fromEntries(
       Object.entries(dev)
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([dep, range]) => [dep, packages.has(dep) && range === "workspace:*" ? `^${latest(dep)}` : range]),
+        .map(([dep, given]) => [dep, packages.has(dep) && given === "workspace:*" ? range(dep) : given]),
     ),
   };
 }
@@ -182,7 +187,7 @@ export function rootFieldsBehind(expected: RootManifest, actual: Readonly<Record
 export function checkStamp({ repo, template, ref }: { readonly repo: string; readonly template: string; readonly ref: string }): { sha: string; files: StampFileCheck[] } {
   const sha = git(template, "rev-parse", `${ref}^{commit}`).toString().trim();
   const tracked = git(template, "ls-tree", "-r", "--name-only", sha).toString().split("\n").filter(Boolean);
-  const packages = templatePackages(template, sha, tracked);
+  const packages = new Set(templatePackages(template, sha, tracked).keys());
   const files = KEEP.map((path): StampFileCheck => {
     const file = join(repo, path);
     if (!existsSync(file)) return { path, state: "missing" };
@@ -190,7 +195,7 @@ export function checkStamp({ repo, template, ref }: { readonly repo: string; rea
     const actual = readFileSync(file);
     if (path === "package.json") {
       const source = JSON.parse(blob.toString("utf8")) as RootManifest;
-      const expected = stampRoot(source, "", packages, () => "0.0.0");
+      const expected = stampRoot(source, "", packages, () => "^0.0.0");
       const fields = rootFieldsBehind(expected, JSON.parse(actual.toString("utf8")) as Record<string, unknown>, packages, source.devDependencies);
       return fields.length > 0 ? { path, state: "differs", fields } : { path, state: "same" };
     }
@@ -217,7 +222,7 @@ function manifests(root: string, folder = ""): string[] {
  *
  * @throws Error when the name is not valid, the folder exists, or the result has a part that cannot work
  */
-export async function stamp({ name, description, npm, template, out, ref, latest }: StampOptions): Promise<string> {
+export async function stamp({ name, description, npm, template, out, ref, latest, link }: StampOptions): Promise<string> {
   if (!NAME.test(name)) throw new Error(`The repository name must match ${String(NAME)}.`);
   if (existsSync(out)) throw new Error(`The folder exists: ${out}`);
   const sha = git(template, "rev-parse", `${ref}^{commit}`).toString().trim();
@@ -231,8 +236,14 @@ export async function stamp({ name, description, npm, template, out, ref, latest
     writeFileSync(target, path.startsWith(".github/workflows/") ? pinWorkflow(blob.toString("utf8"), sha) : blob);
   }
 
+  const folders = templatePackages(template, sha, tracked);
+  const folder = (dep: string): string | undefined => (link === true ? folders.get(dep) : undefined);
+  const range = (dep: string): string => {
+    const local = folder(dep);
+    return local === undefined ? `^${latest(dep)}` : `link:${resolve(template, local).replace(/\\/g, "/")}`;
+  };
   const rootFile = join(out, "package.json");
-  const root = stampRoot(JSON.parse(readFileSync(rootFile, "utf8")) as RootManifest, name, templatePackages(template, sha, tracked), latest);
+  const root = stampRoot(JSON.parse(readFileSync(rootFile, "utf8")) as RootManifest, name, folders, range);
   writeFileSync(rootFile, `${JSON.stringify(root, null, 2)}\n`);
 
   mkdirSync(join(out, "docs"), { recursive: true });
@@ -243,7 +254,7 @@ export async function stamp({ name, description, npm, template, out, ref, latest
   if (written.skipped.length > 0) throw new Error(`The preset site did not write ${written.skipped.join(", ")}.`);
   const siteFile = join(written.dir, "package.json");
   const site = JSON.parse(readFileSync(siteFile, "utf8")) as { devDependencies: Record<string, string> };
-  for (const dep of ["vite", "@mark1russell7/site-pages"]) site.devDependencies[dep] = `^${latest(dep)}`;
+  for (const dep of ["vite", "@mark1russell7/site-pages"]) site.devDependencies[dep] = range(dep);
   site.devDependencies = Object.fromEntries(Object.entries(site.devDependencies).sort(([a], [b]) => a.localeCompare(b)));
   writeFileSync(siteFile, `${JSON.stringify(site, null, 2)}\n`);
 
