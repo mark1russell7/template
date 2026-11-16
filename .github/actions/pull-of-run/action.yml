@@ -1,6 +1,6 @@
 name: pull-of-run
 description: >-
-  Finds the open pull request of the branch of a run that workflow_dispatch starts, for example a gate of the queue. It
+  Finds the open pull request of the branch of a run that workflow_dispatch starts, for example a run by hand. It
   gives the tip of the base branch, the head and the labels of the pull request, and the pull request as JSON. It fails
   closed: a lookup that cannot decide stops the job with its reason. pull.ts tells the rules.
 inputs:
