@@ -54,6 +54,7 @@ export {
   noLocalPaths,
   packNoBuildinfo,
   pagesAfterRelease,
+  publishTextSafe,
   pagesSite,
   pinnedGitDeps,
   pipeFails,
