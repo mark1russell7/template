@@ -570,17 +570,15 @@ describe("queue: the workflows", () => {
     assert.doesNotMatch(caller, /private:/);
   });
 
-  it("installs the version of @mark1russell7/text that pnpm-lock.yaml of the template resolves, so a bump of the lockfile cannot leave the workflow behind", () => {
-    const lock = readFileSync(join(root, "pnpm-lock.yaml"), "utf8");
-    // pnpm 12 writes two documents: the root importer of the second one has the devDependencies
-    const locked = [...lock.matchAll(/\nimporters:\n\n {2}\.:\n([\s\S]*?)(?:\n\n|$)/g)]
-      .map((match) => /\n {6}'@mark1russell7\/text':\n {8}specifier: \S+\n {8}version: ([^\s(]+)/.exec(`\n${match[1] ?? ""}`)?.[1])
-      .find((version) => version !== undefined);
-    assert.ok(locked !== undefined, "pnpm-lock.yaml resolves no @mark1russell7/text for the root package");
-    assert.equal(/\n {2}TEXT_VERSION: "([^"]+)"\n/.exec(shared)?.[1], locked);
+  it("installs the version of @mark1russell7/text that pnpm-lock.yaml of the template gives, so a bump of the lockfile also moves the install", () => {
     // The install goes to the folder of the script: the sparse checkout also has the root package.json of the template
-    const install = shared.indexOf(`run: npm install --no-save --no-package-lock --ignore-scripts --prefix .queue-template/scripts/workflows "@mark1russell7/text@\${TEXT_VERSION}"\n`);
+    const run = [
+      'version="$(node .queue-template/scripts/workflows/locked-version.ts .queue-template/pnpm-lock.yaml @mark1russell7/text)"',
+      'npm install --no-save --no-package-lock --ignore-scripts --prefix .queue-template/scripts/workflows "@mark1russell7/text@${version}"',
+    ];
+    const install = shared.indexOf(`run: |\n          ${run[0]}\n          ${run[1]}\n`);
     assert.ok(install > 0);
     assert.ok(install < shared.indexOf("run: node .queue-template/scripts/workflows/queue.ts"));
+    assert.doesNotMatch(shared, /TEXT_VERSION/);
   });
 });

@@ -45,15 +45,15 @@ outputs:
 runs:
   using: composite
   steps:
-    # The script imports the escapes of Markdown and of workflow commands from @mark1russell7/text. The version is the
-    # version that pnpm-lock.yaml of the template resolves, and a test of .github/actions/pull-of-run.test.ts fails when
-    # the two differ. The folder of the action has no package.json, so the install goes there, and Node finds that
-    # node_modules first. No install script starts.
+    # The script imports the escapes of Markdown and of workflow commands from @mark1russell7/text, at the version that
+    # pnpm-lock.yaml of the template gives (CI.md, "The packages of the workflow scripts"). The folder of the action is in
+    # the whole tree of the template, so the root of the tree is three folders up. The folder of the action has no
+    # package.json, so the install goes there, and Node finds that node_modules first. No install script starts.
     - name: Install the package of the script
       shell: bash
-      env:
-        TEXT_VERSION: "0.0.6"
-      run: npm install --no-save --no-package-lock --ignore-scripts --prefix "$GITHUB_ACTION_PATH" "@mark1russell7/text@${TEXT_VERSION}"
+      run: |
+        version="$(node "$GITHUB_ACTION_PATH/../../../scripts/workflows/locked-version.ts" "$GITHUB_ACTION_PATH/../../../pnpm-lock.yaml" @mark1russell7/text)"
+        npm install --no-save --no-package-lock --ignore-scripts --prefix "$GITHUB_ACTION_PATH" "@mark1russell7/text@${version}"
     - id: pull
       name: Pull request of the run
       shell: bash

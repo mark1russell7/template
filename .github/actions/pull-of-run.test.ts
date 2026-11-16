@@ -408,17 +408,16 @@ describe("the action and its job in reusable-ci.yml", () => {
     return first.replace(/^>-\n/u, "").replace(/\s+/gu, " ").trim();
   }
 
-  it("installs the version of @mark1russell7/text that pnpm-lock.yaml of the template resolves, before the script", () => {
-    const lock = read("pnpm-lock.yaml");
-    // pnpm 12 writes two documents: the root importer of the second one has the devDependencies
-    const locked = [...lock.matchAll(/\nimporters:\n\n {2}\.:\n([\s\S]*?)(?:\n\n|$)/gu)]
-      .map((match) => /\n {6}'@mark1russell7\/text':\n {8}specifier: \S+\n {8}version: ([^\s(]+)/u.exec(`\n${match[1] ?? ""}`)?.[1])
-      .find((version) => version !== undefined);
-    assert.ok(locked !== undefined, "pnpm-lock.yaml resolves no @mark1russell7/text for the root package");
-    assert.equal(/\n {8}TEXT_VERSION: "([^"]+)"\n/u.exec(action)?.[1], locked);
-    const install = action.indexOf('run: npm install --no-save --no-package-lock --ignore-scripts --prefix "$GITHUB_ACTION_PATH" "@mark1russell7/text@${TEXT_VERSION}"\n');
+  it("installs the version of @mark1russell7/text that pnpm-lock.yaml of the template gives, before the script", () => {
+    // The root of the tree of the template is three folders up from the folder of the action
+    const run = [
+      'version="$(node "$GITHUB_ACTION_PATH/../../../scripts/workflows/locked-version.ts" "$GITHUB_ACTION_PATH/../../../pnpm-lock.yaml" @mark1russell7/text)"',
+      'npm install --no-save --no-package-lock --ignore-scripts --prefix "$GITHUB_ACTION_PATH" "@mark1russell7/text@${version}"',
+    ];
+    const install = action.indexOf(`run: |\n        ${run[0]}\n        ${run[1]}\n`);
     assert.ok(install > 0);
     assert.ok(install < action.indexOf('run: node "$PULL"'));
+    assert.doesNotMatch(action, /TEXT_VERSION/u);
   });
 
   it("gives each output of the step, and the job gives each output that the other jobs read, but not the text", () => {
