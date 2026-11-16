@@ -86,6 +86,9 @@ function partEnd(lower: string, lt: number, search: Search, unclosed: Set<string
 /**
  * This function gives the `h1` and the number of characters of text of an HTML document, with no script. It removes the
  * comments, the elements of `NOT_TEXT` and the tags in one scan, from the left to the right.
+ *
+ * This scan is a general scan of the text of HTML, so its home is `@mark1russell7/text`, next to `escapeHtml`. It moves to
+ * `@mark1russell7/text` in its next release. Then this package imports it from there and keeps only the floor.
  */
 export function noScriptText(html: string): NoScriptText {
   // Only A to Z go to lower case, so each index of the copy is an index of the HTML.
