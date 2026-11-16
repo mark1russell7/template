@@ -47,9 +47,11 @@ type NameRule: build/index.d.ts#NameRule
 type NpmDrift: build/index.d.ts#NpmDrift
 type NpmDriftKind: build/index.d.ts#NpmDriftKind
 type NpmPresence: build/index.d.ts#NpmPresence
+OWNERS: build/owners.d.ts#OWNERS
 type OptionSpec: build/index.d.ts#OptionSpec
 type OptionValue: build/index.d.ts#OptionValue
 type Options: build/index.d.ts#Options
+type Owner: build/owners.d.ts#Owner
 PAGES_WORKFLOWS: build/index.d.ts#PAGES_WORKFLOWS
 PRE_PUSH_HOOK: build/index.d.ts#PRE_PUSH_HOOK
 PRIVATE_NAMES_FILE_CONFIG: build/index.d.ts#PRIVATE_NAMES_FILE_CONFIG
@@ -159,6 +161,8 @@ npmDrift: build/index.d.ts#npmDrift
 npmLookup: build/index.d.ts#npmLookup
 npmNames: build/index.d.ts#npmNames
 npmUrl: build/index.d.ts#npmUrl
+ownerOf: build/owners.d.ts#ownerOf
+ownersOf: build/owners.d.ts#ownersOf
 packNoBuildinfo: build/index.d.ts#packNoBuildinfo
 packageFolders: build/workspace.chunk.d.ts#packageFolders
 pagesAfterRelease: build/index.d.ts#pagesAfterRelease
@@ -212,6 +216,7 @@ setVersions: build/index.d.ts#setVersions
 setupCue: build/index.d.ts#setupCue
 sharedCi: build/index.d.ts#sharedCi
 sharedDocsRule: build/index.d.ts#sharedDocsRule
+sharedNames: build/owners.d.ts#sharedNames
 signaturesOf: build/index.d.ts#signaturesOf
 siteCheckInCi: build/index.d.ts#siteCheckInCi
 sourceMain: build/index.d.ts#sourceMain
@@ -242,6 +247,14 @@ globToRegExp: build/workspace.chunk.d.ts#globToRegExp
 packageFolders: build/workspace.chunk.d.ts#packageFolders
 reportFolders: build/workspace.chunk.d.ts#reportFolders
 workspaceGlobs: build/workspace.chunk.d.ts#workspaceGlobs
+
+## ./owners (build/owners.d.ts): names
+
+OWNERS: build/owners.d.ts#OWNERS
+Owner: build/owners.d.ts#Owner
+ownerOf: build/owners.d.ts#ownerOf
+ownersOf: build/owners.d.ts#ownersOf
+sharedNames: build/owners.d.ts#sharedNames
 
 ## bin: 1 commands
 
@@ -1150,6 +1163,30 @@ export declare const workspaceProtocol: Rule;
 
 ### build/index.d.ts#yamlFaults
 export declare function yamlFaults(text: string): YamlFault[];
+
+### build/owners.d.ts#OWNERS
+export declare const OWNERS: readonly Owner[];
+
+### build/owners.d.ts#Owner
+export interface Owner {
+  readonly login: string;
+  readonly kind: "user" | "organization";
+  readonly plan: "pro" | "team";
+  readonly jobs: number;
+  readonly macos: number;
+}
+
+### build/owners.d.ts#ownerOf
+export declare function ownerOf(login: string): Owner | undefined;
+
+### build/owners.d.ts#ownersOf
+export declare function ownersOf(value: string | undefined): string[];
+
+### build/owners.d.ts#sharedNames
+export declare function sharedNames(repos: readonly {
+  readonly owner: string;
+  readonly name: string;
+}[]): string[];
 
 ### build/workspace.chunk.d.ts#globFolders
 declare function globFolders(root: string, glob: string): string[];

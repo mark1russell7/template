@@ -159,4 +159,5 @@ export {
 } from "./run.ts";
 export { findHomes, HOMES, MAP_RULE, mapMarkdown, mapText, mergeHomes, npmDrift, npmNames, readOverlay, type Home, type HomeState, type NpmDrift, type NpmDriftKind, type NpmPresence } from "./map.ts";
 export { changelogSection, MAX_NOTES, npmUrl, releaseNotes, tagName } from "./release-text.ts";
+export { OWNERS, ownerOf, ownersOf, sharedNames, type Owner } from "./owners.ts";
 export { globFolders, globToRegExp, packageFolders, workspaceGlobs } from "./workspace.ts";

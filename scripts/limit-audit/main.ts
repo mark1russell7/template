@@ -1,8 +1,8 @@
 // The audit of the time limits. `limit-audit.ts` has the rules, and its test does not start this file.
 //
-//   node scripts/limit-audit/main.ts [--repos a,b] [--hours 24] [--ci-runs 3] [--out <folder>] [--strict] [--fails-from YYYY-MM-DD]
+//   node scripts/limit-audit/main.ts [--owners a,b] [--repos a,b] [--hours 24] [--ci-runs 3] [--out <folder>] [--strict] [--fails-from YYYY-MM-DD]
 //
-// For each public repository of the owner that is not archived (or each one of --repos), the script reads the runs of
+// For each public repository of the owners (default: each owner of the package conventions) that is not archived (or each one of --repos), the script reads the runs of
 // the default branch that started in the last --hours hours. It reads the jobs of each run that did not pass and each run with a second
 // attempt, if the run took a minute or more, and the newest --ci-runs runs of ci.yml. Then it reads the annotations of each cancelled job of a
 // minute or more and of each job coverage. It writes limit-audit.json and the summary into --out, and an annotation for each finding.
@@ -12,7 +12,8 @@
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { lines, pool } from "../lib/gh.ts";
+import { lines, pool, publicRepos } from "../lib/gh.ts";
+import { ownersOf } from "../../packages/conventions/src/owners.ts";
 import {
   type Finding,
   type Job,
@@ -29,7 +30,7 @@ import {
 
 const { values } = parseArgs({
   options: {
-    owner: { type: "string", default: process.env["GITHUB_REPOSITORY_OWNER"] ?? "mark1russell7" },
+    owners: { type: "string", default: "" },
     repos: { type: "string", default: "" },
     hours: { type: "string", default: "24" },
     "ci-runs": { type: "string", default: "3" },
@@ -52,14 +53,10 @@ try {
   console.error(`Usage: --fails-from: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(2);
 }
-const owner = values.owner;
+const owners = ownersOf(values.owners);
 const since = new Date(Date.now() - hours * 3_600_000).toISOString().replace(/\.\d+Z$/, "Z");
 
-type Repo = { name: string; default_branch: string };
-const all = await lines<Repo>(
-  `users/${owner}/repos?per_page=100`,
-  ".[] | select((.private | not) and (.archived | not)) | {name, default_branch} | tojson",
-);
+const all = await publicRepos(owners);
 const wanted = values.repos
   .split(",")
   .map((name) => name.trim())
@@ -70,7 +67,7 @@ const notRead: string[] = wanted.filter((name) => !repos.some((repo) => repo.nam
 const findings: Finding[] = [];
 let calls = 0;
 const results = await pool(repos, 4, async (repo) => {
-  const full = `${owner}/${repo.name}`;
+  const full = `${repo.owner}/${repo.name}`;
   try {
     const runs = await lines<Run>(
       `repos/${full}/actions/runs?branch=${encodeURIComponent(repo.default_branch)}&created=%3E%3D${since}&per_page=100&exclude_pull_requests=true`,
