@@ -19,6 +19,7 @@ export const KEEP: readonly string[] = [
   ".github/workflows/ai-review.yml",
   ".github/workflows/ci.yml",
   ".github/workflows/codex-review.yml",
+  ".github/workflows/lockfile.yml",
   ".github/workflows/queue.yml",
   ".github/workflows/release.yml",
   ".github/workflows/security.yml",

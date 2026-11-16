@@ -47,6 +47,7 @@ on:
       - ".github/workflows/reusable-pages-check.yml"
       - ".github/workflows/reusable-release-*.yml"
       - ".github/workflows/reusable-ci.yml"
+      - ".github/workflows/reusable-lockfile.yml"
       - "scripts/release/**"
       # The test site installs the workspace, so a change of a package file can break it
       - "package.json"
@@ -107,6 +108,7 @@ jobs:
             .github/workflows/reusable-pages-check.yml
             .github/workflows/reusable-release-*.yml
             .github/workflows/reusable-ci.yml
+            .github/workflows/reusable-lockfile.yml
             scripts/release/**
             package.json
             pnpm-lock.yaml
@@ -628,6 +630,15 @@ jobs:
           done; done; done
           node -e 'const s = require(process.argv[1]); if (!s.github?.available) { console.error("::error::the GitHub part is not available:", s.github?.reason); process.exit(1); } if (!(s.items?.length > 0)) { console.error("::error::the Status page has no roadmap item"); process.exit(1); } console.log("github:", s.pullRequests.length, "open PRs,", s.issues.length, "open issues;", s.items.length, "roadmap items")' "$OUT/data/status.json"
 
+  # The test of reusable-lockfile.yml: the merge of main, the install that writes only pnpm-lock.yaml, and the
+  # artifact. A pull request starts it on its own merge commit, and a push starts it on main.
+  lockfile:
+    needs: changes
+    if: needs.changes.outputs.match == 'true'
+    uses: ./.github/workflows/reusable-lockfile.yml
+    permissions:
+      contents: read
+
   release-build:
     needs: changes
     if: needs.changes.outputs.match == 'true'
@@ -819,7 +830,7 @@ jobs:
   actions-ok:
     name: Actions OK
     if: ${{ !cancelled() }}
-    needs: [changes, green-main, setup-cue, setup-playwright, setup-playwright-warning, cue-ci, coverage-deadline, data-stamps, pages, pages-check, release-build, release-publish, release-tag, release-check, gate-summary-last]
+    needs: [changes, green-main, setup-cue, setup-playwright, setup-playwright-warning, cue-ci, coverage-deadline, data-stamps, pages, pages-check, lockfile, release-build, release-publish, release-tag, release-check, gate-summary-last]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}

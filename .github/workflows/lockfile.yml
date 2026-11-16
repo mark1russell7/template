@@ -1,6 +1,9 @@
 # Makes pnpm-lock.yaml again on a runner, for the branch that the run starts on (reusable-lockfile.yml):
 #
-#   gh workflow run lockfile.yml -R mark1russell7/template --ref <branch>
+#   gh workflow run lockfile.yml -R <owner/repo> --ref <branch>
+#
+# A dispatch on the default branch fails. The job "lockfile" of actions-test.yml tests the shared workflow on
+# each pull request of the template that changes it.
 name: Lockfile
 
 on:
