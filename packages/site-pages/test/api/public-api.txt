@@ -23,7 +23,7 @@ type ChangelogSection: build/index.d.ts#ChangelogSection
 type ChangelogSource: build/index.d.ts#ChangelogSource
 type CheckState: build/chunks/freshness.d.ts#CheckState
 type CliIo: build/index.d.ts#CliIo
-type CronLine: build/chunks/freshness.d.ts#CronLine
+type CronLine: build/index.d.ts#CronLine
 DATA_STAMP_SCHEMA: build/chunks/freshness.d.ts#DATA_STAMP_SCHEMA
 DEFAULT_CHANGELOGS: build/index.d.ts#DEFAULT_CHANGELOGS
 type DataLimit: build/chunks/freshness.d.ts#DataLimit
@@ -113,7 +113,7 @@ checkFreshness: build/chunks/freshness.d.ts#checkFreshness
 checkStateOf: build/index.d.ts#checkStateOf
 classCounts: build/index.d.ts#classCounts
 compareVersions: build/index.d.ts#compareVersions
-cronLines: build/chunks/freshness.d.ts#cronLines
+cronLines: build/index.d.ts#cronLines
 dayRange: build/index.d.ts#dayRange
 escapeHtml: build/index.d.ts#escapeHtml
 failingCases: build/chunks/freshness.d.ts#failingCases
@@ -451,12 +451,6 @@ interface ChangelogReading {
 ### build/chunks/freshness.d.ts#CheckState
 type CheckState = "success" | "failure" | "pending" | "none";
 
-### build/chunks/freshness.d.ts#CronLine
-interface CronLine {
-  readonly line: number;
-  readonly cron: string;
-}
-
 ### build/chunks/freshness.d.ts#DATA_STAMP_SCHEMA
 declare const DATA_STAMP_SCHEMA = "data-stamp/1";
 
@@ -709,9 +703,6 @@ interface WorkspaceVersion {
 
 ### build/chunks/freshness.d.ts#checkFreshness
 declare function checkFreshness(stamps: DataStamps, options: FreshnessOptions): FreshnessCheck;
-
-### build/chunks/freshness.d.ts#cronLines
-declare function cronLines(workflow: string): CronLine[];
 
 ### build/chunks/freshness.d.ts#failingCases
 declare function failingCases(stamps: DataStamps, options: FreshnessOptions): readonly FailingCase[];
@@ -1098,6 +1089,12 @@ interface CliIo {
   now?: string;
 }
 
+### build/index.d.ts#CronLine
+interface CronLine {
+  readonly line: number;
+  readonly cron: string;
+}
+
 ### build/index.d.ts#DEFAULT_CHANGELOGS
 export declare const DEFAULT_CHANGELOGS: readonly string[];
 
@@ -1413,6 +1410,9 @@ export declare function classCounts(items: readonly BoardItem[]): Record<StatusC
 
 ### build/index.d.ts#compareVersions
 export declare function compareVersions(a: string, b: string): number;
+
+### build/index.d.ts#cronLines
+export declare function cronLines(workflow: string): CronLine[];
 
 ### build/index.d.ts#dayRange
 export declare function dayRange(start: number, end: number): string;

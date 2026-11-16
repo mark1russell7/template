@@ -126,9 +126,11 @@ export function workspaceVersions(repoDir: string): Record<string, readonly Work
     const old = chosen.get(manifest.name);
     if (old === undefined || compareVersions(manifest.version, old.version) > 0) chosen.set(manifest.name, { path, version: manifest.version });
   });
-  // One log gives each commit that changed a version line of a chosen file, the newest first.
+  // One log gives each commit that changed a version line of a chosen file, the newest first. The search has no anchor,
+  // so a `package.json` on one line also counts. A commit that changed only another part of that line keeps the version.
+  // The loop below reads the version of each commit, so such a commit does not change the time of a version.
   const files = [...chosen.values()].map(({ path }) => path);
-  const log = files.length === 0 ? "" : (git(top, "-c", "core.quotePath=false", "log", "--format=%x00%H %cI", "--name-only", '-G^\\s*"version"\\s*:', "HEAD", "--", ...files.map((path) => `:(literal)${path}`)) ?? "");
+  const log = files.length === 0 ? "" : (git(top, "-c", "core.quotePath=false", "log", "--format=%x00%H %cI", "--name-only", '-G"version"\\s*:', "HEAD", "--", ...files.map((path) => `:(literal)${path}`)) ?? "");
   const commits = new Map<string, { sha: string; date: string }[]>();
   for (const entry of log.split("\0")) {
     const [head = "", ...names] = entry.split("\n");
