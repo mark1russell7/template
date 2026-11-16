@@ -411,7 +411,7 @@ describe("the action and its job in reusable-ci.yml", () => {
   it("installs the version of @mark1russell7/text that pnpm-lock.yaml of the template gives, before the script", () => {
     // The root of the tree of the template is three folders up from the folder of the action
     const run = [
-      'version="$(node "$GITHUB_ACTION_PATH/../../../scripts/workflows/locked-version.ts" "$GITHUB_ACTION_PATH/../../../pnpm-lock.yaml" @mark1russell7/text)"',
+      'version="$(node "$GITHUB_ACTION_PATH/locked-version.ts" "$GITHUB_ACTION_PATH/../../../pnpm-lock.yaml" @mark1russell7/text)"',
       'npm install --no-save --no-package-lock --ignore-scripts --prefix "$GITHUB_ACTION_PATH" "@mark1russell7/text@${version}"',
     ];
     const install = action.indexOf(`run: |\n        ${run[0]}\n        ${run[1]}\n`);

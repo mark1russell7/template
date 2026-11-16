@@ -797,7 +797,8 @@ uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<full commit SHA>
 
 Some workflow scripts import a package of the template, for example `@mark1russell7/text`. The workflow installs that package with npm, outside pnpm. It does not pin a version of its own.
 
-- The install step starts `scripts/workflows/locked-version.ts`. The script reads the version that `pnpm-lock.yaml` of the template gives for the root package.
+- The install step starts `.github/actions/pull-of-run/locked-version.ts`. The script reads the version that `pnpm-lock.yaml` of the template gives for the root package.
+- The script is in the folder of the action. Thus each checkout of the action has it, also a sparse checkout of `.github/actions`.
 - Thus a bump of the lockfile, for example by the release train, also moves each such install. No pin in a workflow stays behind.
 - `reusable-queue.yml` and the action `pull-of-run` install `@mark1russell7/text` in this way.
 - A test of `scripts/workflows/locked-version.test.ts` fails when a workflow or an action installs a package of the lockfile at a version in its text.

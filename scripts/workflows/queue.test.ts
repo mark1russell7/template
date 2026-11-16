@@ -572,8 +572,9 @@ describe("queue: the workflows", () => {
 
   it("installs the version of @mark1russell7/text that pnpm-lock.yaml of the template gives, so a bump of the lockfile also moves the install", () => {
     // The install goes to the folder of the script: the sparse checkout also has the root package.json of the template
+    assert.match(shared, /\n {10}path: \.queue-template\n {10}sparse-checkout: \|\n {12}scripts\/workflows\n {12}\.github\/actions\/pull-of-run\n/);
     const run = [
-      'version="$(node .queue-template/scripts/workflows/locked-version.ts .queue-template/pnpm-lock.yaml @mark1russell7/text)"',
+      'version="$(node .queue-template/.github/actions/pull-of-run/locked-version.ts .queue-template/pnpm-lock.yaml @mark1russell7/text)"',
       'npm install --no-save --no-package-lock --ignore-scripts --prefix .queue-template/scripts/workflows "@mark1russell7/text@${version}"',
     ];
     const install = shared.indexOf(`run: |\n          ${run[0]}\n          ${run[1]}\n`);
