@@ -27,10 +27,14 @@
 # The run uses the code of its own branch, so no input names a branch and the cache of the default branch
 # stays out of reach.
 #
-# The job merges the default branch into the branch without a commit. It stops when a file other than
+# A dispatch on the default branch fails: the job makes the lockfile of a branch, and a person merges it.
+# It merges the default branch into the branch without a commit. It stops when a file other than
 # pnpm-lock.yaml conflicts. Then it takes the lockfile of the default branch and runs
-# "pnpm install --lockfile-only --ignore-scripts": no package script runs, and nothing is built.
-# The artifact "lockfile" has pnpm-lock.yaml and merge.txt with the commit of the default branch.
+# "pnpm install --lockfile-only --no-frozen-lockfile --ignore-scripts": no package script runs, and nothing
+# is built. In CI, pnpm makes a frozen install by default, and a frozen install does not write the file.
+# The job fails when the install changes a file other than pnpm-lock.yaml.
+# The artifact "lockfile" has only pnpm-lock.yaml and merge.txt with the commit of the default branch.
+# The normal CI of the commit with the new file then does a frozen install, which examines the file.
 #
 # The job pushes nothing: it has only "contents: read", and a push with the token of a run starts no checks.
 # So the session finishes the merge in its worktree:
@@ -57,6 +61,17 @@ jobs:
     permissions:
       contents: read
     steps:
+      # A test of the template (actions-test.yml) also starts on a push to the default branch
+      - name: Refuse the default branch
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          DEFAULT: ${{ github.event.repository.default_branch }}
+          REF: ${{ github.ref }}
+        run: |
+          if [ "$REF" = "refs/heads/$DEFAULT" ]; then
+            echo "::error::The job makes the lockfile of a branch, not of $DEFAULT. Start it with --ref <branch>."
+            exit 1
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -85,9 +100,18 @@ jobs:
           node-version: "26"
       - name: Make the lockfile again
         run: |
-          pnpm install --lockfile-only --ignore-scripts
+          pnpm install --lockfile-only --no-frozen-lockfile --ignore-scripts
           cp pnpm-lock.yaml "$RUNNER_TEMP/pnpm-lock.yaml"
           git diff --stat "$MAIN" -- pnpm-lock.yaml >> "$GITHUB_STEP_SUMMARY" || true
+      # The merge staged its files. Thus a change of the install shows in the work tree only.
+      - name: Only pnpm-lock.yaml changed
+        run: |
+          changed=$( { git diff --name-only; git ls-files --others --exclude-standard; } | sort -u)
+          other=$(printf '%s\n' "$changed" | grep -v -x 'pnpm-lock.yaml' | grep . || true)
+          if [ -n "$other" ]; then
+            echo "::error::The install changed files other than pnpm-lock.yaml: $other"
+            exit 1
+          fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: lockfile
