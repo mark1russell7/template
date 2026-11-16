@@ -1,4 +1,4 @@
-// Tests of scripts/workflows/locked-version.ts (CI.md, "The packages of the workflow scripts"). Start them with
+// Tests of .github/actions/pull-of-run/locked-version.ts (CI.md, "The packages of the workflow scripts"). Start them with
 // "pnpm test:workflows". The tests read the lockfile and the workflows of the template, and use no network.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { lockedVersion } from "./locked-version.ts";
+import { lockedVersion } from "../../.github/actions/pull-of-run/locked-version.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "../..");
@@ -81,7 +81,7 @@ describe("lockedVersion", () => {
 });
 
 describe("the command", () => {
-  const script = join(here, "locked-version.ts");
+  const script = join(root, ".github/actions/pull-of-run/locked-version.ts");
   const start = (...args: string[]) => spawnSync(process.execPath, [script, ...args], { encoding: "utf8" });
 
   it("writes the version and a line end, and exits with code 1 for a package that the root does not have", () => {
@@ -132,7 +132,7 @@ describe("the installs of the workflows", () => {
         }
       }
     }
-    assert.deepEqual(pinned, [], "Read the version with scripts/workflows/locked-version.ts, as reusable-queue.yml does");
+    assert.deepEqual(pinned, [], "Read the version with .github/actions/pull-of-run/locked-version.ts, as reusable-queue.yml does");
   });
 
   it("read the version of @mark1russell7/text with locked-version.ts before each install of it", () => {

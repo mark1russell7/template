@@ -1,8 +1,10 @@
 // The version of a package that pnpm-lock.yaml gives for the root package (CI.md, "The packages of the workflow scripts").
 // A workflow that installs a package with npm, outside pnpm, starts it before the install:
 //
-//   version="$(node scripts/workflows/locked-version.ts pnpm-lock.yaml @mark1russell7/text)"
+//   version="$(node .github/actions/pull-of-run/locked-version.ts pnpm-lock.yaml @mark1russell7/text)"
 //
+// The script is in the folder of the action pull-of-run, so each checkout of that action has it. A job that checks out
+// only .github/actions, as the job pull of reusable-ci.yml does, has the script and the root files of the template.
 // Thus a bump of the lockfile also moves each such install, and no version pin in a workflow stays behind. The script
 // imports only Node.js modules, because it starts before each install. It writes the version and a line end to stdout.
 // It exits with code 1 when the lockfile has no such package for the root package, and with code 2 for a wrong command.

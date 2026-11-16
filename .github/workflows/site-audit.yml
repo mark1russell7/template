@@ -400,7 +400,7 @@ jobs:
       - name: Install the package of the script
         shell: bash
         run: |
-          version="$(node next/scripts/workflows/locked-version.ts next/pnpm-lock.yaml @mark1russell7/text)"
+          version="$(node next/.github/actions/pull-of-run/locked-version.ts next/pnpm-lock.yaml @mark1russell7/text)"
           npm install --no-save --no-package-lock --ignore-scripts --prefix next/scripts/workflows "@mark1russell7/text@${version}"
       - name: Playwright for the site check
         shell: bash

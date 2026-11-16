@@ -18,6 +18,7 @@ The template holds the CI, the release and the Pages workflows of the repositori
 | `.github/workflows/reusable-queue.yml` | Workflow | Merges `main` into each pull request with auto-merge that is behind, and starts the held runs of its new head ("The queue"). |
 | `.github/workflows/reusable-ai-review.yml` | Workflow | Gives a pull request a review by Claude on request (the `ai-review` label), comment only (`AI-REVIEW.md`). |
 | `.github/workflows/reusable-codex-review.yml` | Workflow | Gives a pull request a second review by an OpenAI model, comment only (`CODEX-REVIEW.md`). |
+| `.github/workflows/reusable-lockfile.yml` | Workflow | Makes the `pnpm-lock.yaml` of a branch again on a runner, with no local install ("The lockfile of a branch"). |
 
 ## CI
 
@@ -416,6 +417,53 @@ The queue does not do these things:
 - When the head does not change in the wait time, the queue starts no run. The next run of the queue does not see that pull request as `BEHIND`, but it starts the held runs of its head (step 6).
 - Each merge updates each other pull request that is behind, and starts its gates again. With N pull requests in the queue, the merge of all of them starts about N × N / 2 runs of each gate.
 
+## The lockfile of a branch
+
+A dependency update needs a new `pnpm-lock.yaml`. On a computer with low memory, a local install can fail. `reusable-lockfile.yml` makes the file on a runner. A repository uses it in its `lockfile.yml`:
+
+```yaml
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: lockfile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lockfile:
+    uses: mark1russell7/template/.github/workflows/reusable-lockfile.yml@<commit> # main
+    permissions:
+      contents: read
+```
+
+To make the lockfile of a branch:
+
+```sh
+gh workflow run lockfile.yml -R <owner/repo> --ref <branch>
+gh run download <run id> -R <owner/repo> -n lockfile -D <folder>
+git merge <commit of merge.txt>
+cp <folder>/pnpm-lock.yaml pnpm-lock.yaml && git add pnpm-lock.yaml && git commit --no-edit
+```
+
+A run does these steps:
+
+1. A dispatch on the default branch fails. The file is for a branch, and a person merges that branch.
+2. It merges the default branch into the branch, with no commit. It stops when a file other than `pnpm-lock.yaml` conflicts.
+3. It takes the lockfile of the default branch, then starts `pnpm install --lockfile-only --no-frozen-lockfile --ignore-scripts`. No script of a package starts, and nothing is built.
+4. It fails when the install changes a file other than `pnpm-lock.yaml`.
+5. It uploads the artifact `lockfile`: `pnpm-lock.yaml` and `merge.txt`, with the commit of the default branch.
+
+- In CI, pnpm makes a frozen install by default. A frozen install does not write the file, so the job gives `--no-frozen-lockfile`.
+- The job has only `contents: read`, and it pushes nothing. A push with the token of a run starts no checks.
+- After the commit of the new file, the CI of the branch does a frozen install. That install fails when the file does not agree with the `package.json` files.
+- No input names a branch. The run uses the code of its own branch, so the cache of the default branch stays out of reach.
+- GitHub starts a `workflow_dispatch` workflow only when its file is on the default branch. Add `lockfile.yml` to the default branch first, in its own pull request.
+- The branch also needs the file. Merge the default branch into it first.
+- The caller has no `pull_request` trigger. A trigger with `paths` fails the rule `gate-trigger` of `@mark1russell7/conventions`.
+- The stamp gives each new repository this `lockfile.yml`.
+
 ## Release
 
 The `release.yml` of a repository keeps four jobs:
@@ -812,7 +860,8 @@ uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<full commit SHA>
 
 Some workflow scripts import a package of the template, for example `@mark1russell7/text`. The workflow installs that package with npm, outside pnpm. It does not pin a version of its own.
 
-- The install step starts `scripts/workflows/locked-version.ts`. The script reads the version that `pnpm-lock.yaml` of the template gives for the root package.
+- The install step starts `.github/actions/pull-of-run/locked-version.ts`. The script reads the version that `pnpm-lock.yaml` of the template gives for the root package.
+- The script is in the folder of the action. Thus each checkout of the action has it, also a sparse checkout of `.github/actions`.
 - Thus a bump of the lockfile, for example by the release train, also moves each such install. No pin in a workflow stays behind.
 - `reusable-queue.yml` and the action `pull-of-run` install `@mark1russell7/text` in this way.
 - A test of `scripts/workflows/locked-version.test.ts` fails when a workflow or an action installs a package of the lockfile at a version in its text.
@@ -833,6 +882,7 @@ The workflows of the template call the shared workflows and actions by a local p
 - `ai-review.yml` tests `reusable-ai-review.yml`, and `codex-review.yml` tests `reusable-codex-review.yml`. Without its API key, a review stops at once with a note.
 - The tests of `scripts/ai-review/` examine the request, the redaction and the post of the second review, with no network.
 - `queue.yml` uses `reusable-queue.yml`, so each push to `main` of the template starts the queue. The tests of `scripts/workflows/queue.test.ts` examine the plan, the calls of the API, the summary and the two workflow files, with a fake API.
+- The job `lockfile` of `actions-test.yml` tests `reusable-lockfile.yml`. It merges `main`, makes the file and uploads the artifact, with no dispatch.
 
 The job `publish` of `release.yml` uses the pinned form of `npm-publish`, also in the template. A local action needs a checkout, and that job does no checkout.
 
