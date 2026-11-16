@@ -60,6 +60,7 @@ export {
   jobFails,
   gateAfterCancel,
   playwrightInstall,
+  publishTextSafe,
   pushMainOnly,
   releaseFiles,
   requiredScripts,

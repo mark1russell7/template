@@ -19,6 +19,7 @@ import { mainRunsFinish } from "./main-runs-finish.ts";
 import { noBuildOutput } from "./no-build-output.ts";
 import { noLocalPaths } from "./no-local-paths.ts";
 import { packNoBuildinfo } from "./pack-no-buildinfo.ts";
+import { publishTextSafe } from "./publish-text-safe.ts";
 import { exportsRequire } from "./exports-require.ts";
 import { apiReportScript } from "./api-report-script.ts";
 import { pagesAfterRelease } from "./pages-after-release.ts";
@@ -88,6 +89,7 @@ export const RULES: readonly Rule[] = [
   licenseFile,
   coverageProvider,
   packNoBuildinfo,
+  publishTextSafe,
   exportsRequire,
   pagesSite,
   siteCheckInCi,
@@ -96,4 +98,4 @@ export const RULES: readonly Rule[] = [
 ];
 
 export { publishedMinor };
-export { apiReportScript, changelogVersion, coverageProvider, cuePreset, exportsRequire, gateAfterCancel, gateTrigger, securityOneJob, securityOverrides, serviceRunMain, setupCue, sharedCi, homeModule, homePackage, jobFails, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, packNoBuildinfo, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, playwrightInstall, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, siteCheckInCi, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, versionTitle, workflowParses, workspaceProtocol };
+export { apiReportScript, changelogVersion, coverageProvider, cuePreset, exportsRequire, gateAfterCancel, gateTrigger, securityOneJob, securityOverrides, serviceRunMain, setupCue, sharedCi, homeModule, homePackage, jobFails, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, packNoBuildinfo, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, playwrightInstall, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, siteCheckInCi, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, versionTitle, workflowParses, workspaceProtocol, publishTextSafe };
