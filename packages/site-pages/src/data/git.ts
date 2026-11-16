@@ -4,6 +4,9 @@
  */
 
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { compareVersions, parseVersion } from "./versions.ts";
 
 /** A git tag and the ISO date of its creation. */
 export interface TagDate {
@@ -54,6 +57,33 @@ export function headingDate(repoDir: string, version: string, file: string): str
  */
 export function versionCommitTime(repoDir: string, file: string): string | null {
   return git(repoDir, "log", "-1", "--format=%cI", '-G^\\s*"version":', "HEAD", "--", file)?.trim() || null;
+}
+
+/**
+ * This function gives the version of each package of the repository, by its name, from each `package.json` that git tracks.
+ * In CI, these files are the files of the build commit. For two packages with one name, it keeps the higher version.
+ * Outside a repository, it gives no package.
+ */
+export function workspaceVersions(repoDir: string): Record<string, string> {
+  const versions = new Map<string, string>();
+  const top = git(repoDir, "rev-parse", "--show-toplevel")?.trim();
+  const listed = top ? (git(top, "ls-files", "-z", "--", ":(glob)**/package.json") ?? "") : "";
+  for (const path of listed.split("\0")) {
+    if (path === "" || top === undefined) continue;
+    let manifest: unknown;
+    try {
+      manifest = JSON.parse(readFileSync(join(top, path), "utf8"));
+    } catch {
+      // A file that is gone from the folder or that is not JSON names no package.
+      continue;
+    }
+    if (manifest === null || typeof manifest !== "object") continue;
+    const { name, version } = manifest as { name?: unknown; version?: unknown };
+    if (typeof name !== "string" || typeof version !== "string" || parseVersion(version) === null) continue;
+    const old = versions.get(name);
+    if (old === undefined || compareVersions(version, old) > 0) versions.set(name, version);
+  }
+  return Object.fromEntries(versions);
 }
 
 /** This function gives the full SHA of `HEAD`, or null. */

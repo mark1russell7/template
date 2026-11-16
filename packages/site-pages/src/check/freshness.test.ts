@@ -1,9 +1,10 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { NpmVersionTime } from "../data/types.ts";
-import { checkFreshness, cronLines, DATA_STAMP_SCHEMA, failingCases, latestAt, minorsBehind, parseDataStamps, runFreshnessCli, scheduleGapDays, type DataLimit, type NoAgeLimit, type FreshnessOptions, type DataRun, type DataStamps, type PageStamp } from "./freshness.ts";
+import { checkFreshness, cronLines, DATA_STAMP_SCHEMA, failingCases, latestAt, minorsBehind, parseDataStamps, runFreshnessCli, scheduleGapDays, type DataLimit, type NoAgeLimit, type FreshnessCheck, type FreshnessOptions, type DataRun, type DataStamps, type PageStamp } from "./freshness.ts";
 
 const ENGINE = "@scope/engine";
 const NOW = "2026-11-10T12:00:00Z";
@@ -76,7 +77,7 @@ describe("minorsBehind and latestAt", () => {
 
 describe("checkFreshness", () => {
   it("passes on current data", () => {
-    expect(check(stamps([run()]))).toEqual({ faults: [], notRun: [] });
+    expect(check(stamps([run()]))).toEqual({ faults: [], notRun: [], warnings: [] });
   });
 
   it("fails on data over the age limit with no run in flight", () => {
@@ -134,6 +135,23 @@ describe("checkFreshness", () => {
     expect(result.notRun[0]).toContain("npm gives no version");
   });
 
+  it("reads an engine of the same repository from the workspace at the build commit, not from npm", () => {
+    const own = (used: string, version: string): FreshnessCheck =>
+      checkFreshness(stamps([run({ engines: { [ENGINE]: "0.9.0", "@scope/own": used } })]), { now: NOW, times, workspace: { "@scope/own": version } });
+    expect(own("0.4.0", "0.5.0")).toEqual({ faults: [], notRun: [], warnings: [] });
+    expect(own("0.4.0", "0.6.0").faults).toEqual(["index.html: the run 7 used @scope/own 0.4.0, and the repository has 0.6.0 at the build commit. The limit is 1 minor version behind."]);
+    // The workspace and not npm gives the version of an engine of the repository.
+    const behindNpm = run({ date: "2026-11-09T12:00:00Z", engines: { [ENGINE]: "0.7.0" } });
+    expect(checkFreshness(stamps([behindNpm]), { now: NOW, times, workspace: { [ENGINE]: "0.7.1" } }).faults).toEqual([]);
+    expect(checkFreshness(stamps([run()]), { now: NOW, times, workspace: { [ENGINE]: "0.11.0" } }).faults[0]).toContain("the repository has 0.11.0 at the build commit");
+  });
+
+  it("says that a rule did not run only for an engine that neither npm nor the workspace has", () => {
+    const result = checkFreshness(stamps([run({ engines: { constructor: "1.0.0" } })]), { now: NOW, times: [], workspace: { "@scope/other": "1.0.0" } });
+    expect(result.faults).toEqual([]);
+    expect(result.notRun).toEqual(["index.html: npm gives no version of constructor at the start of the run 7, and no package of the repository has that name."]);
+  });
+
   it("takes other limits", () => {
     const old = run({ date: "2026-11-09T12:00:00Z", engines: { [ENGINE]: "0.7.0" } });
     expect(checkFreshness(stamps([old]), { now: NOW, times, maxMinorsBehind: 2 }).faults).toEqual([]);
@@ -146,7 +164,7 @@ describe("a study with no limit", () => {
   const noLimit: NoAgeLimit = { reproduce: "The code of the study is gone.", today: "The page tells of one day." };
 
   it("has no age limit and no limit of the engines", () => {
-    expect(check(page({ study: true, noLimit }))).toEqual({ faults: [], notRun: [] });
+    expect(check(page({ study: true, noLimit }))).toEqual({ faults: [], notRun: [], warnings: [] });
     expect(parseDataStamps(page({ study: true, noLimit })).ok).toBe(true);
   });
 
@@ -221,15 +239,20 @@ describe("a study with a limit", () => {
     expect(parseDataStamps(notStudy).ok).toBe(true);
   });
 
-  it("keeps the age rule and the commit rule off before the start, and the schedule rule on", () => {
+  it("warns on the age rule and the commit rule before the start, fails from the start, and keeps the schedule rule on", () => {
     const old = aged(60, { commit: undefined as unknown as string });
     const start = { startsAt: "2026-12-07T00:00:00Z" };
     expect(parseDataStamps(page([old], start)).ok).toBe(true);
     expect(faults(page([old], start))).toEqual([]);
+    expect(checkFreshness(page([old], start), { now: NOW, times, schedules: { [WORKFLOW]: 28 } }).warnings).toEqual([
+      "index.html: the run 7 is 60.0 days old, over the limit of 30, and no run on newer engines is in flight. The gate fails on it from 2026-12-07T00:00:00Z.",
+      "index.html: the run 7 names no commit. The gate fails on it from 2026-12-07T00:00:00Z.",
+    ]);
     expect(faults(page([old], start), 31)[0]).toContain("a gap of 31.0 days");
-    const after = checkFreshness(page([old], start), { now: "2026-12-07T00:00:00Z", times, schedules: { [WORKFLOW]: 28 } }).faults;
-    expect(after[0]).toContain("over the limit of 30");
-    expect(after).toContain("index.html: the run 7 names no commit.");
+    const after = checkFreshness(page([old], start), { now: "2026-12-07T00:00:00Z", times, schedules: { [WORKFLOW]: 28 } });
+    expect(after.faults[0]).toContain("over the limit of 30");
+    expect(after.faults).toContain("index.html: the run 7 names no commit.");
+    expect(after.warnings).toEqual([]);
   });
 
   it("refuses a start after the last start, and a start with no date", () => {
@@ -237,10 +260,16 @@ describe("a study with a limit", () => {
     expect(parseDataStamps(page([aged(1)], { startsAt: "soon" }))).toMatchObject({ ok: false, faults: ["index.html: the start of the limit has no date."] });
   });
 
-  it("gives a failing case after the start of the limit", () => {
+  it("gives a failing case after the start of the limit, with the age from the date of the data", () => {
     const [one] = failingCases(page([aged(1)], { startsAt: "2026-12-07T00:00:00Z" }), { now: NOW, times, schedules: { [WORKFLOW]: 28 } });
-    expect(one?.at).toBe("2027-01-07T00:00:00.000Z");
-    expect(one?.fault).toContain("over the limit of 30");
+    expect(one?.at).toBe("2026-12-10T12:00:00.000Z");
+    expect(one?.fault).toContain("the run 7 is 31.0 days old, over the limit of 30");
+  });
+
+  it("gives the start as the failing case of data that is old at the start, so the start never moves the clock", () => {
+    const [one] = failingCases(page([aged(60)], { startsAt: "2026-12-07T00:00:00Z" }), { now: NOW, times, schedules: { [WORKFLOW]: 28 } });
+    expect(one?.at).toBe("2026-12-07T00:00:00.000Z");
+    expect(one?.fault).toContain("the run 7 is 86.5 days old, over the limit of 30");
   });
 });
 
@@ -357,18 +386,22 @@ describe("scheduleGapDays", () => {
 describe("failingCases", () => {
   const cases = (s: DataStamps, more: Partial<FreshnessOptions> = {}) => failingCases(s, { now: NOW, times, ...more });
 
-  it("fails a measured page one day after the limit from the time of the check", () => {
+  it("fails a measured page one day after the limit, from the date of its data", () => {
     const [one] = cases(stamps([run()]));
-    expect(one?.at).toBe("2026-11-14T12:00:00.000Z");
-    expect(one?.fault).toContain("over the limit of 3");
+    expect(one?.at).toBe("2026-11-13T00:00:00.000Z");
+    expect(one?.fault).toContain("the run 7 is 4.0 days old, over the limit of 3");
+    const [older] = cases(stamps([run({ id: "2" }), run({ id: "1", date: "2026-11-08T00:00:00Z" })]));
+    expect(older?.at).toBe("2026-11-12T00:00:00.000Z");
+    expect(older?.fault).toContain("the run 1 is 4.0 days old");
   });
 
   it("uses the limit of the page, and also fails a run in flight", () => {
     const limit: DataLimit = { days: 7, reason: "The scan is weekly.", workflow: "scan.yml" };
     const [one] = cases({ schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", runs: [run()], limit }] }, { schedules: { "scan.yml": 7 } });
-    expect(one?.at).toBe("2026-11-18T12:00:00.000Z");
+    expect(one?.at).toBe("2026-11-17T00:00:00.000Z");
     expect(one?.fault).toContain("over the limit of 7");
-    const [flying] = cases(stamps([run()], run({ id: "8", date: "2026-11-10T00:00:00Z" })));
+    const [flying] = cases(stamps([run()], run({ id: "8", date: "2026-11-10T00:00:00Z", engines: { [ENGINE]: "0.10.0" } })));
+    expect(flying?.at).toBe("2026-11-14T00:00:00.000Z");
     expect(flying?.fault).toContain("in flight for more than 3");
   });
 
@@ -390,12 +423,16 @@ describe("runFreshnessCli", () => {
     writeFileSync(join(dir, name), typeof content === "string" ? content : JSON.stringify(content));
     return name;
   };
-  const start = async (argv: readonly string[]): Promise<{ code: number; out: string; err: string }> => {
+  const start = async (argv: readonly string[], env: NodeJS.ProcessEnv = {}, cwd: string = dir): Promise<{ code: number; out: string; err: string; asked: string[] }> => {
     let out = "";
     let err = "";
-    const fetcher = (async () => new Response(JSON.stringify({ versions: Object.fromEntries(times.map((t) => [t.version, {}])), time: Object.fromEntries(times.map((t) => [t.version, t.date])) }))) as typeof fetch;
-    const code = await runFreshnessCli(argv, { cwd: dir, env: {}, stdout: (t) => (out += t), stderr: (t) => (err += t) }, fetcher);
-    return { code, out, err };
+    const asked: string[] = [];
+    const fetcher = (async (input: string | URL | Request) => {
+      asked.push(decodeURIComponent(input instanceof Request ? input.url : input.toString()));
+      return new Response(JSON.stringify({ versions: Object.fromEntries(times.map((t) => [t.version, {}])), time: Object.fromEntries(times.map((t) => [t.version, t.date])) }));
+    }) as typeof fetch;
+    const code = await runFreshnessCli(argv, { cwd, env, stdout: (t) => (out += t), stderr: (t) => (err += t) }, fetcher);
+    return { code, out, err, asked };
   };
 
   it("reads the schedule of a limit from the workflow file", async () => {
@@ -419,7 +456,7 @@ describe("runFreshnessCli", () => {
   it("exits with 0 on correct stamps, and reads npm", async () => {
     const { code, out } = await start(["--stamps", file("good.json", stamps([run()])), "--now", NOW]);
     expect(out).toContain("The data stamps of 1 page pass.");
-    expect(out).toContain("Failing case at 2026-11-14T12:00:00.000Z: index.html: the run 7");
+    expect(out).toContain("Failing case at 2026-11-13T00:00:00.000Z: index.html: the run 7");
     expect(out).not.toContain("Not run");
     expect(code).toBe(0);
   });
@@ -443,7 +480,7 @@ describe("runFreshnessCli", () => {
     const page = (date: string) => ({ schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", study: true, limit, runs: [run({ date, commit: "abcdef0123456789abcdef0123456789abcdef01", engines: { redis: "7.4" } })] }] });
     const clean = await start(["--stamps", file("clean-study.json", page("2026-11-09T00:00:00Z")), "--now", NOW]);
     expect(clean.code).toBe(0);
-    expect(clean.out).toContain("Failing case at 2026-12-11T12:00:00.000Z: index.html: the run 7");
+    expect(clean.out).toContain("Failing case at 2026-12-10T00:00:00.000Z: index.html: the run 7");
     const old = await start(["--stamps", file("old-study.json", page("2026-10-10T00:00:00Z")), "--now", NOW]);
     expect(old.code).toBe(1);
     expect(old.err).toContain("the run 7 is 31.5 days old, over the limit of 30");
@@ -466,6 +503,46 @@ describe("runFreshnessCli", () => {
     const old = await start(["--stamps", file("old-page.json", stamps([run({ date: "2026-11-06T00:00:00Z" })])), "--now", NOW]);
     expect(old.code).toBe(1);
     expect(old.err).toContain("the run 7 is 4.5 days old, over the limit of 3");
+  });
+
+  it("warns on old data before the start of its limit, and gives the start as the failing case", async () => {
+    file("later.yml", 'on:\n  schedule:\n    - cron: "0 5 8,30 * *"\n');
+    const limit: DataLimit = { days: 30, reason: "The runs are heavy.", workflow: "later.yml", ruling: "https://example.com/ruling", startsAt: "2026-12-07T00:00:00Z" };
+    const run7 = run({ date: "2026-10-08T00:00:00Z", commit: "abcdef0123456789abcdef0123456789abcdef01", engines: { redis: "7.4" } });
+    const later = file("later.json", { schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", study: true, limit, runs: [run7] }] });
+    const local = await start(["--stamps", later, "--now", NOW]);
+    expect(local.code).toBe(0);
+    expect(local.out).toContain("Warning: index.html: the run 7 is 33.5 days old, over the limit of 30, and no run on newer engines is in flight. The gate fails on it from 2026-12-07T00:00:00Z.\n");
+    expect(local.out).toContain("Failing case at 2026-12-07T00:00:00.000Z: index.html: the run 7 is 60.0 days old");
+    const actions = await start(["--stamps", later, "--now", NOW], { GITHUB_ACTIONS: "true" });
+    expect(actions.out).toContain("::warning::index.html: the run 7 is 33.5 days old");
+  });
+
+  it("reads an engine of the same repository from its package.json in git, and does not ask npm for it", async () => {
+    const repo = mkdtempSync(join(tmpdir(), "stamps-repo-"));
+    writeFileSync(join(repo, ".gitconfig-empty"), "");
+    const git = (...args: string[]): void => {
+      execFileSync("git", args, { cwd: repo, stdio: "ignore", env: { ...process.env, GIT_CONFIG_GLOBAL: join(repo, ".gitconfig-empty"), GIT_CONFIG_NOSYSTEM: "1" } });
+    };
+    mkdirSync(join(repo, "packages", "own"), { recursive: true });
+    mkdirSync(join(repo, "packages", "loose"), { recursive: true });
+    writeFileSync(join(repo, "package.json"), JSON.stringify({ name: "root", private: true }));
+    writeFileSync(join(repo, "packages", "own", "package.json"), JSON.stringify({ name: "@scope/own", version: "0.4.1" }));
+    git("init", "-q");
+    git("add", "package.json", "packages/own/package.json");
+    // A file that git does not track is not a file of the build commit, so its higher version does not count.
+    writeFileSync(join(repo, "packages", "loose", "package.json"), JSON.stringify({ name: "@scope/own", version: "0.9.0" }));
+    const page = (used: string) => ({ schema: DATA_STAMP_SCHEMA, pages: [{ page: "index.html", runs: [run({ engines: { [ENGINE]: "0.9.0", "@scope/own": used } })] }] });
+    writeFileSync(join(repo, "same.json"), JSON.stringify(page("0.4.0")));
+    writeFileSync(join(repo, "behind.json"), JSON.stringify(page("0.2.0")));
+    const same = await start(["--stamps", "same.json", "--now", NOW], {}, repo);
+    expect(same.code).toBe(0);
+    expect(same.out).not.toContain("Not run");
+    expect(same.asked.some((url) => url.includes("@scope/own"))).toBe(false);
+    expect(same.asked.some((url) => url.includes(ENGINE))).toBe(true);
+    const behind = await start(["--stamps", "behind.json", "--now", NOW], {}, repo);
+    expect(behind.code).toBe(1);
+    expect(behind.err).toContain("index.html: the run 7 used @scope/own 0.2.0, and the repository has 0.4.1 at the build commit.");
   });
 
   it("exits with 2 on an incorrect command line, and gives the help", async () => {

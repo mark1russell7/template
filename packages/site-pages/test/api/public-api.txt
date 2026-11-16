@@ -497,6 +497,7 @@ interface FailingCase {
 interface FreshnessCheck {
   readonly faults: readonly string[];
   readonly notRun: readonly string[];
+  readonly warnings: readonly string[];
 }
 
 ### build/chunks/freshness.d.ts#FreshnessOptions
@@ -506,6 +507,7 @@ interface FreshnessOptions {
   readonly maxAgeDays?: number;
   readonly maxMinorsBehind?: number;
   readonly schedules?: Readonly<Record<string, number | string>>;
+  readonly workspace?: Readonly<Record<string, string>>;
 }
 
 ### build/chunks/freshness.d.ts#GitHubOpenWork
