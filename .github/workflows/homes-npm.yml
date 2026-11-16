@@ -71,6 +71,10 @@ jobs:
   # pull request. A red run on main goes to the owner of the map, who commits the new index and releases conventions. The
   # homes release each day, so the job writes the new index itself and uploads it as the artifact home-exports. Then the
   # owner needs no install and no build on their computer: the summary gives the command that downloads the file.
+  # A home with new names has a grace of 7 days from the first version with the new names (GRACE_DAYS of
+  # scripts/homes/exports.ts). In the grace, the compare passes with a warning and the output stale, and the job also
+  # writes and uploads the new index. Thus one refresh takes the releases of a week, and main stays green between the
+  # refreshes.
   exports:
     name: The index of the exports of the homes against npm
     if: github.event_name != 'pull_request'
@@ -91,10 +95,11 @@ jobs:
       - name: Compare the index with npm
         id: compare
         run: node scripts/homes/exports.ts --check
-      # Only an old index writes a new one: a failed read of npm also fails the compare, and then the write fails too
+      # Only an old index writes a new one: a failed read of npm also fails the compare, and then the write fails too. An
+      # index in its grace also writes a new one.
       - name: Write the index again
         id: write
-        if: failure() && steps.compare.outcome == 'failure'
+        if: (failure() && steps.compare.outcome == 'failure') || steps.compare.outputs.stale == 'true'
         env:
           RUN_ID: ${{ github.run_id }}
           REPOSITORY: ${{ github.repository }}
@@ -115,7 +120,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload the index
-        if: failure() && steps.write.outputs.changed == 'true'
+        if: (failure() || steps.compare.outputs.stale == 'true') && steps.write.outputs.changed == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: home-exports

@@ -10,8 +10,14 @@
 // current: a home has new exports, lost exports, or is new or gone. A new version with the same names is
 // current, so a release of conventions itself (which is in the index) does not make the index old.
 // Run it again after each release of a home package that changes its exports.
+//
+// A home that changes its names on npm gets GRACE_DAYS. The grace starts at the publish time of the first version
+// after the version of the index with other names. A later version with the same names does not start it. In the
+// grace, --check passes with a warning, and writes stale=true to GITHUB_OUTPUT. Thus one refresh of the index takes
+// the releases of a week, and main stays green. A package that is new or gone fails at once: only a change of the
+// map in this repository makes it. A package with no publish time on npm also fails.
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -53,13 +59,13 @@ export function indexModule(index: Readonly<Record<string, PackageExports>>): st
   return lines.join("\n");
 }
 
-async function exportsOf(name: string, temp: string): Promise<PackageExports> {
-  const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}/latest`);
-  if (!response.ok) throw new Error(`${name}: npm gives HTTP ${response.status}`);
+async function exportsOf(name: string, spec: string, temp: string): Promise<PackageExports> {
+  const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}/${spec}`);
+  if (!response.ok) throw new Error(`${name}@${spec}: npm gives HTTP ${response.status}`);
   const meta = (await response.json()) as { version: string; dist: { tarball: string } };
   const tarball = await fetch(meta.dist.tarball);
-  if (!tarball.ok) throw new Error(`${name}: the tarball gives HTTP ${tarball.status}`);
-  const dir = join(temp, name.replace(/[@/]/g, "_"));
+  if (!tarball.ok) throw new Error(`${name}@${spec}: the tarball gives HTTP ${tarball.status}`);
+  const dir = join(temp, `${name.replace(/[@/]/g, "_")}_${spec}`);
   mkdirSync(dir, { recursive: true });
   const file = join(dir, "package.tgz");
   writeFileSync(file, Buffer.from(await tarball.arrayBuffer()));
@@ -74,6 +80,72 @@ export function namesOf(text: string): Map<string, string> {
   return names;
 }
 
+/** This function gives the version of each package of an index module, keyed by the package. */
+export function versionsOf(text: string): Map<string, string> {
+  const versions = new Map<string, string>();
+  for (const match of text.matchAll(/^ {2}("[^"]+"): \{ version: "([^"]*)", names: \[.*\] \},$/gm)) versions.set(JSON.parse(match[1]!) as string, match[2]!);
+  return versions;
+}
+
+/** The days that a home can have new names on npm before the check fails. */
+export const GRACE_DAYS: number = 7;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * This function gives the versions after a version up to the latest version, from the field time of npm. The order
+ * is the order of their publish times. It gives no pre-release. It gives an empty list when npm has no time for a version.
+ */
+export function laterVersions(time: Readonly<Record<string, string>>, version: string, latest: string): string[] {
+  const start = time[version];
+  const end = time[latest];
+  if (start === undefined || end === undefined) return [];
+  const from = Date.parse(start);
+  const to = Date.parse(end);
+  return Object.entries(time)
+    .filter(([key]) => key !== "created" && key !== "modified" && (key === latest || !key.includes("-")))
+    .filter(([, value]) => Date.parse(value) > from && Date.parse(value) <= to)
+    .sort(([, a], [, b]) => Date.parse(a) - Date.parse(b))
+    .map(([key]) => key);
+}
+
+/** The verdict of the check: the packages that fail, and the packages in their grace, with its end. */
+export interface Verdict {
+  readonly fail: readonly string[];
+  readonly grace: readonly { readonly name: string; readonly ends: string }[];
+}
+
+/**
+ * This function gives the verdict for the changed packages. The grace of a package of both indexes starts at its
+ * time in starts: the first version with other names. A new or gone package, or a package with no start, fails.
+ */
+export function verdictOf(
+  current: string,
+  next: string,
+  changed: readonly string[],
+  starts: ReadonlyMap<string, string>,
+  now: Date,
+  graceDays: number = GRACE_DAYS,
+): Verdict {
+  const before = versionsOf(current);
+  const after = versionsOf(next);
+  const fail: string[] = [];
+  const grace: { name: string; ends: string }[] = [];
+  for (const name of changed) {
+    const start = before.has(name) && after.has(name) ? starts.get(name) : undefined;
+    const ends = start === undefined ? undefined : Date.parse(start) + graceDays * DAY_MS;
+    if (ends !== undefined && ends > now.getTime()) grace.push({ name, ends: new Date(ends).toISOString() });
+    else fail.push(name);
+  }
+  return { fail, grace };
+}
+
+async function timesOf(name: string): Promise<Readonly<Record<string, string>> | undefined> {
+  const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}`);
+  if (!response.ok) return undefined;
+  return ((await response.json()) as { time?: Record<string, string> }).time;
+}
+
 /** This function gives the packages whose names differ between two index modules, in order: new, gone or changed. */
 export function changedPackages(current: string, next: string): string[] {
   const before = namesOf(current);
@@ -81,17 +153,35 @@ export function changedPackages(current: string, next: string): string[] {
   return [...new Set([...before.keys(), ...after.keys()])].filter((name) => before.get(name) !== after.get(name)).sort();
 }
 
+/**
+ * This function gives the publish time of the first version after the version of the index with other names. It
+ * reads the names of each version between from its tarball. It gives undefined when npm has no time for the package.
+ */
+async function changeStart(name: string, version: string, latest: PackageExports, names: string, temp: string): Promise<string | undefined> {
+  const time = await timesOf(name);
+  if (time === undefined) return undefined;
+  for (const candidate of laterVersions(time, version, latest.version)) {
+    const candidateNames = candidate === latest.version ? latest.names : (await exportsOf(name, candidate, temp)).names;
+    if (JSON.stringify(candidateNames) !== names) return time[candidate];
+  }
+  return undefined;
+}
+
 async function main(args: readonly string[]): Promise<number> {
-  const check = args.includes("--check");
   const temp = mkdtempSync(join(tmpdir(), "home-exports-"));
-  const index: Record<string, PackageExports> = {};
   try {
-    for (const home of HOMES) {
-      if (home.state !== "published") continue;
-      for (const name of home.packages) if (!(home.pending ?? []).includes(name)) index[name] = await exportsOf(name, temp);
-    }
+    return await mainIn(args, temp);
   } finally {
     rmSync(temp, { recursive: true, force: true });
+  }
+}
+
+async function mainIn(args: readonly string[], temp: string): Promise<number> {
+  const check = args.includes("--check");
+  const index: Record<string, PackageExports> = {};
+  for (const home of HOMES) {
+    if (home.state !== "published") continue;
+    for (const name of home.packages) if (!(home.pending ?? []).includes(name)) index[name] = await exportsOf(name, "latest", temp);
   }
   const next = indexModule(index);
   let current = "";
@@ -103,7 +193,25 @@ async function main(args: readonly string[]): Promise<number> {
   if (check) {
     const changed = changedPackages(current, next);
     if (changed.length === 0) return 0;
-    process.stderr.write(`packages/conventions/src/home-exports.ts is not current: the names of ${changed.length} package(s) changed on npm (${changed.join(", ")}). Run node scripts/homes/exports.ts\n`);
+    const versions = versionsOf(current);
+    const names = namesOf(current);
+    const starts = new Map<string, string>();
+    for (const name of changed) {
+      const version = versions.get(name);
+      const latest = index[name];
+      const before = names.get(name);
+      if (version === undefined || latest === undefined || before === undefined) continue;
+      const start = await changeStart(name, version, latest, before, temp);
+      if (start !== undefined) starts.set(name, start);
+    }
+    const verdict = verdictOf(current, next, changed, starts, new Date());
+    for (const { name, ends } of verdict.grace) {
+      process.stdout.write(`::warning::The index has old names of ${name}. The check fails from ${ends}. Run node scripts/homes/exports.ts\n`);
+    }
+    const output = process.env["GITHUB_OUTPUT"];
+    if (verdict.grace.length > 0 && output !== undefined) appendFileSync(output, "stale=true\n");
+    if (verdict.fail.length === 0) return 0;
+    process.stderr.write(`packages/conventions/src/home-exports.ts is not current: the names of ${verdict.fail.length} package(s) changed on npm (${verdict.fail.join(", ")}). Run node scripts/homes/exports.ts\n`);
     return 1;
   }
   writeFileSync(INDEX_FILE, next);
