@@ -6,7 +6,7 @@ export type HomeState = "published" | "unpublished" | "planned" | "none";
 
 /** One area of code and its home. */
 export interface Home {
-  /** The id of the area, in kebab case. */
+  /** The id of the area, in kebab case of lower-case letters and digits, for example `3d-stages`. */
   readonly area: string;
   /** The area in a few plain words. */
   readonly title: string;
@@ -304,14 +304,25 @@ export const HOMES: readonly Home[] = [
     note: "Loops go to @mark1russell7/service, the machine state machine to @mark1russell7/algebra. It has no site facts.",
   },
   {
+    area: "3d-stages",
+    title: "3D stages and viewers",
+    covers: "three.js stages for any scene: camera and named views, picking, themes, markers, a globe of areas and places over time",
+    packages: ["@mark1russell7/visuals"],
+    repo: "mark1russell7/visuals",
+    pending: ["@mark1russell7/visuals"],
+    state: "unpublished",
+    words: ["3d", "three.js", "threejs", "webgl", "globe", "scene", "camera", "picking", "viewer", "markers", "stage"],
+    note: "3D geometry records go to layout-contract. Points on the Earth and great circles go to geo.",
+  },
+  {
     area: "room-view",
-    title: "3D room viewer",
-    covers: "a three.js viewer of a room model (glTF) with placed objects, outlets and circuits as data",
-    packages: [],
+    title: "3D room model",
+    covers: "a room model (glTF) with placed objects, outlets and circuits as data, on the stages of visuals",
+    packages: ["@mark1russell7/room-view"],
     repo: "mark1russell7/room-view",
-    state: "planned",
-    words: ["3d", "three.js", "threejs", "gltf", "room", "floor plan", "scene", "outlet", "blender", "viewer"],
-    note: "3D geometry records go to layout-contract.",
+    state: "published",
+    words: ["gltf", "room", "floor plan", "outlet", "circuit", "blender", "apartment model"],
+    note: "3D geometry records go to layout-contract. The general viewer parts go to visuals.",
   },
   {
     area: "packing",
