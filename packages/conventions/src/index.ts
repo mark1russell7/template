@@ -58,6 +58,7 @@ export {
   pinnedGitDeps,
   pipeFails,
   gateAfterCancel,
+  playwrightInstall,
   pushMainOnly,
   releaseFiles,
   requiredScripts,

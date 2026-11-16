@@ -167,6 +167,7 @@ pathNameHit: build/index.d.ts#pathNameHit
 pathsOf: build/index.d.ts#pathsOf
 pinnedGitDeps: build/index.d.ts#pinnedGitDeps
 pipeFails: build/index.d.ts#pipeFails
+playwrightInstall: build/index.d.ts#playwrightInstall
 prPathFilters: build/index.d.ts#prPathFilters
 prePush: build/index.d.ts#prePush
 privateNamesFile: build/index.d.ts#privateNamesFile
@@ -929,6 +930,9 @@ export declare const pinnedGitDeps: Rule;
 
 ### build/index.d.ts#pipeFails
 export declare const pipeFails: Rule;
+
+### build/index.d.ts#playwrightInstall
+export declare const playwrightInstall: Rule;
 
 ### build/index.d.ts#prPathFilters
 export declare function prPathFilters(text: string): PathFilter[];

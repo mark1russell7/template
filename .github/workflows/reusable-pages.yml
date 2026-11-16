@@ -131,6 +131,16 @@ on:
         description: The version of playwright-core whose Chromium the check uses.
         type: string
         default: "1.64.1"
+      playwright-browsers:
+        description: >-
+          The Playwright browsers that the build needs, with spaces between them (for example "chromium"). The action
+          setup-playwright installs them from a cache before the build, so the build command needs no install.
+        type: string
+        default: ""
+      playwright-command:
+        description: The command that runs the Playwright CLI of the repository, for example "pnpm --filter @vex/site exec playwright".
+        type: string
+        default: npx --no-install playwright
       artifact-prefix:
         description: >-
           A prefix of the names of the artifacts github-pages and site-check, for example "test-". Two calls in one run

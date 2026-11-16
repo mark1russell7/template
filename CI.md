@@ -770,6 +770,9 @@ The job `site` of `ci.yml` checks the site of each pull request, and "CI OK" nee
 - `site-check-probe` is a JavaScript or TypeScript file that tests the interactive core of the home. Its checks run at each width. The check removes the types of a `.ts` file, so the site needs no build step for its probe. `site-pages check --help` tells its functions.
 - `site-check-probe` also takes a probe for other pages, as `<page>=<file>` pairs separated by commas, for example `test-probe.js, /structures/=src/structures-probe.ts`. A file with no page is the probe of the first page. A page with no probe has none.
 - The check uses the Chromium of `playwright-core` at `site-check-playwright`, from the action `setup-playwright`. The artifact `site-check` has the screenshots and `report.json`.
+- `playwright-browsers` names the Playwright browsers that the build needs, for example `chromium`. The action `setup-playwright` installs them before the build.
+- `playwright-command` is the Playwright CLI of the repository, for example `pnpm --filter @vex/site exec playwright`. Its version is the version of the build.
+- The install has a cache, a time limit and one more try. Thus the build command needs no `playwright install` of its own. The rule `playwright-install` of `@mark1russell7/conventions` finds such an install.
 - Two calls of `reusable-pages.yml` in one run need two values of `artifact-prefix`. The prefix goes before the names `github-pages` and `site-check` of the artifacts.
 - A download by name gets only the latest artifact of the name. `download-artifact` also finds by ID only the latest artifact of each name. Thus two artifacts of one name in one run are a fault.
 - The check runs from `packages/site-pages/src/check` of the template commit of the workflow. It needs Node.js 22.18 or later.

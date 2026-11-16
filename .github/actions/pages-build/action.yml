@@ -41,6 +41,14 @@ runs:
         '
     - shell: bash
       run: pnpm install --frozen-lockfile
+    # The browsers of the build, from a cache, with a time limit and one more try, so a slow package mirror does not
+    # hold the build. The command of the build thus needs no install of its own (the rule playwright-install).
+    - name: Playwright browsers
+      if: fromJSON(inputs.config)['playwright-browsers'] != ''
+      uses: ./.shared-actions/.github/actions/setup-playwright
+      with:
+        browsers: ${{ fromJSON(inputs.config)['playwright-browsers'] }}
+        command: ${{ fromJSON(inputs.config)['playwright-command'] }}
     - name: Build
       shell: bash
       env:
