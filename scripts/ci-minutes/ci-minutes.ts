@@ -5,7 +5,9 @@
 // For a sample of the pull-request runs of each public repository, the read answers three questions.
 // - Where does the time go? Each job, by its name, with the time of each class of its steps: setup, install, build,
 //   test, check and other. A selector that runs fewer tests saves only test time. A selector that skips a job saves
-//   all of its time.
+//   all of its time. One step of the shared CI starts each script of the input scripts (build, typecheck, lint, test),
+//   so the name of the step tells nothing. The log of the job has one group for each script, with a time on each line,
+//   so the read splits that step into one part for each script, with the class of the name of the script.
 // - What does each pull request change? Docs only, the lockfile, a workflow, a root file, or the folders of the
 //   packages of a workspace, with the count of packages that it touches.
 // - What can each part of a selector save? The minutes of the runs of docs-only pull requests, the minutes of the runs
@@ -30,6 +32,11 @@ export interface Run {
   readonly conclusion: string | null;
   readonly created_at: string;
   readonly pull_requests: readonly { readonly number: number }[];
+  /**
+   * The count of the runs of the query, from each page of the list. The list stops at 1000 runs for a query with a date,
+   * so a busy repository has more runs than the list.
+   */
+  readonly total_count?: number | undefined;
 }
 
 /** A step of a job. */
@@ -42,7 +49,10 @@ export interface Step {
 
 /** A job of a run, with its steps. */
 export interface Job {
+  readonly id: number;
   readonly name: string;
+  /** The name of the runner of the job. It is empty for a job that no runner took. */
+  readonly runner_name?: string | null | undefined;
   readonly conclusion: string | null;
   readonly created_at: string;
   readonly started_at: string | null;
@@ -56,13 +66,39 @@ export interface JobRecord {
   readonly workflow: string;
   readonly run: number;
   readonly pr: number;
+  /** The id of the job. Its log is `repos/<owner>/<repo>/actions/jobs/<id>/logs`. */
+  readonly id: number;
   readonly job: string;
   readonly conclusion: string | null;
   readonly queueMs: number;
   readonly ms: number;
   /** The minutes of the job rounded up, as GitHub counts the minutes of each job. */
   readonly minutes: number;
-  readonly steps: readonly { readonly name: string; readonly cls: StepClass; readonly ms: number }[];
+  readonly steps: readonly StepRecord[];
+}
+
+/** The record of one step. A step that starts the scripts has one part for each script, from the log of the job. */
+export interface StepRecord {
+  readonly name: string;
+  readonly cls: StepClass;
+  readonly ms: number;
+  readonly parts?: readonly Part[] | undefined;
+}
+
+/** One script that a step started: its name, the class of its name, and its time. */
+export interface Part {
+  readonly script: string;
+  readonly cls: StepClass;
+  readonly ms: number;
+}
+
+/** The record of a job that no runner took: it waited in the queue, and its run was cancelled before it started. */
+export interface QueueRecord {
+  readonly repo: string;
+  readonly workflow: string;
+  readonly run: number;
+  readonly job: string;
+  readonly waitMs: number;
 }
 
 /** The kind of the change of a pull request. The first kind that applies decides, in this order. */
@@ -85,9 +121,11 @@ export interface RepoRead {
   readonly repo: string;
   /** The count of the folders of packages of the workspace (packages/*), or 0 for a repository with one package. */
   readonly packages: number;
-  /** The pull-request runs of the window. */
+  /** The pull-request runs of the window, from the count of the API. */
   readonly runs: number;
-  /** The pull requests of those runs. */
+  /** The runs of the list, at most 1000. The sample and the pull requests come from them. */
+  readonly listed: number;
+  /** The pull requests of the runs of the list. */
   readonly pullRequests: number;
   /** The runs whose jobs the read has. */
   readonly sampled: number;
@@ -124,25 +162,127 @@ export function stepClass(name: string): StepClass {
   return "other";
 }
 
-/** This function tells if a job ran: it has a start and an end, and it was not skipped. */
-export function ran(job: Job): boolean {
-  return job.started_at !== null && job.completed_at !== null && job.conclusion !== "skipped";
+/** This function tells if a runner took a job: the job has the name of a runner or a step. */
+function taken(job: Job): boolean {
+  return (job.runner_name ?? "") !== "" || (job.steps?.length ?? 0) > 0;
 }
 
-/** This function gives the record of one job that ran. */
-export function jobRecord(repo: string, workflow: string, run: number, pr: number, job: Job): JobRecord {
+/**
+ * This function tells if a job ran: a runner took it, it has a start and an end, and it was not skipped. The API gives a
+ * start to a job that waited in the queue until its run was cancelled, and that start is the time of the queue.
+ */
+export function ran(job: Job): boolean {
+  return job.started_at !== null && job.completed_at !== null && job.conclusion !== "skipped" && taken(job);
+}
+
+/** This function tells if a job waited in the queue until its run was cancelled: no runner took it. */
+export function queuedOut(job: Job): boolean {
+  return job.conclusion === "cancelled" && job.completed_at !== null && !taken(job);
+}
+
+/** This function gives the record of a job that waited in the queue until its run was cancelled. */
+export function queueRecord(repo: string, workflow: string, run: number, job: Job): QueueRecord {
+  return { repo, workflow, run, job: job.name, waitMs: took(job.created_at, job.completed_at) };
+}
+
+/** The names of the steps of the shared CI that start the input scripts, each script in one group of the log. */
+export const SCRIPT_STEPS: readonly string[] = ["Scripts", "Scripts before the tests"];
+
+/** This function tells if a job has a step that starts the input scripts. The read then reads the log of the job. */
+export function hasScripts(job: Job): boolean {
+  return (job.steps ?? []).some((step) => SCRIPT_STEPS.includes(step.name));
+}
+
+/** A group of the log of a job: its title, the time of its first line, and the time of its end line. */
+export interface Group {
+  readonly title: string;
+  readonly startMs: number;
+  readonly endMs: number;
+}
+
+/** A line of a log that opens or closes a group: its time, and the title of the group that it opens. */
+const GROUP_LINE = /^﻿?(\d{4}-\d\d-\d\dT[\d:.]+Z) ##\[(group|endgroup)\](.*)$/u;
+
+/**
+ * This function gives the groups of the log of a job. Each line of the log starts with its time, for example
+ * `2026-11-14T12:55:36.0828491Z ##[group]pnpm run test`, and a group ends at the next line `##[endgroup]`. GitHub does
+ * not nest groups. A group in the output of a script takes the place of the group of the script, so the time of that
+ * script stays in its step, and a split never gives a script more time than it took. A group with no end is not a group.
+ */
+export function logGroups(log: string): Group[] {
+  const groups: Group[] = [];
+  let open: { title: string; startMs: number } | undefined;
+  for (const line of log.split("\n")) {
+    const match = GROUP_LINE.exec(line.trimEnd());
+    if (match === null) continue;
+    const at = Date.parse(match[1] as string);
+    if (!Number.isFinite(at)) continue;
+    if (match[2] === "group") open = { title: (match[3] as string).trim(), startMs: at };
+    else if (open !== undefined) {
+      groups.push({ ...open, endMs: at });
+      open = undefined;
+    }
+  }
+  return groups;
+}
+
+/** This function gives the name of the script of a group title of the shared CI, for example `test` of `pnpm run test`. */
+export function scriptOf(title: string): string | undefined {
+  return /^pnpm (?:-r --if-present )?run ([A-Za-z0-9][\w:.-]*)$/u.exec(title)?.[1];
+}
+
+/** The steps of the API give their times in whole seconds, and the log gives parts of a second. */
+const SLACK_MS = 1_000;
+
+/**
+ * This function gives the parts of each step that starts the input scripts: one part for each group of a script whose
+ * start is in the time of the step. The key is the index of the step.
+ */
+export function partsOf(job: Job, groups: readonly Group[]): Map<number, Part[]> {
+  const parts = new Map<number, Part[]>();
+  const steps = job.steps ?? [];
+  for (const group of groups) {
+    const script = scriptOf(group.title);
+    if (script === undefined) continue;
+    const index = steps.findIndex(
+      (step) =>
+        SCRIPT_STEPS.includes(step.name) &&
+        !!step.started_at &&
+        !!step.completed_at &&
+        group.startMs >= Date.parse(step.started_at) - SLACK_MS &&
+        group.startMs <= Date.parse(step.completed_at) + SLACK_MS,
+    );
+    if (index < 0) continue;
+    const list = parts.get(index) ?? [];
+    list.push({ script, cls: stepClass(script), ms: Math.max(0, group.endMs - group.startMs) });
+    parts.set(index, list);
+  }
+  return parts;
+}
+
+/**
+ * This function gives the record of one job that ran. With the groups of the log of the job, each step that starts the
+ * input scripts gets one part for each script.
+ */
+export function jobRecord(repo: string, workflow: string, run: number, pr: number, job: Job, groups: readonly Group[] = []): JobRecord {
   const ms = took(job.started_at, job.completed_at);
+  const parts = partsOf(job, groups);
   return {
     repo,
     workflow,
     run,
     pr,
+    id: job.id,
     job: job.name,
     conclusion: job.conclusion,
     queueMs: took(job.created_at, job.started_at),
     ms,
     minutes: Math.max(1, Math.ceil(ms / 60_000)),
-    steps: (job.steps ?? []).map((step) => ({ name: step.name, cls: stepClass(step.name), ms: took(step.started_at, step.completed_at) })),
+    steps: (job.steps ?? []).map((step, index) => {
+      const record: StepRecord = { name: step.name, cls: stepClass(step.name), ms: took(step.started_at, step.completed_at) };
+      const list = parts.get(index);
+      return list === undefined ? record : { ...record, parts: list };
+    }),
   };
 }
 
@@ -220,10 +360,19 @@ export interface KindSum {
   readonly testMs: number;
 }
 
+/** The sums of one script over the sample, from the parts of the steps that start the input scripts. */
+export interface ScriptSum {
+  readonly script: string;
+  readonly cls: StepClass;
+  readonly count: number;
+  readonly ms: number;
+}
+
 /** The summary of a read: sums and counts of the sample. */
 export interface Summary {
   readonly repos: number;
   readonly runs: number;
+  readonly listed: number;
   readonly pullRequests: number;
   readonly sampledRuns: number;
   readonly jobs: number;
@@ -232,6 +381,11 @@ export interface Summary {
   readonly queueMs: number;
   /** The jobs that waited 5 minutes or more in the queue. */
   readonly queuedLong: number;
+  /** The jobs that no runner took before their run was cancelled, and the sum of their waits. They cost no minutes. */
+  readonly queuedOut: { readonly jobs: number; readonly waitMs: number };
+  /** The steps that start the input scripts, and the steps of them that the log split into scripts. */
+  readonly scriptSteps: { readonly steps: number; readonly split: number };
+  readonly byScript: readonly ScriptSum[];
   readonly byJob: readonly JobSum[];
   readonly byKind: readonly KindSum[];
   /** What each part of a selector can save, in rounded minutes of the sample. */
@@ -247,19 +401,46 @@ export interface Summary {
 
 const zero = (): ClassMs => ({ setup: 0, install: 0, build: 0, test: 0, check: 0, other: 0 });
 
-/** This function gives the summary of the records of a read. */
-export function summarize(repos: readonly RepoRead[], jobs: readonly JobRecord[], prs: readonly PrRecord[]): Summary {
+/**
+ * This function adds the time of a step to the time of each class. A step with parts gives each part to the class of its
+ * script, and the rest to the class of the step. When the parts take more time than the step, the parts get the time of
+ * the step in their ratio, so the sum stays the time of the step.
+ */
+export function addStep(into: ClassMs, step: StepRecord): void {
+  const parts = step.parts ?? [];
+  const partsMs = parts.reduce((n, part) => n + part.ms, 0);
+  const scale = partsMs > step.ms ? step.ms / partsMs : 1;
+  for (const part of parts) into[part.cls] += part.ms * scale;
+  into[step.cls] += Math.max(0, step.ms - partsMs);
+}
+
+/** This function gives the summary of the records of a read and of the jobs that waited until their run was cancelled. */
+export function summarize(repos: readonly RepoRead[], jobs: readonly JobRecord[], prs: readonly PrRecord[], queued: readonly QueueRecord[] = []): Summary {
   const changes = new Map(prs.map((pr) => [`${pr.repo}#${pr.pr}`, pr.change]));
   const packages = new Map(repos.map((repo) => [repo.repo, repo.packages]));
   const classMs = zero();
   const byJob = new Map<string, { repos: Set<string>; count: number; minutes: number; ms: number; classMs: ClassMs }>();
   const byKind = new Map<ChangeKind, { prs: Set<string>; jobs: number; minutes: number; testMs: number }>();
   const gain = { docsOnly: 0, lockfile: 0, workflow: 0, root: 0, packageTests: 0 };
+  const byScript = new Map<string, { cls: StepClass; count: number; ms: number }>();
+  const scriptSteps = { steps: 0, split: 0 };
   let queueMs = 0;
   let queuedLong = 0;
   for (const record of jobs) {
     const stepMs = zero();
-    for (const step of record.steps) stepMs[step.cls] += step.ms;
+    for (const step of record.steps) {
+      addStep(stepMs, step);
+      if (SCRIPT_STEPS.includes(step.name)) {
+        scriptSteps.steps++;
+        if ((step.parts ?? []).length > 0) scriptSteps.split++;
+      }
+      for (const part of step.parts ?? []) {
+        const sum = byScript.get(part.script) ?? { cls: part.cls, count: 0, ms: 0 };
+        sum.count++;
+        sum.ms += part.ms;
+        byScript.set(part.script, sum);
+      }
+    }
     for (const cls of STEP_CLASSES) classMs[cls] += stepMs[cls];
     queueMs += record.queueMs;
     if (record.queueMs >= 5 * 60_000) queuedLong++;
@@ -291,6 +472,7 @@ export function summarize(repos: readonly RepoRead[], jobs: readonly JobRecord[]
   return {
     repos: repos.length,
     runs: repos.reduce((n, repo) => n + repo.runs, 0),
+    listed: repos.reduce((n, repo) => n + repo.listed, 0),
     pullRequests: repos.reduce((n, repo) => n + repo.pullRequests, 0),
     sampledRuns: repos.reduce((n, repo) => n + repo.sampled, 0),
     jobs: jobs.length,
@@ -298,6 +480,11 @@ export function summarize(repos: readonly RepoRead[], jobs: readonly JobRecord[]
     classMs,
     queueMs,
     queuedLong,
+    queuedOut: { jobs: queued.length, waitMs: queued.reduce((n, record) => n + record.waitMs, 0) },
+    scriptSteps,
+    byScript: [...byScript.entries()]
+      .map(([script, sum]) => ({ script, ...sum }))
+      .sort((a, b) => b.ms - a.ms || a.script.localeCompare(b.script)),
     byJob: [...byJob.entries()]
       .map(([job, sum]) => ({ job, repos: sum.repos.size, count: sum.count, minutes: sum.minutes, ms: sum.ms, classMs: sum.classMs }))
       .sort((a, b) => b.minutes - a.minutes || a.job.localeCompare(b.job)),
@@ -317,10 +504,19 @@ export function render(summary: Summary, days: number, notRead: readonly string[
   const out = [
     "## CI minutes",
     "",
-    `${summary.repos} repositories, ${summary.runs} pull-request runs of ${summary.pullRequests} pull requests in ${days} days. ` +
+    `${summary.repos} repositories, ${summary.runs} pull-request runs in ${days} days. ` +
+      `The list of the API gave ${summary.listed} of them, of ${summary.pullRequests} pull requests. ` +
       `The sample: ${summary.sampledRuns} runs, ${summary.jobs} jobs, ${summary.minutes} minutes (each job rounded up). ` +
       `${summary.queuedLong} jobs waited 5 minutes or more in the queue.`,
   ];
+  if (summary.queuedOut.jobs > 0) {
+    out.push(
+      "",
+      `${summary.queuedOut.jobs} more jobs waited ${min(summary.queuedOut.waitMs)} minutes in all, until their run was cancelled. ` +
+        "No runner took them, so they cost no minutes.",
+    );
+  }
+  out.push("", `The log split ${summary.scriptSteps.split} of ${summary.scriptSteps.steps} steps that start the input scripts into one part for each script.`);
   if (notRead.length > 0) out.push("", `No read: ${notRead.join(", ")}.`);
   out.push("", "| Class of step | Minutes | Share |", "| --- | ---: | ---: |");
   for (const cls of STEP_CLASSES) out.push(`| ${cls} | ${min(summary.classMs[cls])} | ${share(summary.classMs[cls], stepMs)} |`);
@@ -346,6 +542,10 @@ export function render(summary: Summary, days: number, notRead: readonly string[
     out.push(
       `| ${j.job.replaceAll("|", "\\|")} | ${j.repos} | ${j.count} | ${j.minutes} | ${min(j.classMs.setup + j.classMs.install)} | ${min(j.classMs.build)} | ${min(j.classMs.test)} | ${min(j.classMs.check)} |`,
     );
+  }
+  if (summary.byScript.length > 0) {
+    out.push("", `| Script (top ${top}) | Class | Steps | Minutes |`, "| --- | --- | ---: | ---: |");
+    for (const s of summary.byScript.slice(0, top)) out.push(`| \`${s.script}\` | ${s.cls} | ${s.count} | ${min(s.ms)} |`);
   }
   return out;
 }
