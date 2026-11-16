@@ -58,6 +58,31 @@ export function childKeys(lines: readonly string[], index: number): number[] {
   return keys;
 }
 
+/** This function gives the end of the list under the key at the line `key`, for example `steps`. A list can have the same indent as its key. */
+export function listEnd(lines: readonly string[], key: number): number {
+  const indent = indentOf(lines[key] ?? "");
+  for (let at = key + 1; at < lines.length; at++) {
+    const line = lines[at] ?? "";
+    if (line.trim() === "") continue;
+    if (indentOf(line) < indent || (indentOf(line) === indent && !line.trimStart().startsWith("- "))) return at;
+  }
+  return lines.length;
+}
+
+/** This function gives the lines of the items (`- `) of the list under the key at the line `key`. */
+export function listItems(lines: readonly string[], key: number): number[] {
+  const end = listEnd(lines, key);
+  let indent: number | undefined;
+  const starts: number[] = [];
+  for (let at = key + 1; at < end; at++) {
+    const line = lines[at] ?? "";
+    if (line.trim() === "") continue;
+    indent ??= indentOf(line);
+    if (indentOf(line) === indent && line.trimStart().startsWith("- ")) starts.push(at);
+  }
+  return starts;
+}
+
 /** A change of the lines: at the index `at`, remove `remove` lines and put `insert` in their place. */
 export interface Splice {
   readonly at: number;

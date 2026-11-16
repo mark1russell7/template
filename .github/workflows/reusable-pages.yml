@@ -304,14 +304,13 @@ jobs:
           artifact_name: ${{ inputs.artifact-prefix }}github-pages
           timeout: 606000
 
-  # Tell the search engines of IndexNow (Bing and others) about the pages of the new deploy. A failure here does not
-  # fail the deploy. A scheduled deploy changes only the Status page, so it sends nothing.
+  # Tell the search engines of IndexNow (Bing and others) about the pages of the new deploy. A failed call to the engines
+  # does not fail the deploy. A scheduled deploy changes only the Status page, so it sends nothing.
   indexnow:
     needs: [build, deploy]
     if: inputs.deploy && needs.build.outputs.indexnow-key != '' && github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    continue-on-error: true
     permissions:
       contents: read
     steps:
@@ -325,7 +324,9 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
+      # Only the call to the engines can fail without a failure of the deploy. A failed checkout still fails the job.
       - name: IndexNow
+        continue-on-error: true
         env:
           SITE: ${{ needs.deploy.outputs.page-url }}
           KEY: ${{ needs.build.outputs.indexnow-key }}

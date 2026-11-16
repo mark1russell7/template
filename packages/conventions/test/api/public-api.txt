@@ -7,6 +7,7 @@
 ## . (build/index.d.ts): names
 
 ACTIONS_COMMIT: build/index.d.ts#ACTIONS_COMMIT
+type Advisory: build/index.d.ts#Advisory
 type AllowedHit: build/index.d.ts#AllowedHit
 type AuditSource: build/index.d.ts#AuditSource
 type Break: build/index.d.ts#Break
@@ -24,6 +25,7 @@ HOME_EXPORTS: build/index.d.ts#HOME_EXPORTS
 HOME_PATTERNS: build/index.d.ts#HOME_PATTERNS
 HOME_TIMEOUT_MS: build/index.d.ts#HOME_TIMEOUT_MS
 HOOK_MARKER: build/index.d.ts#HOOK_MARKER
+type HiddenFailure: build/index.d.ts#HiddenFailure
 type Home: build/index.d.ts#Home
 type HomeAnswer: build/index.d.ts#HomeAnswer
 type HomeFetch: build/index.d.ts#HomeFetch
@@ -118,6 +120,7 @@ globToRegExp: build/workspace.chunk.d.ts#globToRegExp
 hasFile: build/index.d.ts#hasFile
 hasImportMetaMain: build/index.d.ts#hasImportMetaMain
 hasTests: build/index.d.ts#hasTests
+hiddenFailures: build/index.d.ts#hiddenFailures
 homeModule: build/index.d.ts#homeModule
 homePackage: build/index.d.ts#homePackage
 inFolder: build/index.d.ts#inFolder
@@ -128,6 +131,7 @@ isCommonUse: build/index.d.ts#isCommonUse
 isGitSpecifier: build/index.d.ts#isGitSpecifier
 isPinned: build/index.d.ts#isPinned
 isSourcePath: build/index.d.ts#isSourcePath
+jobFails: build/index.d.ts#jobFails
 keyLine: build/index.d.ts#keyLine
 licenseFile: build/index.d.ts#licenseFile
 licenseFileOf: build/index.d.ts#licenseFileOf
@@ -160,6 +164,7 @@ packageFolders: build/workspace.chunk.d.ts#packageFolders
 pagesAfterRelease: build/index.d.ts#pagesAfterRelease
 pagesCalls: build/index.d.ts#pagesCalls
 pagesSite: build/index.d.ts#pagesSite
+parseAdvisory: build/index.d.ts#parseAdvisory
 parseConfig: build/index.d.ts#parseConfig
 parseJsonc: build/index.d.ts#parseJsonc
 parsePrivateNames: build/index.d.ts#parsePrivateNames
@@ -211,8 +216,10 @@ signaturesOf: build/index.d.ts#signaturesOf
 siteCheckInCi: build/index.d.ts#siteCheckInCi
 sourceMain: build/index.d.ts#sourceMain
 specifiersOf: build/index.d.ts#specifiersOf
+startsTests: build/index.d.ts#startsTests
 summaryMarkdown: build/index.d.ts#summaryMarkdown
 summaryName: build/index.d.ts#summaryName
+swallowsTests: build/index.d.ts#swallowsTests
 tagName: build/index.d.ts#tagName
 testsRequired: build/index.d.ts#testsRequired
 trustPolicy: build/index.d.ts#trustPolicy
@@ -244,6 +251,14 @@ conventions: ./build/cli.js
 
 ### build/index.d.ts#ACTIONS_COMMIT
 export declare const ACTIONS_COMMIT: string;
+
+### build/index.d.ts#Advisory
+interface Advisory {
+  readonly file: string;
+  readonly job: string;
+  readonly until: string;
+  readonly reason: string;
+}
 
 ### build/index.d.ts#AllowedHit
 interface AllowedHit {
@@ -340,6 +355,14 @@ export declare const HOME_TIMEOUT_MS = 3e4;
 
 ### build/index.d.ts#HOOK_MARKER
 export declare const HOOK_MARKER = "# conventions hook: pre-push";
+
+### build/index.d.ts#HiddenFailure
+interface HiddenFailure {
+  readonly job: string;
+  readonly line: number;
+  readonly kind: "job" | "step" | "or";
+  readonly value: string;
+}
 
 ### build/index.d.ts#Home
 interface Home {
@@ -593,6 +616,7 @@ interface RuleContext {
   readonly packages: readonly PackageInfo[];
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly base?: string;
+  readonly today?: string;
   gitFiles(): readonly string[] | undefined;
   git(args: readonly string[]): string | undefined;
 }
@@ -746,7 +770,7 @@ export declare function convertGate(text: string, file: string, commit?: string)
 export declare const coverageProvider: Rule;
 
 ### build/index.d.ts#createContext
-export declare function createContext(root: string, config: ConventionsConfig, options?: Pick<CheckOptions, "base" | "env">): RuleContext;
+export declare function createContext(root: string, config: ConventionsConfig, options?: Pick<CheckOptions, "base" | "env" | "today">): RuleContext;
 
 ### build/index.d.ts#cuePreset
 export declare const cuePreset: Rule;
@@ -787,6 +811,9 @@ export declare function hasImportMetaMain(range: unknown): boolean;
 ### build/index.d.ts#hasTests
 export declare function hasTests(files: readonly string[], folder: string): boolean;
 
+### build/index.d.ts#hiddenFailures
+export declare function hiddenFailures(text: string): HiddenFailure[];
+
 ### build/index.d.ts#homeModule
 export declare const homeModule: Rule;
 
@@ -816,6 +843,9 @@ export declare function isPinned(spec: string, fullSha: boolean): boolean;
 
 ### build/index.d.ts#isSourcePath
 export declare function isSourcePath(path: string): boolean;
+
+### build/index.d.ts#jobFails
+export declare const jobFails: Rule;
 
 ### build/index.d.ts#keyLine
 export declare function keyLine(text: string, field: string, name: string): number | undefined;
@@ -909,6 +939,9 @@ export declare function pagesCalls(text: string, workflows?: readonly string[]):
 
 ### build/index.d.ts#pagesSite
 export declare const pagesSite: Rule;
+
+### build/index.d.ts#parseAdvisory
+export declare function parseAdvisory(entry: string): Advisory | undefined;
 
 ### build/index.d.ts#parseConfig
 export declare function parseConfig(value: unknown, rules: readonly Rule[]): ConventionsConfig;
@@ -1063,11 +1096,17 @@ export declare const sourceMain: Rule;
 ### build/index.d.ts#specifiersOf
 export declare function specifiersOf(manifest: Manifest, field: string): [string, string][];
 
+### build/index.d.ts#startsTests
+export declare function startsTests(line: string): boolean;
+
 ### build/index.d.ts#summaryMarkdown
 export declare function summaryMarkdown(result: CheckResult): string;
 
 ### build/index.d.ts#summaryName
 export declare function summaryName(workflowName: string): string;
+
+### build/index.d.ts#swallowsTests
+export declare function swallowsTests(line: string): boolean;
 
 ### build/index.d.ts#tagName
 export declare function tagName(name: string, version: string, packageCount: number): string;

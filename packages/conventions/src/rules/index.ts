@@ -26,6 +26,7 @@ import { pagesSite } from "./pages-site.ts";
 import { siteCheckInCi } from "./site-check-in-ci.ts";
 import { pinnedGitDeps } from "./pinned-git-deps.ts";
 import { pipeFails } from "./pipe-fails.ts";
+import { jobFails } from "./job-fails.ts";
 import { playwrightInstall } from "./playwright-install.ts";
 import { pushMainOnly } from "./push-main-only.ts";
 import { publishedMinor } from "./published-minor.ts";
@@ -75,6 +76,7 @@ export const RULES: readonly Rule[] = [
   mainRunsFinish,
   pushMainOnly,
   pipeFails,
+  jobFails,
   gateAfterCancel,
   gateTrigger,
   securityOneJob,
@@ -94,4 +96,4 @@ export const RULES: readonly Rule[] = [
 ];
 
 export { publishedMinor };
-export { apiReportScript, changelogVersion, coverageProvider, cuePreset, exportsRequire, gateAfterCancel, gateTrigger, securityOneJob, securityOverrides, serviceRunMain, setupCue, sharedCi, homeModule, homePackage, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, packNoBuildinfo, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, playwrightInstall, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, siteCheckInCi, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, versionTitle, workflowParses, workspaceProtocol };
+export { apiReportScript, changelogVersion, coverageProvider, cuePreset, exportsRequire, gateAfterCancel, gateTrigger, securityOneJob, securityOverrides, serviceRunMain, setupCue, sharedCi, homeModule, homePackage, jobFails, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, packNoBuildinfo, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, playwrightInstall, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, siteCheckInCi, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, versionTitle, workflowParses, workspaceProtocol };
