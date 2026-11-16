@@ -4,6 +4,7 @@
  * A page with no icon link makes the browser ask for `/favicon.ico`. A project site on GitHub Pages has no such file.
  * Thus the console of each page shows a 404 error, and a check of the page errors counts it.
  */
+import { scanHtml } from "@mark1russell7/text/html";
 import { escapeHtml } from "./html.ts";
 
 /** The SVG of the default icon: a page with a folded corner on a square of the accent color of the pages. */
@@ -23,15 +24,13 @@ export const SITE_ICON_HREF: string =
 /**
  * This function tells if an HTML page has an icon link: a `link` element with the word `icon` in its `rel`.
  * `rel="icon"` and `rel="shortcut icon"` count. `rel="apple-touch-icon"` does not count, because a browser that reads only
- * that link still asks for `/favicon.ico`.
+ * that link still asks for `/favicon.ico`. A link in a comment, a script, a style or a template does not count, because
+ * the browser does not read it. The scan is `scanHtml` of `@mark1russell7/text`.
  */
 export function hasIconLink(html: string): boolean {
-  for (const [tag] of html.matchAll(/<link\b[^>]*>/gi)) {
-    const rel = /\srel\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/i.exec(tag);
-    const words = (rel?.[1] ?? rel?.[2] ?? rel?.[3] ?? "").toLowerCase().split(/\s+/);
-    if (words.includes("icon")) return true;
-  }
-  return false;
+  return scanHtml(html).elements.some(
+    (element) => element.name === "link" && (element.attributes["rel"] ?? "").toLowerCase().split(/\s+/).includes("icon"),
+  );
 }
 
 /** This function gives the `link` element of an icon, for the `head` of a page. The default is the icon of `SITE_ICON_HREF`. */

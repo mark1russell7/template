@@ -50,6 +50,10 @@ describe("noScriptText", () => {
     expect(noScriptText(doc('<?xml version="1.0"?><!doctype html></p>'))).toEqual({ h1: false, chars: 0 });
   });
 
+  it("reads a \">\" in a quoted value of an attribute as a part of the value", () => {
+    expect(noScriptText(doc('<h1 title="a > b">T</h1><a href="/x" data-x=\'>\'>Go</a>'))).toEqual({ h1: true, chars: "T Go".length });
+  });
+
   it("reads a custom element with the name of a raw-text element and a dash as an element with text", () => {
     const body = "<template-card><h1>Card</h1></template-card><style-guide>Guide</style-guide><script-box>Box</script-box><head-line>Line</head-line>";
     expect(noScriptText(doc(body))).toEqual({ h1: true, chars: "Card Guide Box Line".length });

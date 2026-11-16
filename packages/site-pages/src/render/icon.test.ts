@@ -37,6 +37,16 @@ describe("hasIconLink", () => {
     expect(hasIconLink('<link rel="iconic" href="/i.svg">')).toBe(false);
     expect(hasIconLink('<meta name="icon" content="x">')).toBe(false);
   });
+
+  it("does not count a link that the browser does not read", () => {
+    expect(hasIconLink('<!-- <link rel="icon" href="/i.svg"> -->')).toBe(false);
+    expect(hasIconLink('<script>const s = \'<link rel="icon" href="/i.svg">\';</script>')).toBe(false);
+    expect(hasIconLink('<template><link rel="icon" href="/i.svg"></template>')).toBe(false);
+  });
+
+  it("reads a \">\" in a quoted value as a part of the value, not as the end of the tag", () => {
+    expect(hasIconLink('<link title="a > b" rel="icon" href="/i.svg">')).toBe(true);
+  });
 });
 
 describe("the site preset of the template CLI", () => {
