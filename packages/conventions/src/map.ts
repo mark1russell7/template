@@ -326,7 +326,7 @@ export const HOMES: readonly Home[] = [
   {
     area: "electrical",
     title: "Electrical circuits and loads",
-    covers: "circuits, breakers, outlets and loads as data, the continuous-load check, and the formulas with units from quantity. The root entry has no browser. The entry /marks has the marks of a room",
+    covers: "circuits, breakers, outlets and loads as data, the continuous-load check, and the formulas with units from quantity. The root entry has no browser. The entry /add-on is the add-on of room-view. The entry /marks (the marks of a room) is planned",
     packages: [],
     repo: "mark1russell7/room-view",
     pending: ["@mark1russell7/electrical"],
