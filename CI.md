@@ -358,6 +358,17 @@ The lookup fails open. Thus a gate skips only after a read of its files:
 
 `pull-of-run` is TypeScript, so it needs Node.js 22.18 or later. Thus the job sets up Node.js before it. A composite action cannot start a different action of its repository with a path that works for a caller outside the repository. Thus the job of the caller has the two steps, and the template has one lookup of the pull request.
 
+### The read of the CI minutes
+
+The action `changes` skips a whole gate job when no file of the gate changes. A finer selector starts only the tests that a change can affect. The workflow `ci-minutes.yml` of the template measures what each part of a selector can save, before the selector exists. Each Monday it reads the pull-request runs of the last 7 days of each public repository.
+
+- The read takes 10 completed runs of each repository, spread over the week. For each run, it reads the jobs with the time of each step, and the changed files of the pull request.
+- Each step gets a class from its name: setup, install, build, test, check or other. The first rule that matches decides. Thus "Build and test" counts as test time, and the test time is an upper bound.
+- Each pull request gets a kind from its files. The kinds are large (a full page of 100 files), docs only, lockfile, workflow, root file, packages and other. The first kind that applies decides.
+- The summary gives the minutes of each class, each kind and each job by name. It also gives the minutes that each part of a selector can save. The part "packages" is an upper bound: the test time times the share of the packages that the change does not touch.
+- The artifact `ci-minutes` has `ci-minutes.json` with each record of a job and of a pull request. A later study takes its quantiles from these records with no new read.
+- The token of GitHub Actions has 1000 reads each hour. Before each repository, the read examines the limit. When too few reads are left, it waits for the next hour of the token, up to 65 minutes. Else it stops and names each repository that it did not read. The scheduled run fails when the read cannot read a repository.
+
 ## The queue
 
 Several writers merge into one `main` with `gh pr merge --auto`. Two pull requests can each pass their gate alone and break `main` together. For example, two pull requests set the same version, or one pull request removes an export that the other starts to use.

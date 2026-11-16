@@ -1,0 +1,80 @@
+# The read of the CI minutes: the baseline of a test selector, which runs only the jobs and tests that a change can
+# affect. `scripts/ci-minutes/main.ts` reads the pull-request runs of the last 7 days of each public repository of the
+# account. For a sample of 10 runs of each repository, spread over the week, it reads each job with the time of its
+# steps, and the changed files of the pull request. The summary of the run tells where the minutes go (each job by
+# name, and the setup, install, build, test and check steps), what the pull requests change (docs only, the lockfile, a
+# workflow, a root file or the folders of packages), and what each part of a selector can save. The artifact ci-minutes
+# has ci-minutes.json with each record, so a later study takes its quantiles from the records with no new read.
+# The token of GitHub Actions has 1000 reads each hour. A read of more calls waits for the next hour of the token, so
+# the job has a time limit of 150 minutes. The read is not a gate of pull requests. To test a change, start the
+# workflow by hand on its branch, with strict false.
+name: CI minutes
+
+on:
+  workflow_dispatch:
+    inputs:
+      repos:
+        description: "The repositories to read, with commas. Empty: each public repository of the account that is not archived."
+        type: string
+        default: ""
+      days:
+        description: The pull-request runs that started in this number of days before the read (1 to 30).
+        type: string
+        default: "7"
+      sample:
+        description: The count of completed runs of each repository whose jobs and changed files the read reads.
+        type: string
+        default: "10"
+      strict:
+        description: "true: the run fails when the read could not read a repository."
+        type: boolean
+        default: true
+  # Each Monday, so each run reads one week of pull requests
+  schedule:
+    - cron: "30 7 * * 1"
+
+permissions: {}
+
+concurrency:
+  group: ci-minutes-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            scripts/ci-minutes
+            scripts/lib
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: CI minutes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOS: ${{ inputs.repos }}
+          DAYS: ${{ inputs.days || '7' }}
+          SAMPLE: ${{ inputs.sample || '10' }}
+          # The schedule is strict. A start by hand is strict when its input strict is true.
+          STRICT: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.strict) }}
+        run: |
+          set -euo pipefail
+          args=(--repos "$REPOS" --days "$DAYS" --sample "$SAMPLE" --out "$RUNNER_TEMP/ci-minutes")
+          if [ "$STRICT" = "true" ]; then args+=(--strict); fi
+          node scripts/ci-minutes/main.ts "${args[@]}"
+      - name: The records of the read
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-minutes
+          path: ${{ runner.temp }}/ci-minutes
+          if-no-files-found: warn
