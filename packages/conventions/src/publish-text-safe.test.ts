@@ -11,8 +11,15 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
+import { findSecretShapes } from "@mark1russell7/text/redact";
 import { runChecks, type RuleResult } from "./index.ts";
-import { ATTACK_SHAPES, attackLines } from "./rules/publish-text-safe.ts";
+import { ATTACK_SHAPES, attackLines, secretLines } from "./rules/publish-text-safe.ts";
+
+// The sample tokens come from parts at run time, so this file holds no text in the shape of a token. A scan of the
+// repository, for example the push protection of GitHub, finds no token here.
+const CLASSIC = ["ghp", "_", "a1".repeat(18)].join("");
+const NPM = ["npm", "_", "b2".repeat(18)].join("");
+const KEY_BLOCK = [["-----BEGIN", "PRIVATE KEY-----"].join(" "), "c3".repeat(30), ["-----END", "PRIVATE KEY-----"].join(" ")].join("\n");
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-publish-text-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -132,10 +139,58 @@ describe("publish-text-safe", () => {
     for (const line of clean) expect(attackLines(line), line).toEqual([]);
   });
 
-  it("finds no shape in the README and the manifest of this package, so its own publish passes", () => {
-    expect(attackLines(readFileSync(new URL("../README.md", import.meta.url), "utf8"))).toEqual([]);
+  it("finds no shape and no token in the README and the manifest of this package, so its own publish passes", () => {
+    const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+    expect(attackLines(readme)).toEqual([]);
+    expect(secretLines(readme)).toEqual([]);
     const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { description?: string; keywords?: string[] };
-    expect(attackLines([manifest.description ?? "", ...(manifest.keywords ?? [])].join("\n"))).toEqual([]);
+    const fields = [manifest.description ?? "", ...(manifest.keywords ?? [])].join("\n");
+    expect(attackLines(fields)).toEqual([]);
+    expect(secretLines(fields)).toEqual([]);
+  });
+
+  it("breaks on a token in a README at the line of its start, and the message names the shape, not the token", () => {
+    const readme = ["# Use", "", `export GH_TOKEN=${CLASSIC}`, "", "A key:", KEY_BLOCK, "", "The end."].join("\n");
+    const result = check(repo({ "package.json": LIB, "README.md": readme }));
+    expect(result.status).toBe("break");
+    expect(result.breaks.map((item) => [item.file, item.line, /\(([a-z-]+)\)\. npm/.exec(item.message)?.[1]])).toEqual([
+      ["README.md", 3, "github-classic"],
+      ["README.md", 6, "private-key"],
+    ]);
+    expect(result.breaks[0]?.message).toContain("The README of @x/text has a classic personal access token of GitHub");
+    for (const item of result.breaks) {
+      expect(item.message).not.toContain(CLASSIC);
+      expect(item.message).not.toContain("a1a1");
+      expect(item.message).not.toContain("c3c3");
+    }
+  });
+
+  it("breaks on a token in the field description and in an entry of keywords, at the line of the field", () => {
+    const manifest = `${JSON.stringify({ name: "@x/q", version: "1.0.0", description: `Set ${NPM} first`, keywords: ["cli", NPM] }, null, 2)}\n`;
+    const result = check(repo({ "package.json": manifest }));
+    expect(result.breaks.map((item) => [item.line, /\(([a-z-]+)\)\. npm/.exec(item.message)?.[1]])).toEqual([
+      [4, "npm"],
+      [5, "npm"],
+    ]);
+    expect(result.breaks[0]?.message).toContain('The field "description" of @x/q has an access token of npm');
+    for (const item of result.breaks) expect(item.message).not.toContain(NPM);
+  });
+
+  it("finds no token in the fake values of a README and in a prefix alone", () => {
+    const clean = [
+      "export GH_TOKEN=TOKEN-EXAMPLE",
+      "Authorization: Bearer TOKEN-EXAMPLE",
+      "A classic token of GitHub starts with ghp_, and a token of npm starts with npm_.",
+      "Set NPM_TOKEN in the secrets of the repository.",
+      "-----BEGIN PUBLIC KEY-----",
+    ];
+    for (const line of clean) expect(secretLines(line), line).toEqual([]);
+  });
+
+  it("gives the same tokens as findSecretShapes of text, with the line of each start", () => {
+    const text = `x\n${NPM} and ${CLASSIC}\n\n${KEY_BLOCK}\n`;
+    expect(secretLines(text).map((hit) => hit.shape.id)).toEqual(findSecretShapes(text).map((match) => match.shape));
+    expect(secretLines(text).map((hit) => hit.line)).toEqual([2, 2, 4]);
   });
 
   it("gives each shape of a line one time, with the line number from 1", () => {
