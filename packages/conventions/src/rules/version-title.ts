@@ -107,7 +107,7 @@ export const versionTitle: Rule = {
       return found === undefined ? [] : [found];
     }
     if (context.base !== undefined && namesPullRequestFile(context.env)) {
-      // A run that workflow_dispatch starts, for example a gate of the merge queue. The checkout is the head of the branch,
+      // A run that workflow_dispatch starts, for example a run by hand. The checkout is the head of the branch,
       // not a merge commit. The shared CI gives the pull request in the file of CONVENTIONS_PULL_REQUEST, and the tip of
       // its base branch as the base. The rule examines the versions that a merge of HEAD into the base sets.
       const title = pullRequestOfRun(context.env)?.title;

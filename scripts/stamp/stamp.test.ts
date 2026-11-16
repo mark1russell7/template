@@ -127,6 +127,13 @@ describe("the stamp", () => {
     assert.match(queue, /types: \[auto_merge_enabled\]/);
   });
 
+  it("gives the lockfile workflow, pinned to the shared workflow (CI.md, \"The lockfile of a branch\")", async () => {
+    const { out, sha } = await stamped();
+    const lockfile = read(out, ".github/workflows/lockfile.yml");
+    assert.ok(lockfile.includes(`uses: mark1russell7/template/.github/workflows/reusable-lockfile.yml@${sha} # main`));
+    assert.match(lockfile, /\n {2}workflow_dispatch:\n/);
+  });
+
   it("stops when the folder exists", async () => {
     const { out } = await stamped();
     await assert.rejects(stamp({ name: "demo-repo", description: "x", template, out, ref: "HEAD", latest: () => "1.0.0" }), /The folder exists/);
