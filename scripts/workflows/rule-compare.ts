@@ -2,7 +2,11 @@
 // that use @mark1russell7/conventions (CI.md, "The compare of the conventions rules"). The job rules of
 // ci.yml starts it:
 //
-//   node next/scripts/workflows/rule-compare.ts --repos <JSON list of owner/name> --base <dir> --next <dir> --out <dir> --work <dir> [--jobs <n>]
+//   GH_TOKEN=... node next/scripts/workflows/rule-compare.ts --base <dir> --next <dir> --out <dir> --work <dir> [--jobs <n>] [--repos <JSON list of owner/name>]
+//
+// With no --repos, repoList() reads the public repositories of each owner of the package conventions that are not
+// archived. Thus a repository that moves to another owner stays in the compare. The read comes from scripts/lib/gh.ts,
+// with its retry after a transient error, so the job installs @mark1russell7/service next to @mark1russell7/text.
 //
 // A change of a rule can fail a repository that passed before. The repository sees the failure only when the train moves
 // its version of conventions, and that pull request of the train is red. So this script finds such failures before the
@@ -25,6 +29,8 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { escapeMarkdown, escapeWorkflowData } from "@mark1russell7/text";
+import { OWNERS } from "../../packages/conventions/src/owners.ts";
+import { type OwnedRepo, pool, publicRepos } from "../lib/gh.ts";
 
 /** One break of a rule in the JSON output of `conventions check`. */
 export interface CheckBreak {
@@ -287,19 +293,16 @@ async function runCheck(checkout: string, clone: string, env: Record<string, str
   return result.code === 0 || result.code === 1 ? parseResult(result.stdout) : undefined;
 }
 
-/** This function starts `task` for each item, with at most `limit` tasks at one time, and gives the results in the order of the items. */
-export async function inPool<T, R>(items: readonly T[], limit: number, task: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = [];
-  let next = 0;
-  const worker = async (): Promise<void> => {
-    while (next < items.length) {
-      const at = next;
-      next += 1;
-      results[at] = await task(items[at] as T);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, worker));
-  return results;
+/** The read of the public repositories of some owners: `publicRepos` of `scripts/lib/gh.ts`, or a fake one in a test. */
+export type ReadRepos = (owners: readonly string[]) => Promise<readonly OwnedRepo[]>;
+
+/**
+ * This function gives the full names of the repositories of the compare, in order. A JSON list of `owner/name` gives those
+ * repositories. With no list, the function reads the public repositories of each owner of `OWNERS` that are not archived.
+ */
+export async function repoList(named: string | undefined, read: ReadRepos = publicRepos): Promise<string[]> {
+  const repos = named === undefined ? (await read(OWNERS.map((owner) => owner.login))).map((repo) => `${repo.owner}/${repo.name}`) : (JSON.parse(named) as string[]);
+  return [...repos].sort((a, b) => a.localeCompare(b));
 }
 
 /** The options of the compare of one repository. */
@@ -343,11 +346,12 @@ async function main(): Promise<number> {
     process.stderr.write("rule-compare: give --base, --next, --out, --work, and a --jobs of 1 or more\n");
     return 2;
   }
-  const repos = [...(JSON.parse(values.repos ?? "[]") as string[])].sort((a, b) => a.localeCompare(b));
+  const repos = await repoList(values.repos);
+  process.stdout.write(`${String(repos.length)} repositories\n`);
   const options: Options = { base: resolve(base), next: resolve(next), out: resolve(out), work: resolve(work), self: process.env["GITHUB_REPOSITORY"] ?? "" };
   mkdirSync(options.out, { recursive: true });
   mkdirSync(options.work, { recursive: true });
-  const outcomes = await inPool(repos, jobs, async (repo) => {
+  const outcomes = await pool(repos, jobs, async (repo) => {
     const began = Date.now();
     const result = await compareRepo(repo, options).catch((error: unknown): RepoOutcome => ({ repo, kind: "unread", reason: error instanceof Error ? error.message : String(error) }));
     process.stdout.write(`${repo}: ${result.kind} (${String(Math.round((Date.now() - began) / 1000))} s)\n`);

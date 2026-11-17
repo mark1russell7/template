@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Clock } from "@mark1russell7/service";
-import { type Exec, RETRY, errorText, gh, lines, publicRepos, transient } from "../lib/gh.ts";
+import { type Exec, RETRY, errorText, gh, lines, pool, publicRepos, transient } from "../lib/gh.ts";
 
 /** An error as `execFile` gives it: the message, and the standard error of `gh`. */
 const ghError = (stderr: string): Error => Object.assign(new Error("Command failed: gh api x"), { stderr });
@@ -90,4 +90,19 @@ test("publicRepos reads each owner in order, and stops on a name that two owners
   ]);
   assert.deepEqual(paths, ["users/a/repos?per_page=100", "users/b/repos?per_page=100"]);
   await assert.rejects(publicRepos(["a", "c"], { exec }), /More than one owner has a repository with the name one./);
+});
+
+test("pool gives the results in the order of the items, with at most the width of tasks at one time", async () => {
+  let running = 0;
+  let most = 0;
+  const got = await pool([5, 1, 3, 2], 2, async (value) => {
+    running += 1;
+    most = Math.max(most, running);
+    await new Promise((done) => setTimeout(done, value));
+    running -= 1;
+    return value * 10;
+  });
+  assert.deepEqual(got, [50, 10, 30, 20]);
+  assert.equal(most, 2);
+  assert.deepEqual(await pool([], 4, async () => assert.fail("no item, no task")), []);
 });

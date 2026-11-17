@@ -6,7 +6,8 @@ import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { escapeMarkdown } from "@mark1russell7/text";
-import { type CheckResult, type CheckRule, annotations, checkEnv, confirmed, dispatchEvent, failures, fails, inPool, newFailures, outcome, parseResult, scopeOf, summaryLines, THREW, unreadRules } from "./rule-compare.ts";
+import { OWNERS } from "../../packages/conventions/src/owners.ts";
+import { type CheckResult, type CheckRule, type ReadRepos, annotations, checkEnv, confirmed, dispatchEvent, failures, fails, newFailures, outcome, parseResult, repoList, scopeOf, summaryLines, THREW, unreadRules } from "./rule-compare.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -157,19 +158,23 @@ describe("unreadRules", () => {
   });
 });
 
-describe("inPool", () => {
-  it("gives the results in the order of the items, with at most the limit of tasks at one time", async () => {
-    let running = 0;
-    let most = 0;
-    const got = await inPool([5, 1, 3, 2], 2, async (value) => {
-      running += 1;
-      most = Math.max(most, running);
-      await new Promise((done) => setTimeout(done, value));
-      running -= 1;
-      return value * 10;
-    });
-    assert.deepEqual(got, [50, 10, 30, 20]);
-    assert.equal(most, 2);
+describe("repoList", () => {
+  const read: ReadRepos = async (owners) =>
+    owners.flatMap((owner, at) => [
+      { owner, name: `z-${String(at)}`, default_branch: "main" },
+      { owner, name: `a-${String(at)}`, default_branch: "main" },
+    ]);
+
+  it("reads each owner of OWNERS when no list is given, and gives the full names in order", async () => {
+    const want = OWNERS.flatMap((owner, at) => [`${owner.login}/a-${String(at)}`, `${owner.login}/z-${String(at)}`]).sort((a, b) => a.localeCompare(b));
+    assert.ok(OWNERS.length >= 2, "the test reads more than one owner");
+    assert.deepEqual(await repoList(undefined, read), want);
+  });
+
+  it("gives the named repositories in order, with no read", async () => {
+    const none: ReadRepos = async () => assert.fail("a named list reads no owner");
+    assert.deepEqual(await repoList('["o/lag","n/vex"]', none), ["n/vex", "o/lag"]);
+    assert.deepEqual(await repoList("[]", none), []);
   });
 });
 
