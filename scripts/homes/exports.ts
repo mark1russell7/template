@@ -16,13 +16,17 @@
 // grace, --check passes with a warning, and writes stale=true to GITHUB_OUTPUT. Thus one refresh of the index takes
 // the releases of a week, and main stays green. A package that is new or gone fails at once: only a change of the
 // map in this repository makes it. A package with no publish time on npm also fails.
+//
+// Only the map decides which packages the index has (indexPackages). The job of homes-npm.yml reads npm, so it does not
+// run on a pull request. A test of exports.test.ts holds the keys of the index to the map with no read of npm, so a pull
+// request that adds a published home to the map with no row in the index fails its own checks.
 import { execFileSync } from "node:child_process";
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { packageReport } from "@mark1russell7/api-report";
-import { HOMES } from "../../packages/conventions/src/map.ts";
+import { type Home, HOMES } from "../../packages/conventions/src/map.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const INDEX_FILE: string = join(ROOT, "packages/conventions/src/home-exports.ts");
@@ -31,6 +35,14 @@ export const INDEX_FILE: string = join(ROOT, "packages/conventions/src/home-expo
 export interface PackageExports {
   readonly version: string;
   readonly names: readonly string[];
+}
+
+/**
+ * This function gives the packages of the index, in the order of the map: each package of a published home that is not
+ * pending. Only the map decides this list, so a test holds the keys of the index to it with no read of npm.
+ */
+export function indexPackages(homes: readonly Home[]): string[] {
+  return homes.filter((home) => home.state === "published").flatMap((home) => home.packages.filter((name) => !(home.pending ?? []).includes(name)));
 }
 
 /** This function gives the names of the values of an API report: no types, and no `default`. */
@@ -202,10 +214,7 @@ async function main(args: readonly string[]): Promise<number> {
 async function mainIn(args: readonly string[], temp: string): Promise<number> {
   const check = args.includes("--check");
   const index: Record<string, PackageExports> = {};
-  for (const home of HOMES) {
-    if (home.state !== "published") continue;
-    for (const name of home.packages) if (!(home.pending ?? []).includes(name)) index[name] = await exportsOf(name, "latest", temp);
-  }
+  for (const name of indexPackages(HOMES)) index[name] = await exportsOf(name, "latest", temp);
   const next = indexModule(index);
   let current = "";
   try {

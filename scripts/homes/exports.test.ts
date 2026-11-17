@@ -3,7 +3,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { GRACE_DAYS, changedPackages, firstChange, indexModule, laterVersions, namesOf, sameNames, valueNames, verdictOf, versionsOf } from "./exports.ts";
+import { HOME_EXPORTS } from "../../packages/conventions/src/home-exports.ts";
+import { type Home, HOMES } from "../../packages/conventions/src/map.ts";
+import { GRACE_DAYS, changedPackages, firstChange, indexModule, indexPackages, laterVersions, namesOf, sameNames, valueNames, verdictOf, versionsOf } from "./exports.ts";
 
 test("valueNames gives the values of a report, with no types and no default", () => {
   const report = ["# The public API of p", "", "## . (build/index.d.ts): 4 names", "", "median: build/index.d.ts#median", "type Options: build/index.d.ts#Options", "default: build/index.d.ts#default", "QUANTILES: build/index.d.ts#QUANTILES", "median: build/b.d.ts#median"].join("\n");
@@ -125,4 +127,35 @@ test("the job exports writes and uploads the new index also in the grace", () =>
   assert.match(workflow, /\n {8}id: compare\n {8}run: node scripts\/homes\/exports\.ts --check\n/u);
   assert.match(workflow, /\n {8}id: write\n {8}if: \(failure\(\) && steps\.compare\.outcome == 'failure'\) \|\| steps\.compare\.outputs\.stale == 'true'\n/u);
   assert.match(workflow, /\n {8}if: \(failure\(\) \|\| steps\.compare\.outputs\.stale == 'true'\) && steps\.write\.outputs\.changed == 'true'\n/u);
+});
+
+test("indexPackages gives each package of a published home that is not pending, in the order of the map", () => {
+  const home = (area: string, state: Home["state"], packages: readonly string[], pending?: readonly string[]): Home => ({
+    area,
+    title: area,
+    covers: area,
+    packages,
+    repo: `o/${area}`,
+    state,
+    words: [],
+    ...(pending === undefined ? {} : { pending }),
+  });
+  const homes = [
+    home("b", "published", ["@o/b", "@o/b-new"], ["@o/b-new"]),
+    home("u", "unpublished", ["@o/u"]),
+    home("p", "planned", [], ["@o/p"]),
+    home("a", "published", ["@o/a"]),
+  ];
+  assert.deepEqual(indexPackages(homes), ["@o/b", "@o/a"]);
+});
+
+// The job of the index in homes-npm.yml reads npm, so it does not run on a pull request. On 11-17 #387 added three
+// published homes to the map with no row in the index, passed its checks, and turned main red. This test reads no npm:
+// only the map decides the keys of the index, so a pull request that changes one without the other fails here.
+test("the index has a row for each package of a published home of the map, and no other row", () => {
+  const want = [...new Set(indexPackages(HOMES))].sort();
+  const have = Object.keys(HOME_EXPORTS).sort();
+  const missing = want.filter((name) => !have.includes(name));
+  const extra = have.filter((name) => !want.includes(name));
+  assert.deepEqual({ missing, extra }, { missing: [], extra: [] }, "Run node scripts/homes/exports.ts after a change of the published homes of the map, and commit the index");
 });
