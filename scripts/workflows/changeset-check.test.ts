@@ -6,6 +6,7 @@ import {
   evaluate,
   globToRegExp,
   packageJsonChanged,
+  packageJsonReleaseOnly,
   parseChangeset,
 } from "../../.github/actions/changeset-check/check.ts";
 
@@ -89,6 +90,67 @@ test("an empty changeset or the label no-changeset says that no release is neede
 test("the version pull request of changesets is skipped", () => {
   const r = evaluate({ packages, changedFiles: ["packages/a/package.json"], changesets: [], headRef: "changeset-release/main" });
   assert.ok(r.skipped);
+});
+
+test("a change of only the version and the internal ranges is a release", () => {
+  const internal = new Set(["@x/a", "@x/b"]);
+  const before = { name: "@x/a", version: "0.4.1", dependencies: { "@x/b": "^1.2.0", y: "^1.0.0" }, devDependencies: { z: "^1.0.0" } };
+  const bumped = { ...before, version: "0.4.2", dependencies: { "@x/b": "^1.2.1", y: "^1.0.0" } };
+  assert.equal(packageJsonReleaseOnly(before, bumped, internal), true);
+  assert.equal(packageJsonReleaseOnly(before, { ...bumped, dependencies: { "@x/b": "^1.2.1", y: "^2.0.0" } }, internal), false);
+  assert.equal(packageJsonReleaseOnly(before, { ...bumped, exports: { ".": "./index.js" } }, internal), false);
+  assert.equal(packageJsonReleaseOnly(undefined, bumped, internal), false);
+  assert.equal(packageJsonReleaseOnly(before, undefined, internal), false);
+});
+
+test("a version pull request on any branch passes: it consumes changesets and only bumps versions", () => {
+  const r = evaluate({
+    packages,
+    changedFiles: ["packages/a/package.json", "packages/a/CHANGELOG.md", "packages/b/package.json", ".changeset/one.md", ".changeset/two.md"],
+    packageJsonChanges: { "packages/a/package.json": true, "packages/b/package.json": true },
+    releaseOnly: { "packages/a/package.json": true, "packages/b/package.json": true },
+    consumedChangesets: [".changeset/one.md", ".changeset/two.md"],
+    changesets: [],
+    headRef: "release/0.4.2",
+  });
+  assert.equal(r.skipped, undefined);
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual(r.rows, []);
+  assert.match(r.notes.join(" "), /consumes 2 changesets .* releases 2 packages/);
+});
+
+test("a version pull request with a code change of a package still needs its changeset", () => {
+  const r = evaluate({
+    packages,
+    changedFiles: ["packages/a/package.json", "packages/b/src/index.ts", ".changeset/one.md"],
+    packageJsonChanges: { "packages/a/package.json": true },
+    releaseOnly: { "packages/a/package.json": true },
+    consumedChangesets: [".changeset/one.md"],
+    changesets: [],
+    headRef: "release/0.4.2",
+  });
+  assert.equal(r.errors.length, 1);
+  assert.match(r.errors[0] ?? "", /@x\/b/);
+  assert.doesNotMatch(r.errors[0] ?? "", /@x\/a/);
+});
+
+test("a version bump by hand, with no changeset consumed, needs a changeset", () => {
+  const input: EvaluateInput = {
+    packages,
+    changedFiles: ["packages/a/package.json"],
+    packageJsonChanges: { "packages/a/package.json": true },
+    releaseOnly: { "packages/a/package.json": true },
+    changesets: [],
+  };
+  assert.equal(evaluate(input).errors.length, 1);
+  // A pull request that adds a changeset and deletes another is not a version pull request.
+  const mixed = evaluate({
+    ...input,
+    changedFiles: ["packages/a/package.json", ".changeset/new.md", ".changeset/old.md"],
+    consumedChangesets: [".changeset/old.md"],
+    changesets: [{ file: ".changeset/new.md", releases: { "@x/b": "patch" } }],
+  });
+  assert.match(mixed.errors.join(" "), /@x\/a/);
 });
 
 test("major on a 0.x package fails unless the label release-1.0 is on the pull request", () => {
