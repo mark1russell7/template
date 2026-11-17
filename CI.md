@@ -810,6 +810,25 @@ A change of the site check can fail a page that passed before. The site sees the
 - The job has 4 shards. Two shards start at one time, after the job `nav`. One check of all sites is approximately 1000 views, or 65 minutes.
 - The artifact `site-compare-<shard>` has `compare-<shard>.json`, and the report and the log of each check. Only a site with a new problem keeps its screenshots.
 
+### The compare of the conventions rules
+
+A change of a rule of `@mark1russell7/conventions` can fail a repository that passed before. The repository sees the failure only when its pin moves. Thus the job `rules` of `ci.yml` examines each change of the rules before it merges.
+
+- The job starts on a pull request of the template that changes `packages/conventions/src`, `scripts/workflows/rule-compare.ts` or `ci.yml`. A change of a test file only does not start it.
+- The job lists the public repositories of the owner that are not archived. `scripts/workflows/rule-compare.ts` clones each one at its default branch, with one commit.
+- A repository with no dependency on `@mark1russell7/conventions` in its root `package.json` is out of scope. The template is out of scope, because its own CI examines it.
+- In each clone, the script starts `conventions check --json --no-base` of the base and then of the pull request.
+- The two checks get the event file of a dispatched run of that repository. Thus no rule reads the pull request of the template, and a rule that examines a change skips.
+- The checks do not get the secret `CONVENTIONS_PRIVATE_PATTERNS`. Thus no private name goes into the report.
+- A place is a rule with a file and a line. A failure is a break of a rule with the status `break`, or a rule that threw.
+- A place with more failures in the check of the pull request than in the check of the base has new failures.
+- A place with the same count and a different text has a changed text. A changed text is not a new failure, and the summary counts it.
+- A repository with a new failure gets a second pair of checks. Only a new failure of both pairs fails the job. A new failure of one pair is a warning.
+- A repository with no result of the base is a no read, with a warning. A repository with a result of the base and no result of the pull request fails.
+- The summary names each rule that skips in each repository with a result. The compare cannot read such a rule.
+- The artifact `rule-compare` has `rule-compare.json`, and the output, the log and the event file of each check.
+- The fix of a new failure merges with its migration. An example is a sync rule of the release train that changes each repository before the rule fails.
+
 ### The site config
 
 The file `.github/site.json` is the one home of the values of the site. The deploy of `main` and the check of each pull request read it. Thus a pull request checks the site that `main` deploys.
