@@ -24,7 +24,7 @@ These presets hold the shared Renovate settings of the repositories of mark1russ
   - The minor updates of the runtime dependencies: one pull request.
   - A minor update before 1.0.0 can break (SemVer). These updates get a group of their own, for a review.
   - The GitHub Actions (minor, patch, digest): one pull request. A major update gets a pull request of its own.
-  - The shared workflows and actions of the template: one pull request, "template workflows and actions".
+  - The shared workflows and actions of the template: no pull request. The release train moves these pins ("The pins of the template").
   - The Claude Code CLI of a workflow (`CLAUDE_CODE_VERSION`): one pull request, "Claude Code CLI", for a review.
 - Renovate opens no pull request for a range in `peerDependencies`. It lists each new version on the Dependency Dashboard, and a person ticks it there or changes the range by hand. A range is a promise to the users.
 - Renovate does not change `.github/workflows/release.yml` or `scripts/release/`. These files change only from `~/git/template` (`RELEASING.md`).
@@ -37,15 +37,16 @@ A repository pins each shared workflow and action of the template to a commit of
 uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<full commit SHA> # main
 ```
 
-- The comment `# main` tells Renovate the branch. Renovate moves the pin to the newest commit of `main`.
-- The manager `github-actions` reads the `uses:` of a job (a shared workflow) and of a step (an action).
-- Renovate 43.84.0 and later read a comment that is not a version as a branch or a tag ([renovatebot/renovate#40225](https://github.com/renovatebot/renovate/pull/40225)). The datasource `github-digest` then gives the newest commit of that branch. Thus the preset needs no regex manager for these pins.
-- The Dependency Dashboard of a repository shows each pin as `mark1russell7/template main@<commit>`, with the update "digest to `<commit>`".
-- All the pins of a repository come in one pull request, "template workflows and actions" (branch `renovate/template-workflows`).
-- A commit of a branch has no release date. Thus the preset sets no release-age wait for `mark1russell7/template`.
-- Without that rule, Renovate holds these updates with no end (`minimumReleaseAgeBehaviour` is `timestamp-required`).
-- These pull requests come on Monday before 06:00 (New York time), also when a repository changes its own schedule. A workflow change during a release makes its tag job fail with HTTP 403 (`RELEASING.md`).
-- The pins in `release.yml` stay as they are. The release session moves them (`RELEASING.md`).
+- The release train moves these pins, in its template sync (the rule `pins` of `mark1russell7/release-train`). Renovate does not move them. One owner gives one pull request for each change of the template.
+- The train moves the pins only when the files of a pin changed since its commit. A change of the docs of the template thus moves no pin, and starts no CI in each repository.
+- All the pins of a repository move together, so they stay one commit.
+- The train keeps the pins of `release.yml` while a version is in flight. A workflow change during a release makes its tag job fail with HTTP 403 (`RELEASING.md`).
+- The train does not move a pin to a file that `main` does not have. The sync pull request names that pin under "Needs a hand".
+- The train does not sync the template repository. Thus in that repository only, Renovate moves the pins of the template:
+  - A rule with `matchRepositories` in `base` gives the update in that repository. Thus a new repository that copies `renovate.json` of the template does not move its pins with Renovate.
+  - The comment `# main` tells Renovate the branch. Renovate 43.84.0 and later read a comment that is not a version as a branch or a tag ([renovatebot/renovate#40225](https://github.com/renovatebot/renovate/pull/40225)). The datasource `github-digest` then gives the newest commit of that branch.
+  - All the pins come in one pull request, "template workflows and actions" (branch `renovate/template-workflows`), on Monday before 06:00 (New York time).
+  - A commit of a branch has no release date. Thus the rule sets no release-age wait. Without it, Renovate holds these updates with no end (`minimumReleaseAgeBehaviour` is `timestamp-required`).
 
 ## The Claude Code CLI
 
