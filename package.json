@@ -33,7 +33,7 @@
     "@mark1russell7/cue": "^2.0.0",
     "@mark1russell7/service": "^0.9.3",
     "@mark1russell7/ste-lint": "^0.3.0",
-    "@mark1russell7/text": "^0.0.6",
+    "@mark1russell7/text": "^0.0.13",
     "@swc/core": "^1.15.0",
     "@types/node": "^26.6.5",
     "dependency-cruiser": "^18.7.0",
