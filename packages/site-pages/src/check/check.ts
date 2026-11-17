@@ -7,6 +7,9 @@
  * exception and a failed request of the site also fail it. A script that does not load and a failed check of the probe
  * fail it too. The command
  * writes a screenshot of each view.
+ *
+ * The first view of each page also reads the HTML that the server sent, before any script changed it. The view fails when
+ * that HTML has no `h1` or too little text for a reader with no script (`noScriptProblems`).
  */
 
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -14,6 +17,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { findBrowser, launch, NoReplyError, type Browser, type Page } from "./browser.ts";
 import { MEASURE, probeExpression, type Cut, type Measure, type ProbeCheck } from "./measure.ts";
+import { NO_SCRIPT_MIN_CHARS, noScriptProblems } from "./noscript.ts";
 import { probeScript, TYPESCRIPT_PROBE } from "./probe.ts";
 import { serve } from "./serve.ts";
 
@@ -56,6 +60,11 @@ export interface CheckOptions {
   callMs?: number | undefined;
   /** The time limit of the scroll and of the islands of a view, for `revealExpression`. The default is `ISLAND_LIMIT_MS`. */
   islandMs?: number | undefined;
+  /**
+   * The least number of characters of text in the HTML of each page, with no script. The default is `NO_SCRIPT_MIN_CHARS`.
+   * The value 0 turns off this floor, but not the rule of the `h1`. The value `false` turns off the read of the HTML.
+   */
+  noScriptChars?: number | false | undefined;
   log?: ((line: string) => void) | undefined;
 }
 
@@ -236,7 +245,11 @@ export async function checkSite(options: CheckOptions): Promise<CheckResult> {
       for (const width of options.widths) {
         for (const scheme of options.schemes) {
           const probe = scheme === options.schemes[0] ? probes[index] : undefined;
-          const input: ViewInput = { target, path, width, scheme, probe, options };
+          // Only the first view of a page reads its HTML, so that the summary gives each problem of the HTML one time.
+          const first = width === options.widths[0] && scheme === options.schemes[0];
+          const floor = options.noScriptChars ?? NO_SCRIPT_MIN_CHARS;
+          const noScriptChars = first && floor !== false ? floor : undefined;
+          const input: ViewInput = { target, path, width, scheme, probe, noScriptChars, options };
           let { view, hung } = await checkView(page, events, input);
           // A page that does not answer can hold the browser. The check tries the view again in a new browser.
           // Then one hang of the browser does not fail a deploy, and a page that hangs each time fails.
@@ -267,6 +280,16 @@ export async function checkSite(options: CheckOptions): Promise<CheckResult> {
     writeFileSync(join(options.shots, "summary.md"), summary(result));
   }
   return result;
+}
+
+/**
+ * This function gives the HTML that the server sent for the document of a navigation, before any script changed it.
+ * The request of a navigation has the id of its loader. A page that the function cannot read gives an error, not a pass.
+ */
+async function documentHtml(page: Page, loaderId: string | undefined): Promise<string> {
+  if (loaderId === undefined) throw new Error("the navigation has no loader");
+  const { body, base64Encoded } = (await page.send("Network.getResponseBody", { requestId: loaderId })) as { body: string; base64Encoded: boolean };
+  return base64Encoded ? Buffer.from(body, "base64").toString("utf8") : body;
 }
 
 /**
@@ -343,6 +366,8 @@ interface ViewInput {
   scheme: "light" | "dark";
   /** The code of the probe of this view, or undefined for no probe. */
   probe: string | undefined;
+  /** The floor of text of the HTML of the page (`noScriptProblems`), or undefined when this view does not read the HTML. */
+  noScriptChars: number | undefined;
   options: CheckOptions;
 }
 
@@ -356,12 +381,20 @@ async function checkView(page: Page, events: Events, input: ViewInput): Promise<
     await page.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: scheme }] });
     events.reset();
     const loaded = page.once("Page.loadEventFired", options.timeoutMs);
-    const navigation = (await page.send("Page.navigate", { url: target })) as { errorText?: string };
+    const navigation = (await page.send("Page.navigate", { url: target })) as { errorText?: string; loaderId?: string };
     if (navigation.errorText) {
       loaded.catch(() => {});
       throw new Error(`the page did not open: ${navigation.errorText}`);
     }
     await loaded;
+    if (input.noScriptChars !== undefined) {
+      try {
+        view.problems.push(...noScriptProblems(await documentHtml(page, navigation.loaderId), input.noScriptChars));
+      } catch (error) {
+        if (error instanceof NoReplyError) throw error;
+        view.problems.push(`with no script, the HTML of the page cannot be read: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
     await page.evaluate("document.fonts ? document.fonts.ready.then(() => true) : true");
     await new Promise((done) => setTimeout(done, options.settleMs));
     const islandMs = options.islandMs ?? ISLAND_LIMIT_MS;
@@ -441,6 +474,11 @@ edge, a text area hides its text, a box cuts text, a table goes out of view on a
 shows no text, or on a console error, an exception, a failed request of the site, a script that
 does not load or a failed check of the probe. Add data-overflow-ok to a box that is meant to
 scroll or to clip.
+
+The check also reads the HTML that the server sent for each page, before any script started. It fails
+a page whose HTML has no h1, or less than 200 characters of text outside the head, script, style,
+template and noscript elements. A search robot or a reader app that starts no script reads only
+that text.
 
 Options:
   --out <dir>          The built site folder. The check serves it at --base.

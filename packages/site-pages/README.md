@@ -74,6 +74,10 @@ A view fails for each of these problems:
 - A check of the probe fails, or the probe makes no check.
 - An Astro island does not start in the time limit. A hidden island and an island of a media query that does not match do not count.
 
+The first view of each page also reads the HTML that the server sent, before any script started. That view fails when the HTML has no `h1`. It also fails when the HTML has less than 200 characters of text (`NO_SCRIPT_MIN_CHARS`). The text in `head`, `script`, `style`, `template` and `noscript` does not count.
+
+A search robot, a link preview and a reader app often start no script. An app that writes all its text with a script gives them an empty page. To correct it, put the title in an `h1` and a short text in the HTML of the page. The app can replace them when it starts. `noScriptText` and `noScriptProblems` give the same measure with no browser.
+
 The text of the problem has the element, the box, the two widths, the width of the view and the start of the text. For example:
 
 ```text

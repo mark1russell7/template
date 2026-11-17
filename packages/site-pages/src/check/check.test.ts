@@ -50,6 +50,10 @@ beforeAll(() => {
   write("dead-cue/index.html", page(`<h1>Dead cue</h1><div class="scroll-cue" style="overflow-x: auto"><table style="min-width: 46rem"><tr><td>${LONG}</td></tr></table></div>`, `<style>@keyframes fades{to{opacity:1}}@supports (animation-timeline:scroll()){.scroll-cue{background-image:none;animation:linear both fades scroll(self inline)}}</style>`));
   // A clean copy of the same page: the two lines stay apart, and the cue shows.
   write("live-cue/index.html", page(`<h1>Live cue</h1><div class="scroll-cue" style="overflow-x: auto"><table style="min-width: 46rem"><tr><td>${LONG}</td></tr></table></div>`, `<style>@keyframes fades{to{opacity:1}}@supports (animation-timeline:scroll()){.scroll-cue{background-image:none;animation-name:fades;animation-timeline:scroll(self inline)}}</style>`));
+  // An app that writes all its text with a script: the browser shows the text, but the HTML that the server sent has none.
+  write("script-app/index.html", page(`<div id="root"></div><script>document.getElementById("root").innerHTML = "<h1>App</h1><p>" + "A line of the app. ".repeat(20) + "</p>";</script>`));
+  write("static-text/index.html", page(`<h1>Static</h1><p>${"A line of the page. ".repeat(12)}</p><noscript>Turn on JavaScript</noscript>`));
+  write("noscript-text/index.html", page(`<noscript><h1>No script</h1><p>${"Turn on JavaScript to see this page. ".repeat(8)}</p></noscript><div id="root"></div>`));
   write("other-sites-bad/index.html", page(`<h1>Other sites</h1>`, `<meta name="site-check-other-paths" content="(">`));
   write("module/index.html", page(`<h1>Module</h1><p>A module script that imports a Node.js module</p><script type="module" src="page.js"></script>`));
   write("module/page.js", `import "node:perf_hooks";\ndocument.querySelector("p").textContent = "ran";`);
@@ -304,8 +308,24 @@ describe.skipIf(browser === undefined)("checkSite in a browser", () => {
     schemes: ["light", "dark"],
     settleMs: 100,
     timeoutMs: 30_000,
+    // The pages of these tests are short. Only the test of the floor of text reads their HTML.
+    noScriptChars: false,
     ...extra,
   });
+
+  it("fails the first view of a page whose HTML, with no script, has no h1 or too little text", async () => {
+    const result = await checkSite(options(["/script-app/", "/static-text/", "/noscript-text/"], { widths: [360, 1280], schemes: ["light"], noScriptChars: undefined }));
+    const at = (page: string) => result.views.filter((view) => view.page === page).map((view) => view.problems);
+    const noH1 = "with no script, the HTML of the page has no h1. Put the title of the page in an h1 of the HTML.";
+    const short = "with no script, the HTML of the page has 0 characters of text, less than 200. Put the main text of the page in its HTML.";
+    // The browser shows the text of the app, so only the read of the HTML fails, and only in the first view of the page.
+    expect(at("/script-app/")).toEqual([[noH1, short], []]);
+    expect(at("/static-text/")).toEqual([[], []]);
+    // The text in noscript does not count.
+    expect(at("/noscript-text/")[0]).toEqual(expect.arrayContaining([noH1, short]));
+    expect(at("/noscript-text/")[1]).not.toContain(noH1);
+    expect(result.ok).toBe(false);
+  }, 120_000);
 
   it("fails a table with the class of the cue when the served CSS gives no cue, and passes a clean copy", async () => {
     const result = await checkSite(options(["/dead-cue/", "/live-cue/"], { widths: [360], schemes: ["light"] }));
@@ -333,7 +353,9 @@ describe.skipIf(browser === undefined)("checkSite in a browser", () => {
   }, 60_000);
 
   it("passes a view whose page hangs only at the first try, and marks it as retried", async () => {
-    // The first answer gives a page that blocks itself after its load. Each later answer gives a good page.
+    // The first answer gives a page that blocks itself after its load. Each later answer gives a good page. The check
+    // does not read the HTML (noScriptChars: false): that read also comes after the load, so the first call that waits
+    // is then Network.getResponseBody or Runtime.evaluate, by a race.
     let answers = 0;
     const server = createServer((request, response) => {
       if (request.url !== "/") {
@@ -348,7 +370,7 @@ describe.skipIf(browser === undefined)("checkSite in a browser", () => {
     try {
       const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
       const lines: string[] = [];
-      const result = await checkSite({ url, pages: ["/"], widths: [360], schemes: ["light"], settleMs: 0, timeoutMs: 30_000, callMs: 2_000, log: (line) => lines.push(line) });
+      const result = await checkSite({ url, pages: ["/"], widths: [360], schemes: ["light"], settleMs: 0, timeoutMs: 30_000, callMs: 2_000, noScriptChars: false, log: (line) => lines.push(line) });
       expect(result.ok).toBe(true);
       expect(result.views).toHaveLength(1);
       expect(result.views[0]).toMatchObject({ page: "/", width: 360, ok: true, problems: [] });
