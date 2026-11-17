@@ -43,9 +43,10 @@ on:
 
 permissions: {}
 
+# A run of main finishes: a newer run of main waits for it. A newer run of another ref cancels the run of that ref.
 concurrency:
   group: site-audit-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   changes:
