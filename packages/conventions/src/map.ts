@@ -326,13 +326,12 @@ export const HOMES: readonly Home[] = [
   {
     area: "electrical",
     title: "Electrical circuits and loads",
-    covers: "circuits, breakers, outlets and loads as data, the continuous-load check, and the formulas with units from quantity. The root entry has no browser. The entry /add-on is the add-on of room-view. The entry /marks (the marks of a room) is planned",
-    packages: [],
+    covers: "circuits, breakers, outlets and loads as data, the continuous-load check, and the formulas with units from quantity. The root entry has no browser. The entry /add-on is the add-on of room-view, the entry /marks has the marks of a room, and the entry /schema reads a layer from JSON",
+    packages: ["@mark1russell7/electrical"],
     repo: "mark1russell7/room-view",
-    pending: ["@mark1russell7/electrical"],
-    state: "planned",
+    state: "published",
     words: ["electrical", "circuit", "breaker", "outlet", "load", "amps", "volts", "panel", "wiring"],
-    note: "It is the first add-on of room-view, the package @mark1russell7/electrical. cluster-design takes the load of each circuit from it.",
+    note: "It is the first add-on of room-view. cluster-design takes the load of each circuit from it.",
   },
   {
     area: "packing",
