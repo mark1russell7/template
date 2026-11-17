@@ -187,6 +187,9 @@ importers:
       '@mark1russell7/cue':
         specifier: ^2.0.0
         version: 2.1.4
+      '@mark1russell7/service':
+        specifier: ^0.9.3
+        version: 0.9.3(zod@4.6.7)
       '@mark1russell7/ste-lint':
         specifier: ^0.3.0
         version: 0.3.2
@@ -294,6 +297,9 @@ importers:
 
   packages/conventions:
     dependencies:
+      '@mark1russell7/text':
+        specifier: ^0.0.8
+        version: 0.0.8
       yaml:
         specifier: ^2.9.1
         version: 2.9.1
@@ -615,6 +621,15 @@ packages:
       zod:
         optional: true
 
+  '@mark1russell7/algebra@0.9.6':
+    resolution: {integrity: sha512-FJAmXgBQTbd99es9+D4s6iit/m2nDWR1KLl5BDQWPtiNsguWzMrjqL4vMi0VIl9YKf/wTbP6yb/4r9aPF4/gng==}
+    engines: {node: '>=22.19'}
+    peerDependencies:
+      zod: ^4.1.0
+    peerDependenciesMeta:
+      zod:
+        optional: true
+
   '@mark1russell7/collections@0.11.1':
     resolution: {integrity: sha512-A8WllF8xDdMzIC1WBJYEf5PHO5zt+TJ/qVYGGHZMRbAu5y/U0ngToSdy7AkQeFlk/dLaPDydY+lCs18X817Cpw==}
     engines: {node: '>=22.12'}
@@ -623,6 +638,10 @@ packages:
     resolution: {integrity: sha512-+EEUBpLrTBcJoMIOF3C5XMVpzO7eYrermtdleEvWLGNJK9/HGPT9o6GgbsW+Vl+s3/0QrXksc0qOIUlE70HI9Q==}
     engines: {node: '>=22'}
     hasBin: true
+
+  '@mark1russell7/files@0.0.3':
+    resolution: {integrity: sha512-FiiKK/sAbp39ypGv+2XzYRc+s911pdCtu97UQ4LiKmQKHjqPiyocGO48r2YObucxUkQhnm9mCdkiQxW6rFjiAg==}
+    engines: {node: '>=22'}
 
   '@mark1russell7/layout-contract@0.3.7':
     resolution: {integrity: sha512-BitSjwuRHBpwLoUTCoF/JdIcAjMfxBw+/V8N7tcw7tNQ6uPYvAWdcQvJ48CSEkKFotgf41wn2EIdNfqUj+qo8Q==}
@@ -691,6 +710,36 @@ packages:
       zod:
         optional: true
 
+  '@mark1russell7/service@0.9.3':
+    resolution: {integrity: sha512-t/zFEvHFuVTuxNlZeavq1y/4JqOgKOweERkkAUSXKLQMCUgXtPnyU7KizKXFbJq3UAy4CZ/gcEzB5EzXsvUT+w==}
+    engines: {node: '>=22.19'}
+    peerDependencies:
+      '@grpc/grpc-js': ^1.14.6
+      '@opentelemetry/api': ^1.9.0
+      amqplib: ^2.2.0
+      ioredis: ^6.0.0
+      mongodb: ^7.7.0
+      pg: ^8.23.1
+      ws: ^8.22.0
+      zod: ^4.1.0
+    peerDependenciesMeta:
+      '@grpc/grpc-js':
+        optional: true
+      '@opentelemetry/api':
+        optional: true
+      amqplib:
+        optional: true
+      ioredis:
+        optional: true
+      mongodb:
+        optional: true
+      pg:
+        optional: true
+      ws:
+        optional: true
+      zod:
+        optional: true
+
   '@mark1russell7/ste-lint@0.3.2':
     resolution: {integrity: sha512-0WRNon1oYKX1mmTP/AhrPnpoGAGolmpkJWHaTkHXc4SKe1tQhUvPrY/0TQ4gvu7aN+TEPpypiZDIkOjYZG8qBA==}
     engines: {node: '>=22'}
@@ -698,6 +747,10 @@ packages:
 
   '@mark1russell7/text@0.0.6':
     resolution: {integrity: sha512-IwKQHx9U+k5AbEzZ8q4CxImQCuYXSFhvzMOSgy5UGYrZRIBO9RES7SYrXDrKqQFtMl5qD2QbibffevUPsrUW+A==}
+    engines: {node: '>=22.12'}
+
+  '@mark1russell7/text@0.0.8':
+    resolution: {integrity: sha512-Na9SOvlPKoaPBvhMe3dZCItCUiETvgCSkplkHnDIK8i1nep72Ean26U7t6611i1/FhrLz4v+GJDHr+/Yn5hYrQ==}
     engines: {node: '>=22.12'}
 
   '@mark1russell7/typeset@0.1.5':
@@ -2005,6 +2058,12 @@ snapshots:
     optionalDependencies:
       zod: 4.6.7
 
+  '@mark1russell7/algebra@0.9.6(zod@4.6.7)':
+    dependencies:
+      '@mark1russell7/quantity': 0.4.1(zod@4.6.7)
+    optionalDependencies:
+      zod: 4.6.7
+
   '@mark1russell7/collections@0.11.1(zod@4.6.7)':
     dependencies:
       '@mark1russell7/algebra': 0.8.10(zod@4.6.7)
@@ -2014,6 +2073,8 @@ snapshots:
       - zod
 
   '@mark1russell7/cue@2.1.4': {}
+
+  '@mark1russell7/files@0.0.3': {}
 
   '@mark1russell7/layout-contract@0.3.7':
     dependencies:
@@ -2054,11 +2115,25 @@ snapshots:
     optionalDependencies:
       zod: 4.6.7
 
+  '@mark1russell7/service@0.9.3(zod@4.6.7)':
+    dependencies:
+      '@mark1russell7/algebra': 0.9.6(zod@4.6.7)
+      '@mark1russell7/collections': 0.11.1(zod@4.6.7)
+      '@mark1russell7/files': 0.0.3
+      '@mark1russell7/quantity': 0.4.1(zod@4.6.7)
+      '@mark1russell7/rational': 0.1.2
+      '@mark1russell7/rigor-generators': 0.1.16
+      '@mark1russell7/text': 0.0.6
+    optionalDependencies:
+      zod: 4.6.7
+
   '@mark1russell7/ste-lint@0.3.2':
     dependencies:
       typescript: 6.0.3
 
   '@mark1russell7/text@0.0.6': {}
+
+  '@mark1russell7/text@0.0.8': {}
 
   '@mark1russell7/typeset@0.1.5':
     dependencies:

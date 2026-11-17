@@ -35,7 +35,7 @@ export function reachOf(specifier: string): Minor | undefined {
 const behind = (have: Minor, other: Minor): boolean => have[0] < other[0] || (have[0] === other[0] && have[1] < other[1]);
 
 /** This function gives the indent, the key and the value of one line of YAML. It cuts the line by position, with no pattern. */
-function yamlEntry(line: string): { readonly indent: number; readonly key: string; readonly value: string } | undefined {
+export function yamlEntry(line: string): { readonly indent: number; readonly key: string; readonly value: string } | undefined {
   const text = line.trimEnd();
   const body = text.trimStart();
   const colon = body.indexOf(": ");
