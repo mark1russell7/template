@@ -20,7 +20,7 @@ describe("the homes", () => {
     const areas = HOMES.map((home) => home.area);
     expect(new Set(areas).size).toBe(areas.length);
     for (const home of HOMES) {
-      expect(home.area).toMatch(/^[a-z]+(-[a-z]+)*$/);
+      expect(home.area).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
       expect(home.repo).toMatch(/^mark1russell7\/[A-Za-z0-9._-]+$/);
       if (home.state === "published") expect(home.packages.length, home.area).toBeGreaterThan(0);
       if (home.state === "planned" || home.state === "none") expect(home.packages, home.area).toEqual([]);
@@ -76,6 +76,16 @@ describe("the search", () => {
     expect(findHomes("docker compose")[0]?.area).toBe("network-labs");
     expect(findHomes("traceroute")[0]?.area).toBe("network-diagnosis");
     expect(findHomes("dns lookup jitter")[0]?.area).toBe("network-diagnosis");
+    expect(findHomes("three.js")[0]?.area).toBe("3d-stages");
+    expect(findHomes("camera picking")[0]?.area).toBe("3d-stages");
+    expect(findHomes("lens timeline")[0]?.area).toBe("3d-stages");
+    expect(findHomes("gltf")[0]?.area).toBe("room-view");
+    expect(findHomes("apartment model")[0]?.area).toBe("room-view");
+    expect(findHomes("viewer")[0]?.area).toBe("3d-stages");
+    expect(findHomes("3d marks")[0]?.area).toBe("3d-stages");
+    expect(findHomes("heat map")[0]?.area).toBe("3d-stages");
+    expect(findHomes("anchor add-on")[0]?.area).toBe("room-view");
+    expect(findHomes("circuit breaker")[0]?.area).toBe("electrical");
     expect(findHomes("nothing-like-this")).toEqual([]);
     expect(findHomes("")).toBe(HOMES);
   });

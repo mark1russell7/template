@@ -6,7 +6,7 @@ export type HomeState = "published" | "unpublished" | "planned" | "none";
 
 /** One area of code and its home. */
 export interface Home {
-  /** The id of the area, in kebab case. */
+  /** The id of the area, in kebab case of lower-case letters and digits, for example `3d-stages`. */
   readonly area: string;
   /** The area in a few plain words. */
   readonly title: string;
@@ -286,11 +286,11 @@ export const HOMES: readonly Home[] = [
   {
     area: "cluster-design",
     title: "Computer cluster design",
-    covers: "part classes and fit rules (socket, memory type, power supply), runner capacity, watts, heat, noise, circuit load, as formulas with units over a configuration",
+    covers: "part classes and fit rules (socket, memory type, power supply), runner capacity, watts, heat, noise, the load of a design on each circuit (the circuit math comes from electrical), as formulas with units over a configuration",
     packages: [],
     repo: "mark1russell7/cluster-design",
     state: "planned",
-    words: ["cluster", "hardware", "pc build", "socket", "psu", "watts", "circuit", "runner capacity", "heat", "noise", "rack", "compatibility"],
+    words: ["cluster", "hardware", "pc build", "socket", "psu", "watts", "runner capacity", "heat", "noise", "rack", "compatibility"],
     note: "It has no site facts and no prices: a site and part records are input data. Units come from quantity, roll-ups from Vex.",
   },
   {
@@ -304,14 +304,34 @@ export const HOMES: readonly Home[] = [
     note: "Loops go to @mark1russell7/service, the machine state machine to @mark1russell7/algebra. It has no site facts.",
   },
   {
+    area: "3d-stages",
+    title: "3D stages and marks",
+    covers: "the stage on three.js for any scene (camera and named views, picking, themes), the camera maths with no browser, the shared marks of the viewers (a point on a surface, a run along a wall, a heat map on a floor) and a globe of areas and places over time. Composable views: lenses with named knobs, a pure model, lanes and one shared timeline",
+    packages: ["@mark1russell7/visuals"],
+    repo: "mark1russell7/visuals",
+    state: "published",
+    words: ["3d", "three.js", "threejs", "webgl", "globe", "scene", "camera", "picking", "viewer", "marks", "markers", "heat map", "stage", "lens", "lanes", "timeline", "osi"],
+    note: "Each viewer maps its records to these marks. 3D geometry records go to layout-contract. Points on the Earth and great circles go to geo.",
+  },
+  {
     area: "room-view",
     title: "3D room viewer",
-    covers: "a three.js viewer of a room model (glTF) with placed objects, outlets and circuits as data",
-    packages: [],
+    covers: "the core of a room model: rooms, walls, openings, placed objects and anchors, with no topic. Each topic is an add-on package in the same repository, with its records on the anchors, its checks, its Vex formulas and its marks: electrical first, then plumbing, light and sound. The add-ons do not know each other. The viewer maps the records to the marks of visuals",
+    packages: ["@mark1russell7/room-view"],
     repo: "mark1russell7/room-view",
-    state: "planned",
-    words: ["3d", "three.js", "threejs", "gltf", "room", "floor plan", "scene", "outlet", "blender", "viewer"],
+    state: "published",
+    words: ["gltf", "room", "wall", "opening", "anchor", "add-on", "floor plan", "blender", "apartment model"],
     note: "3D geometry records go to layout-contract.",
+  },
+  {
+    area: "electrical",
+    title: "Electrical circuits and loads",
+    covers: "circuits, breakers, outlets and loads as data, the continuous-load check, and the formulas with units from quantity. The root entry has no browser. The entry /add-on is the add-on of room-view, the entry /marks has the marks of a room, and the entry /schema reads a layer from JSON",
+    packages: ["@mark1russell7/electrical"],
+    repo: "mark1russell7/room-view",
+    state: "published",
+    words: ["electrical", "circuit", "breaker", "outlet", "load", "amps", "volts", "panel", "wiring"],
+    note: "It is the first add-on of room-view. cluster-design takes the load of each circuit from it.",
   },
   {
     area: "packing",
