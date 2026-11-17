@@ -1,10 +1,12 @@
 // The reads of the GitHub API that the scripts of the template share: `gh api` with no shell, a retry after a transient
 // error, a pool of reads with a width, and the rate limit of the token. The audit of the time limits (scripts/limit-audit)
 // and the read of the CI minutes (scripts/ci-minutes) use them. Each workflow that starts one of those scripts installs
-// the dependencies of the root, because the retry comes from its home, @mark1russell7/service.
+// the dependencies of the root, because the retry comes from its home, @mark1russell7/service. The list of the owners
+// comes from its home, the package conventions.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { type Clock, type RetryOptions, retry } from "@mark1russell7/service";
+import { sharedNames } from "../../packages/conventions/src/owners.ts";
 
 const run = promisify(execFile);
 
@@ -59,6 +61,33 @@ export async function gh(args: readonly string[], options: GhOptions = {}): Prom
 /** This function gives one JSON value for each line that `gh api --paginate` writes with a `tojson` filter. */
 export async function lines<T>(path: string, jq: string, options?: GhOptions): Promise<T[]> {
   return parseLines<T>(await gh(["api", "--paginate", path, "--jq", jq], options));
+}
+
+/** A public repository that is not archived, of one of the owners. */
+export interface OwnedRepo {
+  readonly owner: string;
+  readonly name: string;
+  readonly default_branch: string;
+}
+
+/**
+ * This function gives each public repository that is not archived, of each owner, in the order of the owners. It stops
+ * when two owners have a repository of the same name, because each reader keys its records by the name.
+ */
+export async function publicRepos(owners: readonly string[], options?: GhOptions): Promise<OwnedRepo[]> {
+  const repos: OwnedRepo[] = [];
+  for (const owner of owners) {
+    repos.push(
+      ...(await lines<OwnedRepo>(
+        `users/${owner}/repos?per_page=100`,
+        ".[] | select((.private | not) and (.archived | not)) | {owner: .owner.login, name, default_branch} | tojson",
+        options,
+      )),
+    );
+  }
+  const shared = sharedNames(repos);
+  if (shared.length > 0) throw new Error(`More than one owner has a repository with the name ${shared.join(", ")}.`);
+  return repos;
 }
 
 /** This function gives one JSON value for each line of one page of `gh api` (no `--paginate`) with a `tojson` filter. */

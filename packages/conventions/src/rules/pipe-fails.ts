@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { byCode } from "../workspace.ts";
 import type { Break, Rule } from "../rule.ts";
-import { WORKFLOW, childKeys, indentOf, keyValue, workflowLines } from "../workflow.ts";
+import { WORKFLOW, childKeys, indentOf, keyValue, listEnd, listItems, workflowLines } from "../workflow.ts";
 
 /** This function gives the words that end the here-documents of a line of a script. */
 function hereWords(line: string): string[] {
@@ -75,9 +75,9 @@ export function runSteps(lines: readonly string[]): RunStep[] {
     const jobShell = defaultShell(lines, job);
     const steps = childKeys(lines, job).find((at) => keyValue(lines[at] ?? "", "steps") !== undefined);
     if (steps === undefined) continue;
-    const dashes = stepStarts(lines, steps);
+    const dashes = listItems(lines, steps);
     dashes.forEach((dash, order) => {
-      const end = dashes[order + 1] ?? blockAfter(lines, steps);
+      const end = dashes[order + 1] ?? listEnd(lines, steps);
       const indent = indentOf(lines[dash] ?? "") + 2;
       let run: number | undefined;
       let shell: string | undefined;
@@ -103,31 +103,6 @@ export function runSteps(lines: readonly string[]): RunStep[] {
     });
   }
   return found;
-}
-
-/** This function gives the end of the list of steps under the key at the line `steps`. A list can have the same indent as its key. */
-function blockAfter(lines: readonly string[], steps: number): number {
-  const indent = indentOf(lines[steps] ?? "");
-  for (let at = steps + 1; at < lines.length; at++) {
-    const line = lines[at] ?? "";
-    if (line.trim() === "") continue;
-    if (indentOf(line) < indent || (indentOf(line) === indent && !line.trimStart().startsWith("- "))) return at;
-  }
-  return lines.length;
-}
-
-/** This function gives the lines of the items of the list of steps. */
-function stepStarts(lines: readonly string[], steps: number): number[] {
-  const end = blockAfter(lines, steps);
-  let indent: number | undefined;
-  const starts: number[] = [];
-  for (let at = steps + 1; at < end; at++) {
-    const line = lines[at] ?? "";
-    if (line.trim() === "") continue;
-    indent ??= indentOf(line);
-    if (indentOf(line) === indent && line.trimStart().startsWith("- ")) starts.push(at);
-  }
-  return starts;
 }
 
 /** This function tells if a shell hides a failure on the left of a pipe. A shell that is not bash or sh has other rules, and the rule does not read it. */

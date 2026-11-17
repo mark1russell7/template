@@ -40,5 +40,15 @@
     "publint": "^0.3.25",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
+  },
+  "conventions": {
+    "rules": {
+      "job-fails": {
+        "advisory": [
+          "reusable-ci.yml#coverage until 2027-02-16: A caller with no strict coverage gets coverage on main as advice. The job checks runs the same tests strictly, and a called workflow has no other way to keep a job out of the result of its caller. On 2027-02-16 ci reads the callers again: the mode ends when no caller reads its advice."
+        ],
+        "reason": "The non-strict coverage of reusable-ci.yml is advice, not a gate. Each entry has its own reason and its last day."
+      }
+    }
   }
 }

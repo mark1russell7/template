@@ -64,6 +64,10 @@ export interface SiteConfig {
   readonly "site-check-probe": string;
   /** The Playwright version of the site check. */
   readonly "site-check-playwright": string;
+  /** The Playwright browsers of the build, with spaces between them. The action `setup-playwright` installs them before the build. */
+  readonly "playwright-browsers": string;
+  /** The command that runs the Playwright CLI of the repository, for the install of `playwright-browsers`. */
+  readonly "playwright-command": string;
   /** `true` gives each page the bar of the site. */
   readonly "site-bar": boolean;
   /** The pages of the bar, with commas between them. */
@@ -109,6 +113,8 @@ export const SITE_CONFIG_KEYS: { readonly [K in SiteConfigKey]: SiteConfigKeySpe
   "site-check-widths": { kind: "string", default: "" },
   "site-check-probe": { kind: "string", default: "" },
   "site-check-playwright": { kind: "string", default: "1.64.1" },
+  "playwright-browsers": { kind: "string", default: "" },
+  "playwright-command": { kind: "string", default: "npx --no-install playwright" },
   "site-bar": { kind: "boolean", default: false },
   "site-bar-pages": { kind: "string", default: "" },
   "site-bar-npm": { kind: "string", default: "" },

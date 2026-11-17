@@ -69,7 +69,7 @@ export function readConfig(root: string, rules: readonly Rule[] = RULES): Conven
 }
 
 /** This function gives the facts of the repository at `root` that the rules read. */
-export function createContext(root: string, config: ConventionsConfig, options: Pick<CheckOptions, "base" | "env"> = {}): RuleContext {
+export function createContext(root: string, config: ConventionsConfig, options: Pick<CheckOptions, "base" | "env" | "today"> = {}): RuleContext {
   const rootPackage = readPackage(root, root);
   const packages = packageFolders(root, config.packages ?? undefined)
     .filter((dir) => resolve(dir) !== resolve(root))
@@ -81,6 +81,7 @@ export function createContext(root: string, config: ConventionsConfig, options: 
     packages,
     env: options.env ?? {},
     ...(options.base === undefined ? {} : { base: options.base }),
+    ...(options.today === undefined ? {} : { today: options.today }),
     gitFiles() {
       if (files === null) {
         const out = runGit(root, ["ls-files", "-z", "--cached"]);

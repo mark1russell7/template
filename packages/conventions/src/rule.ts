@@ -88,6 +88,8 @@ export interface RuleContext {
   readonly env: Readonly<Record<string, string | undefined>>;
   /** The base commit that `--base` gives, if any. */
   readonly base?: string;
+  /** The day of the check (`YYYY-MM-DD`, UTC), for a rule with exceptions that end. A rule takes the day of the clock when it is missing. */
+  readonly today?: string;
   /** This function gives the files that git tracks, relative to the root, or undefined when the root is not in a git repository. */
   gitFiles(): readonly string[] | undefined;
   /** This function starts git in the root, and gives its output, or undefined when git fails. */
