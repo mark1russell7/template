@@ -297,6 +297,9 @@ importers:
 
   packages/conventions:
     dependencies:
+      '@mark1russell7/text':
+        specifier: ^0.0.8
+        version: 0.0.8
       yaml:
         specifier: ^2.9.1
         version: 2.9.1
@@ -744,6 +747,10 @@ packages:
 
   '@mark1russell7/text@0.0.6':
     resolution: {integrity: sha512-IwKQHx9U+k5AbEzZ8q4CxImQCuYXSFhvzMOSgy5UGYrZRIBO9RES7SYrXDrKqQFtMl5qD2QbibffevUPsrUW+A==}
+    engines: {node: '>=22.12'}
+
+  '@mark1russell7/text@0.0.8':
+    resolution: {integrity: sha512-Na9SOvlPKoaPBvhMe3dZCItCUiETvgCSkplkHnDIK8i1nep72Ean26U7t6611i1/FhrLz4v+GJDHr+/Yn5hYrQ==}
     engines: {node: '>=22.12'}
 
   '@mark1russell7/typeset@0.1.5':
@@ -2125,6 +2132,8 @@ snapshots:
       typescript: 6.0.3
 
   '@mark1russell7/text@0.0.6': {}
+
+  '@mark1russell7/text@0.0.8': {}
 
   '@mark1russell7/typeset@0.1.5':
     dependencies:
