@@ -11,7 +11,7 @@ import type { RegistryLookup } from "./rules/unreleased-change.ts";
 import { authorOf, convertGate, declaredName, hasTests, HOMES, mitText, modulesOf, moduleUses, pagesCalls, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, unreleasedChangeRule, type CheckOptions, type RegistryAnswer, type RuleResult } from "./index.ts";
 import { API_REPORT_RANGE } from "./rules/api-report-script.ts";
 import { minuteField } from "./rules/runner-budget.ts";
-import { runsOnMain, startsOnPush } from "./rules/main-runs-finish.ts";
+import { runsOnMain, runsOnOneCommit, startsOnPush } from "./rules/main-runs-finish.ts";
 import { triggersOf } from "./rules/site-check-in-ci.ts";
 import { localBase, runCli } from "./run.ts";
 
@@ -1715,6 +1715,41 @@ describe("main-runs-finish", () => {
     expect(runsOnMain(["on:", "  workflow_call:", "    inputs:"])).toBe(true);
     expect(runsOnMain(["on: [workflow_call]"])).toBe(true);
     expect(runsOnMain(["on: workflow_dispatch"])).toBe(false);
+    expect(runsOnMain(["on:", "  workflow_run:", "    workflows: [CI]", "    types: [completed]"])).toBe(true);
+    expect(runsOnMain(["on: [workflow_run]"])).toBe(true);
+    expect(runsOnOneCommit(["on: [push, pull_request]"])).toBe(true);
+    expect(runsOnOneCommit(["on:", "  workflow_call:"])).toBe(true);
+    expect(runsOnOneCommit(["on:", "  workflow_run:", "    workflows: [CI]"])).toBe(false);
+    expect(runsOnOneCommit(["on:", "  push:", "  workflow_run:", "    workflows: [CI]"])).toBe(true);
+  });
+
+  // A run of workflow_run is a run of the default branch. render pages.yml (2026-11-17) deployed after CI with
+  // cancel-in-progress true, so a queue of merges cancelled each deployment, and the rule did not read it.
+  // GitHub gives a run of workflow_run the last commit of the default branch, so a newer run that takes the place of a
+  // waiting run tests the same commit or a newer one. layout-contract memory-probe.yml (2026-11-17) has a group that
+  // ends with the ref and cancel-in-progress false, and it is not a break. A file that also starts on push gets both checks.
+  it("reports a workflow_run workflow that cancels a run in progress, and does not examine its group", () => {
+    const after = ["on:", "  workflow_run:", "    workflows: [CI]", "    types: [completed]", "  schedule:", '    - cron: "17 */3 * * *"'];
+    const shared = "${{ github.ref }}";
+    const root = fixture({
+      "package.json": { name: "one" },
+      ".github/workflows/pages.yml": flow(after, "true", "pages"),
+      ".github/workflows/good.yml": flow(after, PR, "pages"),
+      ".github/workflows/probe.yml": flow(after, "false", "${{ github.event_name }}-${{ github.ref }}"),
+      ".github/workflows/mixed.yml": flow(["on:", "  push:", "  workflow_run:", "    workflows: [CI]"], PR, shared),
+    });
+    commitAll(root);
+    const breaks = rule(root, "main-runs-finish").breaks;
+    expect(breaks.map((item) => `${item.file}:${String(item.line)}`)).toEqual([".github/workflows/mixed.yml:6", ".github/workflows/pages.yml:9"]);
+    expect(breaks.map((item) => item.message)).toEqual([
+      expect.stringContaining("mixed.yml starts on push and workflow_run, and its concurrency group ends with the ref."),
+      expect.stringContaining("pages.yml starts on workflow_run and has `cancel-in-progress: true`. The next run of the default branch cancels the run in progress"),
+    ]);
+    runFix({ root, only: ["main-runs-finish"] });
+    expect(readFileSync(join(root, ".github/workflows/pages.yml"), "utf8")).toContain(`  cancel-in-progress: ${PR}\n`);
+    expect(readFileSync(join(root, ".github/workflows/mixed.yml"), "utf8")).toContain(`  group: ci-${OWN}\n`);
+    expect(readFileSync(join(root, ".github/workflows/probe.yml"), "utf8")).toContain("  group: ci-${{ github.event_name }}-${{ github.ref }}\n");
+    expect(rule(root, "main-runs-finish").breaks).toEqual([]);
   });
 
   it("reports a push workflow that cancels a run in progress, and the fix cancels only a pull request run", () => {
@@ -1755,10 +1790,10 @@ describe("main-runs-finish", () => {
     expect(rule(root, "main-runs-finish").breaks).toEqual([]);
   });
 
-  it("skips a repository with no push or called workflow", () => {
+  it("skips a repository with no push, called or workflow_run workflow", () => {
     const root = fixture({ "package.json": { name: "one" }, ".github/workflows/pr.yml": flow(["on: pull_request"], "true") });
     commitAll(root);
-    expect(rule(root, "main-runs-finish")).toMatchObject({ status: "skipped", note: "no workflow starts on push or on workflow_call" });
+    expect(rule(root, "main-runs-finish")).toMatchObject({ status: "skipped", note: "no workflow starts on push, workflow_call or workflow_run" });
   });
 });
 
