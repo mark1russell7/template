@@ -633,7 +633,7 @@ Two functions read a measure from GitHub at the build. Each result has the `at` 
 | Function | Measure |
 | --- | --- |
 | `githubGreenRun({ owner, repo, token, workflow })` | The scheduled runs of a workflow that passed in a row, from the newest run |
-| `githubReleaseLag({ owner, repo, token, tagPrefix, branch })` | The age in days of the oldest commit of the first-parent line of the branch that is not in the newest release of the tag prefix. A merge commit counts at its own date. Drafts and pre-releases do not count. |
+| `githubReleaseLag({ owner, repo, token, tagPrefix, branch, paths })` | The age in days of the oldest commit of the first-parent line of the branch that is not in the newest release of the tag prefix. A merge commit counts at its own date. Drafts and pre-releases do not count. With `paths` (for example `["packages/", "!packages/site/"]`), only a commit that changes a file in the paths counts. The last entry that matches a file decides. |
 
 ## The shell of a site
 
