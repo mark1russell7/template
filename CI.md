@@ -819,6 +819,7 @@ The file `.github/site.json` is the one home of the values of the site. The depl
 - When the repository has the file, a call that also gives a site input with a value different from its default fails. Give each site value in one place.
 - A repository with no file keeps its site inputs in the call of `reusable-pages.yml`. The check of a pull request needs the file.
 - The job `site` of `ci.yml` uses `reusable-pages-check.yml`. "CI OK" needs the job, so a pull request with a bad site does not merge.
+- When `ci.yml` has a job `site` of its own, the check job gets the first free id of `site-check`, `site-check-2` and the next ones. The rule `site-check-in-ci` finds the check job by its workflow, not by its id.
 - The check builds the site and starts the site check and the probe, as the deploy does. It uploads the artifacts and deploys nothing.
 - GitHub counts the permissions of a called workflow against the grant of the caller job. A CI job of a pull request has no write permission.
 - Thus `reusable-pages-check.yml` gets only `contents: read`. On a public repository, each read of `site-pages` works with this token.
