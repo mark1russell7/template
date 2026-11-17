@@ -17,6 +17,7 @@ boundaries: build/index.d.ts#boundaries
 boundaryRules: build/index.d.ts#boundaryRules
 declaredDependencies: build/index.d.ts#declaredDependencies
 defaultOptions: build/index.d.ts#defaultOptions
+devOnlyDependencies: build/index.d.ts#devOnlyDependencies
 doNotFollowPaths: build/index.d.ts#doNotFollowPaths
 entryPattern: build/index.d.ts#entryPattern
 packageEntries: build/index.d.ts#packageEntries
@@ -34,6 +35,8 @@ export interface BoundaryOptions {
   reference?: string;
   scopes?: ScopeOptions;
   buildFolders?: string[];
+  bundled?: string[];
+  sourceFolders?: string[];
   forbidden?: Rule[];
   options?: Record<string, unknown>;
 }
@@ -60,7 +63,7 @@ export interface Rule {
 }
 
 ### build/index.d.ts#RuleOptions
-export interface RuleOptions extends Pick<BoundaryOptions, "apps" | "reference" | "scopes"> {
+export interface RuleOptions extends Pick<BoundaryOptions, "apps" | "reference" | "scopes" | "bundled" | "sourceFolders"> {
   dependencies?: string[];
 }
 
@@ -77,6 +80,8 @@ export interface WorkspacePackage {
   private: boolean;
   entries: string[];
   dependencies?: string[];
+  devOnly?: string[];
+  bundled?: boolean;
 }
 
 ### build/index.d.ts#boundaries
@@ -90,6 +95,9 @@ export declare function declaredDependencies(manifest: Record<string, unknown>):
 
 ### build/index.d.ts#defaultOptions
 export declare function defaultOptions(root?: string, input?: DefaultOptionsInput): Record<string, unknown>;
+
+### build/index.d.ts#devOnlyDependencies
+export declare function devOnlyDependencies(manifest: Record<string, unknown>): string[];
 
 ### build/index.d.ts#doNotFollowPaths
 export declare function doNotFollowPaths(packages: Pick<WorkspacePackage, "dir">[], buildFolders?: string[]): string[];

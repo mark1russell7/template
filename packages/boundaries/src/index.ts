@@ -41,6 +41,10 @@ export interface WorkspacePackage {
   entries: string[];
   /** The names of the dependencies in package.json: dependencies, devDependencies, peerDependencies and optionalDependencies. */
   dependencies?: string[];
+  /** The names that are only in devDependencies of package.json: not in dependencies, peerDependencies or optionalDependencies. */
+  devOnly?: string[];
+  /** True when the folder has a config file of a bundler: the build holds each import, also an import of a dev dependency. */
+  bundled?: boolean;
 }
 
 /**
@@ -69,6 +73,17 @@ export interface BoundaryOptions {
    * does not follow the imports of their files, and it does not start from them.
    */
   buildFolders?: string[];
+  /**
+   * The names of the packages whose build holds each import, for example a site that vite builds. The rule
+   * run-time-import-of-a-dev-dependency does not apply to them. The default is each package with a config file of a
+   * bundler: vite, tsdown, tsup, rollup, rolldown or webpack.
+   */
+  bundled?: string[];
+  /**
+   * The source folders of each package, for example `["src"]` (the default). The rule run-time-import-of-a-dev-dependency
+   * applies to their files. A test, a config file and a script outside these folders can import a dev dependency.
+   */
+  sourceFolders?: string[];
   /** More rules, after the rules of the boundaries. */
   forbidden?: Rule[];
   /** More options of dependency-cruiser. They replace the default options with the same key. */
@@ -79,6 +94,19 @@ const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\
 
 /** The default build folders of a package. */
 const BUILD_FOLDERS = ["dist", "build"];
+
+/** The default source folders of a package. */
+const SOURCE_FOLDERS = ["src"];
+
+/** The files and the folders of the tests. The default options exclude them, and the rule of the dev dependencies skips them. */
+const TEST_FILES = "\\.(test|spec|e2e)\\.[cm]?[jt]sx?$";
+const TEST_FOLDERS = "/(test|tests|e2e|__tests__|fixtures)/";
+
+/**
+ * A config file of a bundler. Its package is bundled: the build holds each import. A tsdown build, for example,
+ * puts each package that is not in dependencies or peerDependencies into the build.
+ */
+const BUNDLER_CONFIG = /^(vite|tsdown|tsup|rollup|rolldown|webpack)\.config\.[cm]?[jt]s$/;
 
 const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
 
@@ -224,13 +252,30 @@ export function workspacePackages(root: string, globs?: string[]): WorkspacePack
       private: manifest["private"] === true,
       entries: packageEntries(dir, manifest),
       dependencies: declaredDependencies(manifest),
+      devOnly: devOnlyDependencies(manifest),
+      ...(hasBundlerConfig(join(root, dir)) ? { bundled: true } : {}),
     });
   }
   return found;
 }
 
+/** The names that are only in devDependencies of a package.json. An install with --prod does not have them. */
+export function devOnlyDependencies(manifest: Record<string, unknown>): string[] {
+  const run = new Set(declaredDependencies({ ...manifest, devDependencies: undefined }));
+  return declaredDependencies({ devDependencies: manifest["devDependencies"] }).filter((name) => !run.has(name));
+}
+
+/** This function tells if the folder `dir` has a config file of a bundler. A folder that it cannot read has none. */
+function hasBundlerConfig(dir: string): boolean {
+  try {
+    return readdirSync(dir).some((name) => BUNDLER_CONFIG.test(name));
+  } catch {
+    return false;
+  }
+}
+
 /** The options of `boundaryRules()`. */
-export interface RuleOptions extends Pick<BoundaryOptions, "apps" | "reference" | "scopes"> {
+export interface RuleOptions extends Pick<BoundaryOptions, "apps" | "reference" | "scopes" | "bundled" | "sourceFolders"> {
   /** More declared dependencies, for example the dependencies of the root package.json. */
   dependencies?: string[];
 }
@@ -286,6 +331,36 @@ export function boundaryRules(packages: WorkspacePackage[], opts: RuleOptions = 
       from: {},
       to: { path: `^(${scopes.map(escape).join("|")})/`, ...(known.length > 0 ? { pathNot: `^(${known.join("|")})(/|$)` } : {}), couldNotResolve: true },
     });
+  }
+  const bundled = opts.bundled ?? packages.filter((p) => p.bundled === true).map((p) => p.name);
+  const run = packages.filter((p) => !bundled.includes(p.name) && p.dir !== "" && p.dir !== ".").map((p) => escape(p.dir));
+  const sources = (opts.sourceFolders ?? SOURCE_FOLDERS).map((folder) => folder.replace(/^\.\//, "").replace(/\/$/, "")).filter((folder) => folder !== "");
+  if (run.length > 0 && sources.length > 0) {
+    rules.push({
+      name: "run-time-import-of-a-dev-dependency",
+      severity: "error",
+      comment: why(
+        "A source file imports a package that is only in devDependencies. An install with --prod does not have it, so the import fails at run time. Move the package to dependencies, or import only its types.",
+      ),
+      from: { path: `^(${run.join("|")})/(${sources.map(escape).join("|")})/`, pathNot: [TEST_FILES, TEST_FOLDERS] },
+      // A package in devDependencies and in one more field (a peer, for example) is not only a dev dependency.
+      to: { dependencyTypes: ["npm-dev"], dependencyTypesNot: ["type-only", "npm", "npm-peer", "npm-optional"] },
+    });
+    // A workspace package resolves to its folder, not into node_modules, so the npm types do not show it. A rule for each package finds it.
+    for (const pkg of packages.filter((p) => !bundled.includes(p.name) && p.dir !== "" && p.dir !== ".")) {
+      const devOnly = new Set(pkg.devOnly ?? []);
+      const targets = packages.filter((p) => p !== pkg && devOnly.has(p.name)).map((p) => `^${escape(p.dir)}/`);
+      if (targets.length === 0) continue;
+      rules.push({
+        name: `run-time-import-of-a-dev-workspace-package-in-${slug(pkg.name)}`,
+        severity: "error",
+        comment: why(
+          `A source file of ${pkg.name} imports a workspace package that is only in its devDependencies. An install with --prod does not link it, so the import fails at run time. Move the package to dependencies, or import only its types.`,
+        ),
+        from: { path: `^${escape(pkg.dir)}/(${sources.map(escape).join("|")})/`, pathNot: [TEST_FILES, TEST_FOLDERS] },
+        to: { path: targets, dependencyTypesNot: ["type-only"] },
+      });
+    }
   }
   const apps =
     opts.apps === "private" ? packages.filter((p) => p.private) : packages.filter((p) => (opts.apps ?? []).includes(p.name));
@@ -361,8 +436,10 @@ export function defaultOptions(root?: string, input: DefaultOptionsInput = {}): 
   const packages = input.packages ?? (root ? workspacePackages(root) : []);
   return {
     ...parserOptions(root),
+    // node_modules is not in the exclude list: the rule run-time-import-of-a-dev-dependency needs each import of a
+    // package in the graph. The analysis does not follow node_modules (doNotFollow), so a package is a leaf.
     exclude: {
-      path: ["(^|/)node_modules/", "\\.(test|spec|e2e)\\.[cm]?[jt]sx?$", "\\.d\\.[cm]?ts$", "/(test|tests|e2e|__tests__|fixtures)/"],
+      path: [TEST_FILES, "\\.d\\.[cm]?ts$", TEST_FOLDERS],
     },
     doNotFollow: { path: doNotFollowPaths(packages, input.buildFolders) },
     enhancedResolveOptions: {
