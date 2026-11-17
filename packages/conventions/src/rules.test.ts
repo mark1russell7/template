@@ -1715,6 +1715,24 @@ describe("main-runs-finish", () => {
     expect(runsOnMain(["on:", "  workflow_call:", "    inputs:"])).toBe(true);
     expect(runsOnMain(["on: [workflow_call]"])).toBe(true);
     expect(runsOnMain(["on: workflow_dispatch"])).toBe(false);
+    expect(runsOnMain(["on:", "  workflow_run:", "    workflows: [CI]", "    types: [completed]"])).toBe(true);
+    expect(runsOnMain(["on: [workflow_run]"])).toBe(true);
+  });
+
+  // A run of workflow_run is a run of the default branch. render pages.yml (2026-11-17) deployed after CI with
+  // cancel-in-progress true, so a queue of merges cancelled each deployment, and the rule did not read it.
+  it("reports a workflow_run workflow that cancels a run in progress", () => {
+    const after = ["on:", "  workflow_run:", "    workflows: [CI]", "    types: [completed]", "  schedule:", '    - cron: "17 */3 * * *"'];
+    const root = fixture({
+      "package.json": { name: "one" },
+      ".github/workflows/pages.yml": flow(after, "true", "pages"),
+      ".github/workflows/good.yml": flow(after, PR, "pages"),
+    });
+    commitAll(root);
+    expect(rule(root, "main-runs-finish").breaks.map((item) => `${item.file}:${String(item.line)}`)).toEqual([".github/workflows/pages.yml:9"]);
+    runFix({ root, only: ["main-runs-finish"] });
+    expect(readFileSync(join(root, ".github/workflows/pages.yml"), "utf8")).toContain(`  cancel-in-progress: ${PR}\n`);
+    expect(rule(root, "main-runs-finish").breaks).toEqual([]);
   });
 
   it("reports a push workflow that cancels a run in progress, and the fix cancels only a pull request run", () => {
@@ -1755,10 +1773,10 @@ describe("main-runs-finish", () => {
     expect(rule(root, "main-runs-finish").breaks).toEqual([]);
   });
 
-  it("skips a repository with no push or called workflow", () => {
+  it("skips a repository with no push, called or workflow_run workflow", () => {
     const root = fixture({ "package.json": { name: "one" }, ".github/workflows/pr.yml": flow(["on: pull_request"], "true") });
     commitAll(root);
-    expect(rule(root, "main-runs-finish")).toMatchObject({ status: "skipped", note: "no workflow starts on push or on workflow_call" });
+    expect(rule(root, "main-runs-finish")).toMatchObject({ status: "skipped", note: "no workflow starts on push, workflow_call or workflow_run" });
   });
 });
 

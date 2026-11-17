@@ -1,5 +1,6 @@
 /**
- * The rule `main-runs-finish`: a workflow that starts on `push` or on `workflow_call` does not cancel a run in progress.
+ * The rule `main-runs-finish`: a workflow that starts on `push`, `workflow_call` or `workflow_run` does not cancel a run in
+ * progress.
  * Only the run of a pull request is cancelled by a newer push. Each commit of main has its own concurrency group, because
  * GitHub keeps only the newest run that waits in a group.
  */
@@ -37,22 +38,23 @@ export function startsOnPush(lines: readonly string[]): boolean {
 
 /**
  * This function tells if a run of the workflow can be a run of main. A workflow that starts on `workflow_call` gets
- * the event of its caller, and a caller can start on `push`.
+ * the event of its caller, and a caller can start on `push`. A run of `workflow_run` is always a run of the default branch.
  */
 export function runsOnMain(lines: readonly string[]): boolean {
-  return startsOnPush(lines) || startsOn(lines, "workflow_call");
+  return startsOnPush(lines) || startsOn(lines, "workflow_call") || startsOn(lines, "workflow_run");
 }
 
 export const mainRunsFinish: Rule = {
   id: "main-runs-finish",
-  title: "A workflow that starts on push or on workflow_call does not cancel a run in progress, and each commit of main has its own concurrency group. A newer push cancels only the run of a pull request.",
+  title: "A workflow that starts on push, workflow_call or workflow_run does not cancel a run in progress, and each commit of main has its own concurrency group. A newer push cancels only the run of a pull request.",
   reason:
-    "On 2026-11-03 the next merge cancelled the CI run of a commit on main, so the main check of that commit had no result. A shared concurrency group also cancelled a bench run on main, and its claim had no measurement. The CI workflow of the template had `cancel-in-progress: true`, and each repository copied it. A called workflow gets the event of its caller, so a `true` in a workflow that starts on `workflow_call` cancels the run of main too (packing, time-gate.yml, 2026-11-03).",
+    "On 2026-11-03 the next merge cancelled the CI run of a commit on main, so the main check of that commit had no result. A shared concurrency group also cancelled a bench run on main, and its claim had no measurement. The CI workflow of the template had `cancel-in-progress: true`, and each repository copied it. A called workflow gets the event of its caller, so a `true` in a workflow that starts on `workflow_call` cancels the run of main too (packing, time-gate.yml, 2026-11-03). A run of `workflow_run` is a run of the default branch: a Pages deployment after CI with `true` is cancelled by the next merge, and a queue of merges cancels each deployment (render, pages.yml, 2026-11-17).",
   fix: `Set \`cancel-in-progress: ${PULL_REQUEST_ONLY}\`, and end the concurrency group with \`${OWN_GROUP}\`. In one group, GitHub cancels a run that waits when a newer run comes, whatever \`cancel-in-progress\` says.`,
   sources: [
     { repo: "private", rule: "main-runs-finish", doc: "docs/STRATEGY.md (2026-11-03, a run of main ends)" },
     { repo: "client", rule: "release", doc: "the release of 0.47.0 (2026-11-03): four waiting CI runs of main were cancelled, so the version commit had no result" },
     { repo: "algebra", rule: "main-check", doc: "the A2 and A5 results (2026-11-03): a cancelled main run, and a cancelled bench run" },
+    { repo: "render", rule: "pages", doc: "render #99 (2026-11-17): pages.yml started on workflow_run with cancel-in-progress true, and the rule did not read workflow_run" },
   ],
   options: {},
   check(context) {
@@ -77,7 +79,7 @@ export const mainRunsFinish: Rule = {
           breaks.push({
             file,
             line: index + 1,
-            message: `${file} starts on push or on workflow_call, and its concurrency group ends with the ref. Runs of main share the group, so a newer push cancels a run that waits, and that commit gets no result.`,
+            message: `${file} starts on push, workflow_call or workflow_run, and its concurrency group ends with the ref. Runs of main share the group, so a newer push cancels a run that waits, and that commit gets no result.`,
             edits: [{ file, before: text, after: replaceLine(text, index + 1, [original.replace(SHARED_GROUP, () => OWN_GROUP)]) }],
           });
           return;
@@ -88,12 +90,12 @@ export const mainRunsFinish: Rule = {
         breaks.push({
           file,
           line: index + 1,
-          message: `${file} starts on push or on workflow_call and has \`cancel-in-progress: true\`. A newer push cancels the run of main in progress, and that commit gets no result.`,
+          message: `${file} starts on push, workflow_call or workflow_run and has \`cancel-in-progress: true\`. A newer push cancels the run of main in progress, and that commit gets no result.`,
           edits: [{ file, before: text, after }],
         });
       });
     }
-    if (pushed === 0) return { skipped: "no workflow starts on push or on workflow_call" };
+    if (pushed === 0) return { skipped: "no workflow starts on push, workflow_call or workflow_run" };
     return breaks;
   },
 };
