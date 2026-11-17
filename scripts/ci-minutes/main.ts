@@ -1,8 +1,8 @@
 // The read of the CI minutes. `ci-minutes.ts` has the rules, and its test does not start this file.
 //
-//   node scripts/ci-minutes/main.ts [--owner o] [--repos a,b] [--days 7] [--sample 10] [--out <folder>] [--strict]
+//   node scripts/ci-minutes/main.ts [--owners a,b] [--repos a,b] [--days 7] [--sample 10] [--out <folder>] [--strict]
 //
-// For each public repository of the owner that is not archived (or each one of --repos), the script reads the
+// For each public repository of the owners (default: each owner of the package conventions) that is not archived (or each one of --repos), the script reads the
 // pull-request runs that started in the last --days days (1 to 30). It reads the jobs, with their steps, of --sample
 // completed runs spread over the window, and the changed files of the pull requests of those runs. For each job with a
 // step that starts the input scripts of the shared CI, it reads the log of the job, and it splits that step into one
@@ -15,7 +15,8 @@
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { errorText, lines, page, pool, rateLimit, text } from "../lib/gh.ts";
+import { type OwnedRepo, errorText, lines, page, pool, publicRepos, rateLimit, text } from "../lib/gh.ts";
+import { ownersOf } from "../../packages/conventions/src/owners.ts";
 import {
   type Group,
   type Job,
@@ -40,7 +41,7 @@ import {
 
 const { values } = parseArgs({
   options: {
-    owner: { type: "string", default: process.env["GITHUB_REPOSITORY_OWNER"] ?? "mark1russell7" },
+    owners: { type: "string", default: "" },
     repos: { type: "string", default: "" },
     days: { type: "string", default: "7" },
     sample: { type: "string", default: "10" },
@@ -54,7 +55,7 @@ if (!Number.isInteger(days) || days < 1 || days > 30 || !Number.isInteger(sample
   console.error("Usage: --days is a whole number from 1 to 30, and --sample a whole number of 0 or more.");
   process.exit(2);
 }
-const owner = values.owner;
+const owners = ownersOf(values.owners);
 const since = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
 
 /** The reads that stay free for the other work of the token. */
@@ -109,12 +110,10 @@ async function groupsOf(full: string, job: Job): Promise<Group[]> {
   }
 }
 
-type Repo = { name: string; default_branch: string };
-
 /** This function reads one repository: its pull-request runs, its packages, and the jobs and changes of its sample. */
-async function readRepo(repo: Repo): Promise<{ read: RepoRead; jobs: JobRecord[]; prs: PrRecord[]; queued: QueueRecord[] }> {
+async function readRepo(repo: OwnedRepo): Promise<{ read: RepoRead; jobs: JobRecord[]; prs: PrRecord[]; queued: QueueRecord[] }> {
   await budget();
-  const full = `${owner}/${repo.name}`;
+  const full = `${repo.owner}/${repo.name}`;
   // Each page of the list has the count of all runs of the query, also of the runs after the 1000 runs of the list.
   const runs = await lines<Run>(
     `repos/${full}/actions/runs?event=pull_request&created=%3E%3D${since}&per_page=100`,
@@ -163,11 +162,8 @@ async function readRepo(repo: Repo): Promise<{ read: RepoRead; jobs: JobRecord[]
   return { read: { repo: repo.name, packages, runs: count, listed: runs.length, pullRequests, sampled: chosen.length }, jobs, prs, queued };
 }
 
-const all = await lines<Repo>(
-  `users/${owner}/repos?per_page=100`,
-  ".[] | select((.private | not) and (.archived | not)) | {name, default_branch} | tojson",
-);
-calls++;
+const all = await publicRepos(owners);
+calls += owners.length;
 const wanted = values.repos
   .split(",")
   .map((name) => name.trim())
@@ -205,7 +201,7 @@ const out = resolve(values.out);
 mkdirSync(out, { recursive: true });
 writeFileSync(
   join(out, "ci-minutes.json"),
-  `${JSON.stringify({ date: new Date().toISOString(), owner, since, days, sample, calls, notRead, noLog, repos: reads, summary, jobs, queued, prs }, null, 2)}\n`,
+  `${JSON.stringify({ date: new Date().toISOString(), owners, since, days, sample, calls, notRead, noLog, repos: reads, summary, jobs, queued, prs }, null, 2)}\n`,
 );
 const summaryText = render(summary, days, notRead);
 if (noLog.length > 0) summaryText.push("", `The read could not read ${noLog.length} logs, so their steps stay whole: ${noLog.slice(0, 5).join(", ")}.`);

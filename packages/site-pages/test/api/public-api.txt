@@ -761,6 +761,8 @@ export interface SiteConfig {
   readonly "site-check-widths": string;
   readonly "site-check-probe": string;
   readonly "site-check-playwright": string;
+  readonly "playwright-browsers": string;
+  readonly "playwright-command": string;
   readonly "site-bar": boolean;
   readonly "site-bar-pages": string;
   readonly "site-bar-npm": string;

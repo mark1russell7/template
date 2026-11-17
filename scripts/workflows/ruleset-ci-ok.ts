@@ -30,15 +30,16 @@
 // runs the check each day, so each new repository gets its ruleset after its first merged pull request. --check does
 // not read the checks that --only-summary removes. With GITHUB_STEP_SUMMARY, it also writes a table there.
 //
-// With no repository, the script uses each public repository of mark1russell7 that is not archived.
+// With no repository, the script uses each public repository that is not archived, of each owner of the package
+// conventions (packages/conventions/src/owners.ts).
 import { execFileSync } from "node:child_process";
 import { appendFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { OWNERS } from "../../packages/conventions/src/owners.ts";
 
 const CHECK = "CI OK";
 // The name of a summary job: one word or more, the first with a capital letter, then " OK" ("Joint bench OK").
 const SUMMARY = /^[A-Z][A-Za-z0-9]*( [A-Za-z0-9]+)* OK$/;
-const OWNER = "mark1russell7";
 // The app id of GitHub Actions, so that only a check of Actions passes the rule.
 const ACTIONS_APP = 15368;
 
@@ -84,8 +85,11 @@ interface Ruleset {
 
 function repositories(named: readonly string[]): string[] {
   if (named.length > 0) return [...named];
-  const repos = json<Repo[]>(["repo", "list", OWNER, "--visibility", "public", "--no-archived", "--limit", "500", "--json", "nameWithOwner,defaultBranchRef"]);
-  return repos.filter((r) => r.defaultBranchRef !== null).map((r) => r.nameWithOwner);
+  return OWNERS.flatMap((owner) =>
+    json<Repo[]>(["repo", "list", owner.login, "--visibility", "public", "--no-archived", "--limit", "500", "--json", "nameWithOwner,defaultBranchRef"])
+      .filter((r) => r.defaultBranchRef !== null)
+      .map((r) => r.nameWithOwner),
+  );
 }
 
 // The summary checks that passed on the head of the newest of the last 5 merged pull requests where "CI OK" passed,

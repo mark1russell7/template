@@ -3,7 +3,7 @@
   "name": "template-monorepo",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@12.20.0",
+  "packageManager": "pnpm@12.21.0",
   "engines": {
     "node": ">=22"
   },
@@ -33,12 +33,22 @@
     "@mark1russell7/cue": "^2.0.0",
     "@mark1russell7/service": "^0.9.3",
     "@mark1russell7/ste-lint": "^0.3.0",
-    "@mark1russell7/text": "^0.0.6",
+    "@mark1russell7/text": "^0.0.13",
     "@swc/core": "^1.15.0",
     "@types/node": "^26.6.5",
     "dependency-cruiser": "^18.7.0",
     "publint": "^0.3.25",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
+  },
+  "conventions": {
+    "rules": {
+      "job-fails": {
+        "advisory": [
+          "reusable-ci.yml#coverage until 2027-02-16: A caller with no strict coverage gets coverage on main as advice. The job checks runs the same tests strictly, and a called workflow has no other way to keep a job out of the result of its caller. On 2027-02-16 ci reads the callers again: the mode ends when no caller reads its advice."
+        ],
+        "reason": "The non-strict coverage of reusable-ci.yml is advice, not a gate. Each entry has its own reason and its last day."
+      }
+    }
   }
 }

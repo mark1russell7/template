@@ -1,5 +1,5 @@
 // The compare of the site check of a pull request with the site check of its base, over the live public sites of the
-// owner (CI.md, "The compare of the site check"). The job compare of site-audit.yml starts it:
+// owners (CI.md, "The compare of the site check"). The job compare of site-audit.yml starts it:
 //
 //   node next/scripts/workflows/site-compare.ts --sites <JSON list> --shard <n> --shards <count> --base <dir> --next <dir> --out <dir>
 //
@@ -293,11 +293,12 @@ function dropShots(dir: string): void {
 async function main(): Promise<number> {
   const { values } = parseArgs({ options: { sites: { type: "string" }, shard: { type: "string" }, shards: { type: "string" }, base: { type: "string" }, next: { type: "string" }, out: { type: "string" } } });
   const token = process.env["GH_TOKEN"] ?? "";
-  const owner = process.env["OWNER"] ?? "";
+  // The owner of each site, from the job sites of site-audit.yml
+  const owners = JSON.parse(process.env["OWNERS"] ?? "{}") as Record<string, string>;
   const [shard, shards] = [Number(values.shard ?? "0"), Number(values.shards ?? "1")];
   const { base, next } = values;
-  if (token === "" || owner === "" || base === undefined || next === undefined || values.out === undefined || !(Number.isInteger(shard) && shards >= 1 && shard >= 0 && shard < shards)) {
-    process.stderr.write("site-compare: give GH_TOKEN, OWNER, --base, --next, --out, and a --shard below --shards\n");
+  if (token === "" || base === undefined || next === undefined || values.out === undefined || !(Number.isInteger(shard) && shards >= 1 && shard >= 0 && shard < shards)) {
+    process.stderr.write("site-compare: give GH_TOKEN, OWNERS, --base, --next, --out, and a --shard below --shards\n");
     return 2;
   }
   const out = resolve(values.out);
@@ -305,6 +306,11 @@ async function main(): Promise<number> {
   const outcomes: SiteOutcome[] = [];
   for (const repo of sites) {
     let target: SiteTargetResult;
+    const owner = owners[repo];
+    if (owner === undefined) {
+      outcomes.push({ repo, kind: "unread", reason: "the job sites gave no owner for it" });
+      continue;
+    }
     try {
       const site = await readSite(owner, repo, token);
       target = siteTarget(`${owner}/${repo}`, site.url, site.files);

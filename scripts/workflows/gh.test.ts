@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Clock } from "@mark1russell7/service";
-import { type Exec, RETRY, errorText, gh, lines, transient } from "../lib/gh.ts";
+import { type Exec, RETRY, errorText, gh, lines, publicRepos, transient } from "../lib/gh.ts";
 
 /** An error as `execFile` gives it: the message, and the standard error of `gh`. */
 const ghError = (stderr: string): Error => Object.assign(new Error("Command failed: gh api x"), { stderr });
@@ -67,4 +67,27 @@ test("gh gives the error at once for an error of the request, and after the last
   await assert.rejects(gh(["api", "x"], { exec: down, clock: fake }), (error: unknown) => /HTTP 502/.test(errorText(error)));
   assert.equal(down.calls, RETRY.tries);
   assert.equal(fake.waits.length, RETRY.tries - 1);
+});
+
+test("publicRepos reads each owner in order, and stops on a name that two owners have", async () => {
+  const paths: string[] = [];
+  const answers: Record<string, string> = {
+    a: `${JSON.stringify({ owner: "a", name: "one", default_branch: "main" })}
+`,
+    b: `${JSON.stringify({ owner: "b", name: "two", default_branch: "trunk" })}
+`,
+    c: `${JSON.stringify({ owner: "c", name: "One", default_branch: "main" })}
+`,
+  };
+  const exec: Exec = async (args) => {
+    const path = args[2] ?? "";
+    paths.push(path);
+    return answers[path.split("/")[1] ?? ""] ?? "";
+  };
+  assert.deepEqual(await publicRepos(["a", "b"], { exec }), [
+    { owner: "a", name: "one", default_branch: "main" },
+    { owner: "b", name: "two", default_branch: "trunk" },
+  ]);
+  assert.deepEqual(paths, ["users/a/repos?per_page=100", "users/b/repos?per_page=100"]);
+  await assert.rejects(publicRepos(["a", "c"], { exec }), /More than one owner has a repository with the name one./);
 });

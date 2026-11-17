@@ -770,6 +770,9 @@ The job `site` of `ci.yml` checks the site of each pull request, and "CI OK" nee
 - `site-check-probe` is a JavaScript or TypeScript file that tests the interactive core of the home. Its checks run at each width. The check removes the types of a `.ts` file, so the site needs no build step for its probe. `site-pages check --help` tells its functions.
 - `site-check-probe` also takes a probe for other pages, as `<page>=<file>` pairs separated by commas, for example `test-probe.js, /structures/=src/structures-probe.ts`. A file with no page is the probe of the first page. A page with no probe has none.
 - The check uses the Chromium of `playwright-core` at `site-check-playwright`, from the action `setup-playwright`. The artifact `site-check` has the screenshots and `report.json`.
+- `playwright-browsers` names the Playwright browsers that the build needs, for example `chromium`. The action `setup-playwright` installs them before the build.
+- `playwright-command` is the Playwright CLI of the repository, for example `pnpm --filter @vex/site exec playwright`. Its version is the version of the build.
+- The install has a cache, a time limit and one more try. Thus the build command needs no `playwright install` of its own. The rule `playwright-install` of `@mark1russell7/conventions` finds such an install.
 - Two calls of `reusable-pages.yml` in one run need two values of `artifact-prefix`. The prefix goes before the names `github-pages` and `site-check` of the artifacts.
 - A download by name gets only the latest artifact of the name. `download-artifact` also finds by ID only the latest artifact of each name. Thus two artifacts of one name in one run are a fault.
 - The check runs from `packages/site-pages/src/check` of the template commit of the workflow. It needs Node.js 22.18 or later.
@@ -806,6 +809,26 @@ A change of the site check can fail a page that passed before. The site sees the
 - A site with no site check is out of scope, because no change of the check fails its deploy. The probes of the sites are not part of the compare.
 - The job has 4 shards. Two shards start at one time, after the job `nav`. One check of all sites is approximately 1000 views, or 65 minutes.
 - The artifact `site-compare-<shard>` has `compare-<shard>.json`, and the report and the log of each check. Only a site with a new problem keeps its screenshots.
+
+### The compare of the conventions rules
+
+A change of a rule of `@mark1russell7/conventions` can fail a repository that passed before. The repository sees the failure only when its pin moves. Thus the job `rules` of `ci.yml` examines each change of the rules before it merges.
+
+- The job starts on a pull request of the template that changes `packages/conventions/src`, `scripts/workflows/rule-compare.ts` or `ci.yml`. A change of a test file only does not start it.
+- The job asks only for `contents: read`. The job `verify` of `release.yml` uses `ci.yml` with that grant, and a job that asks for more stops each release run at its start. The test `scripts/workflows/call-permissions.test.ts` holds this for each call of a workflow of the template.
+- The job lists the public repositories of the owner that are not archived. `scripts/workflows/rule-compare.ts` clones each one at its default branch, with one commit.
+- A repository with no dependency on `@mark1russell7/conventions` in its root `package.json` is out of scope. The template is out of scope, because its own CI examines it.
+- In each clone, the script starts `conventions check --json --no-base` of the base and then of the pull request.
+- The two checks get the event file of a dispatched run of that repository. Thus no rule reads the pull request of the template, and a rule that examines a change skips.
+- The checks do not get the secret `CONVENTIONS_PRIVATE_PATTERNS`. Thus no private name goes into the report.
+- A place is a rule with a file and a line. A failure is a break of a rule with the status `break`, or a rule that threw.
+- A place with more failures in the check of the pull request than in the check of the base has new failures.
+- A place with the same count and a different text has a changed text. A changed text is not a new failure, and the summary counts it.
+- A repository with a new failure gets a second pair of checks. Only a new failure of both pairs fails the job. A new failure of one pair is a warning.
+- A repository with no result of the base is a no read, with a warning. A repository with a result of the base and no result of the pull request fails.
+- The summary names each rule that skips in each repository with a result. The compare cannot read such a rule.
+- The artifact `rule-compare` has `rule-compare.json`, and the output, the log and the event file of each check.
+- The fix of a new failure merges with its migration. An example is a sync rule of the release train that changes each repository before the rule fails.
 
 ### The site config
 

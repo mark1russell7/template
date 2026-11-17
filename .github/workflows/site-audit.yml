@@ -1,4 +1,4 @@
-# The audit of the live sites: `site-pages check --url` on the home of each public site of the account.
+# The audit of the live sites: `site-pages check --url` on the home of each public site of the owners.
 # The check opens each home at the widths, in light and dark, and finds overflow, errors and empty pages.
 # The artifact site-audit has the screenshots, report.json of each site and audit.json for all sites.
 # The job nav starts `site-pages nav --url` on each site: it follows the links from home, and finds the
@@ -21,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       sites:
-        description: "The repositories to examine, with commas. Empty: each public repository of the account that has a Pages site."
+        description: "The repositories to examine, with commas. Empty: each public repository of the owners that has a Pages site."
         type: string
         default: ""
       widths:
@@ -103,27 +103,26 @@ jobs:
       contents: read
     outputs:
       list: ${{ steps.sites.outputs.list }}
+      owners: ${{ steps.sites.outputs.owners }}
     steps:
+      # The script reads the list of the owners from its home, the package conventions.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/workflows
+            packages/conventions/src
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      # The output list has the names of the sites, and the output owners has the owner of each name.
       - name: The sites
         id: sites
-        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          OWNER: ${{ github.repository_owner }}
           SITES: ${{ inputs.sites }}
           SKIP: ${{ github.event_name == 'workflow_dispatch' && inputs.skip || 'typeset' }}
-        run: |
-          set -euo pipefail
-          if [ -n "$SITES" ]; then
-            tr ',' '\n' <<< "$SITES" | sed 's/^ *//;s/ *$//' | grep -v '^$' > "$RUNNER_TEMP/sites.txt"
-          else
-            gh api --paginate "users/$OWNER/repos?per_page=100" \
-              --jq '.[] | select(.has_pages and (.private | not) and (.archived | not)) | .name' | sort > "$RUNNER_TEMP/sites.txt"
-          fi
-          tr ',' '\n' <<< "$SKIP" | sed 's/^ *//;s/ *$//' | grep -v '^$' > "$RUNNER_TEMP/skip.txt" || true
-          grep -vxF -f "$RUNNER_TEMP/skip.txt" "$RUNNER_TEMP/sites.txt" > "$RUNNER_TEMP/audit-sites.txt" || true
-          echo "$(wc -l < "$RUNNER_TEMP/audit-sites.txt") sites: $(tr '\n' ' ' < "$RUNNER_TEMP/audit-sites.txt")"
-          echo "list=$(jq -Rnc '[inputs | select(length > 0)]' < "$RUNNER_TEMP/audit-sites.txt")" >> "$GITHUB_OUTPUT"
+        run: node scripts/workflows/site-list.ts
 
   audit:
     needs: [changes, sites]
@@ -159,16 +158,16 @@ jobs:
       - name: Site audit
         shell: bash
         env:
-          OWNER: ${{ github.repository_owner }}
+          OWNERS: ${{ needs.sites.outputs.owners }}
           WIDTHS: ${{ inputs.widths || '360,1280' }}
         run: |
           set -uo pipefail
           out="$RUNNER_TEMP/site-audit"
           mkdir -p "$out"
-          owner="${OWNER,,}"
           broken=0
           while read -r repo; do
             [ -n "$repo" ] || continue
+            owner="$(jq -r --arg repo "$repo" '.[$repo] | ascii_downcase' <<< "$OWNERS")"
             if [ "${repo,,}" = "$owner.github.io" ]; then url="https://$owner.github.io/"; else url="https://$owner.github.io/$repo/"; fi
             # The shell of the step has -e: a failed site must not end the loop.
             code=0
@@ -260,7 +259,7 @@ jobs:
       - name: The navigation of ${{ matrix.repo }}
         shell: bash
         env:
-          OWNER: ${{ github.repository_owner }}
+          OWNER: ${{ fromJSON(needs.sites.outputs.owners)[matrix.repo] }}
           REPO: ${{ matrix.repo }}
         run: |
           set -uo pipefail
@@ -280,7 +279,7 @@ jobs:
         if: github.event_name == 'pull_request' || inputs.preview-bar
         shell: bash
         env:
-          OWNER: ${{ github.repository_owner }}
+          OWNER: ${{ fromJSON(needs.sites.outputs.owners)[matrix.repo] }}
           REPO: ${{ matrix.repo }}
         run: |
           set -uo pipefail
@@ -415,7 +414,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          OWNER: ${{ github.repository_owner }}
+          OWNERS: ${{ needs.sites.outputs.owners }}
           LIST: ${{ needs.sites.outputs.list }}
           SHARD: ${{ matrix.shard }}
         run: node next/scripts/workflows/site-compare.ts --sites "$LIST" --shard "$SHARD" --shards 4 --base base --next next --out "$RUNNER_TEMP/site-compare"
