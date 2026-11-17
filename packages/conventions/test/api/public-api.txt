@@ -172,6 +172,7 @@ prePush: build/index.d.ts#prePush
 privateNamesFile: build/index.d.ts#privateNamesFile
 privatePatterns: build/index.d.ts#privatePatterns
 privateTextBreaks: build/index.d.ts#privateTextBreaks
+publishTextSafe: build/index.d.ts#publishTextSafe
 publishedMinor: build/index.d.ts#publishedMinor
 publishedMinorRule: build/index.d.ts#publishedMinorRule
 pushMainOnly: build/index.d.ts#pushMainOnly
@@ -944,6 +945,9 @@ export declare function privatePatterns(env: Readonly<Record<string, string | un
 
 ### build/index.d.ts#privateTextBreaks
 export declare function privateTextBreaks(name: string, text: string, privates: PrivateSources, options?: TextBreakOptions): Break[];
+
+### build/index.d.ts#publishTextSafe
+export declare const publishTextSafe: Rule;
 
 ### build/index.d.ts#publishedMinor
 export declare const publishedMinor: Rule;
