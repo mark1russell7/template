@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { addedLines } from "../change.ts";
 import { HOME_EXPORTS } from "../home-exports.ts";
 import { HOMES, type Home } from "../map.ts";
+import { OWNERS } from "../owners.ts";
 import type { Break, Rule, RuleContext } from "../rule.ts";
 import { byCode } from "../workspace.ts";
 
@@ -23,9 +24,17 @@ interface Signature {
   readonly pattern: RegExp;
 }
 
-/** This function gives the repositories, in lower case, that hold code of a home: its repository and each of `alsoIn`. */
+/**
+ * This function gives the repositories, in lower case, that hold code of a home: its repository and each of `alsoIn`.
+ * A repository of an owner of `OWNERS` can move to the other owner. Thus the function gives its name under each owner,
+ * and a move does not wait on a change of the map. A repository of another owner stays as the map names it.
+ */
 export function reposOf(home: Home): readonly string[] {
-  return [home.repo, ...(home.alsoIn ?? [])].map((repo) => repo.toLowerCase());
+  const logins = OWNERS.map((owner) => owner.login.toLowerCase());
+  return [home.repo, ...(home.alsoIn ?? [])].flatMap((repo) => {
+    const [owner = "", name = ""] = repo.toLowerCase().split("/");
+    return logins.includes(owner) && name !== "" ? logins.map((login) => `${login}/${name}`) : [repo.toLowerCase()];
+  });
 }
 
 /** This function gives the signatures of the homes that a repository can use: on npm, or in a repository with a pin. */

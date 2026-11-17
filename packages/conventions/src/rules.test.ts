@@ -8,7 +8,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { blockHash, sharedDocsRule, type HomeFetch } from "./rules/shared-docs.ts";
 import { lockedVersions, minorOf, publishedMinorRule, reachOf } from "./rules/published-minor.ts";
 import type { RegistryLookup } from "./rules/unreleased-change.ts";
-import { authorOf, convertGate, declaredName, hasTests, HOMES, mitText, modulesOf, moduleUses, pagesCalls, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, unreleasedChangeRule, type CheckOptions, type RegistryAnswer, type RuleResult } from "./index.ts";
+import { authorOf, convertGate, declaredName, hasTests, HOMES, mitText, modulesOf, moduleUses, pagesCalls, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, reposOf, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, unreleasedChangeRule, type CheckOptions, type Home, type RegistryAnswer, type RuleResult } from "./index.ts";
 import { API_REPORT_RANGE } from "./rules/api-report-script.ts";
 import { minuteField } from "./rules/runner-budget.ts";
 import { runsOnMain, startsOnPush } from "./rules/main-runs-finish.ts";
@@ -1024,6 +1024,19 @@ describe("home-package", () => {
     // The new name of the target repository after its rename.
     expect(rule(changed(code, "mark1russell7/math"), "home-package", { base: "base", env: {} }).status).toBe("pass");
     expect(rule(changed(code, "mark1russell7/other"), "home-package", { base: "base", env: {} }).breaks.length).toBe(2);
+  });
+
+  it("passes in the home after a move to the other owner, and breaks in a repository of the same name of a third owner", () => {
+    const code = "function medianOf(xs: number[]): number {\n  return xs[0] ?? 0;\n}\n";
+    // The map names mark1russell7/rigor. The home moves to the organization before the map changes (codeatlas, 2026-11-17)
+    expect(rule(changed(code, "metrograph-labs/rigor"), "home-package", { base: "base", env: {} }).status).toBe("pass");
+    expect(rule(changed(code, "Metrograph-Labs/Rigor"), "home-package", { base: "base", env: {} }).status).toBe("pass");
+    // A fork has the name of the home, but an owner out of OWNERS
+    expect(rule(changed(code, "someone/rigor"), "home-package", { base: "base", env: {} }).breaks.length).toBe(1);
+    const plain = HOMES.find((item) => item.alsoIn === undefined) as Home;
+    const home = (repo: string, alsoIn?: string[]): Home => ({ ...plain, repo, ...(alsoIn === undefined ? {} : { alsoIn }) });
+    expect(reposOf(home("mark1russell7/Rigor"))).toEqual(["mark1russell7/rigor", "metrograph-labs/rigor"]);
+    expect(reposOf(home("metrograph-labs/rigor", ["someone/rigor"]))).toEqual(["mark1russell7/rigor", "metrograph-labs/rigor", "someone/rigor"]);
   });
 
   it("skips with no change, and examines each line with the option scope all", () => {
