@@ -33,6 +33,10 @@ describe.skipIf(executable === undefined)("a call of a function in the page", ()
   it("throws with the message of an exception in the page", async () => {
     await expect(browser.page.call("function (text) { throw new Error(text); }", "no link")).rejects.toThrow("no link");
   });
+
+  it("gives WebGL 2 to a page with no graphics card, so a page with a 3D picture shows it on each system", async () => {
+    expect(await browser.page.evaluate<boolean>(`document.createElement("canvas").getContext("webgl2") !== null`)).toBe(true);
+  });
 });
 
 describe.skipIf(executable === undefined)("a call of the page with no reply", () => {
