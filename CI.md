@@ -812,6 +812,7 @@ A change of the site check can fail a page that passed before. The site sees the
 A change of a rule of `@mark1russell7/conventions` can fail a repository that passed before. The repository sees the failure only when its pin moves. Thus the job `rules` of `ci.yml` examines each change of the rules before it merges.
 
 - The job starts on a pull request of the template that changes `packages/conventions/src`, `scripts/workflows/rule-compare.ts` or `ci.yml`. A change of a test file only does not start it.
+- The job asks only for `contents: read`. The job `verify` of `release.yml` uses `ci.yml` with that grant, and a job that asks for more stops each release run at its start. The test `scripts/workflows/call-permissions.test.ts` holds this for each call of a workflow of the template.
 - The job lists the public repositories of the owner that are not archived. `scripts/workflows/rule-compare.ts` clones each one at its default branch, with one commit.
 - A repository with no dependency on `@mark1russell7/conventions` in its root `package.json` is out of scope. The template is out of scope, because its own CI examines it.
 - In each clone, the script starts `conventions check --json --no-base` of the base and then of the pull request.

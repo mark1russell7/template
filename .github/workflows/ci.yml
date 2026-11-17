@@ -174,9 +174,11 @@ jobs:
     if: github.repository == 'mark1russell7/template' && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # release.yml calls this file with "contents: read" only. A job that asks for more stops each run of release.yml at
+    # its start, also when its if skips the job (scripts/workflows/call-permissions.test.ts). In a public repository,
+    # the token reads the files of the pull request with no "pull-requests: read".
     permissions:
       contents: read
-      pull-requests: read
     steps:
       # The merge commit of the pull request: its rules, and the script of the compare
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
