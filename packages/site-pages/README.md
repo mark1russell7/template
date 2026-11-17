@@ -143,6 +143,8 @@ The folder of `--shots` gets a screenshot of each view, `report.json` and `summa
 
 The check finds a browser in this order: `--browser`, `$SITE_CHECK_BROWSER`, the newest Chromium of Playwright, and then Chrome or Edge. The folder `src/check` imports only Node.js. Thus Node.js 22.18 or later can start `src/check/main.ts` with no install. The workflow `reusable-pages.yml` of the template uses it this way.
 
+The browser starts with no graphics card, and it draws WebGL in software (`--enable-unsafe-swiftshader`). Thus a page with a 3D picture shows the same picture on Windows, on macOS and on Linux.
+
 ## The site bar
 
 The command `site-pages bar` writes one shared bar into each HTML page of a built site. The bar comes first in the body of each page.
