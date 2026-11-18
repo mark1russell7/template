@@ -369,6 +369,29 @@ The action `changes` skips a whole gate job when no file of the gate changes. A 
 - The artifact `ci-minutes` has `ci-minutes.json` with each record of a job and of a pull request. A later study takes its quantiles from these records with no new read.
 - The token of GitHub Actions has 1000 reads each hour. Before each repository, the read examines the limit. When too few reads are left, it waits for the next hour of the token, up to 65 minutes. Else it stops and names each repository that it did not read. The scheduled run fails when the read cannot read a repository.
 
+### The selection
+
+The selector reads the change of a pull request and the workspace. It tells which packages the change can affect, and which shared jobs read them. At this time it runs in shadow mode: it writes a record, and each job still runs. A later step skips a job only when the records show that the selector misses no failure.
+
+- In the job `checks`, the first job of the matrix of a pull request starts the action `select`. The step comes after the deepen step and before the install.
+- The action runs the bundle `.github/actions/bundles/select.mjs`. The bundle has each dependency in it and imports only modules of Node.js. Thus the step needs no install and runs no code of the repository.
+- The change is the diff from the merge base to the head. A changed package selects itself and each package that depends on it, in each dependency field.
+- The rules fail open. A global file selects everything: the lockfile, the root `package.json`, `pnpm-workspace.yaml`, a root config, a workflow or a local action. A new or removed `package.json` also selects everything.
+- A file outside the folder of the workspace selects everything. When the selector cannot read the change, the record is "no read", not a smaller selection.
+- For each job, the record gives the choice and its cause (`because`). The cause is a global file, a file that the selector cannot place, the packages, the paths or none.
+- The record has the format `selection/1`, the commit of the shared actions (`ref`) and the time of the step (`durationMs`). The artifact `selection` keeps it for 14 days.
+- The summary of the run shows a table of the jobs, with the choice and the cause of each job.
+- The step has `continue-on-error`, so its failure does not change the result of the CI.
+- To stop the step in a repository, set the repository variable `CI_SELECTION` to `off`.
+
+The selector is the entry `src/select.ts` of the package `conventions`. Each change of its source needs a new bundle in the same commit:
+
+```sh
+pnpm build:actions
+```
+
+The script `check:actions` builds the bundles again and fails when a committed bundle is not current. The script `test` of the root starts it.
+
 ## The queue
 
 Several writers merge into one `main` with `gh pr merge --auto`. Two pull requests can each pass their gate alone and break `main` together. For example, two pull requests set the same version, or one pull request removes an export that the other starts to use.
