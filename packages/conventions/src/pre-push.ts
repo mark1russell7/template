@@ -9,12 +9,12 @@ import { parseConfig } from "./config.ts";
 import { matchesAny, type Break, type Manifest } from "./rule.ts";
 import { RULES } from "./rules/index.ts";
 import { repositoryOfRemote } from "./rules/runner-budget.ts";
-import { parsePrivateNames, PrivateNameListError, type PrivateNameList } from "./private-names.ts";
+import { mergePrivateNames, parsePrivateNames, PrivateNameListError, type PrivateNameList } from "./private-names.ts";
 import {
   invalidPatternBreaks,
   PRIVATE_NAMES_FILE_CONFIG,
   PRIVATE_NAMES_FILE_VARIABLE,
-  privateNamesFile,
+  privateNamesFiles,
   privatePatterns,
   privateTextBreaks,
   type PrivateSources,
@@ -237,32 +237,45 @@ function repoOfPush(options: PrePushOptions): string | undefined {
  * This function is the command `conventions pre-push`. It examines each new commit of the push: its message, the paths
  * that it adds or changes, and each line that it adds. It writes the breaks to `stderr`, and gives the exit code: 1 on a
  * break, 0 on a pass. With no private name list and no private pattern, it writes the line `NO_READ_LINE` and gives 0.
+ * The settings can name more than one list (`privateNamesFiles`). The command then examines the merge of the lists.
  */
 export function prePush(options: PrePushOptions, io: Pick<CliIo, "stderr">): number {
   const readFile = options.readFile ?? ((path: string): string => readFileSync(path, "utf8"));
-  const file = privateNamesFile(options.env, options.git);
+  const files = privateNamesFiles(options.env, options.git);
   const patterns = privatePatterns(options.env);
-  if (file === undefined && patterns.length === 0) {
+  if (files.length === 0 && patterns.length === 0) {
     // A push with no read is not a pass, so the line tells it. It does not stop the push
     io.stderr(`${NO_READ_LINE}\n`);
     return 0;
   }
   let names: PrivateNameList | undefined;
-  if (file !== undefined) {
+  if (files.length > 0) {
     // A list that the settings name and that the gate cannot read or parse stops the push: the check fails closed
-    const source = (options.env[PRIVATE_NAMES_FILE_VARIABLE]?.trim() ?? "") !== "" ? PRIVATE_NAMES_FILE_VARIABLE : `the git config ${PRIVATE_NAMES_FILE_CONFIG}`;
-    let text: string;
-    try {
-      text = readFile(resolve(options.root, file));
-    } catch (error) {
-      io.stderr(`conventions pre-push: Cannot read the private name list that ${source} names: ${readReason(error)}. Correct the setting or the file. The push stops.\n`);
-      return 1;
+    const fromEnv = privateNamesFiles({ [PRIVATE_NAMES_FILE_VARIABLE]: options.env[PRIVATE_NAMES_FILE_VARIABLE] }, () => undefined).length > 0;
+    const source = fromEnv ? PRIVATE_NAMES_FILE_VARIABLE : `the git config ${PRIVATE_NAMES_FILE_CONFIG}`;
+    const lists: PrivateNameList[] = [];
+    for (const [at, file] of files.entries()) {
+      const which = files.length === 1 ? `the private name list that ${source} names` : `private name list ${String(at + 1)} of the ${String(files.length)} that ${source} names`;
+      let text: string;
+      try {
+        text = readFile(resolve(options.root, file));
+      } catch (error) {
+        io.stderr(`conventions pre-push: Cannot read ${which}: ${readReason(error)}. Correct the setting or the file. The push stops.\n`);
+        return 1;
+      }
+      try {
+        lists.push(parsePrivateNames(text));
+      } catch (error) {
+        const reason = error instanceof PrivateNameListError ? error.reason : "the parse failed";
+        io.stderr(`conventions pre-push: ${which.charAt(0).toUpperCase()}${which.slice(1)} is not valid: ${reason}. Correct the file. The push stops.\n`);
+        return 1;
+      }
     }
     try {
-      names = parsePrivateNames(text);
+      names = mergePrivateNames(lists);
     } catch (error) {
-      const reason = error instanceof PrivateNameListError ? error.reason : "the parse failed";
-      io.stderr(`conventions pre-push: The private name list that ${source} names is not valid: ${reason}. Correct the file. The push stops.\n`);
+      const reason = error instanceof PrivateNameListError ? error.reason : "the merge failed";
+      io.stderr(`conventions pre-push: The private name lists that ${source} names are not valid together: ${reason}. Give each name its own id. The push stops.\n`);
       return 1;
     }
   }
