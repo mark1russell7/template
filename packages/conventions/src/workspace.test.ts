@@ -93,6 +93,14 @@ describe("the text of pnpm-workspace.yaml and the folder rule", () => {
     expect(parseWorkspaceGlobs("packages: ['packages/*', site] # all\n")).toEqual(["packages/*", "site"]);
     expect(parseWorkspaceGlobs("packages: [\n  'packages/*', # the libraries\n  site,\n]\n")).toEqual(["packages/*", "site"]);
   });
+  it("removes a comment after spaces, keeps an empty item, and reads a long line of spaces in linear time", () => {
+    expect(parseWorkspaceGlobs("packages:\n  - a   # one\n  - 'b c' #two\n  - x#y\n  -  \n")).toEqual(["a", "b c", "x#y", ""]);
+    // A regular expression with \s+ before a # or before (.+) takes time n² on a line of n spaces
+    const spaces = " ".repeat(100_000);
+    expect(parseWorkspaceGlobs(`packages: [a, b]${spaces}\n`)).toEqual(["a", "b"]);
+    expect(parseWorkspaceGlobs(`packages:\n  -${spaces}a\n  - b${spaces}\n`)).toEqual(["a", "b"]);
+  });
+
   it("gives undefined with no key packages, and throws on a form that it does not read", () => {
     expect(parseWorkspaceGlobs("onlyBuiltDependencies:\n  - esbuild\n")).toBeUndefined();
     expect(() => parseWorkspaceGlobs("packages: packages/*\n")).toThrow(/not a list/);

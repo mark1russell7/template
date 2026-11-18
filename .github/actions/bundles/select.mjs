@@ -179,9 +179,17 @@ function trimEndSlashes(path) {
 	while (end > 0 && path.charAt(end - 1) === "/") end -= 1;
 	return path.slice(0, end);
 }
+/**
+* This function removes a comment at the end of a line of YAML: the first `#` after a space, and the text after it.
+* The caller trims the spaces before it. A search for one space and a `#` takes linear time on each text.
+*/
+function stripComment(text) {
+	const at = text.search(/\s#/);
+	return at < 0 ? text : text.slice(0, at);
+}
 /** This function removes a comment at the end of a YAML value, the spaces and the quotes around it. */
 function unquote(text) {
-	const value = text.replace(/\s+#.*$/, "").trim();
+	const value = stripComment(text).trim();
 	return /^(["']).*\1$/.test(value) ? value.slice(1, -1) : value;
 }
 /**
@@ -193,12 +201,12 @@ function parseWorkspaceGlobs(text) {
 	const lines = text.split(/\r?\n/);
 	const start = lines.findIndex((line) => /^packages\s*:/.test(line));
 	if (start < 0) return void 0;
-	const rest = (lines[start] ?? "").replace(/^packages\s*:/, "").replace(/\s+#.*$/, "").trim();
+	const rest = stripComment((lines[start] ?? "").replace(/^packages\s*:/, "")).trim();
 	if (rest.startsWith("[")) {
 		let flow = rest;
 		for (let index = start + 1; !flow.includes("]"); index++) {
 			if (index >= lines.length) throw new Error("The list packages of pnpm-workspace.yaml has no \"]\"");
-			flow += ` ${(lines[index] ?? "").replace(/\s+#.*$/, "")}`;
+			flow += ` ${stripComment(lines[index] ?? "")}`;
 		}
 		const close = flow.indexOf("]");
 		if (flow.slice(close + 1).trim() !== "") throw new Error(`The list packages of pnpm-workspace.yaml has text after its "]": ${flow}`);
@@ -208,7 +216,7 @@ function parseWorkspaceGlobs(text) {
 	const globs = [];
 	for (const line of lines.slice(start + 1)) {
 		if (/^\s*(#.*)?$/.test(line)) continue;
-		const item = /^\s*-\s+(.+)$/.exec(line);
+		const item = /^\s*-\s(.+)$/.exec(line);
 		if (item) {
 			globs.push(unquote(item[1] ?? ""));
 			continue;
