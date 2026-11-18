@@ -98,8 +98,13 @@ const BUILD_FOLDERS = ["dist", "build"];
 /** The default source folders of a package. */
 const SOURCE_FOLDERS = ["src"];
 
-/** The files and the folders of the tests. The default options exclude them, and the rule of the dev dependencies skips them. */
-const TEST_FILES = "\\.(test|spec|e2e)\\.[cm]?[jt]sx?$";
+/**
+ * The files and the folders of the tests. The default options exclude them, and the rule of the dev dependencies skips
+ * them. A test file has the suffix `.test`, `.spec` or `.e2e`. A helper of the tests adds one word with a hyphen to
+ * the suffix, for example `fixtures.test-util.ts` or `setup.spec-helpers.ts`. The word is an alternative, not an
+ * optional group: dependency-cruiser refuses a pattern with a repetition inside a repetition, as a slow pattern.
+ */
+const TEST_FILES = "\\.(test|spec|e2e)(\\.|-[a-z]+\\.)[cm]?[jt]sx?$";
 const TEST_FOLDERS = "/(test|tests|e2e|__tests__|fixtures)/";
 
 /**
