@@ -226,12 +226,13 @@ export const HOMES: readonly Home[] = [
   {
     area: "optional",
     title: "Optional values",
-    covers: "a value that is present or absent, and Result, a value or an error (1.2.0), with the functor and monad laws",
+    covers:
+      "a value that is present or absent, and Result, a value or an error (1.2.0), with the functor and monad laws; typed reads of unknown values (planned entry /read): the record check isRecord, field readers that give undefined on a wrong type, decoders that give a Result with the path of the bad field",
     packages: ["@mark1russell7/optional"],
     repo: "mark1russell7/optional",
     state: "published",
-    words: ["option", "maybe", "some", "none", "monad", "functor", "result", "either", "error"],
-    note: "@mark1russell7/render-optional is a second copy. It moves to @mark1russell7/optional.",
+    words: ["option", "maybe", "some", "none", "monad", "functor", "result", "either", "error", "guard", "isRecord", "isObject", "field", "decode", "unknown", "narrow"],
+    note: "@mark1russell7/render-optional is a second copy. It moves to @mark1russell7/optional. About 18 repositories have their own isRecord or isObject: they move to the entry /read.",
   },
   {
     area: "geometry",
