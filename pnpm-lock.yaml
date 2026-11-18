@@ -304,9 +304,15 @@ importers:
         specifier: ^2.9.1
         version: 2.9.1
     devDependencies:
+      '@mark1russell7/collections':
+        specifier: ^0.11.3
+        version: 0.11.3(zod@4.6.7)
       '@mark1russell7/cue':
         specifier: ^2.0.0
         version: 2.1.4
+      '@mark1russell7/files':
+        specifier: ^0.0.4
+        version: 0.0.4
       '@mark1russell7/site-pages':
         specifier: workspace:*
         version: link:../site-pages
@@ -630,8 +636,8 @@ packages:
       zod:
         optional: true
 
-  '@mark1russell7/collections@0.11.1':
-    resolution: {integrity: sha512-A8WllF8xDdMzIC1WBJYEf5PHO5zt+TJ/qVYGGHZMRbAu5y/U0ngToSdy7AkQeFlk/dLaPDydY+lCs18X817Cpw==}
+  '@mark1russell7/collections@0.11.3':
+    resolution: {integrity: sha512-KKAYIACji5XtOpbE3fIX4D3aVd0oddyM9dU+Pk+lXpgYOh6VTVoa/0yzwDTipZ42RKp+6BG+LSkLjCe/FjCHFA==}
     engines: {node: '>=22.12'}
 
   '@mark1russell7/cue@2.1.4':
@@ -641,6 +647,10 @@ packages:
 
   '@mark1russell7/files@0.0.3':
     resolution: {integrity: sha512-FiiKK/sAbp39ypGv+2XzYRc+s911pdCtu97UQ4LiKmQKHjqPiyocGO48r2YObucxUkQhnm9mCdkiQxW6rFjiAg==}
+    engines: {node: '>=22'}
+
+  '@mark1russell7/files@0.0.4':
+    resolution: {integrity: sha512-Pb978ZnvlAxzcdWtRtqTGb7mZFCvlNrdKnpZqhxQ7gafzeNGf1JqYFuB4RWiLbJzRuFUWjEoAVG5f2TndCIlSg==}
     engines: {node: '>=22'}
 
   '@mark1russell7/layout-contract@0.3.7':
@@ -2068,7 +2078,7 @@ snapshots:
     optionalDependencies:
       zod: 4.6.7
 
-  '@mark1russell7/collections@0.11.1(zod@4.6.7)':
+  '@mark1russell7/collections@0.11.3(zod@4.6.7)':
     dependencies:
       '@mark1russell7/algebra': 0.8.10(zod@4.6.7)
       '@mark1russell7/optional': 1.2.0
@@ -2079,6 +2089,8 @@ snapshots:
   '@mark1russell7/cue@2.1.4': {}
 
   '@mark1russell7/files@0.0.3': {}
+
+  '@mark1russell7/files@0.0.4': {}
 
   '@mark1russell7/layout-contract@0.3.7':
     dependencies:
@@ -2113,7 +2125,7 @@ snapshots:
   '@mark1russell7/service@0.8.20(zod@4.6.7)':
     dependencies:
       '@mark1russell7/algebra': 0.8.10(zod@4.6.7)
-      '@mark1russell7/collections': 0.11.1(zod@4.6.7)
+      '@mark1russell7/collections': 0.11.3(zod@4.6.7)
       '@mark1russell7/quantity': 0.4.1(zod@4.6.7)
       '@mark1russell7/rational': 0.1.2
       '@mark1russell7/rigor-generators': 0.1.15
@@ -2124,7 +2136,7 @@ snapshots:
   '@mark1russell7/service@0.9.3(zod@4.6.7)':
     dependencies:
       '@mark1russell7/algebra': 0.9.6(zod@4.6.7)
-      '@mark1russell7/collections': 0.11.1(zod@4.6.7)
+      '@mark1russell7/collections': 0.11.3(zod@4.6.7)
       '@mark1russell7/files': 0.0.3
       '@mark1russell7/quantity': 0.4.1(zod@4.6.7)
       '@mark1russell7/rational': 0.1.2

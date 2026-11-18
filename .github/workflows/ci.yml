@@ -194,18 +194,28 @@ jobs:
             scripts/lib/gh.ts
             packages/conventions/src/**
             !packages/conventions/src/**/*.test.ts
+      # The same compare of the import boundaries (CI.md, "The compare of the import boundaries")
+      - id: boundary-changes
+        uses: ./next/.github/actions/changes
+        with:
+          paths: |
+            .github/workflows/ci.yml
+            scripts/workflows/rule-compare.ts
+            scripts/lib/gh.ts
+            packages/boundaries/src/**
+            !packages/boundaries/src/**/*.test.ts
       # The base of the pull request: the rules that each repository gets when its pin moves to the base
-      - if: steps.changes.outputs.match == 'true'
+      - if: steps.changes.outputs.match == 'true' || steps.boundary-changes.outputs.match == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: base
           ref: ${{ github.event.pull_request.base.sha }}
           persist-credentials: false
-      - if: steps.changes.outputs.match == 'true'
+      - if: steps.changes.outputs.match == 'true' || steps.boundary-changes.outputs.match == 'true'
         uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           package_json_file: next/package.json
-      - if: steps.changes.outputs.match == 'true'
+      - if: steps.changes.outputs.match == 'true' || steps.boundary-changes.outputs.match == 'true'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
@@ -216,7 +226,7 @@ jobs:
       # come at the version that pnpm-lock.yaml gives (CI.md, "The packages of the workflow scripts"), into next/scripts,
       # so that scripts/workflows and scripts/lib both find them.
       - name: Install the rules of the base and of the pull request
-        if: steps.changes.outputs.match == 'true'
+        if: steps.changes.outputs.match == 'true' || steps.boundary-changes.outputs.match == 'true'
         run: |
           (cd next && pnpm install --frozen-lockfile --filter "@mark1russell7/conventions...")
           (cd base && pnpm install --frozen-lockfile --filter "@mark1russell7/conventions...")
@@ -229,9 +239,17 @@ jobs:
         if: steps.changes.outputs.match == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node next/scripts/workflows/rule-compare.ts --base base --next next --out "$RUNNER_TEMP/rule-compare" --work "$RUNNER_TEMP/rule-clones" --jobs 4
+        run: node next/scripts/workflows/rule-compare.ts --tool conventions --base base --next next --out "$RUNNER_TEMP/rule-compare/conventions" --work "$RUNNER_TEMP/rule-clones" --jobs 4
+      # Each repository with a dependency on the boundaries and the script check:boundaries. The script installs each
+      # clone with no scripts of the packages, and links the package of the base and then of the pull request into it.
+      # The step starts also after a failure of the compare of the rules, so the summary has both compares.
+      - name: The compare of the import boundaries
+        if: ${{ !cancelled() && steps.boundary-changes.outputs.match == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node next/scripts/workflows/rule-compare.ts --tool boundaries --base base --next next --out "$RUNNER_TEMP/rule-compare/boundaries" --work "$RUNNER_TEMP/boundary-clones" --jobs 4
       - name: The reports of the compare
-        if: ${{ !cancelled() && steps.changes.outputs.match == 'true' }}
+        if: ${{ !cancelled() && (steps.changes.outputs.match == 'true' || steps.boundary-changes.outputs.match == 'true') }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rule-compare

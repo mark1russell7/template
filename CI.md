@@ -388,6 +388,29 @@ The action `changes` skips a whole gate job when no file of the gate changes. A 
 - The artifact `ci-minutes` has `ci-minutes.json` with each record of a job and of a pull request. A later study takes its quantiles from these records with no new read.
 - The token of GitHub Actions has 1000 reads each hour. Before each repository, the read examines the limit. When too few reads are left, it waits for the next hour of the token, up to 65 minutes. Else it stops and names each repository that it did not read. The scheduled run fails when the read cannot read a repository.
 
+### The selection
+
+The selector reads the change of a pull request and the workspace. It tells which packages the change can affect, and which shared jobs read them. At this time it runs in shadow mode: it writes a record, and each job still runs. A later step skips a job only when the records show that the selector misses no failure.
+
+- In the job `checks`, the first job of the matrix of a pull request starts the action `select`. The step comes after the deepen step and before the install.
+- The action runs the bundle `.github/actions/bundles/select.mjs`. The bundle has each dependency in it and imports only modules of Node.js. Thus the step needs no install and runs no code of the repository.
+- The change is the diff from the merge base to the head. A changed package selects itself and each package that depends on it, in each dependency field.
+- The rules fail open. A global file selects everything: the lockfile, the root `package.json`, `pnpm-workspace.yaml`, a root config, a workflow or a local action. A new or removed `package.json` also selects everything.
+- A file outside the folder of the workspace selects everything. When the selector cannot read the change, the record is "no read", not a smaller selection.
+- For each job, the record gives the choice and its cause (`because`). The cause is a global file, a file that the selector cannot place, the packages, the paths or none.
+- The record has the format `selection/1`, the commit of the shared actions (`ref`) and the time of the step (`durationMs`). The artifact `selection` keeps it for 14 days.
+- The summary of the run shows a table of the jobs, with the choice and the cause of each job.
+- The step has `continue-on-error`, so its failure does not change the result of the CI.
+- To stop the step in a repository, set the repository variable `CI_SELECTION` to `off`.
+
+The selector is the entry `src/select.ts` of the package `conventions`. Each change of its source needs a new bundle in the same commit:
+
+```sh
+pnpm build:actions
+```
+
+The script `check:actions` builds the bundles again and fails when a committed bundle is not current. The script `test` of the root starts it.
+
 ## The queue
 
 Several writers merge into one `main` with `gh pr merge --auto`. Two pull requests can each pass their gate alone and break `main` together. For example, two pull requests set the same version, or one pull request removes an export that the other starts to use.
@@ -844,11 +867,28 @@ A change of a rule of `@mark1russell7/conventions` can fail a repository that pa
 - A place is a rule with a file and a line. A failure is a break of a rule with the status `break`, or a rule that threw.
 - A place with more failures in the check of the pull request than in the check of the base has new failures.
 - A place with the same count and a different text has a changed text. A changed text is not a new failure, and the summary counts it.
+- A failure of the base at a place with fewer failures in the pull request is a gone failure. The summary counts and lists them, so a fix shows each repository that it changes.
 - A repository with a new failure gets a second pair of checks. Only a new failure of both pairs fails the job. A new failure of one pair is a warning.
 - A repository with no result of the base is a no read, with a warning. A repository with a result of the base and no result of the pull request fails.
 - The summary names each rule that skips in each repository with a result. The compare cannot read such a rule.
-- The artifact `rule-compare` has `rule-compare.json`, and the output, the log and the event file of each check.
+- The artifact `rule-compare` has the folder `conventions`. It has `rule-compare.json`, and the output, the log and the event file of each check.
 - The fix of a new failure merges with its migration. An example is a sync rule of the release train that changes each repository before the rule fails.
+
+### The compare of the import boundaries
+
+A change of `@mark1russell7/boundaries` can also fail a repository that passed before. The same job `rules` examines it with `rule-compare.ts --tool boundaries`.
+
+- The step starts on a pull request that changes `packages/boundaries/src`, `scripts/workflows/rule-compare.ts`, `scripts/lib/gh.ts` or `ci.yml`. A change of a test file only does not start it.
+- The step starts also after a failure of the compare of the rules. Thus the summary has the result of each compare.
+- A repository is in scope when its root `package.json` has a dependency on `@mark1russell7/boundaries` and the script `check:boundaries`.
+- The script must be one `depcruise` command with plain words. Each other script is a no read, with a warning.
+- The script installs each clone with `pnpm install --frozen-lockfile --ignore-scripts`. A failed install is a no read.
+- Before each check, the script links the package of the base, or of the pull request, into the `node_modules` of the clone.
+- Each check starts the words of `check:boundaries` with a JSON output. The clone gets no build, so an import that resolves only after a build gets the same result in both checks.
+- Each rule of the rule set is a rule of the result. A violation of a rule with the severity `error` is a failure. A violation of each other severity warns.
+- A place is a rule and the file of the import. The text of a failure tells the target of the import.
+- New failures, changed texts and gone failures follow the rules of the compare of the conventions rules.
+- The artifact `rule-compare` has the folder `boundaries`. It has `rule-compare.json`, the install log of each clone, and the result and the log of each check.
 
 ### The site config
 

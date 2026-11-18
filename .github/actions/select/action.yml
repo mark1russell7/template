@@ -1,0 +1,57 @@
+name: select
+description: >-
+  The selector of precise CI (CI.md, "The selection"). It reads the change of a pull request and the workspace, and
+  writes the record selection/1: the packages that the change can affect, and for each shared job its choice and the
+  cause. A global file, or a file that it cannot place, selects everything. In shadow mode the action changes no job. A
+  change that it cannot read gives the record "no read" and the exit code 0. The action runs the bundle
+  ../bundles/select.mjs, so it needs no install and runs no code of the repository.
+inputs:
+  base-sha:
+    description: >-
+      The base commit. The change is the diff from the merge base to the head. Empty: the first parent of HEAD, because
+      the checkout of a pull request is a merge commit.
+    default: ""
+  head-sha:
+    description: The head commit. Empty with an empty base-sha, the second parent of HEAD. Empty with a base-sha, HEAD.
+    default: ""
+  root:
+    description: The folder of the workspace (pnpm-workspace.yaml and the root package.json) in the repository.
+    default: "."
+  global:
+    description: More globs of global files, relative to the root, one on each line. A change to one selects everything.
+    default: ""
+  ref:
+    description: The commit of the shared actions, for the record. A study of the records groups them by it.
+    default: ""
+  out:
+    description: The file of the record.
+    default: ${{ runner.temp }}/selection/selection.json
+outputs:
+  file:
+    description: The file of the record.
+    value: ${{ inputs.out }}
+  name:
+    description: >-
+      A name for the artifact of the record: selection, or selection-<root> with "-" for each "/". Two calls of the CI
+      in one run, each for a different root, then do not write over each other.
+    value: ${{ steps.selection.outputs.name }}
+runs:
+  using: composite
+  steps:
+    - name: Selection
+      id: selection
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        BASE_SHA: ${{ inputs.base-sha }}
+        HEAD_SHA: ${{ inputs.head-sha }}
+        ROOT: ${{ inputs.root }}
+        GLOBAL: ${{ inputs.global }}
+        SELECTOR_REF: ${{ inputs.ref }}
+        OUT: ${{ inputs.out }}
+      run: |
+        root=${ROOT#./}
+        root=${root%/}
+        if [ -z "$root" ] || [ "$root" = . ]; then name=selection; else name="selection-${root//\//-}"; fi
+        echo "name=$name" >> "$GITHUB_OUTPUT"
+        node "$GITHUB_ACTION_PATH/../bundles/select.mjs"

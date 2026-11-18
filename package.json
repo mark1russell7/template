@@ -10,7 +10,7 @@
   "scripts": {
     "package": "tsx packages/cli/src/index.ts package",
     "template": "tsx packages/cli/src/index.ts repo",
-    "test": "pnpm -r run test && pnpm run test:release && pnpm run test:ai-review && pnpm run test:homes && pnpm run test:stamp && pnpm run test:workflows && pnpm run test:actions",
+    "test": "pnpm -r run test && pnpm run test:release && pnpm run test:ai-review && pnpm run test:homes && pnpm run test:stamp && pnpm run test:workflows && pnpm run test:actions && pnpm run check:actions",
     "test:release": "node --test \"scripts/release/*.test.ts\"",
     "test:ai-review": "node --test \"scripts/ai-review/*.test.ts\"",
     "test:homes": "node --test \"scripts/homes/*.test.ts\"",
@@ -19,6 +19,8 @@
     "test:stamp": "node --test \"scripts/stamp/*.test.ts\"",
     "test:workflows": "node --test \"scripts/workflows/*.test.ts\"",
     "test:actions": "node --test \".github/actions/*.test.ts\"",
+    "build:actions": "pnpm --filter @mark1russell7/conventions run build:actions",
+    "check:actions": "pnpm build:actions && node scripts/actions/check-bundles.ts",
     "typecheck": "pnpm -r run typecheck && pnpm run typecheck:scripts",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "lint:ste": "ste-lint",

@@ -133,6 +133,7 @@ isCommonUse: build/index.d.ts#isCommonUse
 isGitSpecifier: build/index.d.ts#isGitSpecifier
 isPinned: build/index.d.ts#isPinned
 isSourcePath: build/index.d.ts#isSourcePath
+isWorkspaceFolder: build/workspace.chunk.d.ts#isWorkspaceFolder
 jobFails: build/index.d.ts#jobFails
 keyLine: build/index.d.ts#keyLine
 licenseFile: build/index.d.ts#licenseFile
@@ -173,6 +174,7 @@ parseAdvisory: build/index.d.ts#parseAdvisory
 parseConfig: build/index.d.ts#parseConfig
 parseJsonc: build/index.d.ts#parseJsonc
 parsePrivateNames: build/index.d.ts#parsePrivateNames
+parseWorkspaceGlobs: build/workspace.chunk.d.ts#parseWorkspaceGlobs
 pathNameHit: build/index.d.ts#pathNameHit
 pathsOf: build/index.d.ts#pathsOf
 pinnedGitDeps: build/index.d.ts#pinnedGitDeps
@@ -247,7 +249,9 @@ yamlFaults: build/index.d.ts#yamlFaults
 
 globFolders: build/workspace.chunk.d.ts#globFolders
 globToRegExp: build/workspace.chunk.d.ts#globToRegExp
+isWorkspaceFolder: build/workspace.chunk.d.ts#isWorkspaceFolder
 packageFolders: build/workspace.chunk.d.ts#packageFolders
+parseWorkspaceGlobs: build/workspace.chunk.d.ts#parseWorkspaceGlobs
 reportFolders: build/workspace.chunk.d.ts#reportFolders
 workspaceGlobs: build/workspace.chunk.d.ts#workspaceGlobs
 
@@ -1210,8 +1214,14 @@ declare function globFolders(root: string, glob: string): string[];
 ### build/workspace.chunk.d.ts#globToRegExp
 declare function globToRegExp(glob: string): RegExp;
 
+### build/workspace.chunk.d.ts#isWorkspaceFolder
+declare function isWorkspaceFolder(folder: string, globs: readonly string[]): boolean;
+
 ### build/workspace.chunk.d.ts#packageFolders
 declare function packageFolders(root: string, globs?: readonly string[] | undefined): string[];
+
+### build/workspace.chunk.d.ts#parseWorkspaceGlobs
+declare function parseWorkspaceGlobs(text: string): string[] | undefined;
 
 ### build/workspace.chunk.d.ts#reportFolders
 declare function reportFolders(root: string, globs?: readonly string[]): string[];

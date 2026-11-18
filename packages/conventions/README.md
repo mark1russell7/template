@@ -313,8 +313,10 @@ The package also exports the functions of the tool:
 - `HOMES` is the map of homes. `findHomes(query)` finds the homes of words, and `mapMarkdown(homes)` and `mapText(homes)` write them. `readOverlay(file)` and `mergeHomes(base, extra)` add more homes.
 - `tagName(name, version, packageCount)` gives the git tag of a version. `releaseNotes(name, version, changelog)` gives the text of its GitHub release, with `changelogSection`, `npmUrl` and `MAX_NOTES`. The script `scripts/release/tags.ts` keeps the same rule, and a test compares the two.
 - `RULES` and each rule, with the helpers `isGitSpecifier`, `isPinned`, `isSourcePath` and `parseJsonc`.
-- `packageFolders(root, globs)`, `globFolders(root, glob)`, `globToRegExp(glob)` and `workspaceGlobs(root)` find the package folders of a repository.
-- The subpath `@mark1russell7/conventions/workspace` gives these four functions and `reportFolders(root, globs)`, and no other code. `reportFolders` adds a public root that the globs leave out. `@mark1russell7/api-report` imports them from this subpath.
+- `packageFolders(root, globs)`, `globFolders(root, glob)`, `globToRegExp(glob)` and `workspaceGlobs(root)` find the package folders of a repository. Like pnpm, `packageFolders` leaves out the folders `node_modules`, `bower_components`, `test` and `tests`.
+- `parseWorkspaceGlobs(text)` reads the globs of the text of `pnpm-workspace.yaml`. `isWorkspaceFolder(folder, globs)` tells if the globs take a folder. These two functions have no input or output.
+- The subpath `@mark1russell7/conventions/workspace` gives these six functions and `reportFolders(root, globs)`, and no other code. `reportFolders` adds a public root that the globs leave out. `@mark1russell7/api-report` imports them from this subpath.
+- The selector of precise CI is `src/select.ts`. It is not an export: the action `select` of the template runs a bundle of it. `CI.md` of the template tells the rules.
 - `privateTextBreaks(name, text, privates, options)` gives the breaks of one text. The rule `no-local-paths` and the command `pre-push` use it. `privates` has the list (`names`) and the patterns (`patterns`).
 - `parsePrivateNames(text)` parses and checks a private name list. It throws a `PrivateNameListError` with a reason that shows no value of the list.
 - `lineNameHit(list, line, place)`, `pathNameHit(list, path)`, `firstNameMatch(line, names)`, `isCommonUse(line, index, rule)` and `isAllowedHit(allow, repo, path, id)` find the names of the list. They have no input or output.

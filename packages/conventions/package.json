@@ -70,12 +70,15 @@
   },
   "scripts": {
     "build": "tsdown",
+    "build:actions": "tsdown -c tsdown.actions.config.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json"
   },
   "devDependencies": {
+    "@mark1russell7/collections": "^0.11.3",
     "@mark1russell7/cue": "^2.0.0",
+    "@mark1russell7/files": "^0.0.4",
     "@mark1russell7/site-pages": "workspace:*",
     "@types/node": "^26.6.4",
     "@vitest/coverage-v8": "^5.0.3",
