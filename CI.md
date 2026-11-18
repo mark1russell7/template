@@ -839,7 +839,8 @@ A change of `@mark1russell7/boundaries` can also fail a repository that passed b
 - The step starts on a pull request that changes `packages/boundaries/src`, `scripts/workflows/rule-compare.ts`, `scripts/lib/gh.ts` or `ci.yml`. A change of a test file only does not start it.
 - The step starts also after a failure of the compare of the rules. Thus the summary has the result of each compare.
 - A repository is in scope when its root `package.json` has a dependency on `@mark1russell7/boundaries` and the script `check:boundaries`.
-- The script must be one `depcruise` command with plain words. Each other script is a no read, with a warning.
+- The script is a list of commands with `&&`, and one command starts with `depcruise`. The compare starts only that command. The other commands are other checks.
+- A word is plain, or text in quotes with no space, variable or escape. A glob in quotes goes to `depcruise` as it is. Each other script is a no read, with a warning.
 - The script installs each clone with `pnpm install --frozen-lockfile --ignore-scripts`. A failed install is a no read.
 - Before each check, the script links the package of the base, or of the pull request, into the `node_modules` of the clone.
 - Each check starts the words of `check:boundaries` with a JSON output. The clone gets no build, so an import that resolves only after a build gets the same result in both checks.
