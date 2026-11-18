@@ -25,6 +25,7 @@ import { parseArgs } from "node:util";
 import { escapeMarkdown, escapeWorkflowData } from "@mark1russell7/text";
 import { blockEnd, childKeys, indentOf, keyValue, workflowLines } from "../../packages/conventions/src/workflow.ts";
 import { resolveSiteConfig, SITE_CONFIG_PATH } from "../../packages/site-pages/src/config/site-config.ts";
+import { shardOf } from "./site-list.ts";
 
 /** One view of a report of the site check: a page at one width in one color scheme. */
 export interface CheckView {
@@ -240,9 +241,6 @@ export function annotations(outcomes: readonly SiteOutcome[]): string[] {
   }
   return lines;
 }
-
-/** This function gives the sites of one shard: the sites at the places `shard`, `shard + shards`, and on, of the sorted list. */
-export const shardOf = (sites: readonly string[], shard: number, shards: number): string[] => [...sites].sort((a, b) => a.localeCompare(b)).filter((_, at) => at % shards === shard);
 
 /** This function reads one response of the GitHub API, or gives undefined for a 404. */
 async function api(path: string, token: string, accept = "application/vnd.github+json"): Promise<Response | undefined> {
