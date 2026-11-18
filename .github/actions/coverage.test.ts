@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { coverageTable, vitestDirs, type Totals } from "./coverage/coverage.ts";
+import { coverageTable, declaresProjects, vitestDirs, type Totals } from "./coverage/coverage.ts";
 
 const script = join(import.meta.dirname, "coverage", "coverage.ts");
 
@@ -19,18 +19,63 @@ const totals = (statements: number, branches: number, functions: number, lines: 
 describe("coverage: the packages with Vitest", () => {
   const tests: Record<string, string> = { "/r": "pnpm -r test", "/r/packages/a": "vitest run", "/r/packages/b": "node --test", "/r/packages/c": "vitest run --project unit" };
   const list = Object.keys(tests).map((path) => ({ path }));
+  const key = (dir: string): string => dir.replaceAll("\\", "/").replace(/^[A-Z]:/, "");
+  const noProjects = (): boolean => false;
 
-  it("gives the packages whose test script starts Vitest, with no root", () => {
-    assert.deepEqual(vitestDirs(list, "/r", (dir) => tests[dir.replaceAll("\\", "/").replace(/^[A-Z]:/, "")]), ["packages/a", "packages/c"]);
+  it("gives the packages whose test script starts Vitest, with no root that only starts the packages", () => {
+    assert.deepEqual(vitestDirs(list, "/r", (dir) => tests[key(dir)], noProjects), ["packages/a", "packages/c"]);
   });
 
   it("gives the root of a repository with one package", () => {
-    assert.deepEqual(vitestDirs([{ path: "/r" }], "/r", () => "vitest run"), ["."]);
+    assert.deepEqual(vitestDirs([{ path: "/r" }], "/r", () => "vitest run", noProjects), ["."]);
+  });
+
+  it("gives the root of a workspace when the root is a package with its own Vitest tests", () => {
+    const own: Record<string, string> = { ...tests, "/r": "vitest run && pnpm --filter site run test" };
+    assert.deepEqual(vitestDirs(list, "/r", (dir) => own[key(dir)], noProjects), [".", "packages/a", "packages/c"]);
+  });
+
+  it("does not give the root of a workspace when its Vitest config declares projects", () => {
+    const own: Record<string, string> = { ...tests, "/r": "vitest run" };
+    const projects = (dir: string): boolean => key(dir) === "/r";
+    assert.deepEqual(vitestDirs(list, "/r", (dir) => own[key(dir)], projects), ["packages/a", "packages/c"]);
+  });
+
+  it("gives the root of a repository with one package, also with projects", () => {
+    assert.deepEqual(vitestDirs([{ path: "/r" }], "/r", () => "vitest run", () => true), ["."]);
   });
 
   it("refuses a list that is not an array", () => {
-    assert.throws(() => vitestDirs({}, "/r", () => undefined), /not a JSON array/);
+    assert.throws(() => vitestDirs({}, "/r", () => undefined, noProjects), /not a JSON array/);
   });
+});
+
+describe("coverage: the projects of a root", () => {
+  const folder = (files: Record<string, string>): string => {
+    const dir = mkdtempSync(join(tmpdir(), "coverage-projects-"));
+    for (const [name, text] of Object.entries(files)) writeFileSync(join(dir, name), text);
+    return dir;
+  };
+  const cases: [string, Record<string, string>, boolean][] = [
+    ["no config", {}, false],
+    ["a config with no projects", { "vitest.config.ts": 'export default { test: { include: ["src/**/*.test.ts"] } };\n' }, false],
+    ["a comment that names projects", { "vitest.config.ts": "// The tests run without projects.\nexport default {};\n" }, false],
+    ["the key projects", { "vitest.config.ts": 'export default { test: { projects: [{ test: { name: "node" } }] } };\n' }, true],
+    ["the key projects with a space before the colon", { "vitest.config.mts": "export default { test: { projects : [] } };\n" }, true],
+    ["the key workspace of Vitest 3", { "vite.config.ts": 'export default { test: { workspace: ["packages/*"] } };\n' }, true],
+    ["a workspace file of Vitest 3", { "vitest.workspace.ts": 'export default ["packages/*"];\n' }, true],
+    ["projects only in vite.config, which Vitest does not read next to vitest.config", { "vitest.config.ts": "export default {};\n", "vite.config.ts": "export default { test: { projects: [] } };\n" }, false],
+  ];
+  for (const [name, files, expected] of cases) {
+    it(`${expected ? "finds" : "does not find"} projects: ${name}`, () => {
+      const dir = folder(files);
+      try {
+        assert.equal(declaresProjects(dir), expected);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  }
 });
 
 describe("coverage: the table and the floor", () => {
@@ -75,6 +120,13 @@ describe("coverage: the script", () => {
       const run = spawnSync(process.execPath, [script, "packages", "list.json"], { cwd: root, encoding: "utf8" });
       assert.equal(run.status, 0, run.stderr);
       assert.equal(run.stdout, "packages/a\n");
+      // A root with its own Vitest tests is a package of the list, until its config declares projects
+      writeFileSync(join(root, "package.json"), JSON.stringify({ scripts: { test: "vitest run" } }));
+      const own = spawnSync(process.execPath, [script, "packages", "list.json"], { cwd: root, encoding: "utf8" });
+      assert.equal(own.stdout, ".\npackages/a\n", own.stderr);
+      writeFileSync(join(root, "vitest.config.ts"), 'export default { test: { projects: ["packages/*"] } };\n');
+      const projects = spawnSync(process.execPath, [script, "packages", "list.json"], { cwd: root, encoding: "utf8" });
+      assert.equal(projects.stdout, "packages/a\n", projects.stderr);
       const none = spawnSync(process.execPath, [script, "packages"], { cwd: root, encoding: "utf8" });
       assert.notEqual(none.status, 0);
       assert.match(none.stderr, /needs the file/);
