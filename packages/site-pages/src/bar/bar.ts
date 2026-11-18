@@ -43,7 +43,10 @@ export interface BarOptions {
 /** The marker attribute of the bar. The navigation crawl looks for it. */
 export const BAR_ATTRIBUTE = "data-site-bar";
 
-/** The CSS of the bar. Each rule starts with `.spb`, so it changes only the bar. */
+/**
+ * The CSS of the bar. Each rule starts with `.spb`, so it changes only the bar. The reset of the bar has the weight of
+ * one class: `:where()` adds no weight. Thus each later rule of the bar wins over the reset.
+ */
 export const BAR_CSS = `
 .spb{--spb-bg:#ffffff;--spb-fg:#151c2e;--spb-muted:#5f6880;--spb-rule:#d6dbe5;--spb-accent:#2346c4;--spb-wash:#e7ecfd;
 color-scheme:light;position:relative;z-index:2147483000;display:block;margin:0;padding:0;background:var(--spb-bg);color:var(--spb-fg);
@@ -52,7 +55,7 @@ text-align:left;letter-spacing:normal;text-transform:none}
 @media (prefers-color-scheme:dark){.spb{--spb-bg:#151a2b;--spb-fg:#e6e9f3;--spb-muted:#a3abc2;--spb-rule:#2b3350;--spb-accent:#93abff;--spb-wash:#1f2a4f;color-scheme:dark}}
 :root[data-theme="dark"] .spb,:root.dark .spb{--spb-bg:#151a2b;--spb-fg:#e6e9f3;--spb-muted:#a3abc2;--spb-rule:#2b3350;--spb-accent:#93abff;--spb-wash:#1f2a4f;color-scheme:dark}
 :root[data-theme="light"] .spb,:root.light .spb{--spb-bg:#ffffff;--spb-fg:#151c2e;--spb-muted:#5f6880;--spb-rule:#d6dbe5;--spb-accent:#2346c4;--spb-wash:#e7ecfd;color-scheme:light}
-.spb *:not(.spb-tools *){box-sizing:border-box;margin:0;padding:0;font:inherit;letter-spacing:inherit}
+.spb :where(*:not(.spb-tools *)){box-sizing:border-box;margin:0;padding:0;font:inherit;letter-spacing:inherit}
 .spb-tools{display:flex;align-items:center;gap:8px}
 .spb-tools:empty{display:none}
 .spb-in{max-width:80rem;margin:0 auto;padding:6px 12px;display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px}
