@@ -22,12 +22,12 @@ export function lineCommandName(line: unknown): string {
 }
 
 /**
- * This function gives the key of a start in the count. With `detail`, a git start counts under `git-<command>`, for
+ * This function gives the key of a start in the count. A git start counts under `git-<command>`, for
  * example `git-ls-files`, so that a report shows which git commands start most. The first argument that is not an
  * option, or the value of `-c` or `-C`, is the command.
  */
-export function startKey(name: string, args: unknown, detail: boolean): string {
-  if (name !== "git" || !detail || !Array.isArray(args)) return name;
+export function startKey(name: string, args: unknown): string {
+  if (name !== "git" || !Array.isArray(args)) return name;
   for (let index = 0; index < args.length; index++) {
     const arg: unknown = args[index];
     if (arg === "-c" || arg === "-C") index++;
@@ -41,6 +41,41 @@ export function gitStartsIn(counts: ReadonlyMap<string, number>): number {
   let sum = 0;
   for (const [key, n] of counts) if (key === "git" || key.startsWith("git-")) sum += n;
   return sum;
+}
+
+/** The git-start budgets of the test files: a budget for each file in `files`, and the budget of each other file. */
+export interface GitBudgets {
+  readonly default: number;
+  readonly files: Readonly<Record<string, number>>;
+}
+
+const isCount = (value: unknown): value is number => typeof value === "number" && Number.isInteger(value) && value >= 0;
+
+/**
+ * This function reads the text of `git-starts.json`.
+ *
+ * @throws Error when the text is not an object with a count `default` and an object `files` of counts
+ */
+export function parseGitBudgets(text: string): GitBudgets {
+  const value: unknown = JSON.parse(text);
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("git-starts.json: the text is not an object");
+  const { default: other, files } = value as Record<string, unknown>;
+  if (!isCount(other)) throw new Error("git-starts.json: default is not a count");
+  if (typeof files !== "object" || files === null || Array.isArray(files)) throw new Error("git-starts.json: files is not an object");
+  for (const [file, budget] of Object.entries(files)) if (!isCount(budget)) throw new Error(`git-starts.json: the budget of ${file} is not a count`);
+  return { default: other, files: files as Record<string, number> };
+}
+
+/** This function gives the message for a test file with more git starts than its budget, or undefined. */
+export function gitBudgetBreak(file: string, counts: ReadonlyMap<string, number>, budgets: GitBudgets): string | undefined {
+  const used = gitStartsIn(counts);
+  const budget = budgets.files[file] ?? budgets.default;
+  if (used <= budget) return undefined;
+  return (
+    `${file} started git ${String(used)} times, over its budget of ${String(budget)} in src/test/git-starts.json. ` +
+    "Share the fixture repositories of src/test/git-fixture.ts: stageAll, commitAll and shared. " +
+    "Raise the budget only for the git starts of the code under test."
+  );
 }
 
 type Wrapped = (file: unknown, ...rest: unknown[]) => unknown;
@@ -58,14 +93,13 @@ export function countProcessStarts(): Map<string, number> {
   const count = (name: string): void => {
     counts.set(name, (counts.get(name) ?? 0) + 1);
   };
-  const detail = process.env["PROCESS_STARTS_DETAIL"] === "1";
   const functions = childProcess as unknown as Record<string, Wrapped | undefined>;
   for (const name of ["spawn", "spawnSync", "execFile", "execFileSync", "exec", "execSync", "fork"]) {
     const original = functions[name];
     if (original === undefined) continue;
     functions[name] = (file, ...rest) => {
       const command = name === "fork" ? "node" : name === "exec" || name === "execSync" ? lineCommandName(file) : commandName(file);
-      count(startKey(command, name === "exec" || name === "execSync" ? undefined : rest[0], detail));
+      count(startKey(command, name === "exec" || name === "execSync" ? undefined : rest[0]));
       return original(file, ...rest);
     };
   }

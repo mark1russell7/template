@@ -1,0 +1,13 @@
+{
+  "default": 20,
+  "files": {
+    "src/rules.test.ts": 650,
+    "src/push-main-only.test.ts": 470,
+    "src/version-title.test.ts": 160,
+    "src/pre-push.test.ts": 140,
+    "src/pages-after-release.test.ts": 130,
+    "src/fix.test.ts": 80,
+    "src/pipe-fails.test.ts": 30,
+    "src/test/git-fixture.test.ts": 30
+  }
+}

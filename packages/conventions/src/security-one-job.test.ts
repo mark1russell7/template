@@ -1,16 +1,14 @@
 // The rule security-one-job on fixture repositories: the caller of reusable-security.yml, the one job of the fix, the
 // inputs, the cases that need a person, and the second run of the fix.
-import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { runChecks, runFix, type RuleResult } from "./index.ts";
 import { SECURITY_SCAN_COMMIT, securityCallers, withOneJob } from "./rules/security-one-job.ts";
+import { gitFixtures } from "./test/git-fixture.ts";
 
-const temp = mkdtempSync(join(tmpdir(), "conventions-security-one-job-"));
-afterAll(() => rmSync(temp, { recursive: true, force: true }));
-let fixtures = 0;
+const repos = gitFixtures("conventions-security-one-job-");
+afterAll(() => repos.remove());
 
 const ID = "security-one-job";
 const FILE = ".github/workflows/security.yml";
@@ -66,14 +64,11 @@ const oneJob = (timeout = "30", inputs: readonly string[] = []): string[] => [
 
 /** This function makes a git repository with the workflow, and gives its root. */
 function repository(text: string): string {
-  const root = join(temp, String(fixtures++));
+  const root = repos.folder();
   mkdirSync(dirname(join(root, FILE)), { recursive: true });
   writeFileSync(join(root, "package.json"), '{ "name": "one" }\n');
   writeFileSync(join(root, FILE), text);
-  for (const args of [["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "-m", "first"]]) {
-    const result = spawnSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", ...args], { cwd: root, encoding: "utf8" });
-    if (result.status !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr}`);
-  }
+  repos.stageAll(root);
   return root;
 }
 

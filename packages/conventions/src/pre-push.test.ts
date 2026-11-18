@@ -1,7 +1,6 @@
 // The private name list, the command pre-push and the command hook install, on fixture repositories.
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync, existsSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, statSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import {
@@ -28,8 +27,8 @@ import {
   type NameRule,
 } from "./index.ts";
 import { addedRuns, FIRST_PRE_PUSH_VERSION } from "./pre-push.ts";
+import { gitFixtures } from "./test/git-fixture.ts";
 
-/** The private probe of each test. No real name is private here. */
 const PROBE = "zz-test-pattern-7316";
 const ZEROS = "0".repeat(40);
 
@@ -52,8 +51,9 @@ const list = parsePrivateNames(LIST_TEXT);
 const HTTPS = "https://github.com/acme-labs/site.git";
 const SSH = "git@github.com:acme-labs/site.git";
 
-const temp = mkdtempSync(join(tmpdir(), "conventions-pre-push-"));
-afterAll(() => rmSync(temp, { recursive: true, force: true }));
+const repos = gitFixtures("conventions-pre-push-");
+afterAll(() => repos.remove());
+const { temp, git, write } = repos;
 let fixtures = 0;
 
 // The tests do not read the git configuration of the computer: a global core.hooksPath or a list file there changes the result
@@ -70,32 +70,18 @@ function gitIn(root: string): (args: readonly string[]) => string | undefined {
   };
 }
 
-/** This function starts git in `root` for a test step, and gives its output. */
-function git(root: string, ...args: string[]): string {
-  const result = spawnSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", ...args], { cwd: root, encoding: "utf8", env: gitEnv });
-  if (result.status !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr}`);
-  return result.stdout.trim();
-}
-
-/** This function writes the files in `root`. */
-function write(root: string, files: Record<string, string>): void {
-  for (const [file, text] of Object.entries(files)) {
-    mkdirSync(dirname(join(root, file)), { recursive: true });
-    writeFileSync(join(root, file), text);
-  }
-}
-
-/** A repository with a first commit, which `origin/main` has. It gives the root and the sha of the first commit. */
+/**
+ * A repository with a first commit, which `origin/main` has. It gives the root and the sha of the first commit. The cases
+ * share one build of it, and each case changes its own copy.
+ */
 function repository(): { root: string; base: string } {
-  const root = join(temp, String(fixtures++));
-  mkdirSync(root, { recursive: true });
-  write(root, { "package.json": `${JSON.stringify({ name: "one" })}\n`, "notes.md": "1\n" });
-  git(root, "init", "-q", "-b", "main");
-  git(root, "add", "-A");
-  git(root, "commit", "-q", "-m", "first");
-  const base = git(root, "rev-parse", "HEAD");
-  git(root, "update-ref", "refs/remotes/origin/main", base);
-  return { root, base };
+  const root = repos.shared("first commit", () => {
+    const first = repos.fixture({ "package.json": `${JSON.stringify({ name: "one" })}\n`, "notes.md": "1\n" });
+    repos.commitAll(first);
+    git(first, "update-ref", "refs/remotes/origin/main", repos.commitOf(first));
+    return first;
+  });
+  return { root, base: repos.commitOf(root) };
 }
 
 /** This function makes a commit of `files` with `message`, and gives its sha. */
@@ -103,7 +89,7 @@ function commit(root: string, files: Record<string, string>, message: string): s
   write(root, files);
   git(root, "add", "-A");
   git(root, "commit", "-q", "-m", message);
-  return git(root, "rev-parse", "HEAD");
+  return repos.commitOf(root);
 }
 
 /** This function writes a private name list, and gives its path. */

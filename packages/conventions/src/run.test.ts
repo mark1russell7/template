@@ -1,24 +1,13 @@
 // The configuration, the output and the bin on fixture repositories.
-import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { parseConfig, RULES, runChecks, runCli, summaryMarkdown, type CliIo } from "./index.ts";
+import { gitFixtures } from "./test/git-fixture.ts";
 
-const temp = mkdtempSync(join(tmpdir(), "conventions-run-"));
-afterAll(() => rmSync(temp, { recursive: true, force: true }));
-let fixtures = 0;
-
-function fixture(files: Record<string, unknown>): string {
-  const root = join(temp, String(fixtures++));
-  mkdirSync(root, { recursive: true });
-  for (const [file, text] of Object.entries(files)) {
-    mkdirSync(dirname(join(root, file)), { recursive: true });
-    writeFileSync(join(root, file), typeof text === "string" ? text : `${JSON.stringify(text, null, 2)}\n`);
-  }
-  return root;
-}
+const repos = gitFixtures("conventions-run-");
+afterAll(() => repos.remove());
+const { fixture, commitAll, commitOf } = repos;
 
 /** A workspace with one package that breaks the rule tsconfig-test. */
 const broken = (conventions?: unknown): string =>
@@ -96,12 +85,9 @@ describe("the configuration", () => {
   it("does not ignore a file that the change adds, and ignores the files that exist and a renamed file", () => {
     const conventions = { rules: { "typed-scripts": { ignore: ["scripts/*.mjs"], reason: "old scripts" } } };
     const root = fixture({ "package.json": { name: "root", private: true, conventions }, "scripts/old.mjs": "export {};\n", "scripts/moved.mjs": "export const moved = \"a script that moves\";\n" });
-    const git = (...args: string[]): string =>
-      spawnSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", ...args], { cwd: root, encoding: "utf8" }).stdout.trim();
-    git("init", "-q");
-    git("add", ".");
-    git("commit", "-q", "-m", "base");
-    const base = git("rev-parse", "HEAD");
+    const git = (...args: string[]): string => repos.git(root, ...args);
+    commitAll(root, "base");
+    const base = commitOf(root);
     // Each file has its own text, so git does not pair two files of the same text as a rename
     writeFileSync(join(root, "scripts/new.mjs"), "export const added = 1;\n");
     git("mv", "scripts/moved.mjs", "scripts/renamed.mjs");
@@ -118,12 +104,9 @@ describe("the configuration", () => {
   it("ignores build output in `generated`, also a file that the change adds", () => {
     const conventions = { rules: { "typed-scripts": { generated: ["dist/**"], reason: "tsc -b writes dist/ from src/" } } };
     const root = fixture({ "package.json": { name: "root", private: true, conventions }, "dist/old.js": "export {};\n" });
-    const git = (...args: string[]): string =>
-      spawnSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", ...args], { cwd: root, encoding: "utf8" }).stdout.trim();
-    git("init", "-q");
-    git("add", ".");
-    git("commit", "-q", "-m", "base");
-    const base = git("rev-parse", "HEAD");
+    const git = (...args: string[]): string => repos.git(root, ...args);
+    commitAll(root, "base");
+    const base = commitOf(root);
     writeFileSync(join(root, "dist/new.js"), "export const added = 1;\n");
     writeFileSync(join(root, "new.mjs"), "export const script = 1;\n");
     git("add", ".");
