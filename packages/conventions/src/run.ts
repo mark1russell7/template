@@ -28,6 +28,11 @@ export interface RuleResult {
   readonly ignored: number;
   /** The reason of `off`, of `ignore`, of `skipped`, or the message of `error`. */
   readonly note?: string;
+  /**
+   * The reason why the rule did not read a part of its cases (`Rule.noRead`). The output then shows "no read" with the
+   * status, so the part does not show as a pass. The status does not change.
+   */
+  readonly noRead?: string;
 }
 
 /** The result of `runChecks`. */
@@ -148,7 +153,13 @@ export function runChecks(options: CheckOptions): CheckResult {
     const warns = breaks.length > 0 && rule.failsFrom !== undefined && today < rule.failsFrom;
     const reason = warns ? [ruleConfig.reason, `The rule fails from ${rule.failsFrom ?? ""}.`].filter((text) => text !== undefined).join(" ") : ruleConfig.reason;
     const note = reason === undefined ? {} : { note: reason };
-    results.push({ ...base, status: breaks.length === 0 ? "pass" : warns ? "warn" : "break", breaks, ignored, ...note });
+    let noRead: string | undefined;
+    try {
+      noRead = rule.noRead?.(context, ruleConfig.options);
+    } catch (error) {
+      noRead = `the rule cannot tell what it read: ${error instanceof Error ? error.message : String(error)}`;
+    }
+    results.push({ ...base, status: breaks.length === 0 ? "pass" : warns ? "warn" : "break", breaks, ignored, ...note, ...(noRead === undefined ? {} : { noRead }) });
   }
   return { rules: results, failed: results.some((result) => result.status === "break" || result.status === "error") };
 }
@@ -215,14 +226,16 @@ const placeOf = (item: Break): string => (item.line === undefined ? item.file : 
 export function formatResult(result: CheckResult): string {
   const count = (status: RuleResult["status"]): number => result.rules.filter((rule) => rule.status === status).length;
   const breaks = result.rules.filter((rule) => rule.status === "break").reduce((sum, rule) => sum + rule.breaks.length, 0);
+  const noReads = result.rules.filter((rule) => rule.noRead !== undefined).length;
   const out: string[] = [
-    `conventions: ${result.rules.length} rules: ${count("pass")} pass, ${count("break")} with ${breaks} break(s), ${count("warn")} warn, ${count("off")} off, ${count("skipped")} skipped, ${count("error")} error(s).`,
+    `conventions: ${result.rules.length} rules: ${count("pass")} pass, ${count("break")} with ${breaks} break(s), ${count("warn")} warn, ${count("off")} off, ${count("skipped")} skipped, ${count("error")} error(s)${noReads > 0 ? `, ${noReads} with no read` : ""}.`,
     "",
   ];
   const label: Record<RuleResult["status"], string> = { pass: "pass ", break: "BREAK", warn: "warn ", off: "off  ", skipped: "skip ", error: "ERROR" };
   for (const rule of result.rules) {
     const extra = rule.ignored > 0 ? ` (${rule.ignored} ignored: ${rule.note ?? ""})` : rule.note !== undefined && rule.status !== "pass" ? ` (${rule.note})` : "";
     out.push(`${label[rule.status]}  ${rule.id}${rule.breaks.length > 0 ? `: ${rule.breaks.length} break(s)` : ""}${extra}`);
+    if (rule.noRead !== undefined) out.push(`       NO READ: ${rule.noRead}`);
     for (const item of rule.breaks.slice(0, MAX_SHOWN)) {
       out.push(`       ${placeOf(item)}  ${item.message}${(item.edits ?? []).length > 0 ? " (conventions fix writes the fix)" : ""}`);
       if (item.fix !== undefined) out.push(`         fix: ${item.fix}`);
@@ -243,7 +256,8 @@ export function summaryMarkdown(result: CheckResult): string {
   for (const rule of result.rules) {
     const shown = rule.status === "break" ? `${rule.breaks.length} break(s)` : rule.status === "warn" ? `warn: ${rule.breaks.length} break(s)` : rule.status;
     const note = rule.ignored > 0 ? `${rule.ignored} ignored: ${rule.note ?? ""}` : (rule.note ?? "");
-    out.push(`| \`${rule.id}\` | ${shown} | ${cell(note)} |`);
+    const noRead = rule.noRead === undefined ? "" : `no read: ${rule.noRead}`;
+    out.push(`| \`${rule.id}\` | ${shown}${noRead === "" ? "" : ", no read"} | ${cell([noRead, note].filter((text) => text !== "").join(" "))} |`);
   }
   const broken = result.rules.filter((rule) => rule.breaks.length > 0);
   for (const rule of broken) {
@@ -261,11 +275,13 @@ const escapeProperty = (text: string): string => escapeData(text).replace(/:/g, 
 
 /**
  * This function gives an `::error` workflow command for each break, so that GitHub shows each break on its line in the pull request.
- * A break of a rule that only warns gives a `::warning` command.
+ * A break of a rule that only warns gives a `::warning` command. A rule with no read of a part gives a `::warning` command
+ * with the reason.
  */
 export function annotations(result: CheckResult): string {
   const out: string[] = [];
   for (const rule of result.rules) {
+    if (rule.noRead !== undefined) out.push(`::warning title=${escapeProperty(`conventions ${rule.id}`)}::${escapeData(`No read: ${rule.noRead}`)}`);
     for (const item of rule.breaks) {
       const line = item.line === undefined ? "" : `,line=${item.line}`;
       out.push(`::${rule.status === "warn" ? "warning" : "error"} file=${escapeProperty(item.file)}${line},title=${escapeProperty(`conventions ${rule.id}`)}::${escapeData(`${item.message} Fix: ${item.fix ?? rule.fix}`)}`);
@@ -308,6 +324,7 @@ export const USAGE: string = `Usage: conventions check [options]
        conventions --list
        conventions map [words] [--markdown | --json] [--overlay <file>]
        conventions pre-push <remote> [<url>]
+       conventions pre-push --base <ref> [--head <ref>]
        conventions hook install
 
   check                 Start each rule. Exit code 1 when a rule has a break.
@@ -320,7 +337,10 @@ export const USAGE: string = `Usage: conventions check [options]
                         lines. Exit code 1 on a break. The list is the JSON file of CONVENTIONS_PRIVATE_NAMES_FILE, else
                         of the git config conventions.privateNamesFile. CONVENTIONS_PRIVATE_PATTERNS adds one regular
                         expression on each line. With neither, it writes a "No read" line and gives 0.
-  hook install          Write the hook pre-push into the hooks folder of git. It keeps a hook that it did not write.
+                        With --base, it is the check of a change in CI. It examines each commit of <base>..<head>
+                        (the default head is HEAD) with the same rules, and the title and the body of the pull
+                        request of the run. It reads no standard input.
+  hook install         Write the hook pre-push into the hooks folder of git. It keeps a hook that it did not write.
                         In CI, or outside a git repository, it does nothing.
 
   --root <folder>       The root of the repository. The default is the current folder.
@@ -482,17 +502,34 @@ function runMap(args: readonly string[], io: CliIo): number {
   return 0;
 }
 
-/** The command `pre-push`: the arguments of the git hook, the remote and its URL. */
+/**
+ * The command `pre-push`: the arguments of the git hook, the remote and its URL. Or the options `--base` and `--head` of
+ * the check of a change in CI. Then the remote is `origin`.
+ */
 function runPrePush(args: readonly string[], io: CliIo): number {
-  const remote = args[0];
-  if (remote === undefined || remote.startsWith("-") || args.length > 2) {
-    io.stderr(`conventions: The command pre-push takes the name of the remote and, after it, its URL.\n\n${USAGE}`);
+  const positional: string[] = [];
+  const range: { base?: string; head?: string } = {};
+  let usage = false;
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index] ?? "";
+    if (arg === "--base" || arg === "--head") {
+      const value = args[++index];
+      if (value === undefined || value === "" || value.startsWith("-")) usage = true;
+      else range[arg === "--base" ? "base" : "head"] = value;
+    } else if (arg.startsWith("-")) usage = true;
+    else positional.push(arg);
+  }
+  const { base, head } = range;
+  const remote = base === undefined ? positional[0] : "origin";
+  if (usage || remote === undefined || (base === undefined ? head !== undefined || positional.length > 2 : positional.length > 0)) {
+    io.stderr(`conventions: The command pre-push takes the name of the remote and, after it, its URL. In CI, it takes --base <ref> and, as an option, --head <ref>.\n\n${USAGE}`);
     return 2;
   }
   const top = runGit(io.cwd, ["rev-parse", "--show-toplevel"])?.trim() ?? "";
   const root = top === "" ? io.cwd : top;
-  const url = args[1];
-  return prePush({ remote, ...(url === undefined ? {} : { url }), input: io.stdin ?? "", env: io.env, root, git: (gitArgs) => runGit(root, gitArgs) }, io);
+  const url = base === undefined ? positional[1] : undefined;
+  const change = base === undefined ? {} : { base, ...(head === undefined ? {} : { head }) };
+  return prePush({ remote, ...(url === undefined ? {} : { url }), ...change, input: base === undefined ? (io.stdin ?? "") : "", env: io.env, root, git: (gitArgs) => runGit(root, gitArgs) }, io);
 }
 
 /** The command `hook install`: it writes the git hook pre-push. */

@@ -563,6 +563,89 @@ describe("conventions pre-push", () => {
   });
 });
 
+describe("conventions pre-push --base", () => {
+  /** This function starts prePush on the change `base..head`, and gives the exit code and the text of stderr. */
+  function check(root: string, base: string, env: Record<string, string>, head?: string): { code: number; stderr: string } {
+    let stderr = "";
+    // The standard input of a hook does not count with a base
+    const input = "not a line of the hook\n";
+    const code = prePush({ remote: "origin", base, ...(head === undefined ? {} : { head }), input, env, root, git: gitIn(root) }, { stderr: (text) => (stderr += text) });
+    return { code, stderr };
+  }
+
+  /** This function writes the file of the pull request of a dispatched run, and gives its path. */
+  function pullRequestFile(facts: Record<string, unknown>): string {
+    const file = join(temp, `pull-request-${String(fixtures++)}.json`);
+    writeFileSync(file, JSON.stringify(facts));
+    return file;
+  }
+
+  it("examines each commit of base..head with the rules of the hook, and tells that the check fails", () => {
+    const { root, base } = repository();
+    const first = commit(root, { "notes.md": `1\nthe ${PROBE}\nAcme corp\n` }, "second");
+    const second = commit(root, { "docs/allowed.md": `${PROBE}\n` }, `third\n\nthe acme-app note`);
+    git(root, "remote", "add", "origin", SSH);
+    const { code, stderr } = check(root, base, { CONVENTIONS_PRIVATE_NAMES_FILE: listFile() });
+    expect(code).toBe(1);
+    expect(stderr).toMatch(/^conventions pre-push: 2 commits, \d+ lines read, 2 breaks\. The check fails\.\n/);
+    expect(stderr).toContain(`  commit ${first.slice(0, 12)} notes.md:2  ${named(2)}\n    fix: Remove the text. The check does not show the text, because the name is private.\n`);
+    expect(stderr).toContain(`  commit ${second.slice(0, 12)} message:3  ${named(1)}`);
+    expect(stderr).toMatch(/\nRemove each text from the commits \(git commit --amend, or git rebase\) and from the pull request\. Then push again\.\n$/);
+    expect(stderr).not.toContain("The push stops");
+    // The output has no private text and no id of a name
+    for (const text of [PROBE, "acme-app", "Acme", "probe"]) expect(stderr).not.toContain(text);
+    // The head limits the change
+    expect(check(root, base, { CONVENTIONS_PRIVATE_NAMES_FILE: listFile() }, first).stderr).toMatch(/^conventions pre-push: 1 commits, \d+ lines read, 1 breaks\. The check fails\./);
+    expect(check(root, first, { CONVENTIONS_PRIVATE_NAMES_FILE: listFile() }).stderr).toMatch(/^conventions pre-push: 1 commits, \d+ lines read, 1 breaks\./);
+  });
+
+  it("examines the title and the body of the pull request of the run", () => {
+    const { root, base } = repository();
+    commit(root, { "notes.md": "1\n2\n" }, "a clean change");
+    const clean = pullRequestFile({ number: 7, title: "A clean title", body: "line one\nline two\n", commits: 1 });
+    const pass = check(root, base, { CONVENTIONS_PRIVATE_NAMES_FILE: listFile(), CONVENTIONS_PULL_REQUEST: clean });
+    expect(pass.code).toBe(0);
+    expect(pass.stderr).toMatch(/^conventions pre-push: 1 commits and the text of the pull request, \d+ lines read, 0 breaks\.\n$/);
+    const named2 = pullRequestFile({ number: 7, title: `the ${PROBE}`, body: `line one\nthe acme-app\n`, commits: 1 });
+    const { code, stderr } = check(root, base, { CONVENTIONS_PRIVATE_NAMES_FILE: listFile(), CONVENTIONS_PULL_REQUEST: named2 });
+    expect(code).toBe(1);
+    expect(stderr).toContain(`  pull request title:1  ${named(2)}`);
+    expect(stderr).toContain(`  pull request body:2  ${named(1)}`);
+    for (const text of [PROBE, "acme-app"]) expect(stderr).not.toContain(text);
+    // A push with the hook does not read the pull request of the environment
+    expect(push(root, `refs/heads/main ${git(root, "rev-parse", "HEAD")} refs/heads/main ${base}\n`, { CONVENTIONS_PRIVATE_NAMES_FILE: listFile(), CONVENTIONS_PULL_REQUEST: named2 }).code).toBe(0);
+  });
+
+  it("fails when git cannot list the change, and writes the line of no read with no list", () => {
+    const { root } = repository();
+    const missing = check(root, "f".repeat(40), { CONVENTIONS_PRIVATE_NAMES_FILE: listFile() });
+    expect(missing).toEqual({ code: 1, stderr: `conventions pre-push: git cannot list the commits of ${"f".repeat(40)}..HEAD. The check fails.\n` });
+    expect(check(root, "HEAD", {})).toEqual({ code: 0, stderr: `${NO_READ_LINE}\n` });
+    expect(check(root, "HEAD", { CONVENTIONS_PRIVATE_NAMES_FILE: join(temp, "missing.json") }).stderr).toMatch(/^conventions pre-push: Cannot read the private name list that CONVENTIONS_PRIVATE_NAMES_FILE names: .*\. The check fails\.\n$/);
+  });
+
+  it("starts from the bin with --base and --head, reads no standard input, and refuses a wrong form", () => {
+    const { root, base } = repository();
+    const head = commit(root, { "notes.md": `1\nthe ${PROBE}\n` }, "second");
+    commit(root, { "notes.md": "1\n" }, "third");
+    let stderr = "";
+    let stdout = "";
+    const io: CliIo = { cwd: root, env: { CONVENTIONS_PRIVATE_NAMES_FILE: listFile() }, stdout: (text) => (stdout += text), stderr: (text) => (stderr += text), stdin: "not a line of the hook\n" };
+    expect(runCli(["pre-push", "--base", base], io)).toBe(1);
+    expect(stderr).toMatch(/^conventions pre-push: 2 commits, \d+ lines read, 1 breaks\. The check fails\./);
+    expect(runCli(["pre-push", "--base", head], io)).toBe(0);
+    expect(runCli(["pre-push", "--base", base, "--head", head], io)).toBe(1);
+    expect(runCli(["pre-push", "--head", head, "--base", `${head}^`], io)).toBe(1);
+    for (const args of [["pre-push", "--head", head], ["pre-push", "--base"], ["pre-push", "--base", "--head"], ["pre-push", "origin", "--base", base], ["pre-push", "--base", base, "--nope"], ["pre-push", "origin", HTTPS, "x"]]) {
+      stderr = "";
+      expect(runCli(args, io), args.join(" ")).toBe(2);
+      expect(stderr).toMatch(/^conventions: The command pre-push takes the name of the remote and, after it, its URL\. In CI, it takes --base <ref> and, as an option, --head <ref>\./);
+    }
+    expect(runCli(["--help"], io)).toBe(0);
+    expect(stdout).toContain("conventions pre-push --base <ref> [--head <ref>]");
+  });
+});
+
 describe("conventions hook install", () => {
   it("writes the hook into the hooks folder of git", () => {
     const { root } = repository();
