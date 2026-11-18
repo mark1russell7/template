@@ -99,9 +99,18 @@ export function globFolders(root: string, glob: string): string[] {
   return found.sort(byCode);
 }
 
+/**
+ * This function removes a comment at the end of a line of YAML: the first `#` after a space, and the text after it.
+ * The caller trims the spaces before it. A search for one space and a `#` takes linear time on each text.
+ */
+function stripComment(text: string): string {
+  const at = text.search(/\s#/);
+  return at < 0 ? text : text.slice(0, at);
+}
+
 /** This function removes a comment at the end of a YAML value, the spaces and the quotes around it. */
 function unquote(text: string): string {
-  const value = text.replace(/\s+#.*$/, "").trim();
+  const value = stripComment(text).trim();
   return /^(["']).*\1$/.test(value) ? value.slice(1, -1) : value;
 }
 
@@ -114,15 +123,12 @@ export function parseWorkspaceGlobs(text: string): string[] | undefined {
   const lines = text.split(/\r?\n/);
   const start = lines.findIndex((line) => /^packages\s*:/.test(line));
   if (start < 0) return undefined;
-  const rest = (lines[start] ?? "")
-    .replace(/^packages\s*:/, "")
-    .replace(/\s+#.*$/, "")
-    .trim();
+  const rest = stripComment((lines[start] ?? "").replace(/^packages\s*:/, "")).trim();
   if (rest.startsWith("[")) {
     let flow = rest;
     for (let index = start + 1; !flow.includes("]"); index++) {
       if (index >= lines.length) throw new Error('The list packages of pnpm-workspace.yaml has no "]"');
-      flow += ` ${(lines[index] ?? "").replace(/\s+#.*$/, "")}`;
+      flow += ` ${stripComment(lines[index] ?? "")}`;
     }
     const close = flow.indexOf("]");
     if (flow.slice(close + 1).trim() !== "") throw new Error(`The list packages of pnpm-workspace.yaml has text after its "]": ${flow}`);
@@ -136,7 +142,7 @@ export function parseWorkspaceGlobs(text: string): string[] | undefined {
   const globs: string[] = [];
   for (const line of lines.slice(start + 1)) {
     if (/^\s*(#.*)?$/.test(line)) continue;
-    const item = /^\s*-\s+(.+)$/.exec(line);
+    const item = /^\s*-\s(.+)$/.exec(line);
     if (item) {
       globs.push(unquote(item[1] ?? ""));
       continue;
