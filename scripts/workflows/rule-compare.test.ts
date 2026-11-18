@@ -186,10 +186,36 @@ describe("boundaryScope", () => {
     assert.equal(boundaryScope(undefined, "f").kind, "off");
   });
 
-  it("is a no read for a script that is not one depcruise command with plain words, or a file that does not parse", () => {
-    for (const script of ["pnpm build && depcruise src", "depcruise src > out.txt", "depcruise $DIRS", "tsx scripts/boundaries.ts", "depcruise 'src'"]) {
-      assert.equal(boundaryScope(manifest(script), "f").kind, "unread", script);
-    }
+  it("gives quoted text with no quotes, as the shell gives it, so a glob in quotes goes to depcruise as it is", () => {
+    assert.deepEqual(boundaryScope(manifest('depcruise --config .dependency-cruiser.ts "packages/*/src"'), "f"), {
+      kind: "args",
+      args: ["--config", ".dependency-cruiser.ts", "packages/*/src", "--output-type", "json", "--output-to", "f"],
+    });
+    assert.deepEqual(boundaryScope(manifest("depcruise 'src'"), "f"), { kind: "args", args: ["src", "--output-type", "json", "--output-to", "f"] });
+  });
+
+  it("takes the one depcruise command of a list with &&, and does not start the other checks", () => {
+    assert.deepEqual(boundaryScope(manifest("node scripts/check-runtime-cycles.ts && depcruise --config .dependency-cruiser.ts packages"), "f"), {
+      kind: "args",
+      args: ["--config", ".dependency-cruiser.ts", "packages", "--output-type", "json", "--output-to", "f"],
+    });
+    assert.deepEqual(boundaryScope(manifest("depcruise src && tsc -p tsconfig.json"), "f"), { kind: "args", args: ["src", "--output-type", "json", "--output-to", "f"] });
+  });
+
+  it("is a no read for a script with a mark of a shell, with no or two depcruise commands, or a file that does not parse", () => {
+    const scripts = [
+      "depcruise src > out.txt",
+      "depcruise $DIRS",
+      'depcruise "$DIRS"',
+      'depcruise "a b"',
+      "depcruise packages/*",
+      "depcruise src; rm -rf build",
+      "depcruise src || true",
+      "depcruise src &&",
+      "tsx scripts/boundaries.ts",
+      "depcruise a && depcruise b",
+    ];
+    for (const script of scripts) assert.equal(boundaryScope(manifest(script), "f").kind, "unread", script);
     assert.equal(boundaryScope("{", "f").kind, "unread");
   });
 });
