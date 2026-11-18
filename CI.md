@@ -116,6 +116,8 @@ The secret `CONVENTIONS_PRIVATE_NAMES` is optional. It has the JSON text of a pr
 - A run with no pull request, for example a push to the default branch, does not start the step.
 - The step comes before the install. It starts no command of the repository and no code of an installed package. A pull request of Renovate is not from a fork, so it gets the secret. A changed dependency cannot read the list.
 - The test `scripts/workflows/private-names.test.ts` starts the step on a fixture with installed packages. It fails when the step starts `pnpm`, `npx`, `npm`, a bin or a package of the fixture.
+- Each git start of the bundle has `-c core.hooksPath=/dev/null -c diff.external= -c core.fsmonitor=false`. Each diff command also has `--no-ext-diff --no-textconv`.
+- Thus a git configuration starts no command: no hook, no external diff, no textconv driver and no file system monitor. A test of `pre-push.test.ts` sets each one, and fails when one starts.
 
 A caller gives the secret by name, or with `secrets: inherit`:
 
