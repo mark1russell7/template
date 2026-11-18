@@ -825,11 +825,28 @@ A change of a rule of `@mark1russell7/conventions` can fail a repository that pa
 - A place is a rule with a file and a line. A failure is a break of a rule with the status `break`, or a rule that threw.
 - A place with more failures in the check of the pull request than in the check of the base has new failures.
 - A place with the same count and a different text has a changed text. A changed text is not a new failure, and the summary counts it.
+- A failure of the base at a place with fewer failures in the pull request is a gone failure. The summary counts and lists them, so a fix shows each repository that it changes.
 - A repository with a new failure gets a second pair of checks. Only a new failure of both pairs fails the job. A new failure of one pair is a warning.
 - A repository with no result of the base is a no read, with a warning. A repository with a result of the base and no result of the pull request fails.
 - The summary names each rule that skips in each repository with a result. The compare cannot read such a rule.
-- The artifact `rule-compare` has `rule-compare.json`, and the output, the log and the event file of each check.
+- The artifact `rule-compare` has the folder `conventions`. It has `rule-compare.json`, and the output, the log and the event file of each check.
 - The fix of a new failure merges with its migration. An example is a sync rule of the release train that changes each repository before the rule fails.
+
+### The compare of the import boundaries
+
+A change of `@mark1russell7/boundaries` can also fail a repository that passed before. The same job `rules` examines it with `rule-compare.ts --tool boundaries`.
+
+- The step starts on a pull request that changes `packages/boundaries/src`, `scripts/workflows/rule-compare.ts`, `scripts/lib/gh.ts` or `ci.yml`. A change of a test file only does not start it.
+- The step starts also after a failure of the compare of the rules. Thus the summary has the result of each compare.
+- A repository is in scope when its root `package.json` has a dependency on `@mark1russell7/boundaries` and the script `check:boundaries`.
+- The script must be one `depcruise` command with plain words. Each other script is a no read, with a warning.
+- The script installs each clone with `pnpm install --frozen-lockfile --ignore-scripts`. A failed install is a no read.
+- Before each check, the script links the package of the base, or of the pull request, into the `node_modules` of the clone.
+- Each check starts the words of `check:boundaries` with a JSON output. The clone gets no build, so an import that resolves only after a build gets the same result in both checks.
+- Each rule of the rule set is a rule of the result. A violation of a rule with the severity `error` is a failure. A violation of each other severity warns.
+- A place is a rule and the file of the import. The text of a failure tells the target of the import.
+- New failures, changed texts and gone failures follow the rules of the compare of the conventions rules.
+- The artifact `rule-compare` has the folder `boundaries`. It has `rule-compare.json`, the install log of each clone, and the result and the log of each check.
 
 ### The site config
 

@@ -101,7 +101,7 @@ describe("boundaryRules", () => {
     ];
     const rules = boundaryRules(packages);
     const npm = rules.find((r) => r.name === "run-time-import-of-a-dev-dependency");
-    expect(npm?.from).toEqual({ path: "^(packages/a|packages/tool)/(src)/", pathNot: ["\\.(test|spec|e2e)\\.[cm]?[jt]sx?$", "/(test|tests|e2e|__tests__|fixtures)/"] });
+    expect(npm?.from).toEqual({ path: "^(packages/a|packages/tool)/(src)/", pathNot: ["\\.(test|spec|e2e)(\\.|-[a-z]+\\.)[cm]?[jt]sx?$","/(test|tests|e2e|__tests__|fixtures)/"] });
     expect(npm?.to).toEqual({ dependencyTypes: ["npm-dev"], dependencyTypesNot: ["type-only", "npm", "npm-peer", "npm-optional"] });
     const workspace = rules.filter((r) => r.name.startsWith("run-time-import-of-a-dev-workspace-package-in-"));
     expect(workspace.map((r) => [r.name, r.from["path"], r.to["path"]])).toEqual([
@@ -145,6 +145,27 @@ describe("defaultOptions", () => {
   it("resolves with the conditions of an ESM import", () => {
     const options = defaultOptions(undefined, { packages: [] });
     expect(options["enhancedResolveOptions"]).toMatchObject({ conditionNames: ["import", "node", "default"] });
+  });
+
+  it("excludes the tests, the helpers of the tests, the fixtures and the declaration files, and keeps each source file", () => {
+    const { path } = defaultOptions(undefined, { packages: [] })["exclude"] as { path: string[] };
+    const excluded = (file: string): boolean => path.some((pattern) => new RegExp(pattern).test(file));
+    for (const file of [
+      "packages/core/src/a.test.ts",
+      "packages/core/src/a.spec.tsx",
+      "packages/core/src/a.e2e.mjs",
+      "packages/core/src/highways/fixtures.test-util.ts",
+      "packages/core/src/fixtures.test-utils.ts",
+      "packages/core/src/setup.spec-helpers.cts",
+      "packages/core/test/a.ts",
+      "packages/core/src/fixtures/a.ts",
+      "packages/core/src/index.d.ts",
+    ]) {
+      expect(excluded(file), file).toBe(true);
+    }
+    for (const file of ["packages/core/src/index.ts", "packages/core/src/test-util.ts", "packages/core/src/contest.ts", "packages/core/src/a.testing.ts"]) {
+      expect(excluded(file), file).toBe(false);
+    }
   });
 });
 

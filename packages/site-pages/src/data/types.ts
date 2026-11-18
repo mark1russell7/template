@@ -63,6 +63,14 @@ export interface NpmVersionTime {
   date: string;
 }
 
+/** A version of a package of the repository, and the time from which the repository has it. */
+export interface WorkspaceVersion {
+  /** The version in the `package.json` of the package. */
+  version: string;
+  /** The ISO time of the commit that set the version. It is absent when the clone does not have that commit. */
+  since?: string;
+}
+
 /** The result of `npmPublishTimes`: the times that npm gave, and a message for each package that failed. */
 export interface NpmPublishTimes {
   times: NpmVersionTime[];
