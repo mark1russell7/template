@@ -785,6 +785,7 @@ The job `site` of `ci.yml` checks the site of each pull request, and "CI OK" nee
 - Each pull request starts `site-audit.yml`, so its check "Site audit OK" is always there. A pull request that changes `site-audit.yml` or the crawl starts the job `nav`. A pull request that changes the site check starts the job `compare`.
 - `site-bar: true` writes the shared site bar into each built HTML page. `site-bar-pages` names the pages of the bar, for example `Demo=demo/,Docs=docs/`. `site-bar-npm` gives the npm link.
 - With `site-bar: true`, the crawl `site-pages nav` examines the built site. A page with no bar, a page more than 2 clicks from home or a page with no way back stops the deploy.
+- A header of the site that shows a link of the bar again also stops the deploy. Remove the links of the bar from the header of the site in the same change. Give each control of the header, for example a theme button, the attribute `data-site-bar-tool`. The bar then holds it.
 - `scroll-cue` (default `true`) gives each code block of each built HTML page the scroll cue of `site-pages cue`. A block wider than its box shows a fade at the edge with more content.
 - A code block with `data-overflow-ok` keeps no cue. `scroll-cue: false` stops the step.
 - `deploy: false` builds and uploads the artifact, with no deploy.
