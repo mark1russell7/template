@@ -203,6 +203,15 @@ The function `packageModel(folder)` gives the public API of a package as data. A
 
 The model has the same entries, names and declarations as the report. `apiModel(report, packageName, docs)` gives the model of the text of a report. The text of a report has no doc comments, so the argument `docs` gives them.
 
+The function `declarationKinds(text)` gives the kinds of the statements of one declaration: `function`, `class`, `interface`, `type`, `enum`, `namespace`, `variable`, `alias` or `other`. A variable with a function type, for example `declare const f: (x: A) => B`, is a `function`. An overload gives one `function`. A function with a merged namespace gives `function` and `namespace`. A count of the public functions of a package is then a query over the model:
+
+```ts
+import { apiModel, declarationKinds } from "@mark1russell7/api-report";
+
+const model = apiModel(readFileSync("test/api/public-api.txt", "utf8"), "my-package");
+const functions = Object.values(model.declarations).filter((declaration) => declarationKinds(declaration.text).includes("function"));
+```
+
 ## Library
 
 The package also exports the functions of the tool:
@@ -210,7 +219,7 @@ The package also exports the functions of the tool:
 - `runReports(options)` compares or writes the reports, and gives the result of each package. `runCli(args, io)` is the bin.
 - `packageReport(folder)` and `apiReport(name, root, entries)` give the text of one report.
 - `entriesOf(manifest, folder)`, `publishedManifest(manifest)` and `binsOf(manifest)` read a `package.json`.
-- `parseDeclarations(text)` and `statementsOf(text)` read a declaration file.
+- `parseDeclarations(text)` and `statementsOf(text)` read a declaration file. `declarationKinds(text)` gives the kinds of the statements of one declaration.
 - `packageFolders(root, globs)`, `globFolders(root, glob)`, `globToRegExp(glob)` and `workspaceGlobs(root)` find the packages. They come from `@mark1russell7/conventions/workspace`.
 - `diffLines(before, after)` and `unifiedDiff(before, after)` give a line diff.
 - `pageFaults(report, packageName, pages, except, complete)` and `reportEntries(report)` hold a hand-written page against a report.
