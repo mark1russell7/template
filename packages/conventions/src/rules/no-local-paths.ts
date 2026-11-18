@@ -8,11 +8,11 @@
  * the private patterns and the breaks of one text.
  */
 import { readFileSync, statSync } from "node:fs";
-import { extname, join } from "node:path";
+import { delimiter, extname, join } from "node:path";
 import { rangeOf } from "../change.ts";
 import { lineNameHit, pathNameHit, PRIVATE_NAME_LIST, type PrivateNameList } from "../private-names.ts";
 import { pullRequestOfRun } from "../pull-request.ts";
-import type { Break, Rule, RuleContext } from "../rule.ts";
+import { isCi, type Break, type Rule, type RuleContext } from "../rule.ts";
 
 /** The extensions of files that are not text. The rule does not read them. */
 const BINARY = new Set(
@@ -200,6 +200,20 @@ export function privateNamesFile(env: Readonly<Record<string, string | undefined
   return fromGit === "" ? undefined : fromGit;
 }
 
+/**
+ * This function gives the paths of the private name lists, in order. The environment variable
+ * `CONVENTIONS_PRIVATE_NAMES_FILE` has priority. It has one path, or more paths with `separator` between them. The
+ * default `separator` is the `delimiter` of `node:path`: `;` on Windows, `:` on other systems. Else, each value of the git
+ * configuration `conventions.privateNamesFile` is a path. The function gives an empty array when neither has a value.
+ */
+export function privateNamesFiles(env: Readonly<Record<string, string | undefined>>, git: (args: readonly string[]) => string | undefined, separator: string = delimiter): string[] {
+  const fromEnv = (env[PRIVATE_NAMES_FILE_VARIABLE] ?? "").split(separator).map((path) => path.trim()).filter((path) => path !== "");
+  if (fromEnv.length > 0) return fromEnv;
+  // The type `path` expands `~` at the start of each value
+  const fromGit = git(["config", "--type=path", "--get-all", PRIVATE_NAMES_FILE_CONFIG]) ?? "";
+  return fromGit.split(/\r?\n/).map((path) => path.trim()).filter((path) => path !== "");
+}
+
 /** This function gives a break for each private pattern that is not a valid regular expression. A break does not show the pattern. */
 export function invalidPatternBreaks(patterns: readonly PrivatePattern[]): Break[] {
   return patterns
@@ -305,5 +319,11 @@ export const noLocalPaths: Rule = {
     // A commit message and the text of a pull request are public too, and a merged commit message stays in the history
     for (const change of changeTexts(context)) add(textBreaks(change.name, change.text, matchers, {}));
     return breaks;
+  },
+  noRead(context) {
+    // The rule reads no private name list, so only the private patterns are its private source. A local run without
+    // them is the normal case. A CI run without them read no private text, and the result must tell it
+    if (!isCi(context.env) || privatePatterns(context.env).length > 0) return undefined;
+    return `CI gives no ${PRIVATE_PATTERNS_VARIABLE}, so the rule did not look for private names. It looked only for home folders and the patterns of its options.`;
   },
 };

@@ -148,6 +148,7 @@ mapMarkdown: build/index.d.ts#mapMarkdown
 mapText: build/index.d.ts#mapText
 matchesAny: build/index.d.ts#matchesAny
 mergeHomes: build/index.d.ts#mergeHomes
+mergePrivateNames: build/index.d.ts#mergePrivateNames
 messageOf: build/index.d.ts#messageOf
 minorOf: build/index.d.ts#minorOf
 mitText: build/index.d.ts#mitText
@@ -182,6 +183,7 @@ playwrightInstall: build/index.d.ts#playwrightInstall
 prPathFilters: build/index.d.ts#prPathFilters
 prePush: build/index.d.ts#prePush
 privateNamesFile: build/index.d.ts#privateNamesFile
+privateNamesFiles: build/index.d.ts#privateNamesFiles
 privatePatterns: build/index.d.ts#privatePatterns
 privateTextBreaks: build/index.d.ts#privateTextBreaks
 publishTextSafe: build/index.d.ts#publishTextSafe
@@ -553,6 +555,8 @@ interface PrePushOptions {
   readonly remote: string;
   readonly url?: string;
   readonly input: string;
+  readonly base?: string;
+  readonly head?: string;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly root: string;
   readonly git: (args: readonly string[]) => string | undefined;
@@ -616,6 +620,7 @@ interface Rule {
   readonly changeScoped?: boolean;
   readonly failsFrom?: string;
   check(context: RuleContext, options: Options): RuleOutcome;
+  noRead?(context: RuleContext, options: Options): string | undefined;
 }
 
 ### build/index.d.ts#RuleConfig
@@ -653,6 +658,7 @@ interface RuleResult {
   readonly breaks: readonly Break[];
   readonly ignored: number;
   readonly note?: string;
+  readonly noRead?: string;
 }
 
 ### build/index.d.ts#SECURITY_SCAN_COMMIT
@@ -904,6 +910,9 @@ export declare function matchesAny(path: string, globs: readonly string[]): bool
 ### build/index.d.ts#mergeHomes
 export declare function mergeHomes(base: readonly Home[], extra: readonly Home[]): readonly Home[];
 
+### build/index.d.ts#mergePrivateNames
+export declare function mergePrivateNames(lists: readonly PrivateNameList[]): PrivateNameList;
+
 ### build/index.d.ts#messageOf
 export declare function messageOf(file: string, name: string, home: Home): string;
 
@@ -993,6 +1002,9 @@ export declare function prePush(options: PrePushOptions, io: Pick<CliIo, "stderr
 
 ### build/index.d.ts#privateNamesFile
 export declare function privateNamesFile(env: Readonly<Record<string, string | undefined>>, git: (args: readonly string[]) => string | undefined): string | undefined;
+
+### build/index.d.ts#privateNamesFiles
+export declare function privateNamesFiles(env: Readonly<Record<string, string | undefined>>, git: (args: readonly string[]) => string | undefined, separator?: string): string[];
 
 ### build/index.d.ts#privatePatterns
 export declare function privatePatterns(env: Readonly<Record<string, string | undefined>>): PrivatePattern[];

@@ -105,6 +105,9 @@ const DEFAULT_NAME = unicode`^export default (${NAME});?$`;
 const NAMELESS_DEFAULT = unicode`^export default (?:declare )?(?:abstract )?(?:class|function\*?)(?!${NAME_PART})\s*((?:${NAME})?)`;
 const DECLARATOR = unicode`^\s*(${NAME})`;
 const DECLARATION = unicode`^(export )?(default )?(?:declare )?(?:abstract )?(?:const (?=enum))?(?:function|class|interface|type|enum|namespace|module) (${NAME})`;
+const KIND_KEYWORD = unicode`^(?:export )?(?:default )?(?:declare )?(?:abstract )?(?:const (?=enum))?(function|class|interface|type|enum|namespace|module)(?!${NAME_PART})`;
+const VARIABLE = /^(?:export )?(?:declare )?(?:const|let|var) (?!enum\b)(.*?);?$/;
+const TYPED_DECLARATOR = unicode`^\s*${NAME}\s*\??\s*:\s*([\s\S]*)$`;
 
 /**
  * This function splits the text of a declaration file into its top-level statements. It removes the
@@ -242,6 +245,77 @@ function splitTopLevel(text: string): string[] {
   }
   parts.push(text.slice(start));
   return parts;
+}
+
+/**
+ * The kind of one statement of a declaration.
+ * - `function`: a function, or a variable with a function type, for example `declare const f: (x: A) => B`.
+ * - `variable`: each other `const`, `let` or `var`.
+ * - `namespace`: a `namespace` or a `module` with a name.
+ * - `alias`: `import A = N.B`.
+ * - `other`: an expression, for example `export default 1` or `export = { a }`.
+ */
+export type DeclarationKind = "function" | "class" | "interface" | "type" | "enum" | "namespace" | "variable" | "alias" | "other";
+
+/**
+ * This function gives the kinds of the statements of the text of one declaration, in their order and with no repeats.
+ * An overload repeats `function`, thus it gives one `function`. A function with a merged namespace gives
+ * `function` and `namespace`. The text is a declaration of a report or of the model, or a statement of a declaration file.
+ */
+export function declarationKinds(text: string): DeclarationKind[] {
+  const kinds: DeclarationKind[] = [];
+  for (const statement of statementsOf(text)) {
+    const kind = statementKind(statement.replace(/\s+/g, " ").trim());
+    if (!kinds.includes(kind)) kinds.push(kind);
+  }
+  return kinds;
+}
+
+/** This function gives the kind of one statement, with its white space as one space. */
+function statementKind(flat: string): DeclarationKind {
+  const keyword = KIND_KEYWORD.exec(flat)?.[1];
+  if (keyword !== undefined) return keyword === "module" ? "namespace" : (keyword as DeclarationKind);
+  const variable = VARIABLE.exec(flat);
+  if (variable) {
+    // A statement with more than one declarator gets the kind of the first one
+    const type = TYPED_DECLARATOR.exec(splitTopLevel(group(variable, 1))[0] ?? "")?.[1];
+    return type !== undefined && isFunctionType(type.trim()) ? "function" : "variable";
+  }
+  if (IMPORT_ALIAS.test(flat)) return "alias";
+  return "other";
+}
+
+/** This function tells if a type is a function type: `(x: A) => B` or `<T>(x: T) => T`, not `(A | B)[]` or `new () => C`. */
+function isFunctionType(type: string): boolean {
+  let index = 0;
+  if (type.startsWith("<")) {
+    index = afterGroup(type, 0);
+    while (type.charAt(index) === " ") index++;
+  }
+  if (index < 0 || type.charAt(index) !== "(") return false;
+  const end = afterGroup(type, index);
+  return end > 0 && type.slice(end).trimStart().startsWith("=>");
+}
+
+/**
+ * This function gives the index after the bracket that closes the bracket at `start`, or -1. It skips strings, and
+ * the `>` of an arrow `=>` closes nothing.
+ */
+function afterGroup(text: string, start: number): number {
+  let depth = 0;
+  for (let index = start; index < text.length; index++) {
+    const char = text.charAt(index);
+    if (char === '"' || char === "'" || char === "`") {
+      let end = index + 1;
+      while (end < text.length && text.charAt(end) !== char) end += text.charAt(end) === "\\" ? 2 : 1;
+      index = end;
+    } else if (char === "(" || char === "[" || char === "{" || char === "<") depth++;
+    else if (char === ")" || char === "]" || char === "}" || (char === ">" && text.charAt(index - 1) !== "=")) {
+      depth--;
+      if (depth === 0) return index + 1;
+    }
+  }
+  return -1;
 }
 
 /** The names of an export or import list: `a, type b, c as d`. */

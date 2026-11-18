@@ -197,6 +197,25 @@ export function parsePrivateNames(text: string): PrivateNameList {
   return { names: rules, allow: allow.map((entry, index) => allowedOf(entry, `allow entry ${String(index + 1)} of ${PRIVATE_NAME_LIST}`, ids)) };
 }
 
+/**
+ * This function merges private name lists into one list, in order. The names of each list come after the names of the
+ * lists before it. Thus the index of a name in a result counts across the lists. `parsePrivateNames` makes sure that an
+ * entry of `allow` refers to a name of its own list. The function throws a `PrivateNameListError` when two lists have
+ * the same id. Then an entry of `allow` can refer to the two names.
+ */
+export function mergePrivateNames(lists: readonly PrivateNameList[]): PrivateNameList {
+  const ids = new Set<string>();
+  const names: NameRule[] = [];
+  lists.forEach((list, at) => {
+    for (const rule of list.names) {
+      if (ids.has(rule.id)) throw new PrivateNameListError(`name ${String(names.length + 1)} of ${PRIVATE_NAME_LIST} (list ${String(at + 1)}): the id is also the id of a name of an earlier list`);
+      ids.add(rule.id);
+      names.push(rule);
+    }
+  });
+  return { names, allow: lists.flatMap((list) => list.allow) };
+}
+
 /** The words before a name in code: a declaration, a type or an operator. */
 const CODE_BEFORE = /\b(class|interface|type|new|extends|implements|const|let|enum|struct|typeof|instanceof|as)\s+$/;
 /** A line of code that imports or exports names. */
