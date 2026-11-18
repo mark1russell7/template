@@ -1448,6 +1448,7 @@ export declare function githubReleaseLag(options: GitHubOptions & {
   endpoint?: string;
   maxPages?: number;
   now?: string;
+  paths?: readonly string[];
 }): Promise<GitHubReleaseLag>;
 
 ### build/index.d.ts#githubReleases

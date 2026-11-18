@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { findHomes, HOMES, mapMarkdown, mapText, mergeHomes, npmDrift, npmNames, runCli, type CliIo, type Home, type NpmPresence } from "./index.ts";
+import { findHomes, HOMES, mapMarkdown, mapText, mergeHomes, npmDrift, npmNames, OWNERS, runCli, type CliIo, type Home, type NpmPresence } from "./index.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-map-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -21,7 +21,10 @@ describe("the homes", () => {
     expect(new Set(areas).size).toBe(areas.length);
     for (const home of HOMES) {
       expect(home.area).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
-      expect(home.repo).toMatch(/^mark1russell7\/[A-Za-z0-9._-]+$/);
+      const [owner = "", name = "", ...more] = home.repo.split("/");
+      expect(OWNERS.map((item) => item.login), home.area).toContain(owner);
+      expect(name, home.area).toMatch(/^[A-Za-z0-9._-]+$/);
+      expect(more, home.area).toEqual([]);
       if (home.state === "published") expect(home.packages.length, home.area).toBeGreaterThan(0);
       if (home.state === "planned" || home.state === "none") expect(home.packages, home.area).toEqual([]);
       if (home.state === "published" || home.state === "unpublished") for (const name of home.pending ?? []) expect(home.packages, `${home.area} ${name}`).toContain(name);
