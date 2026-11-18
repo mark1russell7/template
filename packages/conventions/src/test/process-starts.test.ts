@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { startsReport } from "./process-starts.global.ts";
-import { commandName, gitBudgetBreak, gitStartsIn, lineCommandName, parseGitBudgets, startKey } from "./process-starts.ts";
+import { budgetOf, commandName, gitBudgetBreak, gitStartsIn, lineCommandName, parseGitBudgets, ranInFull, type SuiteTask, startKey } from "./process-starts.ts";
 
 describe("the count of process starts", () => {
   it("names a command file by its name, with no folder and no extension", () => {
@@ -52,6 +52,30 @@ describe("the git-start budgets", () => {
     expect(gitBudgetBreak("src/a.test.ts", new Map([["git-add", 5], ["node", 9]]), budgets)).toContain("src/a.test.ts started git 5 times, over its budget of 4 ");
     expect(gitBudgetBreak("src/b.test.ts", new Map([["git", 2], ["node", 9]]), budgets)).toBeUndefined();
     expect(gitBudgetBreak("src/b.test.ts", new Map([["git", 3]]), budgets)).toMatch(/over its budget of 2 /);
+  });
+
+  it("gives the budget of a count: the next multiple of 10 above it", () => {
+    expect([0, 9, 10, 26, 640].map(budgetOf)).toEqual([10, 10, 20, 30, 650]);
+  });
+
+  it("breaks a file budget well above the count of a file that ran in full, so each gain stays held", () => {
+    const held = parseGitBudgets(JSON.stringify({ default: 20, files: { "src/a.test.ts": 40 } }));
+    expect(gitBudgetBreak("src/a.test.ts", new Map([["git-add", 35]]), held, true)).toBeUndefined();
+    expect(gitBudgetBreak("src/a.test.ts", new Map([["git-add", 30]]), held, true)).toBeUndefined();
+    expect(gitBudgetBreak("src/a.test.ts", new Map([["git-add", 29]]), held, true)).toBe(
+      "src/a.test.ts started git 29 times, well under its budget of 40 in src/test/git-starts.json. Lower its budget to 30. Thus the gain stays held.",
+    );
+    expect(gitBudgetBreak("src/a.test.ts", new Map([["git-add", 5]]), held, true)).toContain("Remove its entry: the default budget of 20 covers it.");
+    expect(gitBudgetBreak("src/a.test.ts", new Map([["git-add", 5]]), held, false)).toBeUndefined();
+    expect(gitBudgetBreak("src/b.test.ts", new Map(), held, true)).toBeUndefined();
+  });
+
+  it("tells a file that ran in full from a file with a filter, a skip or a failed test", () => {
+    const pass = (mode = "run"): SuiteTask => ({ type: "test", mode, result: { state: "pass" } });
+    expect(ranInFull([pass(), { type: "suite", mode: "run", tasks: [pass(), pass("only")] }])).toBe(true);
+    expect(ranInFull([pass(), { type: "suite", mode: "run", tasks: [pass("skip")] }])).toBe(false);
+    expect(ranInFull([pass(), { type: "test", mode: "run", result: { state: "fail" } }])).toBe(false);
+    expect(ranInFull([{ type: "test", mode: "run" }])).toBe(false);
   });
 
   it("refuses a budget that is not a count", () => {

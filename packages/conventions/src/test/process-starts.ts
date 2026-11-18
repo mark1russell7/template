@@ -66,16 +66,46 @@ export function parseGitBudgets(text: string): GitBudgets {
   return { default: other, files: files as Record<string, number> };
 }
 
-/** This function gives the message for a test file with more git starts than its budget, or undefined. */
-export function gitBudgetBreak(file: string, counts: ReadonlyMap<string, number>, budgets: GitBudgets): string | undefined {
+/** This function gives the budget of a count of starts: the next multiple of 10 above the count. */
+export function budgetOf(count: number): number {
+  return (Math.floor(count / 10) + 1) * 10;
+}
+
+/** A task of the test runner, with only the fields that `ranInFull` reads. */
+export interface SuiteTask {
+  readonly type: string;
+  readonly mode: string;
+  readonly result?: { readonly state?: string } | undefined;
+  readonly tasks?: readonly SuiteTask[];
+}
+
+/**
+ * This function tells if each test of the tasks passed, with no filter and no skip. A name filter, `.only`, `.skip` or a
+ * failed test gives fewer starts, so then a count below the budget shows no gain.
+ */
+export function ranInFull(tasks: readonly SuiteTask[]): boolean {
+  return tasks.every((task) => (task.tasks !== undefined ? ranInFull(task.tasks) : (task.mode === "run" || task.mode === "only") && task.result?.state === "pass"));
+}
+
+/**
+ * This function gives the message for a test file with more git starts than its budget, or undefined. When each test of
+ * the file passed (`inFull`), a file budget above `budgetOf` the count also breaks. Thus each gain stays held.
+ */
+export function gitBudgetBreak(file: string, counts: ReadonlyMap<string, number>, budgets: GitBudgets, inFull = false): string | undefined {
   const used = gitStartsIn(counts);
-  const budget = budgets.files[file] ?? budgets.default;
-  if (used <= budget) return undefined;
-  return (
-    `${file} started git ${String(used)} times, over its budget of ${String(budget)} in src/test/git-starts.json. ` +
-    "Share the fixture repositories of src/test/git-fixture.ts: stageAll, commitAll and shared. " +
-    "Raise the budget only for the git starts of the code under test."
-  );
+  const own = budgets.files[file];
+  const budget = own ?? budgets.default;
+  if (used > budget) {
+    return (
+      `${file} started git ${String(used)} times, over its budget of ${String(budget)} in src/test/git-starts.json. ` +
+      "Share the fixture repositories of src/test/git-fixture.ts: stageAll, commitAll and shared. " +
+      "Raise the budget only for the git starts of the code under test."
+    );
+  }
+  if (!inFull || own === undefined || budgetOf(used) >= own) return undefined;
+  const lower = budgetOf(used);
+  const fix = lower <= budgets.default ? `Remove its entry: the default budget of ${String(budgets.default)} covers it.` : `Lower its budget to ${String(lower)}.`;
+  return `${file} started git ${String(used)} times, well under its budget of ${String(own)} in src/test/git-starts.json. ${fix} Thus the gain stays held.`;
 }
 
 type Wrapped = (file: unknown, ...rest: unknown[]) => unknown;

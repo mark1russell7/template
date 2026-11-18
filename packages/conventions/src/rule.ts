@@ -209,18 +209,39 @@ export function readJsonc(file: string): unknown {
 
 /**
  * This function tells if git can find a repository from `root`. A repository is a `.git` folder or file in `root` or in
- * a parent folder, or the variable `GIT_DIR`. Each command of the rules needs a repository, so git fails with no repository.
+ * a parent folder, or the variable `GIT_DIR`.
  */
 export function inRepository(root: string, env: Readonly<Record<string, string | undefined>> = process.env): boolean {
   return (env["GIT_DIR"] ?? "") !== "" || findUp(".git", root) !== null;
 }
 
 /**
- * This function starts git in `root` with `args`, and gives its output, or undefined when git fails. With no repository,
- * it starts no process and gives undefined: each process start costs time, and on Windows also kernel memory.
+ * The git commands that work with no repository. For example, `git config --get` reads the global configuration, and the
+ * pre-push check reads the path of the private name list that way.
+ */
+const NO_REPOSITORY_COMMANDS: ReadonlySet<string> = new Set(["config", "version", "help", "init", "clone", "ls-remote", "var", "hash-object"]);
+
+/**
+ * This function tells if the git arguments `args` need a repository. The command is the first argument that is not an
+ * option, and not the value of `-c`. With `-C`, git finds the repository from another folder, so the function gives false.
+ */
+export function needsRepository(args: readonly string[]): boolean {
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index] ?? "";
+    if (arg === "-C") return false;
+    if (arg === "-c") index++;
+    else if (!arg.startsWith("-")) return !NO_REPOSITORY_COMMANDS.has(arg);
+  }
+  return false;
+}
+
+/**
+ * This function starts git in `root` with `args`, and gives its output, or undefined when git fails. For a command that
+ * needs a repository, in a folder with no repository, it starts no process and gives undefined. Git fails there.
+ * Each process start costs time, and on Windows also kernel memory.
  */
 export function runGit(root: string, args: readonly string[]): string | undefined {
-  if (!inRepository(root)) return undefined;
+  if (needsRepository(args) && !inRepository(root)) return undefined;
   const result = spawnSync("git", [...args], { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024, windowsHide: true });
   if (result.error || result.status !== 0) return undefined;
   return result.stdout;

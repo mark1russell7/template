@@ -1,10 +1,11 @@
 // A setup file of vitest: it counts the process starts of each test file, by command, writes the count for the report
-// of `process-starts.global.ts`, and holds the count of git under the budget of the file in `git-starts.json`.
+// of `process-starts.global.ts`, and holds the count of git under the budget of the file in `git-starts.json`. When each
+// test of the file passed, a budget well above the count also fails, so each gain stays held.
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { afterAll, beforeAll, inject } from "vitest";
 import type { FileStarts } from "./process-starts.global.ts";
-import { countProcessStarts, gitBudgetBreak, parseGitBudgets } from "./process-starts.ts";
+import { countProcessStarts, gitBudgetBreak, parseGitBudgets, ranInFull } from "./process-starts.ts";
 
 /** The root of the package, so that a key of `git-starts.json` is the same from each working folder. */
 const ROOT = join(import.meta.dirname, "..", "..");
@@ -23,6 +24,6 @@ afterAll(({}, suite) => {
   const dir = inject("processStartsDir");
   const row: FileStarts = { file, counts: Object.fromEntries(counts) };
   if (dir !== undefined) writeFileSync(join(dir, `${file.replace(/[^\w.-]+/g, "_")}.json`), JSON.stringify(row));
-  const message = gitBudgetBreak(file, counts, BUDGETS);
+  const message = gitBudgetBreak(file, counts, BUDGETS, ranInFull(suite.tasks));
   if (message !== undefined) throw new Error(message);
 });

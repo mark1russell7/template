@@ -1,10 +1,12 @@
-// runGit starts no git in a folder that no repository holds: each process start costs time, and on Windows kernel memory.
+// runGit starts no git for a command that needs a repository, in a folder that no repository holds: each process start
+// costs time, and on Windows kernel memory. A command that needs no repository, for example git config, still starts.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
-import { inRepository, runGit } from "./rule.ts";
+import { inRepository, needsRepository, runGit } from "./rule.ts";
+import { privateNamesFile } from "./rules/no-local-paths.ts";
 import { startsOf } from "./test/process-starts.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-run-git-"));
@@ -44,6 +46,26 @@ describe("runGit", () => {
     const before = startsOf("git");
     expect(runGit(plain, ["rev-parse", "--git-dir"])).toBeUndefined();
     expect(startsOf("git")).toBe(before);
+  });
+
+  it("starts git config with no repository, so the private name list of the global configuration stays found", () => {
+    vi.stubEnv("GIT_DIR", undefined);
+    const plain = folder("config-only");
+    const global = join(folder("home"), "gitconfig");
+    writeFileSync(global, "[conventions]\n\tprivateNamesFile = /names/from-global.json\n");
+    vi.stubEnv("GIT_CONFIG_GLOBAL", global);
+    vi.stubEnv("GIT_CONFIG_NOSYSTEM", "1");
+    expect(inRepository(plain)).toBe(false);
+    expect(privateNamesFile({}, (args) => runGit(plain, args))).toBe("/names/from-global.json");
+  });
+
+  it("tells which git arguments need a repository", () => {
+    expect(needsRepository(["rev-parse", "--git-dir"])).toBe(true);
+    expect(needsRepository(["-c", "core.quotePath=false", "show", "HEAD"])).toBe(true);
+    expect(needsRepository(["config", "--type=path", "--get", "a.b"])).toBe(false);
+    expect(needsRepository(["-c", "a.b=c", "config", "--get", "a.b"])).toBe(false);
+    expect(needsRepository(["--version"])).toBe(false);
+    expect(needsRepository(["-C", "elsewhere", "status"])).toBe(false);
   });
 
   it("starts git in a repository, and gives its output", () => {
