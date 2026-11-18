@@ -225,6 +225,15 @@ test("globToRegExp matches folders with **", () => {
   assert.ok(globToRegExp("bench/**").test("bench/run.ts"));
 });
 
+test("globToRegExp has the syntax of @mark1russell7/files, and a list maps with it", () => {
+  // map gives an index as the second argument: the function takes only the glob
+  const [group, set, scope] = ["docs/{a,b}.ts", "x/[ab].ts", "@scope/*"].map(globToRegExp);
+  assert.ok(group?.test("docs/b.ts") === true && !group.test("docs/{a,b}.ts"));
+  assert.ok(set?.test("x/a.ts") === true && !set.test("x/c.ts"));
+  assert.ok(scope?.test("@scope/pkg") === true && !scope.test("@scope/a/b"));
+  assert.ok(globToRegExp("bench/**").test("bench"));
+});
+
 test("in a fixed group, a changeset of one member covers the other changed members, with a note", () => {
   const group = [
     { name: "@g/one", dir: "packages/one", version: "0.38.0", private: false },

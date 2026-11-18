@@ -119,7 +119,7 @@ gateAfterCancel: build/index.d.ts#gateAfterCancel
 gateTrigger: build/index.d.ts#gateTrigger
 githubFetch: build/index.d.ts#githubFetch
 globFolders: build/workspace.chunk.d.ts#globFolders
-globToRegExp: build/workspace.chunk.d.ts#globToRegExp
+globToRegExp: @mark1russell7/files/glob#globToRegExp (external)
 hasFile: build/index.d.ts#hasFile
 hasImportMetaMain: build/index.d.ts#hasImportMetaMain
 hasTests: build/index.d.ts#hasTests
@@ -252,7 +252,7 @@ yamlFaults: build/index.d.ts#yamlFaults
 ## ./workspace (build/workspace.d.ts): names
 
 globFolders: build/workspace.chunk.d.ts#globFolders
-globToRegExp: build/workspace.chunk.d.ts#globToRegExp
+globToRegExp: @mark1russell7/files/glob#globToRegExp (external)
 isWorkspaceFolder: build/workspace.chunk.d.ts#isWorkspaceFolder
 packageFolders: build/workspace.chunk.d.ts#packageFolders
 parseWorkspaceGlobs: build/workspace.chunk.d.ts#parseWorkspaceGlobs
@@ -1231,9 +1231,6 @@ export declare function sharedNames(repos: readonly {
 
 ### build/workspace.chunk.d.ts#globFolders
 declare function globFolders(root: string, glob: string): string[];
-
-### build/workspace.chunk.d.ts#globToRegExp
-declare function globToRegExp(glob: string): RegExp;
 
 ### build/workspace.chunk.d.ts#isWorkspaceFolder
 declare function isWorkspaceFolder(folder: string, globs: readonly string[]): boolean;

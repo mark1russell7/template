@@ -38,7 +38,8 @@ runs:
         node-version: "26"
         package-manager-cache: false
     # The scripts go to a folder of RUNNER_TEMP, outside the repository, as in reusable-release-build.yml: a package at
-    # the root with no "files" field packs each file that .gitignore does not name.
+    # the root with no "files" field packs each file that .gitignore does not name. The copy has each module that
+    # check-plan.ts loads: scripts/workflows/release-check.test.ts examines the folders.
     - name: Copy the release scripts
       shell: bash
       env:
@@ -48,6 +49,7 @@ runs:
         mkdir -p "$dir/template/scripts" "$dir/template/.github/actions"
         cp -R "$TEMPLATE/scripts/release" "$dir/template/scripts/release"
         cp -R "$TEMPLATE/.github/actions/changeset-check" "$dir/template/.github/actions/changeset-check"
+        cp -R "$TEMPLATE/.github/actions/bundles" "$dir/template/.github/actions/bundles"
         echo "RELEASE_CHECK_DIR=$dir" >> "$GITHUB_ENV"
     - name: Plan
       id: plan

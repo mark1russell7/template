@@ -3,7 +3,7 @@
 // as the build of reusable-release-build.yml. These tests hold that.
 
 import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -44,6 +44,24 @@ describe("the release check", () => {
     assert.match(action, /scripts\/release\/tags\.ts/u);
     assert.match(action, /RELEASE_PENDING: \$\{\{ steps\.plan\.outputs\.pending \}\}/u);
     assert.doesNotMatch(build, /RELEASE_PENDING/u);
+  });
+
+  it("copies each module that the scripts load, also through the imports of those modules", () => {
+    // On 2026-11-18 check.ts got an import of the bundle files.mjs, and the copy did not have the folder of the bundles
+    const copy = runBlock(action, "    - name: Copy the release scripts\n");
+    const folders = [...copy.matchAll(/cp -R "\$TEMPLATE\/([^"]+)"/gu)].map((match) => match[1] ?? "");
+    const loaded = new Set<string>();
+    const queue = ["scripts/release/check-plan.ts", "scripts/release/pack.ts", "scripts/release/tags.ts"];
+    for (let path = queue.pop(); path !== undefined; path = queue.pop()) {
+      if (loaded.has(path)) continue;
+      loaded.add(path);
+      const file = path;
+      assert.ok(folders.some((folder) => file.startsWith(`${folder}/`)), `A script loads ${file}, and the step does not copy it.`);
+      for (const match of read(file).matchAll(/^\s*(?:import|export)\s(?!type\s)[^;]*?\sfrom\s*"(\.{1,2}\/[^"]+)"/gmu)) {
+        queue.push(posix.join(posix.dirname(file), match[1] ?? ""));
+      }
+    }
+    assert.ok(loaded.has(".github/actions/changeset-check/check.ts"), `The test follows the imports of check-plan.ts: ${[...loaded].join(", ")}`);
   });
 
   it("runs in reusable-ci.yml only on a pull request or on the pull request of a dispatched run, and in a private repository only with release-check-private", () => {

@@ -41,8 +41,11 @@ describe("the globs", () => {
     expect(globToRegExp("a.b/?").test("a.b/c")).toBe(true);
     expect(globToRegExp("a.b/?").test("axb/c")).toBe(false);
     expect(globToRegExp("{apps,libs}/*").test("libs/x")).toBe(true);
-    expect(globToRegExp("(x)+[y]$").test("(x)+[y]$")).toBe(true);
-    expect(() => globToRegExp("{a,b")).toThrow(/no "}"/);
+    expect(globToRegExp("(x)+$").test("(x)+$")).toBe(true);
+    // The syntax of @mark1russell7/files: a set, and a "{" with no "}" as text
+    expect(globToRegExp("a/[bc].ts").test("a/c.ts")).toBe(true);
+    expect(globToRegExp("a/[bc].ts").test("a/[bc].ts")).toBe(false);
+    expect(globToRegExp("{a,b").test("{a,b")).toBe(true);
   });
 
   it("finds the folders of a glob, without node_modules and dot folders", () => {
@@ -50,6 +53,7 @@ describe("the globs", () => {
     expect(globFolders(root, "apps/*")).toEqual(["apps/x"]);
     expect(globFolders(root, "apps/**")).toEqual(["apps", "apps/x", "apps/x/y"]);
     expect(globFolders(root, "{apps,libs}/*")).toEqual(["apps/x", "libs/z"]);
+    expect(globFolders(root, "[al]*/[xz]")).toEqual(["apps/x", "libs/z"]);
     expect(globFolders(root, "./libs/z/")).toEqual(["libs/z"]);
     expect(globFolders(root, "none/*")).toEqual([]);
   });

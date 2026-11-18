@@ -53,7 +53,7 @@ When `check:api` fails, the job writes the API reports again and uploads them as
 | `fetch-depth` | `2` | The commits of the checkout. `0` gets the whole history. With `2`, the checkout of a pull request has the parents of its merge commit. On a pull request, and on a dispatched run of a pull request, the job then deepens the checkout to the merge base, so `check:conventions` reads each commit of the change and the versions at the merge base. On a push to the default branch, the job fetches the commit before the push, for the rule `unreleased-change`. |
 | `timeout-minutes` | `15` | The time limit of each job of the matrix. The job `coverage` has its own limit. |
 | `changesets` | `true` | The changeset check on a pull request, and on a dispatched run of a pull request (refer to "The changeset check"). |
-| `changeset-ignore` | (empty) | More globs of files that need no changeset. |
+| `changeset-ignore` | (empty) | More globs of files that need no changeset, in the syntax of `@mark1russell7/files`: `*`, `**`, `?`, `[abc]` and `{a,b}`. |
 | `coverage` | `false` | The job `coverage` starts the tests of each package with Vitest again, with coverage. A failure fails the CI (refer to "Coverage"). |
 | `coverage-floor` | `0` | The lowest percent of each measure of each package. `0` is no floor. |
 | `coverage-on-main` | `true` | With `coverage: false`, a push to the default branch of a public repository still gives the coverage, not strict. It does not fail the CI (refer to "Coverage"). |
