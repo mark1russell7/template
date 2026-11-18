@@ -551,6 +551,8 @@ interface PrePushOptions {
   readonly remote: string;
   readonly url?: string;
   readonly input: string;
+  readonly base?: string;
+  readonly head?: string;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly root: string;
   readonly git: (args: readonly string[]) => string | undefined;
@@ -614,6 +616,7 @@ interface Rule {
   readonly changeScoped?: boolean;
   readonly failsFrom?: string;
   check(context: RuleContext, options: Options): RuleOutcome;
+  noRead?(context: RuleContext, options: Options): string | undefined;
 }
 
 ### build/index.d.ts#RuleConfig
@@ -651,6 +654,7 @@ interface RuleResult {
   readonly breaks: readonly Break[];
   readonly ignored: number;
   readonly note?: string;
+  readonly noRead?: string;
 }
 
 ### build/index.d.ts#SECURITY_SCAN_COMMIT

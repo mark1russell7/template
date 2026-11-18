@@ -5,8 +5,9 @@ import { runCli } from "./run.ts";
 
 try {
   const args = process.argv.slice(2);
-  // Only the git hook pre-push gives a standard input: the refs of the push. A terminal gives none
-  const stdin = args[0] === "pre-push" && process.stdin.isTTY !== true ? readFileSync(0, "utf8") : undefined;
+  // Only the git hook pre-push gives a standard input: the refs of the push. A terminal gives none, and the check of a
+  // change in CI (--base) reads none
+  const stdin = args[0] === "pre-push" && !args.includes("--base") && process.stdin.isTTY !== true ? readFileSync(0, "utf8") : undefined;
   process.exitCode = runCli(args, {
     cwd: process.cwd(),
     env: process.env,

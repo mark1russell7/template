@@ -201,4 +201,26 @@ describe("the bin", () => {
     expect(text).toContain("| `source-main` | pass |  |");
     expect(text).toContain("| `required-scripts` | pass |  |");
   });
+
+  it("shows no read in the text, the summary and an annotation in CI, and nothing more in a local run", () => {
+    const root = fixture({ "package.json": { name: "one" }, "notes.md": "clean\n" });
+    const git = (...args: string[]): void => void spawnSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", ...args], { cwd: root, encoding: "utf8" });
+    git("init", "-q", "-b", "main");
+    git("add", "-A");
+    git("commit", "-q", "-m", "first");
+    const reason = "CI gives no CONVENTIONS_PRIVATE_PATTERNS, so the rule did not look for private names. It looked only for home folders and the patterns of its options.";
+    const summary = join(root, "..", `summary-${String(fixtures++)}.md`);
+    const { code, stdout } = cli(root, ["check", "--rule", "no-local-paths"], { GITHUB_ACTIONS: "true", GITHUB_STEP_SUMMARY: summary });
+    // The no read does not fail the check: the status stays a pass
+    expect(code).toBe(0);
+    expect(stdout).toContain(`::warning title=conventions no-local-paths::No read: ${reason}`);
+    expect(stdout).toContain("conventions: 1 rules: 1 pass, 0 with 0 break(s), 0 warn, 0 off, 0 skipped, 0 error(s), 1 with no read.");
+    expect(stdout).toContain(`pass   no-local-paths\n       NO READ: ${reason}\n`);
+    expect(readFileSync(summary, "utf8")).toContain(`| \`no-local-paths\` | pass, no read | no read: ${reason} |`);
+    const local = cli(root, ["check", "--rule", "no-local-paths"]);
+    expect(local.code).toBe(0);
+    expect(local.stdout).toBe("conventions: 1 rules: 1 pass, 0 with 0 break(s), 0 warn, 0 off, 0 skipped, 0 error(s).\n\npass   no-local-paths\n");
+    // CI with a private pattern reads the private text, so it shows no note
+    expect(cli(root, ["check", "--rule", "no-local-paths"], { CI: "true", CONVENTIONS_PRIVATE_PATTERNS: "zorbit" }).stdout).not.toMatch(/no read/i);
+  });
 });
