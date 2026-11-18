@@ -114,11 +114,11 @@ export type SelectionRecord = (Selection | SelectionNoRead) & {
 };
 
 /**
- * The global files, relative to the workspace root (decision d3 of the study of precise CI). The selector cannot see the
- * effect of these files on each test, so a change to one of them selects everything.
+ * The global files, relative to the workspace root. The selector cannot see the effect of these files on each test, so
+ * a change to one of them selects everything.
  */
 export const GLOBAL_FILES: readonly GlobalRule[] = [
-  { glob: "pnpm-lock.yaml", reason: "the lockfile (the item d41-lockfile makes it precise)" },
+  { glob: "pnpm-lock.yaml", reason: "the lockfile" },
   { glob: "package.json", reason: "the root package.json: the tools, the scripts and the settings of each package" },
   { glob: "pnpm-workspace.yaml", reason: "the packages and the settings of the workspace" },
   { glob: ".npmrc", reason: "the settings of the install" },

@@ -21,7 +21,7 @@ inputs:
     description: More globs of global files, relative to the root, one on each line. A change to one selects everything.
     default: ""
   ref:
-    description: The commit of the shared actions, for the record. d41-shadow groups the records by it.
+    description: The commit of the shared actions, for the record. A study of the records groups them by it.
     default: ""
   out:
     description: The file of the record.

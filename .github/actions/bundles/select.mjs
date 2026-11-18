@@ -259,13 +259,13 @@ const DEPENDENCY_FIELDS = [
 /** The name of the format of the selection. */
 const SELECTION_FORMAT = "selection/1";
 /**
-* The global files, relative to the workspace root (decision d3 of the study of precise CI). The selector cannot see the
-* effect of these files on each test, so a change to one of them selects everything.
+* The global files, relative to the workspace root. The selector cannot see the effect of these files on each test, so
+* a change to one of them selects everything.
 */
 const GLOBAL_FILES = [
 	{
 		glob: "pnpm-lock.yaml",
-		reason: "the lockfile (the item d41-lockfile makes it precise)"
+		reason: "the lockfile"
 	},
 	{
 		glob: "package.json",

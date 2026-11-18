@@ -395,7 +395,7 @@ jobs:
       # The selection of precise CI in shadow mode (CI.md, "The selection"). The step writes the record selection/1 and
       # changes no job, and continue-on-error keeps a failure of it out of the result. It runs a bundle with no install
       # before the install, so it runs no code of the repository or of its dependencies. The deepen step above fetched
-      # the merge base. The record goes to an artifact for the study d41-shadow, which counts the misses and the time.
+      # the merge base. The record goes to an artifact. A study of the records counts the misses and the time.
       - name: Selection
         id: selection
         if: env.CI_SELECTION_ON == 'true'
