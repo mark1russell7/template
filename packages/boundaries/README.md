@@ -14,9 +14,9 @@ This package gives the import boundaries of a pnpm workspace as a [dependency-cr
 | `run-time-import-of-a-dev-dependency` | A source file imports an npm package that is only in `devDependencies`. An install with `--prod` does not have the package. |
 | `run-time-import-of-a-dev-workspace-package-in-<package>` | A source file imports a workspace package that is only in `devDependencies` of its package. An install with `--prod` does not link it. |
 
-A type-only import is a boundary too. Tests, fixtures and declaration files are not part of a boundary.
+A type-only import is a boundary too. Tests, the helpers of the tests, fixtures and declaration files are not part of a boundary.
 
-The two rules of the dev dependencies examine only the source folders of each package (`sourceFolders`, default `src`). Tests and fixtures are not in them. A type-only import of a dev dependency is correct: the build removes it. A package with a config file of a bundler (`vite`, `tsdown`, `tsup`, `rollup`, `rolldown` or `webpack`) is bundled. Its build holds each import, so the rules do not examine it. The option `bundled` changes this list.
+The two rules of the dev dependencies examine only the source folders of each package (`sourceFolders`, default `src`). Tests, the helpers of the tests and fixtures are not in them. A type-only import of a dev dependency is correct: the build removes it. A package with a config file of a bundler (`vite`, `tsdown`, `tsup`, `rollup`, `rolldown` or `webpack`) is bundled. Its build holds each import, so the rules do not examine it. The option `bundled` changes this list.
 
 The rule `import-of-the-app-<package>` examines only the path of an import that resolves. When the name of an app does not resolve, `not-a-declared-export` finds the import.
 
@@ -90,7 +90,7 @@ module.exports = boundaries(__dirname, {
 
 - `doNotFollow`: `node_modules` and the build folders of each package (`buildFolders`). An import of a different package stops at its entry, for example `packages/b/dist/index.js`. The analysis does not go into the imports of that built file. It also does not start from the files of a build folder.
 - `enhancedResolveOptions.conditionNames`: `["import", "node", "default"]`, as Node resolves an ESM import. An entry that is only for `require` does not resolve.
-- `exclude`: tests, fixtures and declaration files. A file in `node_modules` is in the graph as a leaf, because `doNotFollow` stops the analysis there. The rule `run-time-import-of-a-dev-dependency` needs it.
+- `exclude`: tests, the helpers of the tests, fixtures and declaration files. A test file has the suffix `.test`, `.spec` or `.e2e`. A helper adds one word with a hyphen to the suffix, for example `fixtures.test-util.ts`. A file in `node_modules` is in the graph as a leaf, because `doNotFollow` stops the analysis there. The rule `run-time-import-of-a-dev-dependency` needs it.
 
 To change a default option, give the option in `options`. For example, `options: { enhancedResolveOptions: { exportsFields: ["exports"], conditionNames: ["import", "require", "node", "default"], mainFields: ["module", "main"] } }` also resolves the entries for `require`.
 
