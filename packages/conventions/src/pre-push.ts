@@ -319,8 +319,9 @@ export function prePush(options: PrePushOptions, io: Pick<CliIo, "stderr">): num
     }
     // The push deletes the ref, so it adds no commit
     if (ZERO.test(localSha)) continue;
+    // A commit that a remote branch has is not new: a merge of main into a branch does not read main again
     const others = ["rev-list", localSha, "--not", `--remotes=${options.remote}`];
-    const listed = ZERO.test(remoteSha) ? options.git(others) : (options.git(["rev-list", localSha, `^${remoteSha}`]) ?? options.git(others));
+    const listed = ZERO.test(remoteSha) ? options.git(others) : (options.git(["rev-list", localSha, "--not", remoteSha, `--remotes=${options.remote}`]) ?? options.git(others));
     if (listed === undefined) {
       io.stderr(`conventions pre-push: git cannot list the new commits of ${localRef ?? localSha}. The push stops.\n`);
       return 1;
