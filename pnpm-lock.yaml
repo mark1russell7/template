@@ -310,6 +310,9 @@ importers:
       '@mark1russell7/cue':
         specifier: ^2.0.0
         version: 2.1.4
+      '@mark1russell7/rigor-testkit':
+        specifier: ^0.1.22
+        version: 0.1.22(@mark1russell7/rigor-generators@0.2.0)
       '@mark1russell7/site-pages':
         specifier: workspace:*
         version: link:../site-pages
@@ -690,6 +693,42 @@ packages:
   '@mark1russell7/rigor-statistics@0.2.12':
     resolution: {integrity: sha512-g37AZ4tqim2xp5rcwMgyNBYC75KT5Ai1TcEk7DWHvIlxKDlWquru2rDrwsN9H0pOSccl0o6gQ+eZ9QExERtB/w==}
     engines: {node: '>=22'}
+
+  '@mark1russell7/rigor-testkit@0.1.22':
+    resolution: {integrity: sha512-OCCwws49rpUf1NMmtdku+BWSKrmsjkA78tN6prtM/9mp/ga9/lZTWN55O00bG1XA7ZWCUTH7S/X4wFNik8tg+w==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@mark1russell7/rigor-chaos': ^0.3.2
+      '@mark1russell7/rigor-generators': ^0.1.18 || ^0.2.0
+      '@mark1russell7/rigor-proxy': ^0.4.1
+      '@opentelemetry/api': ^1.9.0
+      '@opentelemetry/api-logs': ^0.213.0 || ^0.223.0
+      '@opentelemetry/sdk-logs': ^0.223.0 || ^3.0.0
+      '@opentelemetry/sdk-metrics': ^2.12.0 || ^3.0.0
+      '@opentelemetry/sdk-trace-base': ^2.12.0
+      fast-check: ^4.0.0
+      ltx: ^3.1.2
+    peerDependenciesMeta:
+      '@mark1russell7/rigor-chaos':
+        optional: true
+      '@mark1russell7/rigor-generators':
+        optional: true
+      '@mark1russell7/rigor-proxy':
+        optional: true
+      '@opentelemetry/api':
+        optional: true
+      '@opentelemetry/api-logs':
+        optional: true
+      '@opentelemetry/sdk-logs':
+        optional: true
+      '@opentelemetry/sdk-metrics':
+        optional: true
+      '@opentelemetry/sdk-trace-base':
+        optional: true
+      fast-check:
+        optional: true
+      ltx:
+        optional: true
 
   '@mark1russell7/service@0.8.20':
     resolution: {integrity: sha512-8yo1hu4MMXCdzRk43tSvB1xqb9MBgOqAmKisspOGszqsRCZVjdmSbZ1Hgli6RtE5jrF7I7eaGEQLHADnhxxHGQ==}
@@ -2117,6 +2156,10 @@ snapshots:
 
   '@mark1russell7/rigor-statistics@0.2.12':
     dependencies:
+      '@mark1russell7/rigor-generators': 0.2.0
+
+  '@mark1russell7/rigor-testkit@0.1.22(@mark1russell7/rigor-generators@0.2.0)':
+    optionalDependencies:
       '@mark1russell7/rigor-generators': 0.2.0
 
   '@mark1russell7/service@0.8.20(zod@4.6.7)':
