@@ -297,6 +297,9 @@ importers:
 
   packages/conventions:
     dependencies:
+      '@mark1russell7/files':
+        specifier: ^0.0.4
+        version: 0.0.4
       '@mark1russell7/text':
         specifier: ^0.0.13
         version: 0.0.13
@@ -310,9 +313,6 @@ importers:
       '@mark1russell7/cue':
         specifier: ^2.0.0
         version: 2.1.4
-      '@mark1russell7/files':
-        specifier: ^0.0.4
-        version: 0.0.4
       '@mark1russell7/site-pages':
         specifier: workspace:*
         version: link:../site-pages

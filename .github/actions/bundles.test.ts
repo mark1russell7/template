@@ -1,14 +1,15 @@
 // Tests the committed bundles of .github/actions/bundles (tsdown.actions.config.ts of the package conventions). Each
 // import of a bundle is a module of Node.js, so a step that runs a bundle runs no code of an installed dependency. Each
 // bundle that an action or a workflow names is in the folder. The bundle of the action select writes a record on a
-// fixture repository. scripts/workflows/private-names.test.ts starts the bundle private-names.mjs. The script
-// check:actions examines that each bundle is current.
+// fixture repository. scripts/workflows/private-names.test.ts starts the bundle private-names.mjs. The library bundle
+// files.mjs has its types in files.d.mts. The script check:actions examines that each bundle is current.
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { isBuiltin } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, it } from "node:test";
 
 const actions = import.meta.dirname;
@@ -55,6 +56,20 @@ describe("the bundles of the shared actions", () => {
         assert.ok(bundles.includes(match[1] ?? ""), `${action.name}/action.yml names ${match[1] ?? ""}, which is not in .github/actions/bundles`);
       }
     }
+  });
+
+  it("has each bundle that a script of an action imports, and the types of each library bundle", () => {
+    const scripts = readdirSync(actions, { recursive: true, encoding: "utf8" }).filter((path) => path.endsWith(".ts") && !path.startsWith("bundles"));
+    let imports = 0;
+    for (const path of scripts) {
+      for (const match of readFileSync(join(actions, path), "utf8").matchAll(/from "\.\.\/bundles\/([\w-]+)\.mjs"/g)) {
+        imports++;
+        const name = match[1] ?? "";
+        assert.ok(bundles.includes(`${name}.mjs`), `${path} imports ${name}.mjs, which is not in .github/actions/bundles`);
+        assert.ok(existsSync(join(folder, `${name}.d.mts`)), `${path} imports ${name}.mjs, which has no ${name}.d.mts`);
+      }
+    }
+    assert.ok(imports > 0, "No script of an action imports a bundle, so the test above reads nothing");
   });
 
   it("has each bundle that a workflow names", () => {
@@ -118,5 +133,19 @@ describe("the bundle select.mjs", () => {
     } finally {
       rmSync(temp, { recursive: true, force: true });
     }
+  });
+});
+
+describe("the library bundle files.mjs", () => {
+  it("gives the glob functions of @mark1russell7/files, with the types of each export", async () => {
+    const files = (await import(pathToFileURL(join(folder, "files.mjs")).href)) as {
+      globToRegExp: (glob: string) => RegExp;
+      matchesGlob: (path: string, glob: string) => boolean;
+    };
+    assert.ok(files.globToRegExp("**/test/**").test("packages/a/test/x.ts"));
+    assert.ok(files.globToRegExp("{apps,libs}/[ab].ts").test("libs/b.ts"));
+    assert.ok(!files.matchesGlob("packages/a/b", "packages/*"));
+    const types = readFileSync(join(folder, "files.d.mts"), "utf8");
+    for (const name of Object.keys(files)) assert.match(types, new RegExp(`export declare function ${name}\\(`), `files.d.mts has no type of ${name}`);
   });
 });

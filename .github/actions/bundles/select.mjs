@@ -29,7 +29,7 @@ function getDescendants(nodes, id) {
 }
 
 /** The characters of a regular expression that a glob character escapes. */
-const SPECIAL$1 = /* @__PURE__ */ new Set([..."\\^$.|+()[]{}"]);
+const SPECIAL = /* @__PURE__ */ new Set([..."\\^$.|+()[]{}"]);
 /** This function gives the pattern with `/` and with no leading `./`. */
 function normalize(glob) {
 	return glob.replaceAll("\\", "/").replace(/^(?:\.\/)+/, "");
@@ -117,62 +117,18 @@ function source(glob, dot, start) {
 				continue;
 			}
 		}
-		out += SPECIAL$1.has(char) ? `\\${char}` : char;
+		out += SPECIAL.has(char) ? `\\${char}` : char;
 		index++;
 	}
 	return out;
 }
 /** This function gives a regular expression that matches a whole relative path with `/` for `glob`. */
-function globToRegExp$1(glob, options = {}) {
+function globToRegExp(glob, options = {}) {
 	return new RegExp(`^${source(normalize(glob), options.dot ?? true, true)}$`);
 }
 
 /** This function compares two strings by their code units, as the default sort does. */
 const byCode = (a, b) => a < b ? -1 : a > b ? 1 : 0;
-/** The characters that have a meaning in a regular expression. */
-const SPECIAL = /* @__PURE__ */ new Set([..."\\^$.|+()[]{}*?/"]);
-/**
-* This function gives a regular expression for a glob of `/` paths. `*` matches a part of one path
-* segment, `?` matches one character, `**` matches zero or more segments, and `{a,b}` matches one of
-* its parts. The function escapes each other special character.
-*/
-function globToRegExp(glob) {
-	let source = "";
-	let braces = 0;
-	for (let index = 0; index < glob.length; index++) {
-		const char = glob.charAt(index);
-		if (char === "/" && glob.slice(index + 1) === "**") {
-			source += "(?:/.*)?";
-			break;
-		}
-		if (char === "*" && glob.charAt(index + 1) === "*") {
-			const atStart = index === 0 || glob.charAt(index - 1) === "/";
-			const after = glob.charAt(index + 2);
-			if (atStart && after === "/") {
-				source += "(?:[^/]+/)*";
-				index += 2;
-			} else if (atStart && after === "") {
-				source += ".*";
-				index += 1;
-			} else {
-				source += "[^/]*";
-				index += 1;
-			}
-		} else if (char === "*") source += "[^/]*";
-		else if (char === "?") source += "[^/]";
-		else if (char === "{") {
-			braces++;
-			source += "(?:";
-		} else if (char === "}" && braces > 0) {
-			braces--;
-			source += ")";
-		} else if (char === "," && braces > 0) source += "|";
-		else if (SPECIAL.has(char)) source += `\\${char}`;
-		else source += char;
-	}
-	if (braces > 0) throw new Error(`A glob with a "{" that has no "}": ${glob}`);
-	return new RegExp(`^${source}$`);
-}
 /** This function removes the `/` characters at the end of a path, with a loop in place of a regular expression. */
 function trimEndSlashes(path) {
 	let end = path.length;
@@ -436,11 +392,11 @@ function select(input) {
 	const prefix = root === "" ? "" : `${root}/`;
 	const global = (input.global ?? GLOBAL_FILES).map((rule) => ({
 		...rule,
-		re: globToRegExp$1(rule.glob)
+		re: globToRegExp(rule.glob)
 	}));
 	const repositoryGlobal = (input.repositoryGlobal ?? REPOSITORY_GLOBAL_FILES).map((rule) => ({
 		...rule,
-		re: globToRegExp$1(rule.glob)
+		re: globToRegExp(rule.glob)
 	}));
 	const ids = packages.map((pkg) => pkg.id);
 	const placed = [];
@@ -524,7 +480,7 @@ function select(input) {
 				packages: choice.packages
 			}
 		};
-		const patterns = job.paths.map((glob) => globToRegExp$1(glob));
+		const patterns = job.paths.map((glob) => globToRegExp(glob));
 		const hits = files.filter((file) => patterns.some((re) => re.test(file.path))).map((file) => file.path);
 		if (hits.length > 0) return {
 			...choice,

@@ -53,13 +53,13 @@
       },
       "home-package": {
         "generated": [
-          ".github/actions/bundles/*.mjs"
+          ".github/actions/bundles/**"
         ],
         "reason": "The script build:actions of conventions makes these bundles from TypeScript source that the rules examine. The script check:actions examines that each bundle is current."
       },
       "typed-scripts": {
         "generated": [
-          ".github/actions/bundles/*.mjs"
+          ".github/actions/bundles/**"
         ],
         "reason": "The script build:actions of conventions makes these bundles from TypeScript source that the rules examine. The script check:actions examines that each bundle is current."
       }

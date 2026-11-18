@@ -29,9 +29,17 @@ function packRule(line: string, index: number): PackRule {
   return { glob: line.slice(bangs).replace(/\/{2,}/g, "/"), include: bangs % 2 === 1, index };
 }
 
-/** This function gives the regular expression of a glob, as npm reads it: with no case, and `*` also matches a dot. */
+/** A regular expression that matches no text. */
+const NO_PATH = /(?!)/;
+
+/**
+ * This function gives the regular expression of a glob, as npm reads it: with no case, and `*` also matches a dot.
+ * The library minimatch keeps a leading `./` as a segment `.`, and no path of a package has that segment. Thus such a
+ * glob matches nothing. The glob function of `@mark1russell7/files` removes a leading `./`, so this function does not
+ * give it the glob.
+ */
 function packRegExp(glob: string): RegExp {
-  return new RegExp(globToRegExp(glob).source, "i");
+  return glob.startsWith("./") ? NO_PATH : new RegExp(globToRegExp(glob).source, "i");
 }
 
 /**

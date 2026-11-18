@@ -6,6 +6,7 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, realpathSync } from "node:fs";
 import { dirname, posix } from "node:path";
 import { fileURLToPath } from "node:url";
+import { globToRegExp as filesGlobToRegExp } from "../bundles/files.mjs";
 
 /** A version bump of a changeset. */
 export type Bump = "patch" | "minor" | "major";
@@ -75,26 +76,11 @@ const BUMPS: readonly Bump[] = ["patch", "minor", "major"];
 
 const isBump = (value: string): value is Bump => (BUMPS as readonly string[]).includes(value);
 
-/** A glob with "**", "*" and "?" as a RegExp of the whole path. */
-export function globToRegExp(glob: string): RegExp {
-  let out = "";
-  for (let i = 0; i < glob.length; i++) {
-    const c = glob[i] ?? "";
-    if (c === "*" && glob[i + 1] === "*") {
-      // "**/" matches zero or more folders
-      if (glob[i + 2] === "/") {
-        out += "(?:.*/)?";
-        i += 2;
-      } else {
-        out += ".*";
-        i += 1;
-      }
-    } else if (c === "*") out += "[^/]*";
-    else if (c === "?") out += "[^/]";
-    else out += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
-  }
-  return new RegExp(`^${out}$`);
-}
+// The glob function of @mark1russell7/files, from the bundle of the shared actions: the action starts with no install.
+// The export takes only the glob, so that list.map(globToRegExp) does not give the index as the options of the home
+// function. scripts/release/check-plan.ts imports it from this file.
+const globOfOneArgument = (glob: string): RegExp => filesGlobToRegExp(glob);
+export { globOfOneArgument as globToRegExp };
 
 /** The packages of a changeset file: { name: bump }. An empty front matter is a changeset with no release. */
 export function parseChangeset(text: string): Record<string, Bump> {
@@ -178,7 +164,7 @@ export function evaluate({
 
   const errors: string[] = [];
   const notes: string[] = [];
-  const ignored = ignore.map(globToRegExp);
+  const ignored = ignore.map(globOfOneArgument);
   const published = packages.filter((p) => !p.private && p.name);
   const byName = new Map(packages.map((p) => [p.name, p]));
   // The deepest package folder that holds the file. A file of a private package belongs to no published package.
