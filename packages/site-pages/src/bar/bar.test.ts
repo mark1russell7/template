@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { applyBar, barHtml, barPages, currentLink, htmlFiles, injectBar, pagePath, parsePages, runBarCli, type BarOptions } from "./bar.ts";
+import { applyBar, barHtml, barPages, currentLink, htmlFiles, injectBar, pagePath, parsePages, runBarCli, takeTools, type BarOptions } from "./bar.ts";
 
 const options: BarOptions = {
   repository: "owner/packing",
@@ -103,6 +103,38 @@ describe("injectBar", () => {
 
   it("changes no page with no body", () => {
     expect(injectBar("<svg></svg>", barHtml(options, ""))).toBe("<svg></svg>");
+  });
+
+  it("has an empty slot for the controls of the site, and ends with its marker", () => {
+    const html = injectBar(page, barHtml(options, ""));
+    expect(html).toContain('</ul><div class="spb-tools" data-site-bar-tools></div></div></nav><!--/site-bar-->');
+  });
+
+  it("moves each control of the site into the slot, in order, and keeps them when it starts two times", () => {
+    const theme = '<button id="theme" class="theme" type="button" data-site-bar-tool aria-label="Change the theme"><span aria-hidden="true">◐</span></button>';
+    const lang = '<a href="./fr/" data-site-bar-tool="">FR $& $1</a>';
+    const own = `<html><head></head><body>\n<header class="top">${theme}</header>\n<main>${lang}<p>x</p></main></body></html>`;
+    const once = injectBar(own, barHtml(options, ""));
+    expect(once).toContain(`<div class="spb-tools" data-site-bar-tools>${theme}${lang}</div></div></nav><!--/site-bar-->`);
+    expect(once).toContain('<header class="top"></header>\n<main><p>x</p></main>');
+    expect(once.match(/data-site-bar-tool\b(?!s)/g)).toHaveLength(2);
+    expect(injectBar(once, barHtml(options, ""))).toBe(once);
+    expect(injectBar(once, barHtml(options, "releases/"))).toContain(`${theme}${lang}</div>`);
+  });
+});
+
+describe("takeTools", () => {
+  it("leaves an element that holds an element with the same tag, and an element with only a similar attribute", () => {
+    const nested = '<div data-site-bar-tool><div>a</div></div>';
+    const similar = '<div data-site-bar-tools></div><span data-site-bar-toolbox>b</span>';
+    expect(takeTools(`${nested}${similar}`)).toEqual({ html: `${nested}${similar}`, tools: [] });
+  });
+
+  it("takes an element with the attribute in any place of its start tag, also with a value", () => {
+    expect(takeTools('<p>a</p><select name="t" data-site-bar-tool="theme"><option>x</option></select>')).toEqual({
+      html: "<p>a</p>",
+      tools: ['<select name="t" data-site-bar-tool="theme"><option>x</option></select>'],
+    });
   });
 });
 
