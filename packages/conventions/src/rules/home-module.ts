@@ -98,7 +98,7 @@ export const homeModule: Rule = {
   reason:
     "A package that imports the module of a home writes its own copy of the code of the home: the pragmas, the migrations, the transactions and the recovery. On 2026-11-15, codeatlas and the SQLite procedures of client opened node:sqlite with their own copies, while @mark1russell7/sqlite was on npm. A move to the home ends a copy, and this rule stops a new copy. The check examines only the lines that a change adds, so the imports that exist do not break.",
   fix: "Use the functions of the home. If the home does not have the function, add it to the home in a pull request of the home repository, then use it. An `import type` of the module does not break. A real exception (for example, a test that writes a broken file) goes in `ignore` with a reason.",
-  sources: [{ repo: "private", rule: "home-module", doc: "docs/STRATEGY.md (2026-11-15, a gate holds each move to a home)" }],
+  sources: [{ repo: "private", rule: "home-module", doc: "a decision of 2026-11-15: a gate holds each move to a home" }],
   options: {
     scope: {
       type: "string",

@@ -1,7 +1,7 @@
 // The private name list, the command pre-push and the command hook install, on fixture repositories.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, statSync, writeFileSync, existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import {
   firstNameMatch,
@@ -12,6 +12,7 @@ import {
   isCommonUse,
   lineNameHit,
   lineNameHits,
+  mergePrivateNames,
   nameMatches,
   NO_READ_LINE,
   parsePrivateNames,
@@ -20,6 +21,7 @@ import {
   prePush,
   PrivateNameListError,
   privateNamesFile,
+  privateNamesFiles,
   privatePatterns,
   privateTextBreaks,
   runCli,
@@ -295,6 +297,31 @@ describe("the private text core", () => {
     expect(privateNamesFile({ CONVENTIONS_PRIVATE_NAMES_FILE: " " }, () => undefined)).toBeUndefined();
   });
 
+  it("finds each path of the lists in the environment, else each value of the git configuration", () => {
+    const asked: (readonly string[])[] = [];
+    const fake = (args: readonly string[]): string | undefined => {
+      asked.push(args);
+      return "/names/first.json\n/names/second.json\n";
+    };
+    expect(privateNamesFiles({ CONVENTIONS_PRIVATE_NAMES_FILE: " /a.json ; /b.json;" }, fake, ";")).toEqual(["/a.json", "/b.json"]);
+    expect(privateNamesFiles({ CONVENTIONS_PRIVATE_NAMES_FILE: "/one.json" }, fake, ";")).toEqual(["/one.json"]);
+    expect(asked).toEqual([]);
+    expect(privateNamesFiles({ CONVENTIONS_PRIVATE_NAMES_FILE: " ; " }, fake, ";")).toEqual(["/names/first.json", "/names/second.json"]);
+    expect(asked).toEqual([["config", "--type=path", "--get-all", "conventions.privateNamesFile"]]);
+    expect(privateNamesFiles({}, () => undefined)).toEqual([]);
+  });
+
+  it("merges the lists in order, and refuses an id that two lists have", () => {
+    const other = parsePrivateNames(JSON.stringify({ names: [{ id: "zorbit", project: "The made-up Zorbit tool", seeds: ["zorbit"], patterns: ["\\bzorbit\\b"] }] }));
+    const merged = mergePrivateNames([list, other]);
+    expect(merged.names.map((rule) => rule.id)).toEqual(["acme-app", "probe", "zorbit"]);
+    expect(merged.allow).toEqual(list.allow);
+    expect(lineNameHit(merged, "The zorbit runs.")?.name).toBe(3);
+    expect(mergePrivateNames([])).toEqual({ names: [], allow: [] });
+    expect(() => mergePrivateNames([list, list])).toThrow(PrivateNameListError);
+    expect(() => mergePrivateNames([other, list, other])).toThrow("name 4 of the private name list (list 3): the id is also the id of a name of an earlier list");
+  });
+
   it("reads the added lines of a patch by the counts of the hunks", () => {
     const patch = ["diff --git a/x.md b/x.md", "--- a/x.md", "+++ b/x.md", "@@ -2,1 +2,3 @@", "-old", "+new", "+++ not a header", "+three", "@@ -9 +11 @@", "-a", "+b"].join("\n");
     expect(addedRuns(patch)).toEqual([
@@ -423,6 +450,35 @@ describe("conventions pre-push", () => {
     git(root, "config", "conventions.privateNamesFile", listFile());
     const head = commit(root, { "notes.md": `${PROBE}\n` }, "second");
     expect(push(root, `refs/heads/main ${head} refs/heads/main ${base}\n`, {}).code).toBe(1);
+  });
+
+  it("reads each list that the settings name, and stops at a name of the second list", () => {
+    const second = listFile(JSON.stringify({ names: [{ id: "zorbit", project: "The made-up Zorbit tool", seeds: ["zorbit"], patterns: ["\\bzorbit\\b"] }] }));
+    const { root, base } = repository();
+    const head = commit(root, { "notes.md": "The zorbit runs.\n" }, "second");
+    const input = `refs/heads/main ${head} refs/heads/main ${base}\n`;
+    expect(push(root, input, { CONVENTIONS_PRIVATE_NAMES_FILE: listFile() }).code).toBe(0);
+    const both = push(root, input, { CONVENTIONS_PRIVATE_NAMES_FILE: [listFile(), second].join(delimiter) });
+    expect(both.code).toBe(1);
+    expect(both.stderr).toContain(`commit ${head.slice(0, 12)} notes.md:1  ${named(3)}`);
+    expect(both.stderr).not.toContain("zorbit");
+    git(root, "config", "conventions.privateNamesFile", listFile());
+    git(root, "config", "--add", "conventions.privateNamesFile", second);
+    expect(push(root, input, {}).code).toBe(1);
+  });
+
+  it("stops the push when a second list does not exist, or has an id of the first list", () => {
+    const { root, base } = repository();
+    const head = commit(root, { "notes.md": "2\n" }, "second");
+    const input = `refs/heads/main ${head} refs/heads/main ${base}\n`;
+    const missing = push(root, input, { CONVENTIONS_PRIVATE_NAMES_FILE: [listFile(), join(temp, "missing-second.json")].join(delimiter) });
+    expect(missing.code).toBe(1);
+    expect(missing.stderr).toBe("conventions pre-push: Cannot read private name list 2 of the 2 that CONVENTIONS_PRIVATE_NAMES_FILE names: the file does not exist. Correct the setting or the file. The push stops.\n");
+    const twice = push(root, input, { CONVENTIONS_PRIVATE_NAMES_FILE: [listFile(), listFile()].join(delimiter) });
+    expect(twice.code).toBe(1);
+    expect(twice.stderr).toBe(
+      "conventions pre-push: The private name lists that CONVENTIONS_PRIVATE_NAMES_FILE names are not valid together: name 3 of the private name list (list 2): the id is also the id of a name of an earlier list. Give each name its own id. The push stops.\n",
+    );
   });
 
   it("stops the push when the list that the settings name does not exist", () => {

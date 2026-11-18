@@ -345,7 +345,7 @@ export const typedFiles: Rule = {
     {
       repo: "private",
       rule: "fail-closed",
-      doc: "docs/STRATEGY.md (2026-10-30, gates and probes fail closed)",
+      doc: "a decision of 2026-10-30: gates and probes fail closed",
     },
   ],
   options: {
