@@ -5,7 +5,8 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { type CheckReport, annotations, checkCalls, confirmed, fails, newProblems, outcome, shardOf, siteTarget, summaryLines } from "./site-compare.ts";
+import { escapeMarkdown } from "@mark1russell7/text";
+import { type CheckReport, annotations, checkCalls, compareSites, confirmed, fails, newProblems, outcome, shardOf, siteTarget, summaryLines } from "./site-compare.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -45,9 +46,11 @@ describe("outcome", () => {
   const clean = report(["/", 360, "light", []]);
   const bad = report(["/", 360, "light", ["overflow 12 px"]]);
 
-  it("is a no read when the check of the base gives no report", () => {
-    assert.equal(outcome("x", { next: clean }).kind, "unread");
-    assert.equal(outcome("x", {}).kind, "unread");
+  it("is a no read that fails when the check of the base gives no report", () => {
+    for (const result of [outcome("x", { next: clean }), outcome("x", {})]) {
+      assert.equal(result.kind, "unread");
+      assert.equal(fails(result), true);
+    }
   });
 
   it("fails when only the check of the base gives a report", () => {
@@ -173,17 +176,76 @@ describe("the summary", () => {
 
   it("counts the sites that fail, and escapes each text of a site", () => {
     const lines = summaryLines("1 of 4", outcomes);
-    assert.equal(lines[0], "## The compare of the site check, shard 1 of 4: 1 of 5 sites fail");
+    assert.equal(lines[0], "## The compare of the site check, shard 1 of 4: 2 of 5 sites fail");
     assert.ok(lines.includes("| b\\|c | **new problems** | 1 |"));
     assert.ok(lines.includes("- \\/ 360 light: overflow \\*12\\* px"));
   });
 
-  it("gives an error for a confirmed problem, and a warning for a problem of one pair and for a no read", () => {
+  it("names each site that it cannot read, with its reason, and a site with no site check does not fail", () => {
+    const lines = summaryLines("1 of 4", outcomes);
+    assert.ok(lines.includes("| e | **no read** | 0 |"));
+    assert.ok(lines.includes("### e: **no read**"));
+    assert.ok(lines.includes("- the check of the base gave no report"));
+    assert.ok(lines.includes("| f | no site check | 0 |"));
+    assert.ok(!lines.some((line) => line.startsWith("### f")));
+  });
+
+  it("gives an error for a confirmed problem and for a no read, and a warning for a problem of one pair", () => {
     const lines = annotations(outcomes);
     assert.equal(lines.length, 3);
     assert.match(lines[0] ?? "", /^::error title=Site check compare::b\|c \/ 360 light: overflow \*12\* px/);
     assert.match(lines[1] ?? "", /^::warning title=Site check compare::d \/ 400 dark: console\.error: 50%25/);
-    assert.match(lines[2] ?? "", /^::warning title=Site check compare::e: no read/);
+    assert.match(lines[2] ?? "", /^::error title=Site check compare::e: no read, because the check of the base gave no report/);
+  });
+});
+
+describe("compareSites", () => {
+  const clean: CheckReport = { views: [{ page: "/", width: 360, scheme: "light", problems: [] }] };
+  const own = "jobs:\n  build:\n    steps:\n      - uses: mark1russell7/template/.github/actions/site-check@v1\n        with:\n          out: site\n";
+  const site = { url: "https://example.github.io/site/", files: { config: undefined, workflows: [own] } };
+  const owners = { a: "owner", b: "owner", c: "owner", off: "owner" };
+
+  it("reads the site config of each site before the first check", async () => {
+    const steps: string[] = [];
+    await compareSites(["a", "b", "c"], owners, {
+      read: (_owner, repo) => {
+        steps.push(`read ${repo}`);
+        return Promise.resolve(site);
+      },
+      check: (side, target) => {
+        steps.push(`check ${side} ${target.repo}`);
+        return clean;
+      },
+    });
+    assert.deepEqual(steps, ["read a", "read b", "read c", "check base a", "check next a", "check base b", "check next b", "check base c", "check next c"]);
+  });
+
+  it("fails for a site whose config read fails, and names the site with its error and its cause", async () => {
+    // fetch of Node.js throws this form when a server closed the connection
+    const closed = new TypeError("fetch failed", { cause: new Error("other side closed") });
+    const outcomes = await compareSites(["a", "b", "off", "x"], owners, {
+      read: (_owner, repo) => {
+        if (repo === "b") return Promise.reject(closed);
+        if (repo === "off") return Promise.resolve({ ...site, files: { config: undefined, workflows: ["jobs: {}\n"] } });
+        return Promise.resolve(site);
+      },
+      check: () => clean,
+    });
+    assert.deepEqual(
+      outcomes.map((each) => [each.repo, each.kind, fails(each)]),
+      [
+        ["a", "same", false],
+        ["b", "unread", true],
+        ["off", "off", false],
+        ["x", "unread", true],
+      ],
+    );
+    assert.deepEqual(outcomes[1], { repo: "b", kind: "unread", reason: "the read of its site config failed: fetch failed (other side closed)" });
+    assert.deepEqual(outcomes[3], { repo: "x", kind: "unread", reason: "the job sites gave no owner for it" });
+    const lines = summaryLines("1 of 1", outcomes);
+    assert.equal(lines[0], "## The compare of the site check, shard 1 of 1: 2 of 4 sites fail");
+    assert.ok(lines.includes("### b: **no read**"));
+    assert.ok(lines.includes(`- ${escapeMarkdown("the read of its site config failed: fetch failed (other side closed)")}`));
   });
 });
 
