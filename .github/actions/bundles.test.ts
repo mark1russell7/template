@@ -1,7 +1,8 @@
 // Tests the committed bundles of .github/actions/bundles (tsdown.actions.config.ts of the package conventions). Each
-// import of a bundle is a module of Node.js, so an action that runs a bundle runs no code of an installed dependency.
-// Each bundle that an action names is in the folder. The bundle of the action select writes a record on a fixture
-// repository. The script check:actions examines that each bundle is current.
+// import of a bundle is a module of Node.js, so a step that runs a bundle runs no code of an installed dependency. Each
+// bundle that an action or a workflow names is in the folder. The bundle of the action select writes a record on a
+// fixture repository. scripts/workflows/private-names.test.ts starts the bundle private-names.mjs. The script
+// check:actions examines that each bundle is current.
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -52,6 +53,15 @@ describe("the bundles of the shared actions", () => {
       if (!existsSync(file)) continue;
       for (const match of readFileSync(file, "utf8").matchAll(/\.\.\/bundles\/([\w-]+\.mjs)/g)) {
         assert.ok(bundles.includes(match[1] ?? ""), `${action.name}/action.yml names ${match[1] ?? ""}, which is not in .github/actions/bundles`);
+      }
+    }
+  });
+
+  it("has each bundle that a workflow names", () => {
+    const workflows = join(actions, "..", "workflows");
+    for (const name of readdirSync(workflows).filter((file) => file.endsWith(".yml"))) {
+      for (const match of readFileSync(join(workflows, name), "utf8").matchAll(/actions\/bundles\/([\w-]+\.mjs)/g)) {
+        assert.ok(bundles.includes(match[1] ?? ""), `${name} names ${match[1] ?? ""}, which is not in .github/actions/bundles`);
       }
     }
   });

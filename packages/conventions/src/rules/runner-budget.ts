@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { cronLines } from "@mark1russell7/site-pages";
 import { byCode } from "../workspace.ts";
-import { replaceLine, type Break, type Edit, type Rule } from "../rule.ts";
+import { repositoryOfRemote, replaceLine, type Break, type Edit, type Rule } from "../rule.ts";
 import { WORKFLOW, blockEnd, childIndent, indentOf, keyValue, workflowLines } from "../workflow.ts";
 
 /**
@@ -21,20 +21,6 @@ export function scheduleMinute(repository: string, file: string): number {
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
   return (hash % 59) + 1;
-}
-
-/** This function gives `owner/name` from a git remote URL, or undefined for a URL that is not of GitHub. */
-export function repositoryOfRemote(url: string): string | undefined {
-  const text = url.trim();
-  for (const prefix of ["git@github.com:", "ssh://git@github.com/", "https://github.com/", "http://github.com/", "git+https://github.com/"]) {
-    if (!text.startsWith(prefix)) continue;
-    let rest = text.slice(prefix.length);
-    if (rest.endsWith("/")) rest = rest.slice(0, -1);
-    if (rest.endsWith(".git")) rest = rest.slice(0, -4);
-    const parts = rest.split("/");
-    return parts.length === 2 && parts.every((part) => part !== "") ? rest : undefined;
-  }
-  return undefined;
 }
 
 /** This function tells if a workflow is a shared workflow (`on: workflow_call`). Its caller gives the concurrency group. */

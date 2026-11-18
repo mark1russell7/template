@@ -26,4 +26,7 @@ const bundle = (name: string, entry: string, packages: string[]) =>
     banner: { js: `// The bundle of ${entry} of @mark1russell7/conventions. Do not edit: pnpm build:actions writes it.` },
   });
 
-export default [bundle("select", "src/select-main.ts", ["@mark1russell7/collections", "@mark1russell7/files"])];
+export default [
+  bundle("select", "src/select-main.ts", ["@mark1russell7/collections", "@mark1russell7/files"]),
+  bundle("private-names", "src/private-names-main.ts", []),
+];

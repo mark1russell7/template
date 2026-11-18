@@ -222,6 +222,20 @@ export function runGit(root: string, args: readonly string[]): string | undefine
   return result.stdout;
 }
 
+/** This function gives `owner/name` from a git remote URL, or undefined for a URL that is not of GitHub. */
+export function repositoryOfRemote(url: string): string | undefined {
+  const text = url.trim();
+  for (const prefix of ["git@github.com:", "ssh://git@github.com/", "https://github.com/", "http://github.com/", "git+https://github.com/"]) {
+    if (!text.startsWith(prefix)) continue;
+    let rest = text.slice(prefix.length);
+    if (rest.endsWith("/")) rest = rest.slice(0, -1);
+    if (rest.endsWith(".git")) rest = rest.slice(0, -4);
+    const parts = rest.split("/");
+    return parts.length === 2 && parts.every((part) => part !== "") ? rest : undefined;
+  }
+  return undefined;
+}
+
 /** This function tells if `file` exists in the folder `dir`. */
 export const hasFile = (dir: string, file: string): boolean => existsSync(join(dir, file));
 

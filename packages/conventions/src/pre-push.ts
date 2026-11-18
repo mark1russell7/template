@@ -5,14 +5,13 @@
  */
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { parseConfig } from "./config.ts";
-import { isCi, matchesAny, type Break, type Manifest } from "./rule.ts";
-import { RULES } from "./rules/index.ts";
-import { repositoryOfRemote } from "./rules/runner-budget.ts";
+import { parseRuleConfig } from "./config.ts";
+import { isCi, matchesAny, repositoryOfRemote, runGit, type Break, type Manifest } from "./rule.ts";
 import { mergePrivateNames, parsePrivateNames, PrivateNameListError, type PrivateNameList } from "./private-names.ts";
 import { pullRequestOfRun } from "./pull-request.ts";
 import {
   invalidPatternBreaks,
+  noLocalPaths,
   PRIVATE_NAMES_FILE_CONFIG,
   PRIVATE_NAMES_FILE_VARIABLE,
   privateNamesFiles,
@@ -70,13 +69,13 @@ interface HomeSettings {
 
 /**
  * This function reads the settings of the rule `no-local-paths` in the root `package.json`: the state, the permitted names
- * and the globs of `ignore` and `generated`. They apply only to the home folders. A private pattern always counts.
+ * and the globs of `ignore` and `generated`. They apply only to the home folders. A private pattern always counts. The
+ * function reads only the entry of `no-local-paths`, so the bundle `private-names.mjs` does not hold the other rules.
  */
 function homeSettings(root: string, readFile: (path: string) => string): HomeSettings {
   try {
     const manifest = JSON.parse(readFile(join(root, "package.json"))) as Manifest;
-    const config = parseConfig(manifest["conventions"], RULES).rules["no-local-paths"];
-    if (config === undefined) return { on: true, allow: [], ignore: [] };
+    const config = parseRuleConfig(manifest["conventions"], noLocalPaths);
     const allow = config.options["allow"];
     return { on: config.off === undefined, allow: Array.isArray(allow) ? [...allow] : [], ignore: [...config.ignore, ...(config.generated ?? [])] };
   } catch {
@@ -359,6 +358,50 @@ export function prePush(options: PrePushOptions, io: Pick<CliIo, "stderr">): num
   out.push(change ? "Remove each text from the commits (git commit --amend, or git rebase) and from the pull request. Then push again." : "Change the commits (git commit --amend, or git rebase), and push again.");
   io.stderr(`${out.join("\n")}\n`);
   return 1;
+}
+
+/** The arguments of the command `pre-push`. */
+export interface PrePushArgs {
+  /** The name of the remote. A check in CI (`base`) uses `origin`. */
+  readonly remote: string;
+  readonly url?: string;
+  readonly base?: string;
+  readonly head?: string;
+}
+
+/**
+ * This function reads the arguments of the command `pre-push`. The git hook gives the name of the remote and its URL.
+ * A check in CI gives `--base <ref>` and, as an option, `--head <ref>`. The function gives undefined for other arguments.
+ */
+export function parsePrePushArgs(args: readonly string[]): PrePushArgs | undefined {
+  const positional: string[] = [];
+  const range: { base?: string; head?: string } = {};
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index] ?? "";
+    if (arg === "--base" || arg === "--head") {
+      const value = args[++index];
+      if (value === undefined || value === "" || value.startsWith("-")) return undefined;
+      range[arg === "--base" ? "base" : "head"] = value;
+    } else if (arg.startsWith("-")) return undefined;
+    else positional.push(arg);
+  }
+  const { base, head } = range;
+  if (base !== undefined) return positional.length > 0 ? undefined : { remote: "origin", base, ...(head === undefined ? {} : { head }) };
+  const [remote, url] = positional;
+  if (remote === undefined || head !== undefined || positional.length > 2) return undefined;
+  return { remote, ...(url === undefined ? {} : { url }) };
+}
+
+/**
+ * This function starts the command `pre-push` in the root of the git working tree of `io.cwd`. The bin and the bundle
+ * `private-names.mjs` of the shared actions use it. Only the git hook reads `io.stdin`.
+ */
+export function runPrePushArgs(args: PrePushArgs, io: Pick<CliIo, "cwd" | "env" | "stderr" | "stdin">): number {
+  const top = runGit(io.cwd, ["rev-parse", "--show-toplevel"])?.trim() ?? "";
+  const root = top === "" ? io.cwd : top;
+  const { remote, url, base, head } = args;
+  const where = { remote, ...(url === undefined ? {} : { url }), ...(base === undefined ? {} : { base }), ...(head === undefined ? {} : { head }) };
+  return prePush({ ...where, input: base === undefined ? (io.stdin ?? "") : "", env: io.env, root, git: (gitArgs) => runGit(root, gitArgs) }, io);
 }
 
 /** The marker line of the hook that `conventions hook install` writes. The command rewrites only a hook with this line. */
