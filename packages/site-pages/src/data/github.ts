@@ -266,19 +266,46 @@ function compareCommit(value: unknown): CompareCommit {
 
 /**
  * This function follows the first-parent line of `commits` from its tip. `commits` are the commits of a branch that a tag does
- * not contain. The function gives the commit date and the first parent of the oldest commit of that line. The tip is the one
- * commit that is not a parent of another commit of the list. The function gives undefined for no commit, and null when the list
- * has no single tip.
+ * not contain. The function gives the commits of that line, the tip first and the oldest last. The tip is the one commit that is
+ * not a parent of another commit of the list. The function gives an empty list for no commit, and null when the list has no
+ * single tip.
  */
-function oldestFirstParent(commits: readonly CompareCommit[]): { date: string; parent: string } | undefined | null {
-  if (commits.length === 0) return undefined;
+function firstParentLine(commits: readonly CompareCommit[]): CompareCommit[] | null {
+  if (commits.length === 0) return [];
   const bySha = new Map(commits.map((commit) => [commit.sha, commit]));
   const parents = new Set(commits.flatMap((commit) => commit.parents));
   const tips = commits.filter((commit) => !parents.has(commit.sha));
   if (tips.length !== 1 || tips[0] === undefined) return null;
-  let line: CompareCommit = tips[0];
-  for (let next = bySha.get(line.parents[0] ?? ""); next !== undefined; next = bySha.get(next.parents[0] ?? "")) line = next;
-  return { date: line.date, parent: line.parents[0] ?? "" };
+  const line: CompareCommit[] = [tips[0]];
+  for (let next = bySha.get(tips[0].parents[0] ?? ""); next !== undefined; next = bySha.get(next.parents[0] ?? "")) line.push(next);
+  return line;
+}
+
+/** GitHub lists at most this many files of one comparison. A list of this length can be cut. */
+const COMPARE_FILES = 300;
+
+/** The most commits of the first-parent line that `githubReleaseLag` reads one at a time for the option `paths`. */
+const COMMIT_READS = 100;
+
+/** This function gives the paths of the files of a comparison of GitHub. A renamed file gives its new path and its old path. */
+function filePaths(files: readonly unknown[]): string[] {
+  return files.flatMap((file) => [text(object(file)["filename"]), text(object(file)["previous_filename"])].filter((path) => path !== ""));
+}
+
+/**
+ * This function tells if a file is in the entries of the option `paths` of `githubReleaseLag`. An entry is a file or a folder of
+ * the repository, and an entry that starts with `!` takes its files out. The last entry that matches a file decides, as in a
+ * `.gitignore` file. A file that no entry matches is not in the paths.
+ */
+function inPaths(paths: readonly string[], file: string): boolean {
+  let found = false;
+  for (const entry of paths) {
+    const out = entry.startsWith("!");
+    const raw = (out ? entry.slice(1) : entry).replace(/^(?:\.\/|\/)+/, "").replace(/\/+$/, "");
+    const path = raw === "." ? "" : raw;
+    if (path === "" || file === path || file.startsWith(`${path}/`)) found = !out;
+  }
+  return found;
 }
 
 /**
@@ -295,11 +322,21 @@ function oldestFirstParent(commits: readonly CompareCommit[]): { date: string; p
  * that is not on that line gives `{ available: false, reason }`. So a merge commit counts at the time of the merge, not at the older
  * dates of the commits that it brings. A commit that lands after the tag and before the release is published counts, because it
  * is not in the release. The time of the release does not decide.
+ *
+ * The option `paths` counts only the commits that change a file in the paths, for example the folders of the packages that a
+ * release publishes. An entry is a file or a folder, and an entry that starts with `!` takes its files out. The last entry that
+ * matches a file decides. Then the age is that of the oldest commit of the line that changes such a file. When no file of the
+ * comparison is in the paths, the age is 0, with no more requests. Else the function reads the commits of the line one at a
+ * time, the oldest first, at most 100. It stops at the first commit that changes a file in the paths. A commit that a later
+ * commit reverts still counts while the branch has another change in the paths. Paths with no entry that adds files give
+ * `{ available: false, reason }`. So does a commit that changes 300 files or more with no file in the paths, because GitHub
+ * lists only 300 files of a comparison.
  */
 export async function githubReleaseLag(
-  options: GitHubOptions & { tagPrefix: string; branch?: string; endpoint?: string; maxPages?: number; now?: string },
+  options: GitHubOptions & { tagPrefix: string; branch?: string; endpoint?: string; maxPages?: number; now?: string; paths?: readonly string[] },
 ): Promise<GitHubReleaseLag> {
-  const { owner, repo, token = "", tagPrefix, branch = "main", endpoint = GITHUB_API, timeoutMs = 15_000 } = options;
+  const { owner, repo, token = "", tagPrefix, branch = "main", endpoint = GITHUB_API, timeoutMs = 15_000, paths } = options;
+  if (paths !== undefined && !paths.some((entry) => !entry.startsWith("!"))) return { available: false, reason: "the option paths has no entry that adds files" };
   const now = options.now ?? new Date().toISOString().replace(/\.\d+Z$/, "Z");
   const wanted = (release: GitHubRelease): boolean => !release.prerelease && release.tag.startsWith(tagPrefix);
   const releases = await readReleasePages(options, wanted);
@@ -314,6 +351,7 @@ export async function githubReleaseLag(
     const commits: CompareCommit[] = [];
     let ahead = 0;
     let base = "";
+    let range: unknown;
     for (let page = 0; url !== null; page++) {
       if (page === COMPARE_PAGES) return { available: false, reason: `the branch has more than ${COMPARE_PAGES * 100} commits after ${release.tag}` };
       const response: Response = await read(url);
@@ -327,14 +365,26 @@ export async function githubReleaseLag(
         if (status !== "ahead" && status !== "identical") return { available: false, reason: `the tag ${release.tag} is not on ${branch} (the comparison is ${status || "unknown"})` };
         ahead = typeof body["ahead_by"] === "number" ? body["ahead_by"] : 0;
         base = text(object(body["merge_base_commit"])["sha"]);
+        range = body["files"];
       }
       for (const value of listed) commits.push(compareCommit(value));
       url = linkedPage(response.headers.get("link"), "next");
     }
     if (commits.length < ahead) return { available: false, reason: `GitHub listed ${commits.length} of the ${ahead} commits after ${release.tag}` };
-    const oldest = oldestFirstParent(commits);
-    if (oldest === null) return { available: false, reason: `the commits after ${release.tag} have no single tip` };
-    if (oldest !== undefined && oldest.parent !== base) return { available: false, reason: `the tag ${release.tag} is not on the first-parent line of ${branch}` };
+    const line = firstParentLine(commits);
+    if (line === null) return { available: false, reason: `the commits after ${release.tag} have no single tip` };
+    const last = line.at(-1);
+    if (last !== undefined && (last.parents[0] ?? "") !== base) return { available: false, reason: `the tag ${release.tag} is not on the first-parent line of ${branch}` };
+    let oldest = last;
+    if (paths !== undefined) {
+      const found = await oldestInPaths(line, range, paths, release.tag, async (from, to) => {
+        const response = await read(`${endpoint}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/compare/${encodeURIComponent(from)}...${encodeURIComponent(to)}?per_page=1`);
+        if (!response.ok) return { reason: `GitHub answered with HTTP ${response.status} for the commit ${to.slice(0, 7)}` };
+        return { files: object(await response.json())["files"] };
+      });
+      if (found !== undefined && "reason" in found) return { available: false, reason: found.reason };
+      oldest = found;
+    }
     if (oldest?.date === "") return { available: false, reason: "the oldest commit has no date" };
     const value = releaseLagOf(oldest?.date, now);
     if (!Number.isFinite(value)) return { available: false, reason: "the time of the read is not a date" };
@@ -342,6 +392,34 @@ export async function githubReleaseLag(
   } catch (error) {
     return failure(error, timeoutMs);
   }
+}
+
+/**
+ * This function gives the oldest commit of a first-parent line that changes a file in `paths`. It gives undefined when no commit
+ * of the line changes one. `line` has the tip first, and `range` is the list of files of the comparison of the tag with the tip.
+ * `files` reads the list of files of one commit against its first parent. The function gives a reason when it cannot tell.
+ */
+async function oldestInPaths(
+  line: readonly CompareCommit[],
+  range: unknown,
+  paths: readonly string[],
+  tag: string,
+  files: (from: string, to: string) => Promise<{ files: unknown } | { reason: string }>,
+): Promise<CompareCommit | undefined | { reason: string }> {
+  // The comparison of the tag with the tip lists each changed file, unless it lists 300.
+  if (Array.isArray(range) && range.length < COMPARE_FILES && !filePaths(range).some((file) => inPaths(paths, file))) return undefined;
+  const oldestFirst = [...line].reverse();
+  for (const [index, commit] of oldestFirst.entries()) {
+    if (index === COMMIT_READS) return { reason: `the first ${COMMIT_READS} commits after ${tag} change no file in the paths` };
+    const read = await files(commit.parents[0] ?? "", commit.sha);
+    if ("reason" in read) return read;
+    if (!Array.isArray(read.files)) return { reason: `GitHub gave no list of files for the commit ${commit.sha.slice(0, 7)}` };
+    if (filePaths(read.files).some((file) => inPaths(paths, file))) return commit;
+    if (read.files.length >= COMPARE_FILES) {
+      return { reason: `the commit ${commit.sha.slice(0, 7)} changes ${COMPARE_FILES} files or more, and GitHub lists only ${COMPARE_FILES}` };
+    }
+  }
+  return undefined;
 }
 
 /** The result of `githubGreenRun`. The field `at` is the end of the newest scheduled run that ended. */
