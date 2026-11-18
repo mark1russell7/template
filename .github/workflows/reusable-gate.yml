@@ -1,0 +1,267 @@
+# A gate job with a second attempt (CI.md, "A gate with a second attempt").
+#
+# A speed gate on a noisy runner cannot decide: its verdict is a no read, and a no read is never a pass. A second
+# attempt on a fresh runner often reads. The job first runs the gate. Only on a no read, the job second runs the gate
+# again. It is a new job, so a fresh runner takes it, and it needs no write permission. The verdict of the workflow is
+# the verdict of the last attempt. A second no read fails the workflow.
+#
+# A repository calls it from its gate workflow:
+#
+#   jobs:
+#     bench:
+#       uses: mark1russell7/template/.github/workflows/reusable-gate.yml@<commit> # main
+#       permissions:
+#         contents: read
+#       with:
+#         command: pnpm run bench:gate
+#
+# The command writes one verdict line for each gate into the file "$GATE_VERDICT_FILE": pass, block or no-read. The
+# script scripts/workflows/gate-attempt.ts of the template commit of this file reads the file and the exit code:
+#
+#   pass     Each gate passes, and the command exits with 0. The job passes.
+#   block    A gate blocks. The job fails, and no second attempt runs.
+#   no-read  A gate has no read, and no gate blocks. The first job passes with a warning, and the job second runs.
+#            The second job fails on a no read.
+#   error    The file has no verdict or a line that is not a verdict, or each gate passes but the exit code is not 0.
+#            The job fails, and no second attempt runs: a crash is not noise.
+#
+# The jobs first and second have the same steps. Only the variable GATE_ATTEMPT of the job is different, and
+# scripts/workflows/gate-attempt.test.ts holds this.
+name: Reusable gate
+
+on:
+  workflow_call:
+    inputs:
+      command:
+        description: The bash command of the gate. It runs with "bash -eo pipefail" and writes one verdict line for each gate into "$GATE_VERDICT_FILE".
+        type: string
+        required: true
+      name:
+        description: The name of the job of the first attempt. The second attempt adds "(second attempt)".
+        type: string
+        default: Gate
+      install:
+        description: The bash command of the install, before the gate. "" installs nothing.
+        type: string
+        default: pnpm install --frozen-lockfile
+      node-version:
+        description: The Node.js version of the job. The verdict script needs 22.18 or later.
+        type: string
+        default: "26"
+      runs-on:
+        description: The runner of each attempt.
+        type: string
+        default: ubuntu-latest
+      timeout-minutes:
+        description: The time limit of each attempt, in minutes.
+        type: number
+        default: 30
+      env:
+        description: Environment variables for the install and the gate, as a JSON object.
+        type: string
+        default: "{}"
+      working-directory:
+        description: The folder of the package.json, relative to the root of the repository.
+        type: string
+        default: "."
+      artifact-path:
+        description: The files to upload after each attempt, as the input path of actions/upload-artifact. "" uploads nothing.
+        type: string
+        default: ""
+      artifact-name:
+        description: The start of the name of the artifact. The artifact of each attempt is "<name>-attempt-<n>". A matrix gives each entry its own name.
+        type: string
+        default: gate-records
+    outputs:
+      verdict:
+        description: The verdict of the last attempt that ran, pass, block, no-read or error. A job that stops before its verdict gives error.
+        value: ${{ jobs.second.outputs.verdict || jobs.first.outputs.verdict }}
+      attempts:
+        description: The count of the attempts that ran, 1 or 2.
+        value: ${{ jobs.second.outputs.verdict && '2' || '1' }}
+      first-verdict:
+        description: The verdict of the first attempt.
+        value: ${{ jobs.first.outputs.verdict }}
+
+permissions:
+  contents: read
+
+jobs:
+  first:
+    name: ${{ inputs.name }}
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+    env:
+      GATE_ATTEMPT: "1"
+      GATE_ATTEMPTS: "2"
+    outputs:
+      # A job that stops before the step verdict gives error, so the second attempt does not run
+      verdict: ${{ steps.verdict.outputs.verdict || 'error' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The verdict script and the action env-json come from the commit of this workflow, as in reusable-ci.yml. The
+      # sparse checkout also has the root files of the template: the install of the package of the script reads its
+      # pnpm-lock.yaml.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .gate-template
+          sparse-checkout: |
+            scripts/workflows
+            .github/actions/env-json
+            .github/actions/pull-of-run
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: ${{ inputs.working-directory }}/package.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: ${{ inputs.install != '' && 'pnpm' || '' }}
+          cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
+      # The script imports the escapes of @mark1russell7/text at the version of pnpm-lock.yaml of the template (CI.md,
+      # "The packages of the workflow scripts"). The install goes to the folder of the script. No install script starts.
+      - name: Install the package of the verdict script
+        shell: bash
+        run: |
+          version="$(node .gate-template/.github/actions/pull-of-run/locked-version.ts .gate-template/pnpm-lock.yaml @mark1russell7/text)"
+          npm install --no-save --no-package-lock --ignore-scripts --prefix .gate-template/scripts/workflows "@mark1russell7/text@${version}"
+      - if: inputs.env != '{}' && inputs.env != ''
+        uses: ./.gate-template/.github/actions/env-json
+        with:
+          env: ${{ inputs.env }}
+      # The folder of the template goes out of the tree of the repository, so the install and the gate do not see it
+      - name: Move the template out of the tree
+        shell: bash
+        run: mv .gate-template "$RUNNER_TEMP/gate-template"
+      - name: Install
+        if: inputs.install != ''
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          COMMAND: ${{ inputs.install }}
+        run: eval "$COMMAND"
+      # The step always passes: the step verdict reads the exit code and the verdict file
+      - name: Gate
+        id: gate
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          COMMAND: ${{ inputs.command }}
+          GATE_VERDICT_FILE: ${{ runner.temp }}/gate-verdicts.txt
+        run: |
+          : > "$GATE_VERDICT_FILE"
+          code=0
+          bash --noprofile --norc -eo pipefail -c "$COMMAND" || code=$?
+          echo "exit=$code" >> "$GITHUB_OUTPUT"
+      - name: Verdict
+        id: verdict
+        if: ${{ !cancelled() && steps.gate.outcome == 'success' }}
+        shell: bash
+        env:
+          GATE_VERDICT_FILE: ${{ runner.temp }}/gate-verdicts.txt
+          GATE_EXIT: ${{ steps.gate.outputs.exit }}
+        run: node "$RUNNER_TEMP/gate-template/scripts/workflows/gate-attempt.ts"
+      - name: Upload the records
+        if: ${{ !cancelled() && inputs.artifact-path != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ inputs.artifact-name }}-attempt-${{ env.GATE_ATTEMPT }}
+          path: ${{ inputs.artifact-path }}
+          if-no-files-found: warn
+
+  # The second attempt runs only on a no read of the first. It is a new job, so it gets a fresh runner.
+  second:
+    needs: first
+    if: needs.first.outputs.verdict == 'no-read'
+    name: ${{ inputs.name }} (second attempt)
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+    env:
+      GATE_ATTEMPT: "2"
+      GATE_ATTEMPTS: "2"
+    outputs:
+      # A job that stops before the step verdict gives error
+      verdict: ${{ steps.verdict.outputs.verdict || 'error' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The verdict script and the action env-json come from the commit of this workflow, as in reusable-ci.yml. The
+      # sparse checkout also has the root files of the template: the install of the package of the script reads its
+      # pnpm-lock.yaml.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .gate-template
+          sparse-checkout: |
+            scripts/workflows
+            .github/actions/env-json
+            .github/actions/pull-of-run
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: ${{ inputs.working-directory }}/package.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: ${{ inputs.install != '' && 'pnpm' || '' }}
+          cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
+      # The script imports the escapes of @mark1russell7/text at the version of pnpm-lock.yaml of the template (CI.md,
+      # "The packages of the workflow scripts"). The install goes to the folder of the script. No install script starts.
+      - name: Install the package of the verdict script
+        shell: bash
+        run: |
+          version="$(node .gate-template/.github/actions/pull-of-run/locked-version.ts .gate-template/pnpm-lock.yaml @mark1russell7/text)"
+          npm install --no-save --no-package-lock --ignore-scripts --prefix .gate-template/scripts/workflows "@mark1russell7/text@${version}"
+      - if: inputs.env != '{}' && inputs.env != ''
+        uses: ./.gate-template/.github/actions/env-json
+        with:
+          env: ${{ inputs.env }}
+      # The folder of the template goes out of the tree of the repository, so the install and the gate do not see it
+      - name: Move the template out of the tree
+        shell: bash
+        run: mv .gate-template "$RUNNER_TEMP/gate-template"
+      - name: Install
+        if: inputs.install != ''
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          COMMAND: ${{ inputs.install }}
+        run: eval "$COMMAND"
+      # The step always passes: the step verdict reads the exit code and the verdict file
+      - name: Gate
+        id: gate
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          COMMAND: ${{ inputs.command }}
+          GATE_VERDICT_FILE: ${{ runner.temp }}/gate-verdicts.txt
+        run: |
+          : > "$GATE_VERDICT_FILE"
+          code=0
+          bash --noprofile --norc -eo pipefail -c "$COMMAND" || code=$?
+          echo "exit=$code" >> "$GITHUB_OUTPUT"
+      - name: Verdict
+        id: verdict
+        if: ${{ !cancelled() && steps.gate.outcome == 'success' }}
+        shell: bash
+        env:
+          GATE_VERDICT_FILE: ${{ runner.temp }}/gate-verdicts.txt
+          GATE_EXIT: ${{ steps.gate.outputs.exit }}
+        run: node "$RUNNER_TEMP/gate-template/scripts/workflows/gate-attempt.ts"
+      - name: Upload the records
+        if: ${{ !cancelled() && inputs.artifact-path != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ inputs.artifact-name }}-attempt-${{ env.GATE_ATTEMPT }}
+          path: ${{ inputs.artifact-path }}
+          if-no-files-found: warn

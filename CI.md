@@ -19,6 +19,7 @@ The template holds the CI, the release and the Pages workflows of the repositori
 | `.github/workflows/reusable-ai-review.yml` | Workflow | Gives a pull request a review by Claude on request (the `ai-review` label), comment only (`AI-REVIEW.md`). |
 | `.github/workflows/reusable-codex-review.yml` | Workflow | Gives a pull request a second review by an OpenAI model, comment only (`CODEX-REVIEW.md`). |
 | `.github/workflows/reusable-lockfile.yml` | Workflow | Makes the `pnpm-lock.yaml` of a branch again on a runner, with no local install ("The lockfile of a branch"). |
+| `.github/workflows/reusable-gate.yml` | Workflow | Starts a gate command, and starts it again on a different runner after a no read ("A gate with a second try"). |
 
 ## CI
 
@@ -376,6 +377,59 @@ The lookup fails open. Thus a gate skips only after a read of its files:
 - A run by hand on the branch of an open pull request also reads the files of that pull request. When no file of the gate changes, the gate jobs skip. A run on `main` starts each gate job.
 
 `pull-of-run` is TypeScript, so it needs Node.js 22.18 or later. Thus the job sets up Node.js before it. A composite action cannot start a different action of its repository with a path that works for a caller outside the repository. Thus the job of the caller has the two steps, and the template has one lookup of the pull request.
+
+### A gate with a second try
+
+A speed gate on a noisy runner cannot decide. Its verdict is a no read, and a no read is not a pass. A second try on a different runner often reads. The shared workflow `reusable-gate.yml` gives a gate job this second try:
+
+1. The job `first` starts the gate command.
+2. Only on a no read, the job `second` starts the command again. It is a new job, so a different runner takes it.
+3. The verdict of the workflow is the verdict of the last try. A second no read fails the workflow.
+
+The second try needs no write permission and no call of the API. A block or an error gets no second try, because a crash is not noise.
+
+```yaml
+jobs:
+  bench:
+    uses: mark1russell7/template/.github/workflows/reusable-gate.yml@<commit> # main
+    permissions:
+      contents: read
+    with:
+      command: pnpm run bench:gate
+
+  bench-ok:
+    name: Bench OK
+    if: ${{ !cancelled() }}
+    needs: [bench]
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - uses: mark1russell7/template/.github/actions/gate-summary@<commit> # main
+        with:
+          needs: ${{ toJSON(needs) }}
+```
+
+The ruleset names the summary check `Bench OK`, as "The check of the ruleset" tells. A no read of the first try passes the job `bench / Gate`. Thus a ruleset that names only that check lets a merge through when the second try fails. A ruleset that names the checks of the gate names the two checks: `bench / Gate` and `bench / Gate (second attempt)`. A skipped second try counts as a pass.
+
+The command writes one line for each gate into the file `$GATE_VERDICT_FILE`: `pass`, `block` or `no-read`. The script `scripts/workflows/gate-attempt.ts` of the template reads the file and the exit code of the command:
+
+| Verdict | When | The job |
+| --- | --- | --- |
+| `pass` | Each gate passes, and the exit code is 0. | The job passes. |
+| `block` | A gate blocks. | The job fails, and no second try starts. |
+| `no-read` | A gate has no read, and no gate blocks. | The first try passes with a warning, and the second try starts. The second try fails. |
+| `error` | The file has no verdict or a line that is not a verdict. Or each gate passes, but the exit code is not 0. | The job fails, and no second try starts. |
+
+- The command starts with `bash -eo pipefail`. A gate that fails stops the command, and the verdicts before it stay in the file.
+- The variables `GATE_ATTEMPT` and `GATE_ATTEMPTS` give the number of the try and the count of tries, for the log of the gate.
+- The outputs are `verdict` (of the last try), `attempts` (1 or 2) and `first-verdict`.
+- `gate-summary` writes the verdict in the line of the job. A success with a verdict that is not `pass` fails the summary.
+- The inputs `install`, `node-version`, `runs-on`, `timeout-minutes`, `env` and `working-directory` set up each try.
+- The input `artifact-path` uploads the records of each try, as the artifact `<artifact-name>-attempt-<n>`.
+- A caller with a matrix gives each entry two tries. Give each entry its own `artifact-name`.
+- The output of a job with a matrix is the output of one entry. Thus the summary reads only the result of such a job.
+
+The jobs `first` and `second` have the same steps. A test of `gate-attempt.test.ts` holds this. `actions-test.yml` of the template starts the workflow with a pass, and with a no read before a pass.
 
 ### The read of the CI minutes
 
@@ -1002,7 +1056,7 @@ Some workflow scripts import a package of the template, for example `@mark1russe
 - The install step starts `.github/actions/pull-of-run/locked-version.ts`. The script reads the version that `pnpm-lock.yaml` of the template gives for the root package.
 - The script is in the folder of the action. Thus each checkout of the action has it, also a sparse checkout of `.github/actions`.
 - Thus a bump of the lockfile, for example by the release train, also moves each such install. No pin in a workflow stays behind.
-- `reusable-queue.yml` and the action `pull-of-run` install `@mark1russell7/text` in this way.
+- `reusable-queue.yml`, `reusable-gate.yml` and the action `pull-of-run` install `@mark1russell7/text` in this way.
 - The job `rules` of `ci.yml` installs `@mark1russell7/text` and `@mark1russell7/service` in this way, into `scripts`. Thus `scripts/workflows` and `scripts/lib` both find them.
 - A test of `scripts/workflows/locked-version.test.ts` fails when a workflow or an action installs a package of the lockfile at a version in its text.
 - The script imports only Node.js modules, because it starts before the install.
