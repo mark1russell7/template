@@ -101,7 +101,7 @@ describe("boundaryRules", () => {
     ];
     const rules = boundaryRules(packages);
     const npm = rules.find((r) => r.name === "run-time-import-of-a-dev-dependency");
-    expect(npm?.from).toEqual({ path: "^(packages/a|packages/tool)/(src)/", pathNot: ["\\.(test|spec|e2e)(\\.|-[a-z]+\\.)[cm]?[jt]sx?$","/(test|tests|e2e|__tests__|fixtures)/"] });
+    expect(npm?.from).toEqual({ path: "^(packages/a|packages/tool)/(src)/", pathNot: ["\\.(test|spec|e2e|bench)(\\.|-[a-z]+\\.)[cm]?[jt]sx?$","/(test|tests|e2e|__tests__|fixtures|bench|benchmarks)/"] });
     expect(npm?.to).toEqual({ dependencyTypes: ["npm-dev"], dependencyTypesNot: ["type-only", "npm", "npm-peer", "npm-optional"] });
     const workspace = rules.filter((r) => r.name.startsWith("run-time-import-of-a-dev-workspace-package-in-"));
     expect(workspace.map((r) => [r.name, r.from["path"], r.to["path"]])).toEqual([
@@ -147,7 +147,7 @@ describe("defaultOptions", () => {
     expect(options["enhancedResolveOptions"]).toMatchObject({ conditionNames: ["import", "node", "default"] });
   });
 
-  it("excludes the tests, the helpers of the tests, the fixtures and the declaration files, and keeps each source file", () => {
+  it("excludes the tests, the benchmarks, their helpers, the fixtures and the declaration files, and keeps each source file", () => {
     const { path } = defaultOptions(undefined, { packages: [] })["exclude"] as { path: string[] };
     const excluded = (file: string): boolean => path.some((pattern) => new RegExp(pattern).test(file));
     for (const file of [
@@ -157,13 +157,27 @@ describe("defaultOptions", () => {
       "packages/core/src/highways/fixtures.test-util.ts",
       "packages/core/src/fixtures.test-utils.ts",
       "packages/core/src/setup.spec-helpers.cts",
+      "packages/core/src/slow.test-setup.ts",
+      "packages/core/src/a.bench.ts",
+      "packages/core/src/a.bench-cases.mts",
+      "packages/host/src/bench/run.ts",
+      "packages/core/benchmarks/a.ts",
       "packages/core/test/a.ts",
       "packages/core/src/fixtures/a.ts",
       "packages/core/src/index.d.ts",
     ]) {
       expect(excluded(file), file).toBe(true);
     }
-    for (const file of ["packages/core/src/index.ts", "packages/core/src/test-util.ts", "packages/core/src/contest.ts", "packages/core/src/a.testing.ts"]) {
+    for (const file of [
+      "packages/core/src/index.ts",
+      "packages/core/src/test-util.ts",
+      "packages/core/src/contest.ts",
+      "packages/core/src/a.testing.ts",
+      "packages/core/src/bench.ts",
+      "packages/workbench/src/index.ts",
+      "packages/core/src/benchmark.ts",
+      "packages/core/src/slow.setup.ts",
+    ]) {
       expect(excluded(file), file).toBe(false);
     }
   });

@@ -129,7 +129,16 @@ export interface Rule {
    */
   readonly failsFrom?: string;
   check(context: RuleContext, options: Options): RuleOutcome;
+  /**
+   * This function gives the reason when the rule cannot read a part of its cases, for example a private source that CI
+   * does not give. It gives undefined when the rule reads each part. The check then shows "no read" and the reason with
+   * the result, so a part with no read does not show as a pass. The status of the rule does not change.
+   */
+  noRead?(context: RuleContext, options: Options): string | undefined;
 }
+
+/** This function tells if the environment is a CI run: `CI` is `true` or `1`, or `GITHUB_ACTIONS` is `true`. */
+export const isCi = (env: Readonly<Record<string, string | undefined>>): boolean => ["true", "1"].includes((env["CI"] ?? "").toLowerCase()) || env["GITHUB_ACTIONS"] === "true";
 
 /** The fields of `package.json` that hold dependencies. */
 export const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"] as const;

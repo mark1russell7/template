@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { apiReport, binsOf, entriesOf, HEADER_LINES, packageModel, packageReport, parseDeclarations, publishedManifest, statementsOf, targetOf } from "./index.ts";
+import { apiReport, binsOf, declarationKinds, entriesOf, HEADER_LINES, packageModel, packageReport, parseDeclarations, publishedManifest, statementsOf, targetOf } from "./index.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "api-report-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -262,6 +262,53 @@ describe("the kinds of the statements", () => {
 
   it("throws at an unknown form of statement", () => {
     expect(() => parseDeclarations("something else;", "x.d.ts")).toThrow(/A statement that the report does not know, in x\.d\.ts/);
+  });
+});
+
+describe("the kinds of a declaration", () => {
+  it("gives the kind of each form of statement", () => {
+    expect(declarationKinds("export declare function f(a: string): void;")).toEqual(["function"]);
+    expect(declarationKinds("declare function* g(): Generator<number>;")).toEqual(["function"]);
+    expect(declarationKinds("export default function (a: string): void;")).toEqual(["function"]);
+    expect(declarationKinds("export declare abstract class C {\n    a: number;\n}")).toEqual(["class"]);
+    expect(declarationKinds("interface I {\n    a: 1;\n}")).toEqual(["interface"]);
+    expect(declarationKinds("export type T<A> = A | null;")).toEqual(["type"]);
+    expect(declarationKinds("declare const enum E {\n    A = 0\n}")).toEqual(["enum"]);
+    expect(declarationKinds("declare enum E {\n    A = 0\n}")).toEqual(["enum"]);
+    expect(declarationKinds("declare namespace N {\n    const a: 1;\n}")).toEqual(["namespace"]);
+    expect(declarationKinds("declare module M {\n}")).toEqual(["namespace"]);
+    expect(declarationKinds("import A = N.B;")).toEqual(["alias"]);
+    expect(declarationKinds("export default 1;")).toEqual(["other"]);
+  });
+
+  it("tells a variable with a function type from a variable", () => {
+    expect(declarationKinds("export declare const f: (x: A) => B;")).toEqual(["function"]);
+    expect(declarationKinds("declare const g: <T>(x: T, y: { a: (b: 1) => 2 }) => T;")).toEqual(["function"]);
+    expect(declarationKinds("declare let h: (x: string) => void, i: number;")).toEqual(["function"]);
+    expect(declarationKinds("declare const a: number;")).toEqual(["variable"]);
+    expect(declarationKinds("declare const b: (A | B)[];")).toEqual(["variable"]);
+    expect(declarationKinds("declare const c: new () => C;")).toEqual(["variable"]);
+    expect(declarationKinds("declare const d: { (x: A): B };")).toEqual(["variable"]);
+    expect(declarationKinds('declare const e: "(x) => y";')).toEqual(["variable"]);
+    expect(declarationKinds("declare const f2: ((x: A) => B) | null;")).toEqual(["variable"]);
+  });
+
+  it("gives each kind once, in the order of the statements", () => {
+    const overloads = ["declare function f(a: string): string;", "declare function f(a: number): number;"].join("\n");
+    expect(declarationKinds(overloads)).toEqual(["function"]);
+    const merged = ["declare function f(): void;", "declare namespace f {\n    const a: 1;\n}"].join("\n");
+    expect(declarationKinds(merged)).toEqual(["function", "namespace"]);
+    expect(declarationKinds("")).toEqual([]);
+  });
+
+  it("gives the kinds of the declarations of a report", () => {
+    const root = fixture({
+      "package.json": { name: "kinds", exports: { ".": { types: "./dist/index.d.ts" } } },
+      "dist/index.d.ts": ["export declare function f(): void;", "export declare const g: (a: 1) => 2;", "export declare const h: number;", "export interface I {\n    a: 1;\n}"].join("\n"),
+    });
+    const model = packageModel(root);
+    const kinds = Object.fromEntries(Object.entries(model.declarations).map(([key, declaration]) => [key, declarationKinds(declaration.text)]));
+    expect(kinds).toEqual({ "dist/index.d.ts#f": ["function"], "dist/index.d.ts#g": ["function"], "dist/index.d.ts#h": ["variable"], "dist/index.d.ts#I": ["interface"] });
   });
 });
 

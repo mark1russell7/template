@@ -17,6 +17,7 @@ type Bin: build/index.d.ts#Bin
 type CliIo: build/index.d.ts#CliIo
 DEFAULT_TOOL: build/index.d.ts#DEFAULT_TOOL
 type DeclarationInfo: build/index.d.ts#DeclarationInfo
+type DeclarationKind: build/index.d.ts#DeclarationKind
 type DiffLine: build/index.d.ts#DiffLine
 type Entry: build/index.d.ts#Entry
 type EntryFile: build/index.d.ts#EntryFile
@@ -40,6 +41,7 @@ apiModel: build/index.d.ts#apiModel
 apiReport: build/index.d.ts#apiReport
 binsOf: build/index.d.ts#binsOf
 byCode: build/index.d.ts#byCode
+declarationKinds: build/index.d.ts#declarationKinds
 declarationPathOf: build/index.d.ts#declarationPathOf
 diffLines: build/index.d.ts#diffLines
 entriesOf: build/index.d.ts#entriesOf
@@ -158,6 +160,9 @@ interface DeclarationInfo {
   readonly references: Set<string>;
   readonly docs: Map<string, string>;
 }
+
+### build/index.d.ts#DeclarationKind
+type DeclarationKind = "function" | "class" | "interface" | "type" | "enum" | "namespace" | "variable" | "alias" | "other";
 
 ### build/index.d.ts#DiffLine
 interface DiffLine {
@@ -289,6 +294,9 @@ export declare function binsOf(manifest: Manifest): Bin[];
 
 ### build/index.d.ts#byCode
 export declare const byCode: (a: string, b: string) => number;
+
+### build/index.d.ts#declarationKinds
+export declare function declarationKinds(text: string): DeclarationKind[];
 
 ### build/index.d.ts#declarationPathOf
 export declare function declarationPathOf(path: string): string | undefined;

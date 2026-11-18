@@ -12,7 +12,7 @@ import { delimiter, extname, join } from "node:path";
 import { rangeOf } from "../change.ts";
 import { lineNameHit, pathNameHit, PRIVATE_NAME_LIST, type PrivateNameList } from "../private-names.ts";
 import { pullRequestOfRun } from "../pull-request.ts";
-import type { Break, Rule, RuleContext } from "../rule.ts";
+import { isCi, type Break, type Rule, type RuleContext } from "../rule.ts";
 
 /** The extensions of files that are not text. The rule does not read them. */
 const BINARY = new Set(
@@ -319,5 +319,11 @@ export const noLocalPaths: Rule = {
     // A commit message and the text of a pull request are public too, and a merged commit message stays in the history
     for (const change of changeTexts(context)) add(textBreaks(change.name, change.text, matchers, {}));
     return breaks;
+  },
+  noRead(context) {
+    // The rule reads no private name list, so only the private patterns are its private source. A local run without
+    // them is the normal case. A CI run without them read no private text, and the result must tell it
+    if (!isCi(context.env) || privatePatterns(context.env).length > 0) return undefined;
+    return `CI gives no ${PRIVATE_PATTERNS_VARIABLE}, so the rule did not look for private names. It looked only for home folders and the patterns of its options.`;
   },
 };

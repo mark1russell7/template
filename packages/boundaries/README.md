@@ -90,13 +90,18 @@ module.exports = boundaries(__dirname, {
 
 - `doNotFollow`: `node_modules` and the build folders of each package (`buildFolders`). An import of a different package stops at its entry, for example `packages/b/dist/index.js`. The analysis does not go into the imports of that built file. It also does not start from the files of a build folder.
 - `enhancedResolveOptions.conditionNames`: `["import", "node", "default"]`, as Node resolves an ESM import. An entry that is only for `require` does not resolve.
-- `exclude`: tests, the helpers of the tests, fixtures and declaration files. A test file has the suffix `.test`, `.spec` or `.e2e`. A helper adds one word with a hyphen to the suffix, for example `fixtures.test-util.ts`. A file in `node_modules` is in the graph as a leaf, because `doNotFollow` stops the analysis there. The rule `run-time-import-of-a-dev-dependency` needs it.
+- `exclude`: tests, benchmarks, their helpers, fixtures and declaration files. A test file has the suffix `.test`, `.spec` or `.e2e`. A benchmark file has the suffix `.bench`, as in vitest bench. A helper adds one word with a hyphen to the suffix, for example `fixtures.test-util.ts`. Name a setup file of vitest in the same way, for example `slow.test-setup.ts`.
+- The default `exclude` also has the folders `test`, `tests`, `e2e`, `__tests__`, `fixtures`, `bench` and `benchmarks`. A bench folder holds the cases of a bench harness. CI starts them with the dev dependencies. A file in `node_modules` is in the graph as a leaf, because `doNotFollow` stops the analysis there. The rule `run-time-import-of-a-dev-dependency` needs it.
 
 To change a default option, give the option in `options`. For example, `options: { enhancedResolveOptions: { exportsFields: ["exports"], conditionNames: ["import", "require", "node", "default"], mainFields: ["module", "main"] } }` also resolves the entries for `require`.
 
 ## The parser
 
 dependency-cruiser reads TypeScript with the TypeScript compiler of the repository only for TypeScript 2 to 6. With TypeScript 7, or with no TypeScript, `boundaries()` sets the parser `swc` when `@swc/core` is installed. Without `@swc/core`, dependency-cruiser reads only JavaScript. For a check of built JavaScript, set `buildFolders: []`.
+
+## Changes in 0.3.2
+
+- The default `exclude` and the rules of the dev dependencies leave out benchmark files (`.bench`) and the folders `bench` and `benchmarks`. Before, a bench case that imports its harness from the dev dependencies was a finding of `run-time-import-of-a-dev-dependency`.
 
 ## Changes in 0.3.0
 
