@@ -23,7 +23,7 @@ type ChangelogSection: build/index.d.ts#ChangelogSection
 type ChangelogSource: build/index.d.ts#ChangelogSource
 type CheckState: build/chunks/freshness.d.ts#CheckState
 type CliIo: build/index.d.ts#CliIo
-type CronLine: build/chunks/freshness.d.ts#CronLine
+type CronLine: build/index.d.ts#CronLine
 DATA_STAMP_SCHEMA: build/chunks/freshness.d.ts#DATA_STAMP_SCHEMA
 DEFAULT_CHANGELOGS: build/index.d.ts#DEFAULT_CHANGELOGS
 type DataLimit: build/chunks/freshness.d.ts#DataLimit
@@ -99,7 +99,10 @@ type TimelineLayout: build/index.d.ts#TimelineLayout
 type TimelineMark: build/index.d.ts#TimelineMark
 type TimelineOptions: build/index.d.ts#TimelineOptions
 UsageError: build/index.d.ts#UsageError
+VERSION_GRACE_DAYS: build/chunks/freshness.d.ts#VERSION_GRACE_DAYS
+WORKSPACE_RULE_START: build/chunks/freshness.d.ts#WORKSPACE_RULE_START
 type WorkflowRunEnd: build/index.d.ts#WorkflowRunEnd
+type WorkspaceVersion: build/chunks/freshness.d.ts#WorkspaceVersion
 build: build/index.d.ts#build
 buildStatusBoard: build/index.d.ts#buildStatusBoard
 changelogFaults: build/index.d.ts#changelogFaults
@@ -110,7 +113,7 @@ checkFreshness: build/chunks/freshness.d.ts#checkFreshness
 checkStateOf: build/index.d.ts#checkStateOf
 classCounts: build/index.d.ts#classCounts
 compareVersions: build/index.d.ts#compareVersions
-cronLines: build/chunks/freshness.d.ts#cronLines
+cronLines: build/index.d.ts#cronLines
 dayRange: build/index.d.ts#dayRange
 escapeHtml: build/index.d.ts#escapeHtml
 failingCases: build/chunks/freshness.d.ts#failingCases
@@ -448,12 +451,6 @@ interface ChangelogReading {
 ### build/chunks/freshness.d.ts#CheckState
 type CheckState = "success" | "failure" | "pending" | "none";
 
-### build/chunks/freshness.d.ts#CronLine
-interface CronLine {
-  readonly line: number;
-  readonly cron: string;
-}
-
 ### build/chunks/freshness.d.ts#DATA_STAMP_SCHEMA
 declare const DATA_STAMP_SCHEMA = "data-stamp/1";
 
@@ -502,6 +499,7 @@ interface FailingCase {
 interface FreshnessCheck {
   readonly faults: readonly string[];
   readonly notRun: readonly string[];
+  readonly warnings: readonly string[];
 }
 
 ### build/chunks/freshness.d.ts#FreshnessOptions
@@ -511,6 +509,9 @@ interface FreshnessOptions {
   readonly maxAgeDays?: number;
   readonly maxMinorsBehind?: number;
   readonly schedules?: Readonly<Record<string, number | string>>;
+  readonly workspace?: Readonly<Record<string, readonly WorkspaceVersion[]>>;
+  readonly versionGraceDays?: number;
+  readonly workspaceStartsAt?: string;
 }
 
 ### build/chunks/freshness.d.ts#GitHubOpenWork
@@ -688,11 +689,20 @@ interface StatusBoardData {
 ### build/chunks/freshness.d.ts#StatusClass
 type StatusClass = "waiting" | "blocked" | "progress" | "open" | "later" | "done";
 
+### build/chunks/freshness.d.ts#VERSION_GRACE_DAYS
+declare const VERSION_GRACE_DAYS = 3;
+
+### build/chunks/freshness.d.ts#WORKSPACE_RULE_START
+declare const WORKSPACE_RULE_START = "2026-11-30T00:00:00Z";
+
+### build/chunks/freshness.d.ts#WorkspaceVersion
+interface WorkspaceVersion {
+  version: string;
+  since?: string;
+}
+
 ### build/chunks/freshness.d.ts#checkFreshness
 declare function checkFreshness(stamps: DataStamps, options: FreshnessOptions): FreshnessCheck;
-
-### build/chunks/freshness.d.ts#cronLines
-declare function cronLines(workflow: string): CronLine[];
 
 ### build/chunks/freshness.d.ts#failingCases
 declare function failingCases(stamps: DataStamps, options: FreshnessOptions): readonly FailingCase[];
@@ -1081,6 +1091,12 @@ interface CliIo {
   now?: string;
 }
 
+### build/index.d.ts#CronLine
+interface CronLine {
+  readonly line: number;
+  readonly cron: string;
+}
+
 ### build/index.d.ts#DEFAULT_CHANGELOGS
 export declare const DEFAULT_CHANGELOGS: readonly string[];
 
@@ -1396,6 +1412,9 @@ export declare function classCounts(items: readonly BoardItem[]): Record<StatusC
 
 ### build/index.d.ts#compareVersions
 export declare function compareVersions(a: string, b: string): number;
+
+### build/index.d.ts#cronLines
+export declare function cronLines(workflow: string): CronLine[];
 
 ### build/index.d.ts#dayRange
 export declare function dayRange(start: number, end: number): string;
