@@ -1217,11 +1217,27 @@ function parsePrePushArgs(args) {
 	};
 }
 /**
+* The options of each git start of the check. With them, a git configuration starts no command: no hook, no external diff
+* and no file system monitor. A textconv driver has its own name, so each diff command also gives `--no-textconv`.
+*/
+const SAFE_GIT_OPTIONS = [
+	"-c",
+	"core.hooksPath=/dev/null",
+	"-c",
+	"diff.external=",
+	"-c",
+	"core.fsmonitor=false"
+];
+/** This function gives the git function of the check in `root`: `runGit` with the safe options before the arguments. */
+function checkGit(root) {
+	return (args) => runGit(root, [...SAFE_GIT_OPTIONS, ...args]);
+}
+/**
 * This function starts the command `pre-push` in the root of the git working tree of `io.cwd`. The bin and the bundle
-* `private-names.mjs` of the shared actions use it. Only the git hook reads `io.stdin`.
+* `private-names.mjs` of the shared actions use it. Only the git hook reads `io.stdin`. Each git start uses `checkGit`.
 */
 function runPrePushArgs(args, io) {
-	const top = runGit(io.cwd, ["rev-parse", "--show-toplevel"])?.trim() ?? "";
+	const top = checkGit(io.cwd)(["rev-parse", "--show-toplevel"])?.trim() ?? "";
 	const root = top === "" ? io.cwd : top;
 	const { remote, url, base, head } = args;
 	return prePush({
@@ -1232,7 +1248,7 @@ function runPrePushArgs(args, io) {
 		input: base === void 0 ? io.stdin ?? "" : "",
 		env: io.env,
 		root,
-		git: (gitArgs) => runGit(root, gitArgs)
+		git: checkGit(root)
 	}, io);
 }
 /** The marker line of the hook that `conventions hook install` writes. The command rewrites only a hook with this line. */
