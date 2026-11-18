@@ -275,7 +275,7 @@ describe("changes: a push run with the input push-files", { skip: skipBash }, ()
     assert.equal(out.status, 0, out.log);
     assert.deepEqual(out.match, ["true"]);
     assert.equal(out.calls.length, 1);
-    assert.ok(out.calls[0]?.startsWith(COMPARE_CALL), out.calls[0]);
+    assert.ok(out.calls[0]?.startsWith(COMPARE_CALL), out.calls.join("\n"));
     assert.match(out.log, /The read of the files of the push failed\. So the gate runs\./u);
   });
 
