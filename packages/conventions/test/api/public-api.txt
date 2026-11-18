@@ -555,6 +555,7 @@ interface PrePushOptions {
   readonly root: string;
   readonly git: (args: readonly string[]) => string | undefined;
   readonly readFile?: (path: string) => string;
+  readonly loadSteLint?: (root: string) => unknown;
 }
 
 ### build/index.d.ts#PrivateNameList

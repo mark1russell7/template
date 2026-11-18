@@ -1,8 +1,10 @@
 // The private name list, the command pre-push and the command hook install, on fixture repositories.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync, existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import {
   firstNameMatch,
@@ -29,7 +31,7 @@ import {
   type CliIo,
   type NameRule,
 } from "./index.ts";
-import { addedRuns, FIRST_PRE_PUSH_VERSION } from "./pre-push.ts";
+import { addedRuns, FIRST_PRE_PUSH_VERSION, steLintArguments } from "./pre-push.ts";
 
 /** The private probe of each test. No real name is private here. */
 const PROBE = "zz-test-pattern-7316";
@@ -560,6 +562,159 @@ describe("conventions pre-push", () => {
     const listed: CliIo = { ...io, env: { CONVENTIONS_PRIVATE_NAMES_FILE: listFile() } };
     expect(runCli(["pre-push", "origin", HTTPS], listed)).toBe(0);
     expect(runCli(["pre-push", "origin", "https://github.com/acme-labs/other.git"], listed)).toBe(1);
+  });
+});
+
+/** The ste-lint of this repository: a fixture repository has no node_modules. */
+const STE_LINT: unknown = createRequire(fileURLToPath(new URL("../../../package.json", import.meta.url)))("@mark1russell7/ste-lint");
+
+/** A text with no finding, and a text with one error of ste-lint (rule semicolon, line 1, column 24). */
+const CLEAN = "The tool reads the file.\n";
+const SEMICOLON = "The tool reads the file; it writes the result.\n";
+
+/** A repository with the script lint:ste and a ste.config.json, and a first commit that origin/main has. */
+function steRepository(script = "ste-lint", config: Record<string, unknown> = { include: ["**/*.md"] }, files: Record<string, string> = {}): { root: string; base: string } {
+  const root = join(temp, String(fixtures++));
+  mkdirSync(root, { recursive: true });
+  write(root, { "package.json": `${JSON.stringify({ name: "one", scripts: { "lint:ste": script } })}\n`, "ste.config.json": `${JSON.stringify(config)}\n`, "notes.md": CLEAN, ...files });
+  git(root, "init", "-q", "-b", "main");
+  git(root, "add", "-A");
+  git(root, "commit", "-q", "-m", "first");
+  const base = git(root, "rev-parse", "HEAD");
+  git(root, "update-ref", "refs/remotes/origin/main", base);
+  return { root, base };
+}
+
+/** This function starts prePush with no private name list, and gives the exit code and the text of stderr. */
+function stePush(root: string, input: string, loadSteLint: (root: string) => unknown = () => STE_LINT): { code: number; stderr: string } {
+  let stderr = "";
+  const code = prePush({ remote: "origin", input, env: {}, root, git: gitIn(root), loadSteLint }, { stderr: (text) => (stderr += text) });
+  return { code, stderr };
+}
+
+/** The input line of a push of main from `base` to `head`. */
+const mainPush = (head: string, base: string): string => `refs/heads/main ${head} refs/heads/main ${base}\n`;
+
+describe("the STE step of conventions pre-push", () => {
+  it("reads the arguments of a script of one command ste-lint, and refuses each other form", () => {
+    expect(steLintArguments("ste-lint")).toEqual([]);
+    expect(steLintArguments("ste-lint --max-warnings 0 'docs/**/*.md' \"a b.md\"")).toEqual(["--max-warnings", "0", "docs/**/*.md", "a b.md"]);
+    for (const script of ["npx ste-lint", "ste-lint && tsc", "ste-lint; echo", "ste-lint | tee out", "ste-lint $FILES", "ste-lint a\"b\"", "eslint ."]) expect(steLintArguments(script), script).toBeUndefined();
+  });
+
+  it("stops a push with an error in a changed file, after the No read line of the private names", () => {
+    const { root, base } = steRepository();
+    const head = commit(root, { "README.md": SEMICOLON }, "a readme");
+    const { code, stderr } = stePush(root, mainPush(head, base));
+    expect(code).toBe(1);
+    expect(stderr.split("\n").slice(0, 3)).toEqual([
+      NO_READ_LINE,
+      "conventions pre-push: STE: 1 files read, 1 errors, 0 warnings. The push stops.",
+      expect.stringMatching(/^ {2}README\.md:1:24 {2}error {2}Do not use a semicolon\..* {2}semicolon$/u),
+    ]);
+    expect(stderr).toContain("Correct the prose in a new commit, and push again.\n");
+  });
+
+  it("passes a clean push with a summary line, and reads only the files of the new commits", () => {
+    // The first commit has an error. The push does not change that file, so the step does not read it
+    const { root, base } = steRepository("ste-lint", { include: ["**/*.md"] }, { "old.md": SEMICOLON });
+    const head = commit(root, { "notes.md": `${CLEAN}${CLEAN}`, "code.json": "{}\n" }, "a clean change");
+    const { code, stderr } = stePush(root, mainPush(head, base));
+    expect(code).toBe(0);
+    expect(stderr).toBe(`${NO_READ_LINE}\nconventions pre-push: STE: 1 files read, 0 errors, 0 warnings.\n`);
+  });
+
+  it("lints the text at the tip of the push, not the working tree", () => {
+    const { root, base } = steRepository();
+    commit(root, { "README.md": SEMICOLON }, "an error");
+    const fixed = commit(root, { "README.md": CLEAN }, "the fix");
+    // A change that is not committed does not go with the push
+    write(root, { "README.md": SEMICOLON });
+    expect(stePush(root, mainPush(fixed, base))).toMatchObject({ code: 0 });
+    git(root, "checkout", "-q", "--", "README.md");
+    const broken = commit(root, { "README.md": SEMICOLON }, "a new error");
+    write(root, { "README.md": CLEAN });
+    expect(stePush(root, mainPush(broken, base)).code).toBe(1);
+  });
+
+  it("skips a file that a later commit of the push removes", () => {
+    const { root, base } = steRepository();
+    commit(root, { "draft.md": SEMICOLON }, "a draft");
+    git(root, "rm", "-q", "draft.md");
+    git(root, "commit", "-q", "-m", "no draft");
+    const head = git(root, "rev-parse", "HEAD");
+    const { code, stderr } = stePush(root, mainPush(head, base));
+    expect(code).toBe(0);
+    expect(stderr).toContain("conventions pre-push: STE: 0 files read, 0 errors, 0 warnings.\n");
+  });
+
+  it("selects the files with the include and ignore of ste.config.json, and with the patterns of the script", () => {
+    const files = { "README.md": SEMICOLON, "docs/guide.md": SEMICOLON, "docs/old/x.md": SEMICOLON };
+    const configured = steRepository("ste-lint", { include: ["**/*.md"], ignore: ["docs/old/**", "README.md"] });
+    const one = stePush(configured.root, mainPush(commit(configured.root, files, "prose"), configured.base));
+    expect(one.code).toBe(1);
+    expect(one.stderr).toContain("STE: 1 files read, 1 errors");
+    expect(one.stderr).toContain("  docs/guide.md:1:24");
+    const patterned = steRepository("ste-lint 'docs/*.md'", { include: ["**/*.md"] });
+    const two = stePush(patterned.root, mainPush(commit(patterned.root, files, "prose"), patterned.base));
+    expect(two.stderr).toContain("STE: 1 files read, 1 errors");
+    expect(two.stderr).toContain("  docs/guide.md:1:24");
+  });
+
+  it("prints a warning, and stops the push only when the warnings are more than --max-warnings", () => {
+    const config = { include: ["**/*.md"], rules: { semicolon: "warning" } };
+    const loose = steRepository("ste-lint", config);
+    const warned = stePush(loose.root, mainPush(commit(loose.root, { "README.md": SEMICOLON }, "a warning"), loose.base));
+    expect(warned.code).toBe(0);
+    expect(warned.stderr).toContain("conventions pre-push: STE: 1 files read, 0 errors, 1 warnings.\n  README.md:1:24  warning  ");
+    const strict = steRepository("ste-lint --max-warnings 0", config);
+    const stopped = stePush(strict.root, mainPush(commit(strict.root, { "README.md": SEMICOLON }, "a warning"), strict.base));
+    expect(stopped.code).toBe(1);
+    expect(stopped.stderr).toContain("STE: 1 files read, 0 errors, 1 warnings, more than the 0 of --max-warnings. The push stops.\n");
+  });
+
+  it("writes a No STE read line and does not stop the push when it cannot lint", () => {
+    const cases: readonly [string, (root: string) => unknown, RegExp][] = [
+      ["ste-lint && tsc", () => STE_LINT, /No STE read: the script lint:ste is not one command ste-lint \("ste-lint && tsc"\)\./u],
+      ["ste-lint", () => ({ loadConfig: () => ({}) }), /No STE read: the @mark1russell7\/ste-lint of the repository does not have parseArgs, findFiles, .*Use version 0\.3\.0 or later\./u],
+      ["ste-lint --no-such-option", () => STE_LINT, /No STE read: ste-lint refuses the arguments of the script lint:ste: "--no-such-option" is not a known option\./u],
+      ["ste-lint --config missing.json", () => STE_LINT, /No STE read: ste-lint cannot read its configuration: /u],
+    ];
+    for (const [script, load, line] of cases) {
+      const { root, base } = steRepository(script);
+      const { code, stderr } = stePush(root, mainPush(commit(root, { "README.md": SEMICOLON }, "prose"), base), load);
+      expect(code, script).toBe(0);
+      expect(stderr, script).toMatch(line);
+    }
+  });
+
+  it("loads the ste-lint of the node_modules of the repository by default", () => {
+    // The fixture repository has no node_modules
+    const { root, base } = steRepository();
+    const head = commit(root, { "README.md": SEMICOLON }, "prose");
+    let stderr = "";
+    const code = prePush({ remote: "origin", input: mainPush(head, base), env: {}, root, git: gitIn(root) }, { stderr: (text) => (stderr += text) });
+    expect(code).toBe(0);
+    expect(stderr).toContain("conventions pre-push: No STE read: the node_modules of the repository do not have @mark1russell7/ste-lint. Install the dependencies.\n");
+  });
+
+  it("writes an input error one time, also when both steps read the commits", () => {
+    const { root } = steRepository();
+    let stderr = "";
+    const env = { CONVENTIONS_PRIVATE_NAMES_FILE: listFile() };
+    const code = prePush({ remote: "origin", input: "not a line\n", env, root, git: gitIn(root), loadSteLint: () => STE_LINT }, { stderr: (text) => (stderr += text) });
+    expect(code).toBe(1);
+    expect(stderr.match(/does not have the form/gu)).toHaveLength(1);
+  });
+
+  it("reads the private names and the prose of one push, and each step can stop it", () => {
+    const { root, base } = steRepository();
+    const head = commit(root, { "README.md": `${SEMICOLON}${PROBE}\n` }, "prose");
+    let stderr = "";
+    const code = prePush({ remote: "origin", input: mainPush(head, base), env: { CONVENTIONS_PRIVATE_NAMES_FILE: listFile() }, root, git: gitIn(root), loadSteLint: () => STE_LINT }, { stderr: (text) => (stderr += text) });
+    expect(code).toBe(1);
+    expect(stderr).toContain(`commit ${head.slice(0, 12)} README.md:2  ${named(2)}`);
+    expect(stderr).toMatch(/conventions pre-push: STE: 1 files read, [1-9]\d* errors, /u);
   });
 });
 
