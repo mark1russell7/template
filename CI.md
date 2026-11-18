@@ -282,6 +282,7 @@ A gate that is only about some files (a bench of the core, a corpus) starts on e
 - Two inputs of `changes` take out more runs. Their defaults keep the behavior above:
   - With `push-files: "true"`, a push run reads the files of its push, from `github.event.before` to the commit of the run. A new branch, a forced push, 300 files or more, or a failed read gives a match.
   - With `version-bumps: skip`, a `package.json` whose only change is its line `"version"` is not a file of the gate. The release of that version builds and packs the package.
+    A gap: a test that reads the version of its own package does not run on a change of only the version. Keep such a test in a gate with no `version-bumps: skip`, or let the release check the version.
 - `gate-summary` is the step of the summary job. It passes when each job passed. When `changes` gives `match: false`, a skipped gate job passes too. A failure, a cancel or another skip fails it.
 - A skip is green only after a pass. Give each job that `allow-skip` names a line `<job id>=<check name>` in `last-result`, and give the summary job `checks: read`. A skip of that job then reads the last result of its check on the commit:
   - A pass passes, and a failure fails the summary.
