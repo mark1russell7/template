@@ -179,6 +179,7 @@ An unknown rule, an unknown option, or an exception or a changed option without 
 | `--no-base` | Do not use a default base. |
 | `--json` | Write the result as JSON. |
 | `pre-push <remote> [<url>]` | Examine the new commits of a push with the private name list. The git hook `pre-push` starts it. |
+| `pre-push --base <ref> [--head <ref>]` | Examine the commits of `<base>..<head>` (the default head is `HEAD`) and the text of the pull request of the run, with the same rules. The shared CI starts it. |
 | `hook install` | Write the git hook `pre-push`. In CI, or outside a git repository, the command does nothing. |
 
 A run that `workflow_dispatch` starts has no pull request in its event file. A person can start the gates of a pull request in this way. For such a run, the shared CI finds the pull request of the branch, and gives two environment variables to the check:
@@ -248,7 +249,9 @@ A break shows the commit, the place and the index of the name in the list. An ex
 
 When no list and no pattern is set, the command writes one line that starts with `conventions pre-push: No read`, and the push continues. A push with no read is not a pass. The push stops when the command cannot read the list that a setting names. It also stops when the list is not JSON, does not agree with the schema, or has a bad regular expression. The line of the stop gives the reason and the index of the entry, not its values.
 
-The check of CI continues to read the environment variable `CONVENTIONS_PRIVATE_PATTERNS` in the rule `no-local-paths`.
+The check of CI continues to read the environment variable `CONVENTIONS_PRIVATE_PATTERNS` in the rule `no-local-paths`. In CI (`CI` or `GITHUB_ACTIONS` is set) with no private pattern, the rule cannot look for private names. Its result then shows `NO READ` and the reason, and GitHub shows a warning. The JSON result has the field `noRead`. The status of the rule does not change, so the rule still fails on a home folder. A local check shows no such note.
+
+With `--base <ref>`, the command is the check of a change in CI. It examines each commit of `<base>..<head>` with the same rules as the hook. It also examines the title and the body of the pull request of the run, as the rule `no-local-paths` reads them. It reads no standard input. A break fails the check with the exit code 1, and the text tells that the check fails, not that the push stops. The step "Private names of the change" of the shared CI starts it with the list of the secret `CONVENTIONS_PRIVATE_NAMES` (`CI.md` of the template).
 
 ## The map of homes
 
@@ -318,4 +321,4 @@ The package also exports the functions of the tool:
 - `lineNameHits(list, line, place)` and `nameMatches(line, names)` give each name of a line, one hit for each name. A scan that counts the names uses them. The gate takes the first hit.
 - `privateNamesFiles(env, git)`, `privateNamesFile(env, git)`, `privatePatterns(env)` and `invalidPatternBreaks(patterns)` read the settings and the patterns. `privateNamesFiles` gives each path, and `privateNamesFile` gives one.
 - `mergePrivateNames(lists)` merges the lists in order. It throws a `PrivateNameListError` when two lists have the same id.
-- `prePush(options, io)` is the command `pre-push`, and `installHook(options, io)` is the command `hook install`. `PRE_PUSH_HOOK` is the text of the hook.
+- `prePush(options, io)` is the command `pre-push`. With the option `base`, it is the check of a change in CI. `installHook(options, io)` is the command `hook install`. `PRE_PUSH_HOOK` is the text of the hook.

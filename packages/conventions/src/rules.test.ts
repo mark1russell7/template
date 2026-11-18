@@ -393,6 +393,30 @@ describe("no-local-paths", () => {
     writeFileSync(file, "{ not json");
     expect(rule(root, "no-local-paths", { env, base: "base" }).breaks).toEqual([]);
   });
+
+  it("shows no read in CI with no private pattern, and still finds a home folder", () => {
+    const root = fixture({ "package.json": { name: "one" }, "notes.md": `one ${linux}\ntwo zorbit\n` });
+    commitAll(root);
+    for (const env of [{ CI: "true" }, { CI: "1" }, { GITHUB_ACTIONS: "true" }]) {
+      const result = rule(root, "no-local-paths", { env });
+      expect(result.status, JSON.stringify(env)).toBe("break");
+      expect(result.breaks.map((item) => `${item.file}:${String(item.line)}`)).toEqual(["notes.md:1"]);
+      expect(result.noRead).toBe("CI gives no CONVENTIONS_PRIVATE_PATTERNS, so the rule did not look for private names. It looked only for home folders and the patterns of its options.");
+    }
+    // A local run is the same as before: no note of a read
+    expect(rule(root, "no-local-paths").noRead).toBeUndefined();
+    expect(rule(root, "no-local-paths", { env: { CI: "false" } }).noRead).toBeUndefined();
+    // With a private pattern, CI reads the private text
+    const read = rule(root, "no-local-paths", { env: { CI: "true", CONVENTIONS_PRIVATE_PATTERNS: "zorbit" } });
+    expect(read.noRead).toBeUndefined();
+    expect(read.breaks.map((item) => `${item.file}:${String(item.line)}`)).toEqual(["notes.md:1", "notes.md:2"]);
+    // A pass with no read is not a plain pass in the output
+    writeFileSync(join(root, "notes.md"), "clean\n");
+    git(root, "commit", "-q", "-am", "clean");
+    const pass = rule(root, "no-local-paths", { env: { GITHUB_ACTIONS: "true" } });
+    expect(pass.status).toBe("pass");
+    expect(pass.noRead).toMatch(/^CI gives no CONVENTIONS_PRIVATE_PATTERNS/);
+  });
 });
 
 describe("release-files", () => {

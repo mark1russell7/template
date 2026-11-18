@@ -10,7 +10,16 @@
  * api-report check
  * ```
  */
-export { parseDeclarations, statementsOf, type DeclarationInfo, type ImportBinding, type LocalExport, type Reexport } from "./declarations.ts";
+export {
+  declarationKinds,
+  parseDeclarations,
+  statementsOf,
+  type DeclarationInfo,
+  type DeclarationKind,
+  type ImportBinding,
+  type LocalExport,
+  type Reexport,
+} from "./declarations.ts";
 export { diffLines, unifiedDiff, type DiffLine, type UnifiedDiffOptions } from "./diff.ts";
 export {
   binsOf,

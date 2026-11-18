@@ -6,10 +6,11 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseConfig } from "./config.ts";
-import { matchesAny, type Break, type Manifest } from "./rule.ts";
+import { isCi, matchesAny, type Break, type Manifest } from "./rule.ts";
 import { RULES } from "./rules/index.ts";
 import { repositoryOfRemote } from "./rules/runner-budget.ts";
 import { mergePrivateNames, parsePrivateNames, PrivateNameListError, type PrivateNameList } from "./private-names.ts";
+import { pullRequestOfRun } from "./pull-request.ts";
 import {
   invalidPatternBreaks,
   PRIVATE_NAMES_FILE_CONFIG,
@@ -33,8 +34,18 @@ export interface PrePushOptions {
    * With no URL, the command asks `git remote get-url`.
    */
   readonly url?: string;
-  /** The standard input of the hook: a line `<local ref> <local sha> <remote ref> <remote sha>` for each ref of the push. */
+  /**
+   * The standard input of the hook: a line `<local ref> <local sha> <remote ref> <remote sha>` for each ref of the push.
+   * The command does not read it when `base` has a value.
+   */
   readonly input: string;
+  /**
+   * The base commit of a change, for a check in CI. With a base, the command examines each commit of `base..head`, not
+   * the refs of `input`. It also examines the title and the body of the pull request of the run (`pullRequestOfRun`).
+   */
+  readonly base?: string;
+  /** The last commit of the change of `base`. The default is `HEAD`. */
+  readonly head?: string;
   readonly env: Readonly<Record<string, string | undefined>>;
   /** The root of the working tree. A relative path of the private name list starts at the root. */
   readonly root: string;
@@ -238,9 +249,15 @@ function repoOfPush(options: PrePushOptions): string | undefined {
  * that it adds or changes, and each line that it adds. It writes the breaks to `stderr`, and gives the exit code: 1 on a
  * break, 0 on a pass. With no private name list and no private pattern, it writes the line `NO_READ_LINE` and gives 0.
  * The settings can name more than one list (`privateNamesFiles`). The command then examines the merge of the lists.
+ *
+ * With the option `base`, the command is the check of a change in CI. It examines each commit of `base..head` with
+ * the same rules, and the title and the body of the pull request of the run. A message then tells that the check fails,
+ * not that the push stops.
  */
 export function prePush(options: PrePushOptions, io: Pick<CliIo, "stderr">): number {
   const readFile = options.readFile ?? ((path: string): string => readFileSync(path, "utf8"));
+  const change = options.base !== undefined;
+  const stops = change ? "The check fails." : "The push stops.";
   const files = privateNamesFiles(options.env, options.git);
   const patterns = privatePatterns(options.env);
   if (files.length === 0 && patterns.length === 0) {
@@ -260,14 +277,14 @@ export function prePush(options: PrePushOptions, io: Pick<CliIo, "stderr">): num
       try {
         text = readFile(resolve(options.root, file));
       } catch (error) {
-        io.stderr(`conventions pre-push: Cannot read ${which}: ${readReason(error)}. Correct the setting or the file. The push stops.\n`);
+        io.stderr(`conventions pre-push: Cannot read ${which}: ${readReason(error)}. Correct the setting or the file. ${stops}\n`);
         return 1;
       }
       try {
         lists.push(parsePrivateNames(text));
       } catch (error) {
         const reason = error instanceof PrivateNameListError ? error.reason : "the parse failed";
-        io.stderr(`conventions pre-push: ${which.charAt(0).toUpperCase()}${which.slice(1)} is not valid: ${reason}. Correct the file. The push stops.\n`);
+        io.stderr(`conventions pre-push: ${which.charAt(0).toUpperCase()}${which.slice(1)} is not valid: ${reason}. Correct the file. ${stops}\n`);
         return 1;
       }
     }
@@ -275,7 +292,7 @@ export function prePush(options: PrePushOptions, io: Pick<CliIo, "stderr">): num
       names = mergePrivateNames(lists);
     } catch (error) {
       const reason = error instanceof PrivateNameListError ? error.reason : "the merge failed";
-      io.stderr(`conventions pre-push: The private name lists that ${source} names are not valid together: ${reason}. Give each name its own id. The push stops.\n`);
+      io.stderr(`conventions pre-push: The private name lists that ${source} names are not valid together: ${reason}. Give each name its own id. ${stops}\n`);
       return 1;
     }
   }
@@ -284,7 +301,16 @@ export function prePush(options: PrePushOptions, io: Pick<CliIo, "stderr">): num
   const home = homeSettings(options.root, readFile);
   const breaks: Break[] = invalidPatternBreaks(patterns);
   const commits = new Set<string>();
-  for (const line of options.input.split(/\r?\n/)) {
+  if (options.base !== undefined) {
+    const head = options.head ?? "HEAD";
+    const listed = options.git(["rev-list", head, `^${options.base}`, "--"]);
+    if (listed === undefined) {
+      io.stderr(`conventions pre-push: git cannot list the commits of ${options.base}..${head}. ${stops}\n`);
+      return 1;
+    }
+    for (const sha of listed.split(/\r?\n/)) if (SHA.test(sha.trim())) commits.add(sha.trim());
+  }
+  for (const line of change ? [] : options.input.split(/\r?\n/)) {
     if (line.trim() === "") continue;
     const [localRef, localSha, , remoteSha] = line.trim().split(/\s+/);
     if (localSha === undefined || remoteSha === undefined || !SHA.test(localSha) || !SHA.test(remoteSha)) {
@@ -305,22 +331,32 @@ export function prePush(options: PrePushOptions, io: Pick<CliIo, "stderr">): num
   for (const sha of commits) {
     const read = readCommit(sha, privates, home, repo, options.git);
     if (read === undefined) {
-      io.stderr(`conventions pre-push: git cannot show the commit ${sha.slice(0, 12)}. The push stops.\n`);
+      io.stderr(`conventions pre-push: git cannot show the commit ${sha.slice(0, 12)}. ${stops}\n`);
       return 1;
     }
     for (const item of read.breaks) breaks.push(item);
     lines += read.lines;
   }
+  // The title and the body of a pull request are public, as a commit message is
+  const pullRequest = change ? pullRequestOfRun(options.env) : undefined;
+  let texts = 0;
+  for (const [name, text] of [["pull request title", pullRequest?.title], ["pull request body", pullRequest?.body]] as const) {
+    if (text === undefined) continue;
+    texts += 1;
+    for (const item of privateTextBreaks(name, text, privates, { allow: home.allow, homes: home.on })) breaks.push(item);
+    lines += text === "" ? 0 : text.replace(/\r?\n$/, "").split(/\r?\n/).length;
+  }
+  const read = `${String(commits.size)} commits${texts > 0 ? " and the text of the pull request" : ""}, ${String(lines)} lines read`;
   if (breaks.length === 0) {
-    io.stderr(`conventions pre-push: ${String(commits.size)} commits, ${String(lines)} lines read, 0 breaks.\n`);
+    io.stderr(`conventions pre-push: ${read}, 0 breaks.\n`);
     return 0;
   }
-  const out = [`conventions pre-push: ${String(commits.size)} commits, ${String(lines)} lines read, ${String(breaks.length)} breaks. The push stops.`];
+  const out = [`conventions pre-push: ${read}, ${String(breaks.length)} breaks. ${stops}`];
   for (const item of breaks) {
     out.push(`  ${placeOf(item)}  ${item.message}`);
     if (item.fix !== undefined) out.push(`    fix: ${item.fix}`);
   }
-  out.push("Change the commits (git commit --amend, or git rebase), and push again.");
+  out.push(change ? "Remove each text from the commits (git commit --amend, or git rebase) and from the pull request. Then push again." : "Change the commits (git commit --amend, or git rebase), and push again.");
   io.stderr(`${out.join("\n")}\n`);
   return 1;
 }
@@ -381,9 +417,6 @@ export interface HookOptions {
   /** This function starts git in `cwd`, and gives its output, or undefined when git fails. */
   readonly git: (args: readonly string[]) => string | undefined;
 }
-
-/** This function tells if the environment is a CI run. */
-const isCi = (env: Readonly<Record<string, string | undefined>>): boolean => ["true", "1"].includes((env["CI"] ?? "").toLowerCase()) || env["GITHUB_ACTIONS"] === "true";
 
 /**
  * This function is the command `conventions hook install`. It writes the hook `pre-push` into the hooks folder of git,
