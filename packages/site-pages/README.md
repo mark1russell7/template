@@ -143,6 +143,8 @@ The folder of `--shots` gets a screenshot of each view, `report.json` and `summa
 
 The check finds a browser in this order: `--browser`, `$SITE_CHECK_BROWSER`, the newest Chromium of Playwright, and then Chrome or Edge. The folder `src/check` imports only Node.js. Thus Node.js 22.18 or later can start `src/check/main.ts` with no install. The workflow `reusable-pages.yml` of the template uses it this way.
 
+The browser starts with no graphics card, and it draws WebGL in software (`--enable-unsafe-swiftshader`). Thus a page with a 3D picture shows the same picture on Windows, on macOS and on Linux.
+
 ## The site bar
 
 The command `site-pages bar` writes one shared bar into each HTML page of a built site. The bar comes first in the body of each page.
@@ -631,7 +633,7 @@ Two functions read a measure from GitHub at the build. Each result has the `at` 
 | Function | Measure |
 | --- | --- |
 | `githubGreenRun({ owner, repo, token, workflow })` | The scheduled runs of a workflow that passed in a row, from the newest run |
-| `githubReleaseLag({ owner, repo, token, tagPrefix, branch })` | The age in days of the oldest commit of the first-parent line of the branch that is not in the newest release of the tag prefix. A merge commit counts at its own date. Drafts and pre-releases do not count. |
+| `githubReleaseLag({ owner, repo, token, tagPrefix, branch, paths })` | The age in days of the oldest commit of the first-parent line of the branch that is not in the newest release of the tag prefix. A merge commit counts at its own date. Drafts and pre-releases do not count. With `paths` (for example `["packages/", "!packages/site/"]`), only a commit that changes a file in the paths counts. The last entry that matches a file decides. |
 
 ## The shell of a site
 

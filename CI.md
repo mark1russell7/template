@@ -814,9 +814,10 @@ A change of the site check can fail a page that passed before. The site sees the
 
 A change of a rule of `@mark1russell7/conventions` can fail a repository that passed before. The repository sees the failure only when its pin moves. Thus the job `rules` of `ci.yml` examines each change of the rules before it merges.
 
-- The job starts on a pull request of the template that changes `packages/conventions/src`, `scripts/workflows/rule-compare.ts` or `ci.yml`. A change of a test file only does not start it.
+- The job starts on a pull request of the template that changes `packages/conventions/src`, `scripts/workflows/rule-compare.ts`, `scripts/lib/gh.ts` or `ci.yml`. A change of a test file only does not start it.
 - The job asks only for `contents: read`. The job `verify` of `release.yml` uses `ci.yml` with that grant, and a job that asks for more stops each release run at its start. The test `scripts/workflows/call-permissions.test.ts` holds this for each call of a workflow of the template.
-- The job lists the public repositories of the owner that are not archived. `scripts/workflows/rule-compare.ts` clones each one at its default branch, with one commit.
+- `scripts/workflows/rule-compare.ts` lists the public repositories that are not archived, of each owner of `packages/conventions/src/owners.ts`. Thus a repository that moves to another owner stays in the compare.
+- The list comes from `publicRepos` of `scripts/lib/gh.ts`, with its retry after a transient error. The script clones each repository at its default branch, with one commit.
 - A repository with no dependency on `@mark1russell7/conventions` in its root `package.json` is out of scope. The template is out of scope, because its own CI examines it.
 - In each clone, the script starts `conventions check --json --no-base` of the base and then of the pull request.
 - The two checks get the event file of a dispatched run of that repository. Thus no rule reads the pull request of the template, and a rule that examines a change skips.
@@ -965,6 +966,7 @@ Some workflow scripts import a package of the template, for example `@mark1russe
 - The script is in the folder of the action. Thus each checkout of the action has it, also a sparse checkout of `.github/actions`.
 - Thus a bump of the lockfile, for example by the release train, also moves each such install. No pin in a workflow stays behind.
 - `reusable-queue.yml` and the action `pull-of-run` install `@mark1russell7/text` in this way.
+- The job `rules` of `ci.yml` installs `@mark1russell7/text` and `@mark1russell7/service` in this way, into `scripts`. Thus `scripts/workflows` and `scripts/lib` both find them.
 - A test of `scripts/workflows/locked-version.test.ts` fails when a workflow or an action installs a package of the lockfile at a version in its text.
 - The script imports only Node.js modules, because it starts before the install.
 

@@ -8,6 +8,7 @@ import {
   boundaryRules,
   declaredDependencies,
   defaultOptions,
+  devOnlyDependencies,
   doNotFollowPaths,
   entryPattern,
   packageEntries,
@@ -66,6 +67,7 @@ describe("boundaryRules", () => {
       "deep-import-into-x-app",
       "not-a-declared-export",
       "unknown-workspace-package",
+      "run-time-import-of-a-dev-dependency",
       "import-of-the-app-x-app",
     ]);
     expect(rules.every((r) => r.comment?.startsWith("ADR-1. "))).toBe(true);
@@ -90,6 +92,26 @@ describe("boundaryRules", () => {
     expect(workspaceScopes(packages, ["@w"])).toEqual(["@w"]);
     expect(boundaryRules(packages, { scopes: [] }).some((r) => r.name === "unknown-workspace-package")).toBe(false);
   });
+
+  it("makes the rules of the dev dependencies for the source folders of each package that is not bundled", () => {
+    const packages = [
+      { name: "@x/a", dir: "packages/a", private: false, entries: [], devOnly: ["@x/tool", "vitest"] },
+      { name: "@x/tool", dir: "packages/tool", private: false, entries: [] },
+      { name: "@x/site", dir: "apps/site", private: true, entries: [], devOnly: ["@x/tool"], bundled: true },
+    ];
+    const rules = boundaryRules(packages);
+    const npm = rules.find((r) => r.name === "run-time-import-of-a-dev-dependency");
+    expect(npm?.from).toEqual({ path: "^(packages/a|packages/tool)/(src)/", pathNot: ["\\.(test|spec|e2e)\\.[cm]?[jt]sx?$", "/(test|tests|e2e|__tests__|fixtures)/"] });
+    expect(npm?.to).toEqual({ dependencyTypes: ["npm-dev"], dependencyTypesNot: ["type-only", "npm", "npm-peer", "npm-optional"] });
+    const workspace = rules.filter((r) => r.name.startsWith("run-time-import-of-a-dev-workspace-package-in-"));
+    expect(workspace.map((r) => [r.name, r.from["path"], r.to["path"]])).toEqual([
+      ["run-time-import-of-a-dev-workspace-package-in-x-a", "^packages/a/(src)/", ["^packages/tool/"]],
+    ]);
+    // The option bundled replaces the packages with a config file of vite, and sourceFolders [] turns off the rules.
+    const named = boundaryRules(packages, { bundled: ["@x/a"], sourceFolders: ["src", "./lib/"] }).find((r) => r.name === "run-time-import-of-a-dev-dependency");
+    expect(named?.from["path"]).toBe("^(packages/tool|apps/site)/(src|lib)/");
+    expect(boundaryRules(packages, { sourceFolders: [] }).some((r) => r.name.startsWith("run-time-import-of-a-dev"))).toBe(false);
+  });
 });
 
 describe("declaredDependencies", () => {
@@ -97,6 +119,11 @@ describe("declaredDependencies", () => {
     expect(
       declaredDependencies({ dependencies: { b: "1" }, devDependencies: { a: "1" }, peerDependencies: { c: "1" }, optionalDependencies: { b: "1", d: "1" } }),
     ).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("gives the names that are only in devDependencies", () => {
+    expect(devOnlyDependencies({ dependencies: { b: "1" }, devDependencies: { a: "1", b: "1", c: "1", e: "1" }, peerDependencies: { c: "1" }, optionalDependencies: { d: "1" } })).toEqual(["a", "e"]);
+    expect(devOnlyDependencies({})).toEqual([]);
   });
 });
 
@@ -138,7 +165,24 @@ describe("boundaries with dependency-cruiser", () => {
   beforeAll(() => {
     root = mkdtempSync(join(tmpdir(), "boundaries-"));
     write("pnpm-workspace.yaml", 'packages:\n  - "packages/*"\n');
-    pkg("packages/a", { name: "@f/a", exports: { ".": "./src/index.js" }, dependencies: { "@f/declared": "^1.0.0" } });
+    pkg("packages/a", {
+      name: "@f/a",
+      exports: { ".": "./src/index.js" },
+      dependencies: { "@f/declared": "^1.0.0", both: "^1.0.0" },
+      devDependencies: { "dev-only": "^1.0.0", both: "^1.0.0", "@f/tool": "workspace:*" },
+    });
+    pkg("packages/tool", { name: "@f/tool", main: "./src/index.js" });
+    // A site that vite builds: its build holds each import, also an import of a dev dependency.
+    pkg("packages/site", { name: "@f/site", private: true, devDependencies: { "dev-only": "^1.0.0" } });
+    write("packages/site/vite.config.js", "export default {};\n");
+    write("packages/site/src/main.js", 'import { dv } from "dev-only";\nexport const s = dv;\n');
+    write("packages/tool/src/index.js", "export const tl = 1;\n");
+    // A script outside the source folder can import a dev dependency.
+    write("packages/a/scripts/build.js", 'import { dv } from "dev-only";\nexport const built = dv;\n');
+    for (const name of ["dev-only", "both"]) {
+      write(`node_modules/${name}/package.json`, JSON.stringify({ name, version: "1.0.0", type: "module", main: "./index.js" }));
+      write(`node_modules/${name}/index.js`, "export const dv = 1;\nexport const bo = 1;\n");
+    }
     pkg("packages/b", { name: "@f/b", exports: { ".": "./src/index.js", "./util": "./src/util.js" } });
     pkg("packages/c", { name: "@f/c", main: "./src/index.js" });
     pkg("packages/app", { name: "@f/app", private: true, main: "./src/main.js" });
@@ -146,6 +190,8 @@ describe("boundaries with dependency-cruiser", () => {
     write("packages/b/src/util.js", "export const u = 1;\n");
     write("packages/b/src/internal.js", "export const i = 1;\n");
     write("packages/c/src/index.js", "export const c = 1;\n");
+    // A tsdown build puts each dev dependency into the build, as vite does.
+    write("packages/c/tsdown.config.js", "export default {};\n");
     write("packages/c/src/hidden.js", "export const h = 1;\n");
     write("packages/app/src/main.js", 'import { a } from "@f/a";\nexport const m = a;\n');
     write(
@@ -161,7 +207,10 @@ describe("boundaries with dependency-cruiser", () => {
         'import { t } from "@f/typo";', // a name in the scope @f that is not a package: it does not resolve
         'import { d } from "@f/declared";', // a declared dependency that is not installed: not unknown
         'import { o } from "@other/missing";', // a different scope: not a rule of the boundaries
-        "export const a = [b, u, c, i, x, h, m, t, d, o];",
+        'import { dv } from "dev-only";', // only in devDependencies: an install with --prod does not have it
+        'import { bo } from "both";', // in dependencies and in devDependencies: allowed
+        'import { tl } from "@f/tool";', // a workspace package only in devDependencies
+        "export const a = [b, u, c, i, x, h, m, t, d, o, dv, bo, tl];",
         "",
       ].join("\n"),
     );
@@ -170,6 +219,7 @@ describe("boundaries with dependency-cruiser", () => {
       ["@f/b", "packages/b"],
       ["@f/c", "packages/c"],
       ["@f/app", "packages/app"],
+      ["@f/tool", "packages/tool"],
     ] as const) {
       link(name, dir);
     }
@@ -185,6 +235,16 @@ describe("boundaries with dependency-cruiser", () => {
       ["@f/app", "packages/app", true],
       ["@f/b", "packages/b", false],
       ["@f/c", "packages/c", false],
+      ["@f/site", "packages/site", true],
+      ["@f/tool", "packages/tool", false],
+    ]);
+    expect(workspacePackages(root).map((p) => [p.name, p.bundled === true])).toEqual([
+      ["@f/a", false],
+      ["@f/app", false],
+      ["@f/b", false],
+      ["@f/c", true],
+      ["@f/site", true],
+      ["@f/tool", false],
     ]);
   });
 
@@ -208,6 +268,8 @@ describe("boundaries with dependency-cruiser", () => {
         "not-a-declared-export: packages/a/src/index.js -> @f/b/src/internal.js",
         "relative-import-out-of-f-a: packages/a/src/index.js -> packages/b/src/internal.js",
         "unknown-workspace-package: packages/a/src/index.js -> @f/typo",
+        "run-time-import-of-a-dev-dependency: packages/a/src/index.js -> node_modules/dev-only/index.js",
+        "run-time-import-of-a-dev-workspace-package-in-f-a: packages/a/src/index.js -> packages/tool/src/index.js",
       ].sort(),
     );
   });
@@ -224,7 +286,9 @@ describe("boundaries on TypeScript source", () => {
   beforeAll(() => {
     root = mkdtempSync(join(tmpdir(), "boundaries-ts-"));
     write("pnpm-workspace.yaml", 'packages:\n  - "packages/*"\n');
-    write("packages/a/package.json", JSON.stringify({ name: "@t/a", type: "module", main: "./src/index.ts" }));
+    write("packages/a/package.json", JSON.stringify({ name: "@t/a", type: "module", main: "./src/index.ts", devDependencies: { "dev-types": "^1.0.0" } }));
+    write("node_modules/dev-types/package.json", JSON.stringify({ name: "dev-types", version: "1.0.0", type: "module", main: "./index.js" }));
+    write("node_modules/dev-types/index.js", "export const d = 1;\n");
     write("packages/b/package.json", JSON.stringify({ name: "@t/b", type: "module", main: "./src/index.ts" }));
     write("packages/b/src/index.ts", "export interface B { b: number }\nexport const b: number = 1;\n");
     write("packages/b/src/secret.ts", "export type Secret = { s: string };\n");
@@ -233,8 +297,10 @@ describe("boundaries on TypeScript source", () => {
       [
         'import { b } from "@t/b";',
         'import type { Secret } from "@t/b/src/secret.ts";', // a type-only deep import
+        'import type { D } from "dev-types";', // a type-only import of a dev dependency: the build removes it
         "export const a: number = b;",
         "export type S = Secret;",
+        "export type T = D;",
         "",
       ].join("\n"),
     );
@@ -251,7 +317,7 @@ describe("boundaries on TypeScript source", () => {
     if (root) rmSync(root, { recursive: true, force: true });
   });
 
-  it("uses swc, and finds a type-only deep import", async () => {
+  it("uses swc, finds a type-only deep import, and passes a type-only import of a dev dependency", async () => {
     const config = boundaries(root);
     expect(config.options["parser"]).toBe("swc");
     const cwd = process.cwd();

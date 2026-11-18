@@ -134,6 +134,9 @@ export async function launch(executable: string, timeoutMs = 30_000, callMs: num
     "--no-first-run",
     "--no-default-browser-check",
     "--disable-gpu",
+    // With no graphics card, Chromium on Windows and macOS gives no WebGL to a page. This flag gives WebGL in software.
+    // Thus a page with a 3D picture shows the same picture on each system. The check opens only the pages of the built site.
+    "--enable-unsafe-swiftshader",
     "--disable-extensions",
     "--disable-background-networking",
     "--disable-sync",
