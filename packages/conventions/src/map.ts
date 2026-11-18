@@ -493,7 +493,7 @@ export const HOMES: readonly Home[] = [
     covers: "one event format based on CAP (the Common Alerting Protocol), a source adapter for each feed (describe, fetch, map, check), the merge of duplicate reports into one incident (idempotent and order-free), priority as a calculation, routes over channels with acknowledgement and escalation, the health and coverage of each source, the fault suite of the pipeline",
     packages: [],
     pending: ["@mark1russell7/alerts"],
-    repo: "mark1russell7/alerts",
+    repo: "metrograph-labs/alerts",
     state: "planned",
     words: ["alert", "alerts", "warning", "emergency", "cap", "common alerting protocol", "incident", "escalate", "escalation", "acknowledge", "severity", "urgency", "weather alert", "coverage", "heartbeat"],
     note: "The planned packages are @mark1russell7/alerts (the core) and one package for each source and each channel. It knows no person and no place: the places and keys of a user are input data. Sending goes through @procedures/notify, fetches through polite-crawler, geography through @mark1russell7/geo, the service loop through @mark1russell7/service, fault tests through rigor-chaos and rigor-proxy.",
