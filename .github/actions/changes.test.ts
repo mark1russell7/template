@@ -45,7 +45,9 @@ function stepScript(): string {
 }
 
 // A fake gh: it records each call in $FAKE_GH/calls. A read of the files gives $FAKE_GH/files, or fails when that file
-// is not there. Read N of the head of a pull request gives line N of $FAKE_GH/heads, or fails for the line "fail".
+// is not there. A read of a comparison gives $FAKE_GH/compare in the same way. The fake does not apply the filter of
+// --jq: each file holds the lines of the output of the filter. Read N of the head of a pull request gives line N of
+// $FAKE_GH/heads, or fails for the line "fail".
 const FAKE_GH = `#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$FAKE_GH/calls"
 path=""
@@ -54,6 +56,9 @@ case "$path" in
   */files[?]*)
     [ -f "$FAKE_GH/files" ] || { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
     cat "$FAKE_GH/files" ;;
+  */compare/*)
+    [ -f "$FAKE_GH/compare" ] || { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+    cat "$FAKE_GH/compare" ;;
   */pulls/*)
     n=$(( $(cat "$FAKE_GH/head-reads" 2>/dev/null || echo 0) + 1 ))
     echo "$n" > "$FAKE_GH/head-reads"
@@ -76,6 +81,14 @@ interface Case {
   /** The files of the pull request, or "fail" for a failed read. */
   readonly files?: readonly string[] | "fail";
   readonly paths?: string;
+  /** github.event.before of a push. */
+  readonly before?: string;
+  /** The input push-files. */
+  readonly pushFiles?: string;
+  /** The input version-bumps. */
+  readonly versionBumps?: string;
+  /** The lines of the comparison of a push, after the filter, or "fail" for a failed read. */
+  readonly compare?: readonly string[] | "fail";
 }
 
 interface Outcome {
@@ -106,6 +119,7 @@ function runStep(test: Case): Outcome {
   writeFileSync(join(bin, "gh"), FAKE_GH, { mode: 0o755 });
   writeFileSync(join(fake, "heads"), (test.heads ?? []).map((head) => `${head}\n`).join(""));
   if (test.files !== "fail") writeFileSync(join(fake, "files"), (test.files ?? []).map((file) => `${file}\n`).join(""));
+  if (test.compare !== undefined && test.compare !== "fail") writeFileSync(join(fake, "compare"), test.compare.map((line) => `${line}\n`).join(""));
   const script = join(temp, "step.sh");
   writeFileSync(script, stepScript());
   const output = join(temp, "output");
@@ -126,6 +140,9 @@ function runStep(test: Case): Outcome {
     PULL: test.pull ?? "",
     PATHS: test.paths ?? "packages/core/src/**",
     IGNORE: "",
+    BEFORE: test.before ?? "",
+    PUSH_FILES: test.pushFiles ?? "",
+    VERSION_BUMPS: test.versionBumps ?? "",
   });
   const result = spawnSync("bash", ["--noprofile", "--norc", "-eo", "pipefail", posix(script)], { cwd: temp, env, encoding: "utf8" });
   const calls = readdirSync(fake).includes("calls") ? readFileSync(join(fake, "calls"), "utf8").split("\n").filter((line) => line !== "") : [];
@@ -134,7 +151,11 @@ function runStep(test: Case): Outcome {
 }
 
 const HEAD_CALL = (number: number): string => `api repos/${REPO}/pulls/${String(number)} --jq .head.sha`;
-const FILES_CALL = (number: number): string => `api --paginate repos/${REPO}/pulls/${String(number)}/files?per_page=100 --jq .[] | .filename, (.previous_filename // empty)`;
+/** The jq filter of each file of the API: the variable FILE of the step. */
+const FILE = /\n {8}FILE='([^'\n]+)'\n/u.exec(action)?.[1] ?? "";
+const FILES_CALL = (number: number): string => `api --paginate repos/${REPO}/pulls/${String(number)}/files?per_page=100 --jq .[] | ${FILE}`;
+const BEFORE = "4444444444444444444444444444444444444444";
+const COMPARE_CALL = `api repos/${REPO}/compare/${BEFORE}...${HEAD} --jq `;
 
 describe("changes: a run of an event that is not a pull request", { skip: skipBash }, () => {
   for (const event of ["push", "schedule", "workflow_dispatch"]) {
@@ -236,11 +257,138 @@ describe("changes: a pull_request run", { skip: skipBash }, () => {
   });
 });
 
-describe("changes: the input pull-request", () => {
-  it("is optional and empty by default, and the step reads it, and the number of the event", () => {
+describe("changes: a push run with the input push-files", { skip: skipBash }, () => {
+  const push = { event: "push", pushFiles: "true", before: BEFORE } as const;
+
+  for (const before of ["", "0000000000000000000000000000000000000000", "abc"]) {
+    it(`runs the gate when the push has no commit before it ("${before}"), and reads nothing`, () => {
+      const out = runStep({ ...push, before, compare: ["docs/a.md"] });
+      assert.equal(out.status, 0, out.log);
+      assert.deepEqual(out.match, ["true"]);
+      assert.deepEqual(out.calls, []);
+      assert.ok(out.log.includes(`The push has no commit before it ("${before}"), for example the push of a new branch. So the gate runs.`), out.log);
+    });
+  }
+
+  it("runs the gate when the read of the comparison fails", () => {
+    const out = runStep({ ...push, compare: "fail" });
+    assert.equal(out.status, 0, out.log);
+    assert.deepEqual(out.match, ["true"]);
+    assert.equal(out.calls.length, 1);
+    assert.ok(out.calls[0]?.startsWith(COMPARE_CALL), out.calls[0]);
+    assert.match(out.log, /The read of the files of the push failed\. So the gate runs\./u);
+  });
+
+  it("runs the gate when the commit of the run is not ahead of the commit before, or for 300 files or more", () => {
+    const diverged = runStep({ ...push, compare: ["not-ahead diverged", "docs/a.md"] });
+    assert.deepEqual(diverged.match, ["true"]);
+    assert.ok(diverged.log.includes('The commit of the run is not ahead of the commit before the push (status "diverged"), for example after a forced push. So the gate runs.'), diverged.log);
+    const many = runStep({ ...push, compare: ["files-limit", "docs/a.md"] });
+    assert.deepEqual(many.match, ["true"]);
+    assert.match(many.log, /The push has 300 files or more, the limit of the API\. So the gate runs\./u);
+  });
+
+  it("reads nothing on a push without the input, as before", () => {
+    const out = runStep({ ...push, pushFiles: "false", compare: ["docs/a.md"] });
+    assert.deepEqual(out.match, ["true"]);
+    assert.deepEqual(out.calls, []);
+  });
+
+  it("decides with the files of the push", { skip: skipJq }, () => {
+    const docs = runStep({ ...push, compare: ["docs/a.md", "README.md"] });
+    assert.equal(docs.status, 0, docs.log);
+    assert.deepEqual(docs.match, ["false"]);
+    assert.match(docs.log, new RegExp(`The event is push, and the input push-files is true\\. The action reads the files of the push from ${BEFORE} to ${HEAD}\\.`, "u"));
+    assert.match(docs.log, /2 files\. Match: false\./u);
+    assert.deepEqual(runStep({ ...push, compare: ["docs/a.md", "packages/core/src/a.ts"] }).match, ["true"]);
+  });
+
+  it("reads the pull request of a pull_request run, not a comparison", { skip: skipJq }, () => {
+    const out = runStep({ event: "pull_request", number: "5", pushFiles: "true", before: BEFORE, files: ["docs/a.md"], compare: ["packages/core/src/a.ts"] });
+    assert.deepEqual(out.match, ["false"]);
+    assert.deepEqual(out.calls, [FILES_CALL(5)]);
+  });
+});
+
+describe("changes: the input version-bumps", { skip: skipJq }, () => {
+  const bump = "version-bump packages/core/package.json";
+  const paths = "packages/*/package.json";
+
+  it("counts a change of only the version by default, as before", () => {
+    const out = runStep({ event: "pull_request", number: "5", paths, files: [bump, "docs/a.md"] });
+    assert.equal(out.status, 0, out.log);
+    assert.deepEqual(out.match, ["true"]);
+  });
+
+  it("with skip, takes out each change of only the version, and keeps each other change of a package.json", () => {
+    const out = runStep({ event: "pull_request", number: "5", paths, versionBumps: "skip", files: [bump, "docs/a.md"] });
+    assert.equal(out.status, 0, out.log);
+    assert.deepEqual(out.match, ["false"]);
+    assert.ok(out.log.includes('Files with a change of only the line "version" of a package.json: 1. They are not files of the gate (the input version-bumps).'), out.log);
+    assert.deepEqual(runStep({ event: "pull_request", number: "5", paths, versionBumps: "skip", files: [bump, "packages/web/package.json"] }).match, ["true"]);
+    assert.deepEqual(runStep({ event: "pull_request", number: "5", paths, versionBumps: "skip", files: [bump] }).match, ["false"]);
+  });
+
+  it("with skip, also takes them out of the files of a push", () => {
+    const out = runStep({ event: "push", pushFiles: "true", before: BEFORE, paths, versionBumps: "skip", compare: [bump] });
+    assert.deepEqual(out.match, ["false"]);
+  });
+});
+
+describe("changes: the filter of each file", { skip: skipJq }, () => {
+  /** This function gives the lines of the output of the filter FILE for the files of the API. */
+  const filter = (files: readonly Record<string, string>[]): string[] => {
+    const result = spawnSync("jq", ["-r", `.[] | ${FILE}`], { input: JSON.stringify(files), encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.split("\n").filter((line) => line !== "");
+  };
+  const version = (from: string, to: string, comma = ","): string => `-  "version": "${from}"${comma}\n+  "version": "${to}"${comma}`;
+
+  it("finds the step variable", () => {
+    assert.ok(FILE.startsWith("if (") && FILE.endsWith(" end"), FILE);
+  });
+
+  it("marks a package.json whose only change is one line version out and one in", () => {
+    const head = '@@ -1,6 +1,6 @@\n {\n   "name": "@acme/core",\n';
+    assert.deepEqual(
+      filter([
+        { filename: "packages/core/package.json", status: "modified", patch: `${head}${version("1.0.0", "1.0.1")}\n   "type": "module",` },
+        { filename: "package.json", status: "modified", patch: `@@ -2,2 +2,2 @@\n${version("1", "2", "")}\n\\ No newline at end of file` },
+      ]),
+      ["version-bump packages/core/package.json", "version-bump package.json"],
+    );
+  });
+
+  it("gives the name of each other file, and both names of a moved file", () => {
+    assert.deepEqual(
+      filter([
+        { filename: "packages/a/package.json", status: "modified", patch: `${version("1.0.0", "1.0.1")}\n-    "x": "^1.0.0"\n+    "x": "^2.0.0"` },
+        { filename: "packages/b/package.json", status: "modified", patch: '-    "x": "^1.0.0"\n+    "x": "^2.0.0"' },
+        { filename: "packages/c/package.json", status: "modified", patch: '-  "version": "1.0.0",\n+  "version": "1.0.1", "main": "x.js",' },
+        { filename: "packages/d/package.json", status: "added", patch: version("1.0.0", "1.0.1") },
+        { filename: "packages/e/package.json", status: "modified" },
+        { filename: "manifest.json", status: "modified", patch: version("1.0.0", "1.0.1") },
+        { filename: "mypackage.json", status: "modified", patch: version("1.0.0", "1.0.1") },
+        { filename: "docs/b.md", previous_filename: "docs/a.md", status: "renamed" },
+      ]),
+      ["packages/a/package.json", "packages/b/package.json", "packages/c/package.json", "packages/d/package.json", "packages/e/package.json", "manifest.json", "mypackage.json", "docs/b.md", "docs/a.md"],
+    );
+  });
+});
+
+describe("changes: the inputs", () => {
+  it("pull-request is optional and empty by default, and the step reads it, and the number of the event", () => {
     assert.match(action, /\n {2}pull-request:\n(?: {4}.*\n)+? {4}default: ""\n/u);
     assert.match(action, /\n {8}PULL: \$\{\{ inputs\.pull-request \}\}\n/u);
     assert.match(action, /\n {8}NUMBER: \$\{\{ github\.event\.pull_request\.number \}\}\n/u);
+  });
+
+  it("push-files and version-bumps keep the old behavior by default, and the step reads them and the commit before a push", () => {
+    assert.match(action, /\n {2}push-files:\n(?: {4}.*\n)+? {4}default: "false"\n/u);
+    assert.match(action, /\n {2}version-bumps:\n(?: {4}.*\n)+? {4}default: "count"\n/u);
+    assert.match(action, /\n {8}PUSH_FILES: \$\{\{ inputs\.push-files \}\}\n/u);
+    assert.match(action, /\n {8}VERSION_BUMPS: \$\{\{ inputs\.version-bumps \}\}\n/u);
+    assert.match(action, /\n {8}BEFORE: \$\{\{ github\.event\.before \}\}\n/u);
   });
 });
 

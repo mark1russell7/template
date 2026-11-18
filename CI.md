@@ -279,6 +279,9 @@ Without the input, a dispatched run in a private repository examines no change, 
 A gate that is only about some files (a bench of the core, a corpus) starts on each pull request too. Two shared actions do the rest:
 
 - `changes` reads the files of the pull request and gives `match`. It has the patterns of `on.pull_request.paths`: `*` does not match `/`, `**` matches each part of a path, and `!` takes files out. A different event is a match, but a run of `workflow_dispatch` can give its pull request (refer to "A dispatched run of a gate").
+- Two inputs of `changes` take out more runs. Their defaults keep the behavior above:
+  - With `push-files: "true"`, a push run reads the files of its push, from `github.event.before` to the commit of the run. A new branch, a forced push, 300 files or more, or a failed read gives a match.
+  - With `version-bumps: skip`, a `package.json` whose only change is its line `"version"` is not a file of the gate. The release of that version builds and packs the package.
 - `gate-summary` is the step of the summary job. It passes when each job passed. When `changes` gives `match: false`, a skipped gate job passes too. A failure, a cancel or another skip fails it.
 - A skip is green only after a pass. Give each job that `allow-skip` names a line `<job id>=<check name>` in `last-result`, and give the summary job `checks: read`. A skip of that job then reads the last result of its check on the commit:
   - A pass passes, and a failure fails the summary.
