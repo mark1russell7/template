@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { startsReport } from "./process-starts.global.ts";
-import { commandName, lineCommandName } from "./process-starts.setup.ts";
+import { commandName, gitStartsIn, lineCommandName, startKey } from "./process-starts.ts";
 
 describe("the count of process starts", () => {
   it("names a command file by its name, with no folder and no extension", () => {
@@ -17,6 +17,14 @@ describe("the count of process starts", () => {
     expect(lineCommandName('"C:\\Program Files\\GitHub CLI\\gh.exe" pr view')).toBe("gh");
     expect(lineCommandName("  git status")).toBe("git");
     expect(lineCommandName(42)).toBe("unknown");
+  });
+
+  it("counts a git start under its command only with the detail on, and sums each key of git", () => {
+    expect(startKey("git", ["-c", "user.name=test", "-C", "a", "ls-files", "-z"], true)).toBe("git-ls-files");
+    expect(startKey("git", ["ls-files", "-z"], false)).toBe("git");
+    expect(startKey("git", ["--version"], true)).toBe("git");
+    expect(startKey("node", ["-e", "1"], true)).toBe("node");
+    expect(gitStartsIn(new Map([["git", 2], ["git-commit", 3], ["gh", 4]]))).toBe(5);
   });
 
   it("reports the files with the most starts first, and a line of the sums", () => {

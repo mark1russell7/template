@@ -297,6 +297,9 @@ importers:
 
   packages/conventions:
     dependencies:
+      '@mark1russell7/files':
+        specifier: ^0.0.4
+        version: 0.0.4
       '@mark1russell7/text':
         specifier: ^0.0.15
         version: 0.0.15
@@ -641,6 +644,10 @@ packages:
 
   '@mark1russell7/files@0.0.3':
     resolution: {integrity: sha512-FiiKK/sAbp39ypGv+2XzYRc+s911pdCtu97UQ4LiKmQKHjqPiyocGO48r2YObucxUkQhnm9mCdkiQxW6rFjiAg==}
+    engines: {node: '>=22'}
+
+  '@mark1russell7/files@0.0.4':
+    resolution: {integrity: sha512-Pb978ZnvlAxzcdWtRtqTGb7mZFCvlNrdKnpZqhxQ7gafzeNGf1JqYFuB4RWiLbJzRuFUWjEoAVG5f2TndCIlSg==}
     engines: {node: '>=22'}
 
   '@mark1russell7/layout-contract@0.3.7':
@@ -2079,6 +2086,8 @@ snapshots:
   '@mark1russell7/cue@2.1.4': {}
 
   '@mark1russell7/files@0.0.3': {}
+
+  '@mark1russell7/files@0.0.4': {}
 
   '@mark1russell7/layout-contract@0.3.7':
     dependencies:

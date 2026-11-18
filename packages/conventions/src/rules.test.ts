@@ -1,7 +1,5 @@
 // Each rule on fixture repositories: a case that passes and a case that breaks.
-import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
@@ -14,37 +12,17 @@ import { minuteField } from "./rules/runner-budget.ts";
 import { runsOnMain, runsOnOneCommit, startsOnPush } from "./rules/main-runs-finish.ts";
 import { triggersOf } from "./rules/site-check-in-ci.ts";
 import { localBase, runCli } from "./run.ts";
+import { gitFixtures } from "./test/git-fixture.ts";
 
-const temp = mkdtempSync(join(tmpdir(), "conventions-rules-"));
-afterAll(() => rmSync(temp, { recursive: true, force: true }));
+const repos = gitFixtures("conventions-rules-");
+afterAll(() => repos.remove());
+const temp = repos.temp;
+/** The count of the event files and the clones of the temporary folder. */
 let fixtures = 0;
 
 const SHA = "0123456789abcdef0123456789abcdef01234567";
 
-/** This function writes the files of a fixture repository, and gives its root. */
-function fixture(files: Record<string, unknown>): string {
-  const root = join(temp, String(fixtures++));
-  mkdirSync(root, { recursive: true });
-  for (const [file, text] of Object.entries(files)) {
-    mkdirSync(dirname(join(root, file)), { recursive: true });
-    writeFileSync(join(root, file), typeof text === "string" ? text : `${JSON.stringify(text, null, 2)}\n`);
-  }
-  return root;
-}
-
-/** This function starts git in `root`, and gives its output. */
-function git(root: string, ...args: string[]): string {
-  const result = spawnSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", ...args], { cwd: root, encoding: "utf8" });
-  if (result.status !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr}`);
-  return result.stdout;
-}
-
-/** This function makes `root` a git repository with one commit of each file. */
-function commitAll(root: string, message = "first"): void {
-  git(root, "init", "-q", "-b", "main");
-  git(root, "add", "-A");
-  git(root, "commit", "-q", "-m", message);
-}
+const { fixture, git, commitAll, stageAll, shared } = repos;
 
 /** This function starts one rule on `root`, and gives its result. */
 function rule(root: string, id: string, options: Omit<CheckOptions, "root" | "only"> = {}): RuleResult {
@@ -185,7 +163,7 @@ describe("tsconfig-test", () => {
 
   it("skips a package with no test file in git, and knows the forms of a test file", () => {
     const root = fixture({ "package.json": { name: "one" }, "tsconfig.json": {}, "src/index.ts": "export {};\n" });
-    commitAll(root);
+    stageAll(root);
     expect(rule(root, "tsconfig-test").status).toBe("pass");
     expect(hasTests(["packages/a/src/x.test.ts"], "packages/a")).toBe(true);
     expect(hasTests(["src/__tests__/x.ts", "README.md"], "")).toBe(true);
@@ -307,7 +285,7 @@ describe("no-build-output", () => {
     };
     expect(rule(fixture(files), "no-build-output").status).toBe("skipped");
     const root = fixture(files);
-    commitAll(root);
+    stageAll(root);
     expect(rule(root, "no-build-output").breaks.map((item) => item.message)).toEqual([
       "Git keeps 1 file(s) in build/.",
       "Git keeps 1 file(s) in packages/a/coverage/.",
@@ -317,7 +295,7 @@ describe("no-build-output", () => {
 
   it("is off with a reason in the configuration", () => {
     const root = fixture({ "package.json": { name: "one", conventions: { rules: { "no-build-output": { off: "git installs need dist" } } } }, "dist/x.js": "" });
-    commitAll(root);
+    stageAll(root);
     expect(rule(root, "no-build-output")).toMatchObject({ status: "off", note: "git installs need dist" });
   });
 });
@@ -396,11 +374,21 @@ describe("no-local-paths", () => {
 });
 
 describe("release-files", () => {
+  /** A repository with one commit of a package, a release file and a README. */
+  function first(): string {
+    return shared("release-files first", () => {
+      const root = fixture({ "package.json": { name: "one" }, "scripts/release/x.mjs": "1\n", "README.md": "1\n" });
+      commitAll(root);
+      return root;
+    });
+  }
   /** A repository with a first commit, and a second commit that changes `file` with `message`. */
   function changed(file: string, message: string, author = "test"): string {
-    const root = fixture({ "package.json": { name: "one" }, "scripts/release/x.mjs": "1\n", "README.md": "1\n" });
-    commitAll(root);
-    git(root, "tag", "base");
+    const root = shared("release-files base", () => {
+      const base = first();
+      git(base, "tag", "base");
+      return base;
+    });
     writeFileSync(join(root, file), "2\n");
     git(root, "-c", `user.name=${author}`, "commit", "-q", "-am", message);
     return root;
@@ -448,8 +436,7 @@ describe("release-files", () => {
   it("does not trust a shallow checkout that ends inside the change, and passes when the checkout has the merge base", () => {
     /** A pull request with the commits `commits` (an author and a file each), as the merge commit of a checkout with depth 2. */
     function shallow(commits: readonly (readonly [string, string])[], mergeMain: boolean): string {
-      const root = fixture({ "package.json": { name: "one" }, "scripts/release/x.mjs": "1\n", "README.md": "1\n" });
-      commitAll(root);
+      const root = first();
       git(root, "switch", "-q", "-c", "pr");
       commits.forEach(([author, file], index) => {
         writeFileSync(join(root, file), `pr ${String(index)}\n`);
@@ -468,7 +455,7 @@ describe("release-files", () => {
       }
       git(root, "switch", "-q", "-c", "checkout");
       git(root, "merge", "-q", "--no-ff", "-m", "merge pr", "pr");
-      const clone = join(temp, String(fixtures++));
+      const clone = join(temp, `clone-${String(fixtures++)}`);
       git(temp, "clone", "-q", "--depth", "2", "--branch", "checkout", pathToFileURL(root).href, clone);
       return clone;
     }
@@ -508,7 +495,7 @@ describe("typed-scripts", () => {
       "tools/x.ps1": "$a = 1\n$b = 2\n",
     });
     expect(rule(root, "typed-scripts").status).toBe("skipped");
-    commitAll(root);
+    stageAll(root);
     expect(rule(root, "typed-scripts").breaks.map((item) => item.file)).toEqual(["bin/run", "build.sh", "scripts/a.mjs", "scripts/b.cjs", "src/c.js", "tools/x.ps1"]);
   });
 
@@ -521,7 +508,7 @@ describe("typed-scripts", () => {
       ".dependency-cruiser.mjs": "export default {};\n",
       "build.sh": "set -e\npnpm build\n",
     });
-    commitAll(root);
+    stageAll(root);
     expect(rule(root, "typed-scripts").breaks).toEqual([]);
   });
 
@@ -542,7 +529,7 @@ describe("typed-files", () => {
       "types/c.d.ts": "export declare const c: number;\n",
     });
     expect(rule(root, "typed-files").status).toBe("skipped");
-    commitAll(root);
+    stageAll(root);
     expect(rule(root, "typed-files").breaks.map((item) => item.file)).toEqual(["scripts/b.ts", "vitest.config.ts"]);
   });
 
@@ -555,18 +542,18 @@ describe("typed-files", () => {
       "lib/b.ts": "export const b = 1;\n",
       "vitest.config.ts": "export default {};\n",
     });
-    commitAll(root);
+    stageAll(root);
     expect(rule(root, "typed-files").breaks).toEqual([]);
   });
 
   it("fails closed: a typecheck that names a missing config, and a repository with no typecheck", () => {
     const missing = fixture({ "package.json": { name: "one", scripts: { typecheck: "tsc -p tsconfig.test.json" } }, "src/a.ts": "export {};\n" });
-    commitAll(missing);
+    stageAll(missing);
     const breaks = rule(missing, "typed-files").breaks;
     expect(breaks[0]?.message).toMatch(/names tsconfig\.test\.json, and that file does not exist/);
     expect(breaks.map((item) => item.file)).toContain("src/a.ts");
     const none = fixture({ "package.json": { name: "one" }, "src/a.ts": "export {};\n" });
-    commitAll(none);
+    stageAll(none);
     expect(rule(none, "typed-files").breaks.map((item) => item.message)).toEqual([expect.stringMatching(/No typecheck script names a tsconfig/), "src/a.ts is in no tsconfig that a typecheck script examines."]);
   });
 
@@ -599,7 +586,7 @@ describe("tests-required", () => {
       "notes.md": "passWithNoTests: true\n",
     });
     expect(rule(root, "tests-required").status).toBe("skipped");
-    commitAll(root);
+    stageAll(root);
     expect(rule(root, "tests-required").breaks.map((item) => `${item.file}:${String(item.line)}`)).toEqual(["package.json:4", "packages/a/vitest.config.ts:1"]);
   });
 });
@@ -610,10 +597,10 @@ describe("roadmap-parses", () => {
 
   it("passes a roadmap that a workflow names and that parses, and skips with no named roadmap", () => {
     const root = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": pages, "docs/ROADMAP.md": roadmap });
-    commitAll(root);
+    stageAll(root);
     expect(rule(root, "roadmap-parses").breaks).toEqual([]);
     const none = fixture({ "package.json": { name: "one" }, ".github/workflows/ci.yml": "jobs:\n  a:\n    with:\n      roadmap: ${{ inputs.roadmap }}\n", "docs/ROADMAP.md": roadmap });
-    commitAll(none);
+    stageAll(none);
     expect(rule(none, "roadmap-parses").status).toBe("skipped");
   });
 
@@ -624,7 +611,7 @@ describe("roadmap-parses", () => {
       "docs/ROADMAP.md": `${roadmap}| a2 | Second |\n`,
       "docs/EMPTY.md": "# Nothing\n",
     });
-    commitAll(root);
+    stageAll(root);
     expect(rule(root, "roadmap-parses").breaks.map((item) => `${item.file}:${String(item.line)}: ${item.message}`)).toEqual([
       "docs/ROADMAP.md:6: docs/ROADMAP.md: the row has 2 cells, and the header has 3",
       ".github/workflows/pages.yml:9: .github/workflows/pages.yml names the roadmap docs/GONE.md, and the file does not exist.",
@@ -639,15 +626,15 @@ describe("roadmap-parses", () => {
       ".github/workflows/other.yml": "jobs:\n  a:\n    with:\n      roadmap: ${{ inputs.roadmap }}\n    uses: o/template/.github/workflows/reusable-pages.yml@0123abc # main\n",
       "docs/ROADMAP.md": roadmap,
     });
-    commitAll(root);
+    stageAll(root);
     expect(rule(root, "roadmap-parses").breaks.map((item) => `${item.file}:${String(item.line)}: ${item.message}`)).toEqual([
       ".github/workflows/pages.yml:5: .github/workflows/pages.yml builds the site with the Pages workflow and gives no roadmap, so the Status page shows no roadmap item.",
     ]);
     const plain = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": "jobs:\n  site:\n    uses: o/t/.github/workflows/reusable-pages.yml@0123abc\n    with:\n      site-pages: false # no Status page\n" });
-    commitAll(plain);
+    stageAll(plain);
     expect(rule(plain, "roadmap-parses").status).toBe("skipped");
     const only = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": "jobs:\n  site:\n    uses: o/t/.github/workflows/reusable-pages.yml@0123abc\n" });
-    commitAll(only);
+    stageAll(only);
     expect(rule(only, "roadmap-parses").status).not.toBe("skipped");
     expect(rule(only, "roadmap-parses").breaks).toHaveLength(1);
   });
@@ -656,23 +643,23 @@ describe("roadmap-parses", () => {
     const call = "jobs:\n  pages:\n    uses: o/t/.github/workflows/reusable-pages.yml@0123abc\n";
     const site = (config: Record<string, unknown>): string => `{\n  "build": "b",\n  "out": "o",\n${Object.entries(config).map(([key, value]) => `  ${JSON.stringify(key)}: ${JSON.stringify(value)}`).join(",\n")}\n}\n`;
     const good = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": call, ".github/site.json": site({ roadmap: "./docs/ROADMAP.md" }), "docs/ROADMAP.md": roadmap });
-    commitAll(good);
+    stageAll(good);
     expect(rule(good, "roadmap-parses").breaks).toEqual([]);
     // The rule parses the roadmap of the file, with the line of its key
     const bad = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": call, ".github/site.json": site({ roadmap: "docs/GONE.md" }) });
-    commitAll(bad);
+    stageAll(bad);
     expect(rule(bad, "roadmap-parses").breaks.map((item) => `${item.file}:${String(item.line)}: ${item.message}`)).toEqual([
       ".github/site.json:4: .github/site.json names the roadmap docs/GONE.md, and the file does not exist.",
     ]);
     const none = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": call, ".github/site.json": site({ "site-name": "x" }) });
-    commitAll(none);
+    stageAll(none);
     expect(rule(none, "roadmap-parses").breaks.map((item) => item.message)).toEqual([".github/site.json gives no roadmap, so the Status page shows no roadmap item."]);
     const noPages = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": call, ".github/site.json": site({ "site-pages": false }) });
-    commitAll(noPages);
+    stageAll(noPages);
     expect(rule(noPages, "roadmap-parses").status).toBe("skipped");
     // A file that is not a site config fails on the pull request, before the Pages run reads it
     const typo = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": call, ".github/site.json": site({ roadmap: "docs/ROADMAP.md", "site-chek": true }), "docs/ROADMAP.md": roadmap });
-    commitAll(typo);
+    stageAll(typo);
     expect(rule(typo, "roadmap-parses").breaks.map((item) => item.message)).toEqual([expect.stringMatching(/"site-chek" is not a key of the site config/)]);
   });
 
@@ -704,7 +691,7 @@ describe("runner-budget", () => {
       ".github/workflows/shared.yml": "on:\n  workflow_call:\njobs:\n  a:\n    runs-on: ubuntu-latest\n",
       ".github/workflows/each.yml": each.join("\n"),
     });
-    commitAll(root);
+    stageAll(root);
     expect(show(root)).toEqual([]);
   });
 
@@ -728,7 +715,7 @@ describe("runner-budget", () => {
       "",
     ];
     const root = fixture({ "package.json": { name: "one" }, ".github/workflows/scan.yml": scan.join("\n") });
-    commitAll(root);
+    stageAll(root);
     expect(show(root)).toEqual([
       ".github/workflows/scan.yml:7: .github/workflows/scan.yml: a matrix has no max-parallel.",
       ".github/workflows/scan.yml:12: .github/workflows/scan.yml: a matrix has max-parallel 8, and the most is 3.",
@@ -745,7 +732,7 @@ describe("runner-budget", () => {
     expect(minuteField(50, 4)).toBe("5,20,35,50");
     const cron = (field: string): string => {
       const root = fixture({ "package.json": { name: "one" }, ".github/workflows/scan.yml": `on:\n  schedule:\n    - cron: "${field} * * * *"\nconcurrency: scan\njobs: {}\n` });
-      commitAll(root);
+      stageAll(root);
       return root;
     };
     expect(show(cron(minuteField(minute, 2)))).toEqual([]);
@@ -758,10 +745,10 @@ describe("runner-budget", () => {
 
   it("reports a schedule when the repository is not known, and skips with no workflow", () => {
     const root = fixture({ "package.json": { name: "one" }, ".github/workflows/scan.yml": 'on:\n  schedule:\n    - cron: "1 5 * * 1"\nconcurrency: scan\njobs: {}\n' });
-    commitAll(root);
+    stageAll(root);
     expect(rule(root, "runner-budget").breaks.map((item) => item.message)).toEqual([expect.stringContaining("cannot find the repository")]);
     const none = fixture({ "package.json": { name: "one" } });
-    commitAll(none);
+    stageAll(none);
     expect(rule(none, "runner-budget").status).toBe("skipped");
   });
 
@@ -769,7 +756,7 @@ describe("runner-budget", () => {
     const caller = "on: pull_request\njobs:\n  review:\n    uses: ./.github/workflows/reusable-ai-review.yml\n  other:\n    uses: o/template/.github/workflows/reusable-ci.yml@0123abc # main\n";
     const shared = "on:\n  workflow_call:\njobs:\n  review:\n    concurrency:\n      group: r\n    runs-on: ubuntu-latest\n  post:\n    runs-on: ubuntu-latest\n";
     const root = fixture({ "package.json": { name: "one" }, ".github/workflows/ai.yml": caller, ".github/workflows/reusable-ai-review.yml": shared, ".github/workflows/reusable-ci.yml": "on: workflow_call\njobs:\n  a:\n    runs-on: ubuntu-latest\n" });
-    commitAll(root);
+    stageAll(root);
     expect(show(root)).toEqual([
       ".github/workflows/ai.yml:5: .github/workflows/ai.yml: the job other has no concurrency group, and the workflow has none.",
       ".github/workflows/reusable-ai-review.yml:8: .github/workflows/reusable-ai-review.yml: the job post has no concurrency group, and its callers rely on it (the option grouped).",
@@ -932,7 +919,7 @@ describe("gate-trigger", () => {
       ".github/workflows/odd.yml": "on:\n  pull_request: { paths: [a] }\njobs:\n  a:\n    runs-on: ubuntu-latest\n",
       ".github/workflows/ci.yml": "on:\n  pull_request:\n  push:\n    paths: [src/**]\njobs:\n  a:\n    runs-on: ubuntu-latest\n",
     });
-    commitAll(root);
+    stageAll(root);
     expect(show(root)).toEqual([
       ".github/workflows/bench.yml:8: fix .github/workflows/bench.yml: on.pull_request.paths, so the workflow does not start on each pull request, and the ruleset cannot ask for its summary check.",
       ".github/workflows/odd.yml:2: .github/workflows/odd.yml: on.pull_request.paths, so the workflow does not start on each pull request, and the ruleset cannot ask for its summary check.",
@@ -949,7 +936,7 @@ describe("gate-trigger", () => {
 
   it("skips a repository with no workflow", () => {
     const root = fixture({ "package.json": { name: "one" } });
-    commitAll(root);
+    stageAll(root);
     expect(rule(root, "gate-trigger")).toMatchObject({ status: "skipped", note: "the repository has no workflow" });
   });
 });
@@ -957,10 +944,13 @@ describe("gate-trigger", () => {
 describe("home-package", () => {
   /** A repository of `repo` with a first commit, and a second commit that adds `added` to src/a.ts. */
   function changed(added: string, repo = "mark1russell7/other"): string {
-    const root = fixture({ "package.json": { name: "one" }, "src/a.ts": "export function median(values: number[]): number {\n  return values[0] ?? 0;\n}\n" });
-    commitAll(root);
-    git(root, "remote", "add", "origin", `https://github.com/${repo}.git`);
-    git(root, "tag", "base");
+    const root = shared(`home-package ${repo}`, () => {
+      const base = fixture({ "package.json": { name: "one" }, "src/a.ts": "export function median(values: number[]): number {\n  return values[0] ?? 0;\n}\n" });
+      commitAll(base);
+      git(base, "remote", "add", "origin", `https://github.com/${repo}.git`);
+      git(base, "tag", "base");
+      return base;
+    });
     writeFileSync(join(root, "src/a.ts"), `export function median(values: number[]): number {\n  return values[0] ?? 0;\n}\n${added}`);
     git(root, "commit", "-q", "-am", "change");
     return root;
@@ -1068,10 +1058,13 @@ describe("home-module", () => {
 
   /** A repository of `repo` with a first commit, and a second commit that adds `added` to src/a.ts. */
   function changed(added: string, repo = "mark1russell7/other", manifest: Record<string, unknown> = { name: "one" }): string {
-    const root = fixture({ "package.json": manifest, "src/a.ts": `import { DatabaseSync } from "${M}";\n` });
-    commitAll(root);
-    git(root, "remote", "add", "origin", `https://github.com/${repo}.git`);
-    git(root, "tag", "base");
+    const root = shared(JSON.stringify(["home-module", repo, manifest]), () => {
+      const base = fixture({ "package.json": manifest, "src/a.ts": `import { DatabaseSync } from "${M}";\n` });
+      commitAll(base);
+      git(base, "remote", "add", "origin", `https://github.com/${repo}.git`);
+      git(base, "tag", "base");
+      return base;
+    });
     writeFileSync(join(root, "src/a.ts"), `import { DatabaseSync } from "${M}";\n${added}`);
     git(root, "commit", "-q", "-am", "change");
     return root;
@@ -1264,16 +1257,16 @@ describe("pages-site", () => {
 
   it("passes a public repository that deploys a site, and a private repository with no site", () => {
     const root = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": pages });
-    commitAll(root);
+    stageAll(root);
     expect(rule(root, "pages-site", { env: event({ private: false }) }).status).toBe("pass");
     const none = fixture({ "package.json": { name: "one" }, ".github/workflows/ci.yml": "jobs:\n  a:\n    runs-on: ubuntu-latest\n" });
-    commitAll(none);
+    stageAll(none);
     expect(rule(none, "pages-site", { env: event({ private: true }) }).status).toBe("pass");
   });
 
   it("skips outside a run, and breaks on a public repository with no site or with a test site only", () => {
     const root = fixture({ "package.json": { name: "one" }, ".github/workflows/actions-test.yml": test });
-    commitAll(root);
+    stageAll(root);
     expect(rule(root, "pages-site", { env: {} }).status).toBe("skipped");
     expect(rule(root, "pages-site", { env: event({}) }).status).toBe("skipped");
     const result = rule(root, "pages-site", { env: event({ private: false }) });
@@ -1281,7 +1274,7 @@ describe("pages-site", () => {
       ".github/workflows/pages.yml: The repository is public, and no workflow deploys its site with the Pages workflow of the template. The calls in .github/workflows/actions-test.yml have deploy: false.",
     ]);
     const none = fixture({ "package.json": { name: "one" } });
-    commitAll(none);
+    stageAll(none);
     expect(rule(none, "pages-site", { env: event({ private: false }) }).breaks.map((item) => item.message)).toEqual(["The repository is public, and no workflow deploys its site with the Pages workflow of the template."]);
   });
 });
@@ -1293,7 +1286,7 @@ describe("site-check-in-ci", () => {
   /** This function gives the breaks of the rule on the files `files`, each as `file:line: message`. */
   const breaksOf = (files: Record<string, unknown>): string[] => {
     const root = fixture({ "package.json": { name: "one" }, ...files });
-    commitAll(root);
+    stageAll(root);
     return rule(root, "site-check-in-ci").breaks.map((item) => `${item.file}${item.line === undefined ? "" : `:${item.line}`}: ${item.message}`);
   };
 
@@ -1307,10 +1300,10 @@ describe("site-check-in-ci", () => {
 
   it("passes a site with its config and a check that CI OK needs, and skips a repository with no deploy", () => {
     const root = fixture({ "package.json": { name: "one" }, ".github/site.json": site, ".github/workflows/pages.yml": deploy, ".github/workflows/ci.yml": ci });
-    commitAll(root);
+    stageAll(root);
     expect(rule(root, "site-check-in-ci").status).toBe("pass");
     const test = fixture({ "package.json": { name: "one" }, ".github/workflows/actions-test.yml": "on: pull_request\njobs:\n  pages:\n    uses: ./.github/workflows/reusable-pages.yml\n    with:\n      out: test-site\n      deploy: false\n" });
-    commitAll(test);
+    stageAll(test);
     expect(rule(test, "site-check-in-ci").status).toBe("skipped");
   });
 
@@ -1361,6 +1354,9 @@ describe("unreleased-change", () => {
   }
   /** A workspace with one published package `@x/a` at `version`, committed and tagged `base`. The option sets the mode. */
   function repo(version: string, extra: Record<string, unknown> = {}, manifest: Record<string, unknown> = {}, strict = true): string {
+    return shared(JSON.stringify(["unreleased-change", version, extra, manifest, strict]), () => build(version, extra, manifest, strict));
+  }
+  function build(version: string, extra: Record<string, unknown>, manifest: Record<string, unknown>, strict: boolean): string {
     const conventions = strict ? { conventions: { rules: { "unreleased-change": { versionEachChange: true, reason: "each pull request sets its version" } } } } : {};
     const root = workspace(conventions, {
       "packages/a/package.json": { name: "@x/a", version, ...manifest },
@@ -1604,7 +1600,7 @@ describe("shared-docs", () => {
   const linkedBlock = (id: string, url = link): string => [`<!-- linked:${id} -->`, `The home of this block is [docs/HOME.md](${url}).`, `<!-- /linked:${id} -->`].join("\n");
   const repo = (text: string, lock: unknown): string => {
     const root = fixture({ "package.json": { name: "one" }, "docs/PROMOTION.md": text, "docs/shared.lock.json": lock });
-    commitAll(root);
+    stageAll(root);
     return root;
   };
   /** A fake download that gives `text` for each URL, or the error `error`, and counts the URLs. */
@@ -1619,7 +1615,7 @@ describe("shared-docs", () => {
 
   it("skips a repository with no lock, and passes blocks that agree with the lock", () => {
     const empty = fixture({ "package.json": { name: "one" } });
-    commitAll(empty);
+    stageAll(empty);
     expect(check(empty, none).status).toBe("skipped");
     const root = repo(doc(sharedBlock("a"), sharedBlock("b", ["Other text."])), { file: "docs/PROMOTION.md", blocks: { a: blockHash(body), b: blockHash(["Other text."]) } });
     expect(check(root, none).breaks).toEqual([]);
@@ -1751,7 +1747,7 @@ describe("main-runs-finish", () => {
       ".github/workflows/probe.yml": flow(after, "false", "${{ github.event_name }}-${{ github.ref }}"),
       ".github/workflows/mixed.yml": flow(["on:", "  push:", "  workflow_run:", "    workflows: [CI]"], PR, shared),
     });
-    commitAll(root);
+    stageAll(root);
     const breaks = rule(root, "main-runs-finish").breaks;
     expect(breaks.map((item) => `${item.file}:${String(item.line)}`)).toEqual([".github/workflows/mixed.yml:6", ".github/workflows/pages.yml:9"]);
     expect(breaks.map((item) => item.message)).toEqual([
@@ -1774,7 +1770,7 @@ describe("main-runs-finish", () => {
       ".github/workflows/pr.yml": flow(["on: pull_request"], "true"),
       ".github/workflows/time-gate.yml": flow(["on:", "  workflow_call:", "  workflow_dispatch:"], "true"),
     });
-    commitAll(root);
+    stageAll(root);
     expect(rule(root, "main-runs-finish").breaks.map((item) => `${item.file}:${String(item.line)}`)).toEqual([".github/workflows/ci.yml:6", ".github/workflows/time-gate.yml:6"]);
     const fixed = runFix({ root, only: ["main-runs-finish"] });
     expect(fixed.changed).toEqual([".github/workflows/ci.yml", ".github/workflows/time-gate.yml"]);
@@ -1794,7 +1790,7 @@ describe("main-runs-finish", () => {
       ".github/workflows/pr.yml": flow(["on: pull_request"], "true", shared),
       ".github/workflows/fixed-name.yml": flow(["on: push"], "false", "pages"),
     });
-    commitAll(root);
+    stageAll(root);
     expect(rule(root, "main-runs-finish").breaks.map((item) => `${item.file}:${String(item.line)}`)).toEqual([".github/workflows/both.yml:3", ".github/workflows/both.yml:4", ".github/workflows/ci.yml:3"]);
     const fixed = runFix({ root, only: ["main-runs-finish"] });
     expect(fixed.changed).toEqual([".github/workflows/both.yml", ".github/workflows/ci.yml"]);
@@ -1805,7 +1801,7 @@ describe("main-runs-finish", () => {
 
   it("skips a repository with no push, called or workflow_run workflow", () => {
     const root = fixture({ "package.json": { name: "one" }, ".github/workflows/pr.yml": flow(["on: pull_request"], "true") });
-    commitAll(root);
+    stageAll(root);
     expect(rule(root, "main-runs-finish")).toMatchObject({ status: "skipped", note: "no workflow starts on push, workflow_call or workflow_run" });
   });
 });

@@ -1,14 +1,15 @@
 // The rule version-title on fixture repositories: the titles of template #212 (5933b34) and #215 (e077054), on a push and on a pull request.
-import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { runChecks, type CheckOptions, type RuleResult } from "./index.ts";
 import { namedVersions } from "./rules/version-title.ts";
+import { gitFixtures } from "./test/git-fixture.ts";
 
-const temp = mkdtempSync(join(tmpdir(), "conventions-version-title-"));
-afterAll(() => rmSync(temp, { recursive: true, force: true }));
+const repos = gitFixtures("conventions-version-title-");
+afterAll(() => repos.remove());
+const { temp, git, shared, commitOf } = repos;
+/** The count of the event files of the temporary folder. */
 let fixtures = 0;
 
 const ID = "version-title";
@@ -17,38 +18,33 @@ const PACKAGE = "packages/site-pages/package.json";
 const TITLE_212 = "site-pages check: a probe for each page (0.3.3) (#212)";
 const TITLE_215 = "fix(site-pages): githubReleaseLag follows the first-parent line (0.3.3) (#215)";
 
-/** This function starts git in `root`, and gives its output. */
-function git(root: string, ...args: string[]): string {
-  const result = spawnSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", ...args], { cwd: root, encoding: "utf8" });
-  if (result.status !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr}`);
-  return result.stdout.trim();
-}
-
 /** This function writes each file, commits the change with the title, and gives the commit. */
 function commit(root: string, title: string, files: Record<string, unknown>): string {
-  for (const [file, text] of Object.entries(files)) {
-    mkdirSync(dirname(join(root, file)), { recursive: true });
-    writeFileSync(join(root, file), typeof text === "string" ? text : `${JSON.stringify(text, null, 2)}\n`);
-  }
+  repos.write(root, files);
   git(root, "add", "-A");
   git(root, "commit", "-q", "--allow-empty", "-m", title);
-  return git(root, "rev-parse", "HEAD");
+  return commitOf(root);
 }
 
 const manifest = (version: string): Record<string, unknown> => ({ name: "@x/site-pages", version });
 
-/** This function makes a workspace with the package `site-pages` at 0.3.2 on `main`, and gives its root and first commit. */
+/**
+ * This function gives a copy of a workspace with the package `site-pages` at 0.3.2 on `main`, and its first commit. The
+ * cases share one build of the workspace.
+ */
 function repository(): { root: string; first: string } {
-  const root = join(temp, String(fixtures++));
-  mkdirSync(root, { recursive: true });
-  git(root, "init", "-q", "-b", "main");
-  const first = commit(root, "first", {
-    "package.json": { name: "root", private: true },
-    "pnpm-workspace.yaml": "packages:\n  - packages/*\n",
-    [PACKAGE]: manifest("0.3.2"),
-    "packages/site-pages/src/github.ts": "export const lag = 1;\n",
+  const root = shared("site-pages at 0.3.2", () => {
+    const base = repos.folder();
+    repos.init(base);
+    commit(base, "first", {
+      "package.json": { name: "root", private: true },
+      "pnpm-workspace.yaml": "packages:\n  - packages/*\n",
+      [PACKAGE]: manifest("0.3.2"),
+      "packages/site-pages/src/github.ts": "export const lag = 1;\n",
+    });
+    return base;
   });
-  return { root, first };
+  return { root, first: commitOf(root) };
 }
 
 /** This function writes an event file, and gives its environment. */
@@ -111,9 +107,8 @@ describe("version-title on a push", () => {
   });
 
   it("passes Release at the start of a title, for a root package", () => {
-    const root = join(temp, String(fixtures++));
-    mkdirSync(root, { recursive: true });
-    git(root, "init", "-q", "-b", "main");
+    const root = repos.folder();
+    repos.init(root);
     const first = commit(root, "first", { "package.json": manifest("0.22.0") });
     commit(root, "Release 0.23.0", { "package.json": manifest("0.23.0") });
     expect(check(root, { env: pushed(first) }).status).toBe("pass");
@@ -135,14 +130,16 @@ describe("version-title on a push", () => {
 describe("version-title on a pull request", () => {
   /** This function makes the checkout of #215: main has #212, and HEAD is the merge of the branch `pr` into main. */
   function mergeOf215(branchVersion: string): string {
-    const { root } = repository();
-    git(root, "switch", "-q", "-c", "pr");
-    commit(root, "the lag follows the first parent", { [PACKAGE]: manifest(branchVersion), "packages/site-pages/src/github.ts": "export const lag = 2;\n" });
-    git(root, "switch", "-q", "main");
-    commit(root, TITLE_212, { [PACKAGE]: manifest("0.3.3") });
-    git(root, "switch", "-q", "--detach", "main");
-    git(root, "merge", "-q", "--no-ff", "-X", "theirs", "-m", "merge pr", "pr");
-    return root;
+    return shared(`merge of #215 with ${branchVersion}`, () => {
+      const { root } = repository();
+      git(root, "switch", "-q", "-c", "pr");
+      commit(root, "the lag follows the first parent", { [PACKAGE]: manifest(branchVersion), "packages/site-pages/src/github.ts": "export const lag = 2;\n" });
+      git(root, "switch", "-q", "main");
+      commit(root, TITLE_212, { [PACKAGE]: manifest("0.3.3") });
+      git(root, "switch", "-q", "--detach", "main");
+      git(root, "merge", "-q", "--no-ff", "-X", "theirs", "-m", "merge pr", "pr");
+      return root;
+    });
   }
 
   it("fails #215 before its merge: the branch sets 0.3.3, which main has already", () => {
@@ -180,14 +177,17 @@ describe("version-title on a dispatched run of a pull request", () => {
    * function gives the tip of main.
    */
   function branchOf215(branchVersion: string, merged: boolean): { root: string; main: string } {
-    const { root } = repository();
-    git(root, "switch", "-q", "-c", "pr");
-    commit(root, "the lag follows the first parent", { [PACKAGE]: manifest(branchVersion), "packages/site-pages/src/github.ts": "export const lag = 2;\n" });
-    git(root, "switch", "-q", "main");
-    const main = commit(root, TITLE_212, { [PACKAGE]: manifest("0.3.3") });
-    git(root, "switch", "-q", "pr");
-    if (merged) git(root, "merge", "-q", "--no-ff", "-X", "ours", "-m", "merge main", "main");
-    return { root, main };
+    const root = shared(`branch of #215 with ${branchVersion}, merged: ${String(merged)}`, () => {
+      const { root: base } = repository();
+      git(base, "switch", "-q", "-c", "pr");
+      commit(base, "the lag follows the first parent", { [PACKAGE]: manifest(branchVersion), "packages/site-pages/src/github.ts": "export const lag = 2;\n" });
+      git(base, "switch", "-q", "main");
+      commit(base, TITLE_212, { [PACKAGE]: manifest("0.3.3") });
+      git(base, "switch", "-q", "pr");
+      if (merged) git(base, "merge", "-q", "--no-ff", "-X", "ours", "-m", "merge main", "main");
+      return base;
+    });
+    return { root, main: commitOf(root, "main") };
   }
 
   const TITLE = "fix(site-pages): githubReleaseLag follows the first-parent line (0.3.3)";

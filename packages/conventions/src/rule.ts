@@ -4,6 +4,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { findUp } from "@mark1russell7/files";
 import { globToRegExp } from "./workspace.ts";
 
 /** A row of the invariants audit that a rule comes from: the repository, the id of the rule in that audit, and the document line. */
@@ -206,8 +207,20 @@ export function readJsonc(file: string): unknown {
   }
 }
 
-/** This function starts git in `root` with `args`, and gives its output, or undefined when git fails. */
+/**
+ * This function tells if git can find a repository from `root`. A repository is a `.git` folder or file in `root` or in
+ * a parent folder, or the variable `GIT_DIR`. Each command of the rules needs a repository, so git fails with no repository.
+ */
+export function inRepository(root: string, env: Readonly<Record<string, string | undefined>> = process.env): boolean {
+  return (env["GIT_DIR"] ?? "") !== "" || findUp(".git", root) !== null;
+}
+
+/**
+ * This function starts git in `root` with `args`, and gives its output, or undefined when git fails. With no repository,
+ * it starts no process and gives undefined: each process start costs time, and on Windows also kernel memory.
+ */
 export function runGit(root: string, args: readonly string[]): string | undefined {
+  if (!inRepository(root)) return undefined;
   const result = spawnSync("git", [...args], { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024, windowsHide: true });
   if (result.error || result.status !== 0) return undefined;
   return result.stdout;
