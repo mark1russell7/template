@@ -204,7 +204,7 @@ export const publishTextSafe: Rule = {
   sources: [
     { repo: "text", rule: "publish-text-safe", doc: "packages/text/README.md (0.0.7, pull request 32)" },
     { repo: "text", rule: "secret-shapes", doc: "packages/text/src/redact.ts (SECRET_SHAPES, findSecretShapesInValue, 0.0.8)" },
-    { repo: "private", rule: "publish-text-safe", doc: "docs/STRATEGY.md (2026-11-16, the publish document has no attack shape and no token)" },
+    { repo: "private", rule: "publish-text-safe", doc: "a decision of 2026-11-16: the publish document has no attack shape and no token" },
   ],
   options: {},
   failsFrom: "2026-11-16",
