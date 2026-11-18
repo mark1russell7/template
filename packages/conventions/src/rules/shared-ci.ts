@@ -15,6 +15,7 @@ export const SHARED_WORKFLOWS: readonly string[] = [
   "reusable-ai-review.yml",
   "reusable-ci.yml",
   "reusable-codex-review.yml",
+  "reusable-gate.yml",
   "reusable-lockfile.yml",
   "reusable-mutation.yml",
   "reusable-pages-check.yml",
