@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { type CheckReport, annotations, checkCalls, confirmed, fails, newProblems, outcome, shardOf, siteTarget, summaryLines } from "./site-compare.ts";
+import { type CheckReport, annotations, checkCalls, confirmed, fails, newProblems, outcome, siteTarget, summaryLines } from "./site-compare.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -188,13 +188,6 @@ describe("the summary", () => {
 });
 
 describe("the shards", () => {
-  it("puts each site in exactly one shard", () => {
-    const sites = ["e", "a", "d", "c", "b", "f", "g"];
-    const shards = [0, 1, 2, 3].map((shard) => shardOf(sites, shard, 4));
-    assert.deepEqual(shards.flat().sort(), [...sites].sort());
-    assert.deepEqual(shards[0], ["a", "e"]);
-  });
-
   it("has the same count of shards in the matrix and in the command of the job compare", () => {
     const text = readFileSync(join(root, ".github/workflows/site-audit.yml"), "utf8");
     const matrix = /\n {8}shard: \[([^\]]*)\]/.exec(text)?.[1]?.split(",").map((entry) => Number(entry.trim()));
