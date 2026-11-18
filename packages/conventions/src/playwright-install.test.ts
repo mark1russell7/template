@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { runChecks, type RuleResult } from "./index.ts";
 import { playwrightInstall, playwrightInstalls, siteConfigInstall } from "./rules/playwright-install.ts";
-import { gitFixtures } from "./test/git-fixture.ts";
+import { gitFixtures } from "@mark1russell7/rigor-testkit/git-fixture";
 
 const repos = gitFixtures("conventions-playwright-install-");
 afterAll(() => repos.remove());

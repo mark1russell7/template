@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { inRepository, needsRepository, runGit } from "./rule.ts";
 import { privateNamesFile } from "./rules/no-local-paths.ts";
-import { startsOf } from "./test/process-starts.ts";
+import { startsOf } from "@mark1russell7/rigor-testkit/process-starts";
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-run-git-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));

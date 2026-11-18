@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { runChecks, runFix, type RuleResult } from "./index.ts";
 import { isDaily, pagesTriggers } from "./rules/pages-after-release.ts";
-import { gitFixtures } from "./test/git-fixture.ts";
+import { gitFixtures } from "@mark1russell7/rigor-testkit/git-fixture";
 
 const repos = gitFixtures("conventions-pages-release-");
 afterAll(() => repos.remove());

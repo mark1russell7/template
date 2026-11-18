@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { runChecks, runFix, type CheckOptions, type RuleResult } from "./index.ts";
-import { gitFixtures } from "./test/git-fixture.ts";
+import { gitFixtures } from "@mark1russell7/rigor-testkit/git-fixture";
 
 const repos = gitFixtures("conventions-push-");
 afterAll(() => repos.remove());

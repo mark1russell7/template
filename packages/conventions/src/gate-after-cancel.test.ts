@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { runChecks, runFix, type RuleResult } from "./index.ts";
 import { alwaysGates, withNotCancelled } from "./rules/gate-after-cancel.ts";
-import { gitFixtures } from "./test/git-fixture.ts";
+import { gitFixtures } from "@mark1russell7/rigor-testkit/git-fixture";
 
 const repos = gitFixtures("conventions-gate-cancel-");
 afterAll(() => repos.remove());

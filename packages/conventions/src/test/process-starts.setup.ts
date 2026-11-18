@@ -4,12 +4,15 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { afterAll, beforeAll, inject } from "vitest";
-import type { FileStarts } from "./process-starts.global.ts";
-import { countProcessStarts, gitBudgetBreak, parseGitBudgets, ranInFull } from "./process-starts.ts";
+import { countProcessStarts, type FileStarts, parseStartBudgets, ranInFull, startBudgetBreak } from "@mark1russell7/rigor-testkit/process-starts";
 
 /** The root of the package, so that a key of `git-starts.json` is the same from each working folder. */
 const ROOT = join(import.meta.dirname, "..", "..");
-const BUDGETS = parseGitBudgets(readFileSync(join(import.meta.dirname, "git-starts.json"), "utf8"));
+const SOURCE = "src/test/git-starts.json";
+const BUDGETS = parseStartBudgets(readFileSync(join(import.meta.dirname, "git-starts.json"), "utf8"), SOURCE);
+const ADVICE =
+  "Share the fixture repositories of @mark1russell7/rigor-testkit/git-fixture: stageAll, commitAll and shared. " +
+  "Raise the budget only for the git starts of the code under test.";
 
 const counts = countProcessStarts();
 
@@ -24,6 +27,6 @@ afterAll(({}, suite) => {
   const dir = inject("processStartsDir");
   const row: FileStarts = { file, counts: Object.fromEntries(counts) };
   if (dir !== undefined) writeFileSync(join(dir, `${file.replace(/[^\w.-]+/g, "_")}.json`), JSON.stringify(row));
-  const message = gitBudgetBreak(file, counts, BUDGETS, ranInFull(suite.tasks));
+  const message = startBudgetBreak(file, counts, BUDGETS, { source: SOURCE, advice: ADVICE, inFull: ranInFull(suite.tasks) });
   if (message !== undefined) throw new Error(message);
 });

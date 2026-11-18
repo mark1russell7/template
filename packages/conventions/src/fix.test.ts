@@ -12,7 +12,7 @@ import {
   type Rule,
 } from "./index.ts";
 import { hasImportMetaMain } from "./rules/main-check.ts";
-import { gitFixtures } from "./test/git-fixture.ts";
+import { gitFixtures } from "@mark1russell7/rigor-testkit/git-fixture";
 
 const repos = gitFixtures("conventions-fix-");
 afterAll(() => repos.remove());

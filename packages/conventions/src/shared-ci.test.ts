@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { runChecks, type RuleResult } from "./index.ts";
 import { SHARED_ACTIONS, SHARED_WORKFLOWS, callsSharedCi } from "./rules/shared-ci.ts";
-import { gitFixtures } from "./test/git-fixture.ts";
+import { gitFixtures } from "@mark1russell7/rigor-testkit/git-fixture";
 
 // The lists of the rule are the files of the template: a new shared workflow or action without a change here fails.
 describe("the shared lists", () => {

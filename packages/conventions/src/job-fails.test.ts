@@ -6,7 +6,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { runChecks, type RuleResult } from "./index.ts";
 import { hiddenFailures, jobFails, parseAdvisory, startsTests, swallowsTests } from "./rules/job-fails.ts";
 import { shellCode } from "./workflow.ts";
-import { gitFixtures } from "./test/git-fixture.ts";
+import { gitFixtures } from "@mark1russell7/rigor-testkit/git-fixture";
 
 const repos = gitFixtures("conventions-job-fails-");
 afterAll(() => repos.remove());

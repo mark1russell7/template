@@ -27,7 +27,7 @@ import {
   type NameRule,
 } from "./index.ts";
 import { addedRuns, FIRST_PRE_PUSH_VERSION } from "./pre-push.ts";
-import { gitFixtures } from "./test/git-fixture.ts";
+import { gitFixtures } from "@mark1russell7/rigor-testkit/git-fixture";
 
 const PROBE = "zz-test-pattern-7316";
 const ZEROS = "0".repeat(40);

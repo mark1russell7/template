@@ -12,7 +12,7 @@ import { minuteField } from "./rules/runner-budget.ts";
 import { runsOnMain, runsOnOneCommit, startsOnPush } from "./rules/main-runs-finish.ts";
 import { triggersOf } from "./rules/site-check-in-ci.ts";
 import { localBase, runCli } from "./run.ts";
-import { gitFixtures } from "./test/git-fixture.ts";
+import { gitFixtures } from "@mark1russell7/rigor-testkit/git-fixture";
 
 const repos = gitFixtures("conventions-rules-");
 afterAll(() => repos.remove());
