@@ -236,10 +236,38 @@ export type BoundaryScope = { readonly kind: "off"; readonly reason: string } | 
 const PLAIN_WORD = /^[\w@%+=:,./-]+$/;
 
 /**
+ * A word in double or single quotes. Its text has no quote, space, variable, command or escape, so the shell gives the
+ * text as it is. A glob in quotes goes to `depcruise` as it is, and `depcruise` reads the glob.
+ */
+const QUOTED_WORD = /^"([^"\s$`\\]*)"$|^'([^'\s]*)'$/;
+
+/**
+ * This function gives the words of one command of a script, with no quotes, or undefined when a word is not plain or
+ * quoted text. An empty command also gives undefined.
+ */
+function commandWords(command: string): string[] | undefined {
+  const words: string[] = [];
+  for (const word of command.trim().split(/\s+/)) {
+    if (PLAIN_WORD.test(word)) {
+      words.push(word);
+      continue;
+    }
+    const quoted = QUOTED_WORD.exec(word);
+    if (quoted === null) return undefined;
+    words.push(quoted[1] ?? quoted[2] ?? "");
+  }
+  return words;
+}
+
+/**
  * This function reads the text of the root `package.json` of a repository. A repository with no dependency on
- * `@mark1russell7/boundaries`, or with no script `check:boundaries`, is out of scope. A script that is not one
- * `depcruise` command with plain words is a no read. Else the function gives the words after `depcruise`, and the
- * option of a JSON output into `outFile`. The last option of `depcruise` decides, so these options come last.
+ * `@mark1russell7/boundaries`, or with no script `check:boundaries`, is out of scope.
+ *
+ * The script is a list of commands with `&&`. Each command has plain words or quoted text. One command starts with
+ * `depcruise`. The other commands are other checks, and the compare does not start them. Each other script is a no read.
+ *
+ * For a script that it reads, the function gives the words after `depcruise`, and the option of a JSON output into
+ * `outFile`. The last option of `depcruise` decides, so these options come last.
  */
 export function boundaryScope(text: string | undefined, outFile: string): BoundaryScope {
   const off = scopeOf(text, BOUNDARIES);
@@ -251,10 +279,12 @@ export function boundaryScope(text: string | undefined, outFile: string): Bounda
     return { kind: "unread", reason: "its root package.json does not parse" };
   }
   if (typeof script !== "string") return { kind: "off", reason: `its root package.json has no script ${BOUNDARY_SCRIPT}` };
-  const [command, ...words] = script.trim().split(/\s+/);
-  if (command !== "depcruise" || !words.every((word) => PLAIN_WORD.test(word))) {
-    return { kind: "unread", reason: `its script ${BOUNDARY_SCRIPT} is not one depcruise command with plain words` };
+  const commands = script.split("&&").map(commandWords);
+  const cruises = commands.filter((words) => words?.[0] === "depcruise");
+  if (commands.some((words) => words === undefined) || cruises.length !== 1) {
+    return { kind: "unread", reason: `its script ${BOUNDARY_SCRIPT} is not a list of plain commands with one depcruise command` };
   }
+  const [, ...words] = cruises[0] ?? [];
   return { kind: "args", args: [...words, "--output-type", "json", "--output-to", outFile] };
 }
 
