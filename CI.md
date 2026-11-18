@@ -390,6 +390,8 @@ jobs:
           needs: ${{ toJSON(needs) }}
 ```
 
+The ruleset names the summary check `Bench OK`, as "The check of the ruleset" tells. A no read of the first try passes the job `bench / Gate`. Thus a ruleset that names only that check lets a merge through when the second try fails. A ruleset that names the checks of the gate names the two checks: `bench / Gate` and `bench / Gate (second attempt)`. A skipped second try counts as a pass.
+
 The command writes one line for each gate into the file `$GATE_VERDICT_FILE`: `pass`, `block` or `no-read`. The script `scripts/workflows/gate-attempt.ts` of the template reads the file and the exit code of the command:
 
 | Verdict | When | The job |

@@ -114,6 +114,14 @@ describe("main", () => {
     assert.match(second.log[1] ?? "", /^::error /u);
   });
 
+  it("fails a block of the second attempt after a no read of the first", () => {
+    const first = start("pass\nno-read\n", at("1", "1"));
+    assert.deepEqual([first.code, first.output], [0, "verdict=no-read\n"]);
+    const second = start("pass\nblock\n", at("2", "1"));
+    assert.deepEqual([second.code, second.output], [1, "verdict=block\n"]);
+    assert.match(second.log[1] ?? "", /^::error title=Gate attempt 2 of 2%3A block::Block: 1 of 2 gates block, and the command exited with 1\.$/u);
+  });
+
   it("gives error for a missing file, a bad exit code and a bad attempt", () => {
     assert.deepEqual([start(undefined, at("1")).code, start(undefined, at("1")).output], [1, "verdict=error\n"]);
     const exit = start("pass\n", at("1", ""));
