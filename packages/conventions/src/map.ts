@@ -14,7 +14,10 @@ export interface Home {
   readonly covers: string;
   /** The packages of the home. A planned home has no package yet. */
   readonly packages: readonly string[];
-  /** The repository of the home, as owner/name. */
+  /**
+   * The repository of the home, as owner/name. The rules of the homes take the name under each owner of `OWNERS`,
+   * so a move between the owners does not wait on this field.
+   */
   readonly repo: string;
   /**
    * The other repositories that hold code of the home while it moves, as owner/name: the source or the target of the move.
@@ -470,7 +473,7 @@ export const HOMES: readonly Home[] = [
     title: "The duplication atlas",
     covers: "function shapes, clone classes, shared names and packages by purpose over all public repositories, and the static analysis of code for bugs, also in the repositories of others",
     packages: [],
-    repo: "mark1russell7/codeatlas",
+    repo: "metrograph-labs/codeatlas",
     state: "unpublished",
     words: ["duplicate", "clone", "copy", "static analysis", "analyzer"],
   },
