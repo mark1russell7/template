@@ -202,6 +202,10 @@ git config --global conventions.privateNamesFile ~/private/private-names.json
 
 The environment variable `CONVENTIONS_PRIVATE_NAMES_FILE` has priority over the git configuration.
 
+The settings can name more than one list. Add each more list with `git config --global --add conventions.privateNamesFile <path>`. In the environment variable, put `;` between the paths on Windows, and `:` on other systems.
+
+The command merges the lists in their order. The index of a name in a break counts across the lists. When two lists have the same id, the push stops.
+
 The list is a JSON file. The schema [`schema/private-names.schema.json`](schema/private-names.schema.json) tells its fields, and the package has the schema. This example has made-up names:
 
 ```json
@@ -312,5 +316,6 @@ The package also exports the functions of the tool:
 - `parsePrivateNames(text)` parses and checks a private name list. It throws a `PrivateNameListError` with a reason that shows no value of the list.
 - `lineNameHit(list, line, place)`, `pathNameHit(list, path)`, `firstNameMatch(line, names)`, `isCommonUse(line, index, rule)` and `isAllowedHit(allow, repo, path, id)` find the names of the list. They have no input or output.
 - `lineNameHits(list, line, place)` and `nameMatches(line, names)` give each name of a line, one hit for each name. A scan that counts the names uses them. The gate takes the first hit.
-- `privateNamesFile(env, git)`, `privatePatterns(env)` and `invalidPatternBreaks(patterns)` read the settings and the patterns.
+- `privateNamesFiles(env, git)`, `privateNamesFile(env, git)`, `privatePatterns(env)` and `invalidPatternBreaks(patterns)` read the settings and the patterns. `privateNamesFiles` gives each path, and `privateNamesFile` gives one.
+- `mergePrivateNames(lists)` merges the lists in order. It throws a `PrivateNameListError` when two lists have the same id.
 - `prePush(options, io)` is the command `pre-push`, and `installHook(options, io)` is the command `hook install`. `PRE_PUSH_HOOK` is the text of the hook.
