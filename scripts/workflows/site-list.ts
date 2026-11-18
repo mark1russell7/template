@@ -31,11 +31,18 @@ export interface SiteList {
  */
 export const NAV_SHARD_SIZE = 8;
 
-/** One shard of the job nav: the name of its job, its number from 0, and its sites. */
+/** One shard of the job nav: the name of its job, its number from 0, its sites, and the address of each site. */
 export interface Shard {
   readonly name: string;
   readonly index: number;
   readonly sites: string[];
+  readonly urls: string[];
+}
+
+/** This function gives the address of the Pages site of a repository: the root for `<owner>.github.io`, else a folder. */
+export function siteUrl(owner: string, name: string): string {
+  const host = `${owner.toLowerCase()}.github.io`;
+  return name.toLowerCase() === host ? `https://${host}/` : `https://${host}/${name}/`;
 }
 
 /** This function gives the sites of one shard: the sites at the places `shard`, `shard + shards`, and on, of the sorted list. */
@@ -43,12 +50,20 @@ export const shardOf = (sites: readonly string[], shard: number, shards: number)
 
 /**
  * This function divides the sites into the fewest shards of at most `size` sites. Each site is in exactly one shard, and
- * the counts of two shards differ by one or less. An empty list gives no shard.
+ * the counts of two shards differ by one or less. An empty list gives no shard. Each site needs an owner in `owners`.
  */
-export function shardsOf(sites: readonly string[], size: number): Shard[] {
+export function shardsOf(sites: readonly string[], owners: Readonly<Record<string, string>>, size: number): Shard[] {
   if (!Number.isInteger(size) || size < 1) throw new RangeError(`The size of a shard must be a positive integer, not ${String(size)}.`);
+  const url = (name: string): string => {
+    const owner = owners[name];
+    if (owner === undefined) throw new Error(`The site ${name} has no owner.`);
+    return siteUrl(owner, name);
+  };
   const count = Math.ceil(sites.length / size);
-  return [...Array(count).keys()].map((index) => ({ name: `${String(index + 1)} of ${String(count)}`, index, sites: shardOf(sites, index, count) }));
+  return [...Array(count).keys()].map((index) => {
+    const part = shardOf(sites, index, count);
+    return { name: `${String(index + 1)} of ${String(count)}`, index, sites: part, urls: part.map(url) };
+  });
 }
 
 /** This function reads a list with commas, with no space around a part and no empty part. */
@@ -101,7 +116,7 @@ function main(): number {
     listOf(process.env["SKIP"]),
   );
   for (const error of result.errors) process.stdout.write(`::error title=Site audit%3A the sites::${error}\n`);
-  const shards = shardsOf(result.list, NAV_SHARD_SIZE);
+  const shards = shardsOf(result.list, result.owners, NAV_SHARD_SIZE);
   process.stdout.write(`${String(result.list.length)} sites in ${String(shards.length)} shards of the job nav: ${result.list.join(" ")}\n`);
   const output = process.env["GITHUB_OUTPUT"];
   if (output !== undefined && output !== "") appendFileSync(output, `list=${JSON.stringify(result.list)}\nowners=${JSON.stringify(result.owners)}\nshards=${JSON.stringify(shards)}\n`);

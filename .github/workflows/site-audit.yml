@@ -264,16 +264,25 @@ jobs:
           browsers: chromium
       # The crawl of each site of the shard. On a pull request, or with the input preview-bar, the same crawl follows with
       # the bar that the Pages workflow writes into each page: the screenshots show the bar on the live site, and the crawl
-      # tells which problems the bar solves. A failed site does not stop the loop: the step fails after the last site.
+      # tells which problems the bar solves. A failed site does not stop the loop. After the last site, the step names each
+      # failed site in the summary and fails (site-list.test.ts starts this step with a fake crawl).
       - name: The navigation of the sites of shard ${{ matrix.shard.name }}
         shell: bash
         env:
-          OWNERS: ${{ needs.sites.outputs.owners }}
-          SITES: ${{ toJSON(matrix.shard.sites) }}
+          SHARD: ${{ matrix.shard.name }}
+          SITES: ${{ join(matrix.shard.sites, ' ') }}
+          URLS: ${{ join(matrix.shard.urls, ' ') }}
           BAR: ${{ github.event_name == 'pull_request' || inputs.preview-bar }}
         run: |
           set -uo pipefail
-          broken=0
+          # A name of a repository and an address of a site have no space.
+          read -ra sites <<< "$SITES"
+          read -ra urls <<< "$URLS"
+          if [ "${#sites[@]}" -eq 0 ] || [ "${#sites[@]}" -ne "${#urls[@]}" ]; then
+            echo "::error title=Site navigation%3A shard $SHARD::the shard has ${#sites[@]} sites and ${#urls[@]} addresses."
+            exit 1
+          fi
+          failed=()
           # One crawl: the folder of its report, its name in a message, and the other options of the command. Exit code 1
           # is a site with problems, and the audit is a report. Exit code 2, a crawl longer than 10 minutes (exit code
           # 124) or no report is a failed audit.
@@ -290,19 +299,22 @@ jobs:
             fi
             return 0
           }
-          while read -r repo; do
-            [ -n "$repo" ] || continue
-            owner="$(jq -r --arg repo "$repo" '.[$repo] | ascii_downcase' <<< "$OWNERS")"
-            if [ "${repo,,}" = "$owner.github.io" ]; then url="https://$owner.github.io/"; else url="https://$owner.github.io/$repo/"; fi
+          for at in "${!sites[@]}"; do
+            repo="${sites[$at]}"
+            url="${urls[$at]}"
             echo "::group::$repo"
             if ! crawl "$RUNNER_TEMP/site-nav/$repo" "the crawl"; then
-              broken=1
+              failed+=("$repo")
             elif [ "$BAR" = "true" ] && ! crawl "$RUNNER_TEMP/site-nav/$repo/bar" "the crawl with the site bar" --preview-bar --require-bar; then
-              broken=1
+              failed+=("$repo")
             fi
             echo "::endgroup::"
-          done < <(jq -r '.[]' <<< "$SITES")
-          exit "$broken"
+          done
+          if [ "${#failed[@]}" -gt 0 ]; then
+            echo "Shard $SHARD: ${#failed[@]} of ${#sites[@]} sites gave no report: ${failed[*]}" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "Shard $SHARD: each of the ${#sites[@]} sites gave a report." | tee -a "$GITHUB_STEP_SUMMARY"
       - name: The reports of shard ${{ matrix.shard.name }}
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
