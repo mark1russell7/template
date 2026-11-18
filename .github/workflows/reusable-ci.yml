@@ -162,6 +162,13 @@ on:
           its pull request has (the rule no-local-paths of check:conventions). The check shows no text of a match. A
           caller gives it with secrets: inherit, or by name.
         required: false
+      CONVENTIONS_PRIVATE_NAMES:
+        description: >-
+          The JSON text of a private name list (the schema private-names.schema.json of conventions). The job checks
+          examines the added lines, the commit messages, the title and the body of a pull request with it, as the git
+          hook pre-push does. The check shows no text of a match. With no value, the check shows "no read". A caller
+          gives it with secrets: inherit, or by name.
+        required: false
 
 jobs:
   # A run that workflow_dispatch starts has no pull request in its event, for example a run by hand (CI.md "A
@@ -399,7 +406,8 @@ jobs:
       - if: inputs.cue-version != '' || (inputs.env != '{}' && inputs.env != '')
         working-directory: .
         run: rm -rf .shared-actions
-      - run: pnpm install --frozen-lockfile
+      - id: install
+        run: pnpm install --frozen-lockfile
       - name: Setup command
         if: inputs.setup != ''
         env:
@@ -476,6 +484,68 @@ jobs:
           if [ ${#failed[@]} -gt 0 ]; then
             echo "failed=${failed[*]}" >> "$GITHUB_OUTPUT"
             echo "::error::These scripts failed: ${failed[*]}"
+            exit 1
+          fi
+      # The added lines, the commit messages, the title and the body of a pull request must not have a private name. The
+      # secret CONVENTIONS_PRIVATE_NAMES has the private name list. GitHub masks a secret as one text, not each name in
+      # it. So the step first masks each seed, each pattern and each id of the list. Then it starts "conventions pre-push
+      # --base", the check of the git hook pre-push, on the commits of the change. A break shows the commit, the path, the
+      # line and the number of the name, never the text. With no secret, or with a conventions that has no --base, the
+      # step shows "no read" and does not fail. A pull request from a fork or from Dependabot gets no secret. Only the
+      # first cell of the matrix starts the check. The test scripts/workflows/private-names.test.ts starts this step.
+      - name: Private names of the change
+        if: ${{ !cancelled() && strategy.job-index == 0 && steps.install.outcome == 'success' }}
+        env:
+          NAMES: ${{ secrets.CONVENTIONS_PRIVATE_NAMES }}
+          PULL_NUMBER: ${{ github.event.pull_request.number }}
+          PULL_BASE: ${{ needs.pull.outputs.base-sha }}
+          CONVENTIONS_PULL_REQUEST: ${{ needs.pull.outputs.found == 'true' && format('{0}/pull-request-of-run/pull-request.json', runner.temp) || '' }}
+        run: |
+          summary() { echo "**Private names of the change:** $1" >> "$GITHUB_STEP_SUMMARY"; }
+          no_read() {
+            echo "::warning title=Private names::No read: $1"
+            summary "no read: $1"
+            exit 0
+          }
+          # A dispatched run has the base of the job pull, and its checkout is the head. The checkout of a pull request is
+          # its merge commit: the tip of the base branch, then the head. The step "Deepen to the merge base" gets the history.
+          if [ -n "$PULL_BASE" ]; then
+            base=$PULL_BASE && head=$(git rev-parse HEAD) || no_read "git cannot find the head of the change."
+          elif [ -n "$PULL_NUMBER" ]; then
+            base=$(git rev-parse HEAD^1) && head=$(git rev-parse HEAD^2) || no_read "the checkout is not the merge commit of the pull request."
+          else
+            summary "no read: the run has no pull request. The check reads only the change of a pull request."
+            exit 0
+          fi
+          [ -n "$NAMES" ] || no_read "the secret CONVENTIONS_PRIVATE_NAMES has no value. A pull request from a fork or from Dependabot gets no secret. Else the caller must give the secret, by name or with secrets: inherit."
+          help=$(pnpm exec conventions --help 2> /dev/null) && [[ "$help" == *"pre-push --base"* ]] ||
+            no_read "the conventions of the repository has no command pre-push --base. Update @mark1russell7/conventions (CI.md)."
+          list="$RUNNER_TEMP/private-names.json"
+          log="$RUNNER_TEMP/private-names.log"
+          trap 'rm -f "$list"' EXIT
+          # The masks come before each other line. Node writes the file, so no command line has the text
+          node -e '
+            let data;
+            try { data = JSON.parse(process.env.NAMES); } catch { data = undefined; }
+            const names = Array.isArray(data?.names) ? data.names : [];
+            const list = (value) => (Array.isArray(value) ? value : []);
+            for (const text of names.flatMap((name) => [name?.id, ...list(name?.seeds), ...list(name?.patterns)])) {
+              if (typeof text === "string" && text.trim() !== "") console.log(`::add-mask::${text.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A")}`);
+            }
+            require("node:fs").writeFileSync(process.argv[1], process.env.NAMES, { mode: 0o600 });
+          ' "$list"
+          status=0
+          CONVENTIONS_PRIVATE_NAMES_FILE="$list" pnpm exec conventions pre-push --base "$base" --head "$head" > "$log" 2>&1 || status=$?
+          cat "$log"
+          {
+            echo "### Private names of the change"
+            echo
+            echo '```text'
+            cat "$log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$status" -ne 0 ]; then
+            echo "::error title=Private names::$(head -n 1 "$log")"
             exit 1
           fi
       # When check:api fails, this step writes the API reports again, and the next step uploads them as an artifact. A
