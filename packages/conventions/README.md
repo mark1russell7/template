@@ -178,7 +178,7 @@ An unknown rule, an unknown option, or an exception or a changed option without 
 | `--base <ref>` | The base commit of the change, for the rules `release-files`, `home-package`, `home-module`, `unreleased-change` and `version-title`. The first default is the environment variable `CONVENTIONS_BASE`, when it is not empty. Outside CI, the next default is the default branch of origin. Thus a local check examines the same added lines as the check of the pull request. |
 | `--no-base` | Do not use a default base. |
 | `--json` | Write the result as JSON. |
-| `pre-push <remote> [<url>]` | Examine the new commits of a push with the private name list. The git hook `pre-push` starts it. |
+| `pre-push <remote> [<url>]` | Examine the new commits of a push with the private name list, and lint their prose with ste-lint. The git hook `pre-push` starts it. |
 | `hook install` | Write the git hook `pre-push`. In CI, or outside a git repository, the command does nothing. |
 
 A run that `workflow_dispatch` starts has no pull request in its event file. A person can start the gates of a pull request in this way. For such a run, the shared CI finds the pull request of the branch, and gives two environment variables to the check:
@@ -250,6 +250,18 @@ When no list and no pattern is set, the command writes one line that starts with
 
 The check of CI continues to read the environment variable `CONVENTIONS_PRIVATE_PATTERNS` in the rule `no-local-paths`.
 
+### The STE lint of a push
+
+When the root `package.json` has the script `lint:ste`, the command also lints the prose of the push before CI does. The lint is the same as the lint of the script in CI:
+
+- It uses `@mark1russell7/ste-lint` from the `node_modules` of the repository, so the version is the version of the script.
+- It uses the `ste.config.json` of the repository and the arguments of the script (`--config`, `--max-warnings` and the patterns).
+- It lints each file that a new commit adds or changes, when ste-lint selects that file. It reads the text of the file at the tip of the push, not the text in the working tree.
+
+An error stops the push. A warning stops the push only when the warnings are more than the value of `--max-warnings`. Each finding shows the file, the line, the column, the severity, the message and the rule.
+
+When the command cannot lint, it writes one line that starts with `conventions pre-push: No STE read`, and the push continues. Examples are a script that is not one command `ste-lint`, a repository with no ste-lint in its `node_modules`, and a configuration that ste-lint cannot read. A repository with no script `lint:ste` gets no line.
+
 ## The map of homes
 
 The map gives the home package of each area of code: statistics, seeded random, exact arithmetic, geometry, text, servers, files and commands, tests and more. Before you write a helper, find its home. If the home does not have the function, add the function to the home. Do not make a local copy or a new package.
@@ -318,4 +330,4 @@ The package also exports the functions of the tool:
 - `lineNameHits(list, line, place)` and `nameMatches(line, names)` give each name of a line, one hit for each name. A scan that counts the names uses them. The gate takes the first hit.
 - `privateNamesFiles(env, git)`, `privateNamesFile(env, git)`, `privatePatterns(env)` and `invalidPatternBreaks(patterns)` read the settings and the patterns. `privateNamesFiles` gives each path, and `privateNamesFile` gives one.
 - `mergePrivateNames(lists)` merges the lists in order. It throws a `PrivateNameListError` when two lists have the same id.
-- `prePush(options, io)` is the command `pre-push`, and `installHook(options, io)` is the command `hook install`. `PRE_PUSH_HOOK` is the text of the hook.
+- `prePush(options, io)` is the command `pre-push`, and `installHook(options, io)` is the command `hook install`. `PRE_PUSH_HOOK` is the text of the hook. The option `loadSteLint` of `prePush` replaces the load of ste-lint, for a test.

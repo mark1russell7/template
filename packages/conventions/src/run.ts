@@ -319,7 +319,9 @@ export const USAGE: string = `Usage: conventions check [options]
                         examines each new commit with the private name list: the message, the paths and the added
                         lines. Exit code 1 on a break. The list is the JSON file of CONVENTIONS_PRIVATE_NAMES_FILE, else
                         of the git config conventions.privateNamesFile. CONVENTIONS_PRIVATE_PATTERNS adds one regular
-                        expression on each line. With neither, it writes a "No read" line and gives 0.
+                        expression on each line. With neither, it writes a "No read" line and gives 0. When the root
+                        package.json has the script lint:ste, it also lints the prose files of the new commits, at the
+                        tip of the push, with the ste-lint of the repository. Exit code 1 on an error of ste-lint.
   hook install          Write the hook pre-push into the hooks folder of git. It keeps a hook that it did not write.
                         In CI, or outside a git repository, it does nothing.
 
