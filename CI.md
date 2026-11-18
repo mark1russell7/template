@@ -821,10 +821,13 @@ A change of the site check can fail a page that passed before. The site sees the
 - The job starts on a pull request that changes `packages/site-pages/src/check`, `bar`, `render/html.ts`, `scripts/workflows/site-compare.ts` or `site-audit.yml`.
 - For each public site with a site check, `scripts/workflows/site-compare.ts` reads the pages and the widths of its site config.
 - The config is `.github/site.json`, the inputs of the call of `reusable-pages.yml` without `deploy: false`, or the inputs of the action `site-check`.
+- The script reads the config of each site of its shard before the first check. A read after a long check can fail on a closed connection.
 - The script starts the check of the base and the check of the pull request on the live pages. Then it compares the problems of each view.
 - A view is a page at one width in one color scheme. A problem that only the new check finds is a new problem.
 - A site with a new problem gets a second pair of checks. Only a new problem of both pairs fails the job. A problem of one pair is a warning.
-- A site with no report of the base is a no read, with a warning. A site with a report of the base and no report of the pull request fails.
+- A site that the script cannot read fails the job, because a no read is not a pass at any time. The summary names each such site with its error.
+- The script cannot read a site when its config gives an error or when the check of the base gives no report.
+- A site with a report of the base and no report of the pull request fails.
 - A site with no site check is out of scope, because no change of the check fails its deploy. The probes of the sites are not part of the compare.
 - The job has 4 shards. Two shards start at one time, after the job `nav`. One check of all sites is approximately 1000 views, or 65 minutes.
 - The artifact `site-compare-<shard>` has `compare-<shard>.json`, and the report and the log of each check. Only a site with a new problem keeps its screenshots.

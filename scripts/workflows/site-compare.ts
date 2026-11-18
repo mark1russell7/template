@@ -8,13 +8,16 @@
 //   1. siteTarget() reads the site config of each site of its shard: .github/site.json, the inputs of the job that calls
 //      reusable-pages.yml, or the inputs of a step that uses the action site-check. The pages and the widths are those
 //      of the site check of that site. A site with no site check is out of scope: no change of the check fails it.
+//      compareSites() reads the config of each site before the first check. A check blocks the script for minutes,
+//      and a fetch after it can use a connection that the server closed in that time.
 //   2. It starts the check of the base and the check of the pull request on the live pages, one after the other.
 //   3. newProblems() gives each problem of a view that only the check of the pull request finds. One pair of runs can
 //      differ by chance (a slow request, a console error of the page). So a site with a new problem gets a second pair,
 //      and confirmed() keeps only the new problems that both pairs give.
 //   4. A confirmed new problem fails the job, with its site, page, width and scheme. A problem of one pair only is a
-//      warning. A site with no report of the base is a no read with a warning, never a pass. A site with a report of
-//      the base and no report of the pull request fails, because the new check cannot read a page that the old one reads.
+//      warning. A site that the compare cannot read fails the job, with its error, because a no read is not a pass:
+//      its site config gave an error, or the check of the base gave no report. A site with a report of the base and no
+//      report of the pull request fails, because the new check cannot read a page that the old one reads.
 // The probes of the sites (site-check-probe) are not part of the compare. The script reads only public data, with
 // GITHUB_TOKEN. The two checks import only Node.js modules and the files of their checkout, so neither needs an install.
 import { spawnSync } from "node:child_process";
@@ -22,7 +25,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realp
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { escapeMarkdown, escapeWorkflowData } from "@mark1russell7/text";
+import { errorMessage, escapeMarkdown, escapeWorkflowData } from "@mark1russell7/text";
 import { blockEnd, childKeys, indentOf, keyValue, workflowLines } from "../../packages/conventions/src/workflow.ts";
 import { resolveSiteConfig, SITE_CONFIG_PATH } from "../../packages/site-pages/src/config/site-config.ts";
 
@@ -195,10 +198,13 @@ export function outcome(repo: string, first: Pair, second?: Pair): SiteOutcome {
   return both.size > 0 ? { repo, kind: "new", problems: both } : { repo, kind: "once", problems: fresh };
 }
 
-/** This function tells if an outcome fails the compare: a confirmed new problem, or no report of the pull request only. */
-export const fails = (each: SiteOutcome): boolean => each.kind === "new" || each.kind === "next-unread";
+/**
+ * This function tells if an outcome fails the compare: a confirmed new problem, no report of the pull request only, or
+ * a site that the compare cannot read. A no read is not a pass at any time. A site with no site check does not fail.
+ */
+export const fails = (each: SiteOutcome): boolean => each.kind === "new" || each.kind === "next-unread" || each.kind === "unread";
 
-/** This function gives the lines of the summary of a shard: a table of the sites, then each new problem. */
+/** This function gives the lines of the summary of a shard: a table of the sites, then each site that it cannot read, then each new problem. */
 export function summaryLines(shard: string, outcomes: readonly SiteOutcome[]): string[] {
   const count = (kind: SiteOutcome["kind"]): number => outcomes.filter((each) => each.kind === kind).length;
   const word: Record<SiteOutcome["kind"], string> = {
@@ -206,7 +212,7 @@ export function summaryLines(shard: string, outcomes: readonly SiteOutcome[]): s
     new: "**new problems**",
     once: "new in one pair only",
     "next-unread": "**no report of the pull request**",
-    unread: "no read",
+    unread: "**no read**",
     off: "no site check",
   };
   const lines = [
@@ -219,6 +225,10 @@ export function summaryLines(shard: string, outcomes: readonly SiteOutcome[]): s
     ...outcomes.map((each) => `| ${escapeMarkdown(each.repo)} | ${word[each.kind]} | ${"problems" in each ? String(each.problems.size) : "0"} |`),
   ];
   for (const each of outcomes) {
+    if (each.kind !== "unread" && each.kind !== "next-unread") continue;
+    lines.push("", `### ${escapeMarkdown(each.repo)}: ${word[each.kind]}`, "", `- ${escapeMarkdown(each.reason)}`);
+  }
+  for (const each of outcomes) {
     if (each.kind !== "new" && each.kind !== "once") continue;
     lines.push("", `### ${escapeMarkdown(each.repo)}: ${word[each.kind]}`, "");
     for (const [key, problems] of each.problems) for (const problem of problems) lines.push(`- ${escapeMarkdown(key)}: ${escapeMarkdown(problem)}`);
@@ -226,7 +236,7 @@ export function summaryLines(shard: string, outcomes: readonly SiteOutcome[]): s
   return lines;
 }
 
-/** This function gives the workflow commands of the outcomes: an error for each fault, and a warning for each doubt. */
+/** This function gives the workflow commands of the outcomes: an error for each fault and each no read, and a warning for each doubt. */
 export function annotations(outcomes: readonly SiteOutcome[]): string[] {
   const lines: string[] = [];
   const say = (level: "error" | "warning", text: string): number => lines.push(`::${level} title=Site check compare::${escapeWorkflowData(text)}`);
@@ -236,7 +246,7 @@ export function annotations(outcomes: readonly SiteOutcome[]): string[] {
       for (const [key, problems] of each.problems) for (const problem of problems) say(each.kind === "new" ? "error" : "warning", `${each.repo} ${key}: ${problem} (${why})`);
     }
     if (each.kind === "next-unread") say("error", `${each.repo}: ${each.reason}`);
-    if (each.kind === "unread") say("warning", `${each.repo}: no read, because ${each.reason}`);
+    if (each.kind === "unread") say("error", `${each.repo}: no read, because ${each.reason}`);
   }
   return lines;
 }
@@ -284,6 +294,54 @@ function runCheck(checkout: string, target: SiteTarget, shots: string): CheckRep
   return JSON.parse(readFileSync(file, "utf8")) as CheckReport;
 }
 
+/** The reads and the checks of a compare. A test gives fakes, so it uses no network and no browser. */
+export interface CompareSteps {
+  /** This function reads the home and the site config files of a site. */
+  readonly read: (owner: string, repo: string) => Promise<{ url: string; files: SiteFiles }>;
+  /** This function starts the check of the base or of the pull request on a site, and gives its report, or undefined when it gives none. */
+  readonly check: (side: "base" | "next", target: SiteTarget, round: number) => CheckReport | undefined;
+  /** This function receives the outcome of each site with a site check, after its checks. */
+  readonly done?: (result: SiteOutcome, target: SiteTarget) => void;
+}
+
+/**
+ * This function compares the check of the base and the check of the pull request on each site, in the order of the
+ * list. It reads the site config of each site before the first check. A check blocks the script for minutes, and a
+ * fetch after it can use a connection that the server closed in that time. Before this order, every second read failed.
+ */
+export async function compareSites(sites: readonly string[], owners: Readonly<Record<string, string>>, steps: CompareSteps): Promise<SiteOutcome[]> {
+  const targets: { repo: string; target: SiteTargetResult }[] = [];
+  for (const repo of sites) {
+    const owner = owners[repo];
+    if (owner === undefined) {
+      targets.push({ repo, target: { error: "the job sites gave no owner for it" } });
+      continue;
+    }
+    try {
+      const site = await steps.read(owner, repo);
+      targets.push({ repo, target: siteTarget(`${owner}/${repo}`, site.url, site.files) });
+    } catch (error) {
+      // fetch gives only "fetch failed". Its cause tells why: a closed connection, a DNS error or a time-out
+      const cause = error instanceof Error && error.cause !== undefined ? ` (${errorMessage(error.cause)})` : "";
+      targets.push({ repo, target: { error: `the read of its site config failed: ${errorMessage(error)}${cause}` } });
+    }
+  }
+  const outcomes: SiteOutcome[] = [];
+  for (const { repo, target } of targets) {
+    if ("error" in target || "off" in target) {
+      outcomes.push("error" in target ? { repo, kind: "unread", reason: target.error } : { repo, kind: "off", reason: target.off });
+      continue;
+    }
+    const pair = (round: number): Pair => ({ base: steps.check("base", target, round), next: steps.check("next", target, round) });
+    const first = pair(1);
+    const once = outcome(repo, first);
+    const result = once.kind === "once" ? outcome(repo, first, pair(2)) : once;
+    outcomes.push(result);
+    steps.done?.(result, target);
+  }
+  return outcomes;
+}
+
 /** This function removes the screenshots under a folder, and keeps the reports and the logs. */
 function dropShots(dir: string): void {
   if (!existsSync(dir)) return;
@@ -303,34 +361,15 @@ async function main(): Promise<number> {
   }
   const out = resolve(values.out);
   const sites = shardOf(JSON.parse(values.sites ?? "[]") as string[], shard, shards);
-  const outcomes: SiteOutcome[] = [];
-  for (const repo of sites) {
-    let target: SiteTargetResult;
-    const owner = owners[repo];
-    if (owner === undefined) {
-      outcomes.push({ repo, kind: "unread", reason: "the job sites gave no owner for it" });
-      continue;
-    }
-    try {
-      const site = await readSite(owner, repo, token);
-      target = siteTarget(`${owner}/${repo}`, site.url, site.files);
-    } catch (error) {
-      target = { error: `the read of its site config failed: ${error instanceof Error ? error.message : String(error)}` };
-    }
-    if ("error" in target || "off" in target) {
-      outcomes.push("error" in target ? { repo, kind: "unread", reason: target.error } : { repo, kind: "off", reason: target.off });
-      continue;
-    }
-    const site = target;
-    const pair = (round: number): Pair => ({ base: runCheck(base, site, join(out, repo, `base-${String(round)}`)), next: runCheck(next, site, join(out, repo, `next-${String(round)}`)) });
-    const first = pair(1);
-    const once = outcome(repo, first);
-    const result = once.kind === "once" ? outcome(repo, first, pair(2)) : once;
-    outcomes.push(result);
-    // The screenshots stay only for a site with a new problem, so the artifact stays small
-    if (result.kind === "same") dropShots(join(out, repo));
-    process.stdout.write(`${repo}: ${result.kind} (pages ${site.pages || "/"})\n`);
-  }
+  const outcomes = await compareSites(sites, owners, {
+    read: (owner, repo) => readSite(owner, repo, token),
+    check: (side, target, round) => runCheck(side === "base" ? base : next, target, join(out, target.repo, `${side}-${String(round)}`)),
+    done: (result, target) => {
+      // The screenshots stay only for a site with a new problem, so the artifact stays small
+      if (result.kind === "same") dropShots(join(out, target.repo));
+      process.stdout.write(`${target.repo}: ${result.kind} (pages ${target.pages || "/"})\n`);
+    },
+  });
   const serial = outcomes.map((each) => ("problems" in each ? { ...each, problems: Object.fromEntries(each.problems) } : each));
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, `compare-${String(shard)}.json`), `${JSON.stringify({ date: new Date().toISOString(), shard, shards, sites: serial }, null, 2)}\n`);
