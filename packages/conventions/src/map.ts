@@ -85,7 +85,7 @@ export const HOMES: readonly Home[] = [
     repo: "mark1russell7/rigor",
     state: "published",
     words: ["benchmark", "harness", "timing", "perf", "gate", "paired-time", "a/a", "warm-up", "bench", "measure", "timer", "stopwatch", "profile", "elapsed", "hrtime", "determinism", "deterministic", "baseline", "ratchet", "threshold"],
-    note: "The entry /fresh runs each arm of each pair in a fresh process, and the entry /supervise stops a case that passes its time budget. Five repositories have their own harness today (vex, packing, highways, layout-stack, typeset). Do not grow a local harness: the shared one replaces them.",
+    note: "The entry /fresh runs each arm of each pair in a fresh process, and the entry /supervise stops a case that passes its time budget. Four repositories have their own harness today (vex, packing, highways, layout-stack). The repository typeset moved to the shared harness on 2026-11-18. Do not grow a local harness: the shared one replaces them.",
   },
   {
     area: "test-generation",
