@@ -84,6 +84,28 @@ describe("gate-summary: the verdict of the jobs", { skip }, () => {
   }
 });
 
+describe("gate-summary: the verdict of a gate of reusable-gate.yml", { skip }, () => {
+  const job = (result: string): unknown => ({ result, outputs: {} });
+  const gate = (result: string, word: string): unknown => ({ result, outputs: { verdict: word, attempts: "2" } });
+
+  it("names the verdict in the line of the job", () => {
+    assert.equal(verdict({ gate: gate("success", "pass") }), "ok gate: success, verdict pass");
+    assert.equal(verdict({ gate: gate("failure", "no-read") }), "FAIL gate: failure, verdict no-read");
+    assert.equal(verdict({ gate: gate("failure", "block") }), "FAIL gate: failure, verdict block");
+    assert.equal(verdict({ gate: gate("failure", "error") }), "FAIL gate: failure, verdict error");
+  });
+
+  it("fails a success with a verdict that is not pass, because the verdict and the result disagree", () => {
+    for (const word of ["no-read", "block", "error"]) assert.equal(verdict({ gate: gate("success", word) }), `FAIL gate: success, but the verdict is ${word}`);
+  });
+
+  it("keeps the line of a job with no verdict or with an output verdict of another meaning", () => {
+    assert.equal(verdict({ gate: job("success") }), "ok gate: success");
+    assert.equal(verdict({ gate: { result: "success", outputs: { verdict: "findings" } } }), "ok gate: success");
+    assert.equal(verdict({ gate: { result: "failure", outputs: { verdict: "pass" } } }), "FAIL gate: failure");
+  });
+});
+
 describe("gate-summary: a skip reads the last result of its check on the commit", { skip }, () => {
   const run = (id: number, name: string, conclusion: string | null, at: string, status = "completed"): unknown => ({
     name,

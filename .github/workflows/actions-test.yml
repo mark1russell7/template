@@ -34,6 +34,11 @@
 #   release-check   The action release-check on a test repository of each case (release-check/fixture.ts): a shipped
 #                   change at a version on npm fails and names the package and the file. The same files pass, a greater
 #                   version passes, no published package passes with a notice, and Changesets pass only with a changeset.
+#   gate-once       reusable-gate.yml with a pass: one attempt, and the verdict pass.
+#   gate-again      reusable-gate.yml with a no read of the first attempt: the second attempt passes, and its verdict is
+#                   the verdict of the call. The input env reaches the command, the folder of the template is out of the
+#                   tree, and each attempt uploads its records.
+#   gate-check      The outputs of the two calls, and the records of each attempt of gate-again.
 #
 # ci.yml tests reusable-ci.yml on each push to main and each pull request. new-repo.ps1 does not copy this
 # workflow, the actions or the shared workflows: a repository uses them from GitHub.
@@ -50,8 +55,10 @@ on:
       - ".github/workflows/reusable-release-*.yml"
       - ".github/workflows/reusable-ci.yml"
       - ".github/workflows/reusable-lockfile.yml"
+      - ".github/workflows/reusable-gate.yml"
       - "scripts/release/**"
       - "scripts/workflows/verified-tree.ts"
+      - "scripts/workflows/gate-attempt.ts"
       # The test site installs the workspace, so a change of a package file can break it
       - "package.json"
       - "pnpm-lock.yaml"
@@ -119,8 +126,10 @@ jobs:
             .github/workflows/reusable-release-*.yml
             .github/workflows/reusable-ci.yml
             .github/workflows/reusable-lockfile.yml
+            .github/workflows/reusable-gate.yml
             scripts/release/**
             scripts/workflows/verified-tree.ts
+            scripts/workflows/gate-attempt.ts
             package.json
             pnpm-lock.yaml
             packages/*/package.json
@@ -873,10 +882,64 @@ jobs:
           echo "::error title=gate-summary::A read error of the check runs did not fail the summary"
           exit 1
 
+  gate-once:
+    needs: changes
+    if: needs.changes.outputs.match == 'true'
+    uses: ./.github/workflows/reusable-gate.yml
+    permissions:
+      contents: read
+    with:
+      name: Gate once
+      install: ""
+      timeout-minutes: 5
+      command: echo pass >> "$GATE_VERDICT_FILE"
+
+  gate-again:
+    needs: changes
+    if: needs.changes.outputs.match == 'true'
+    uses: ./.github/workflows/reusable-gate.yml
+    permissions:
+      contents: read
+    with:
+      name: Gate again
+      install: ""
+      timeout-minutes: 5
+      env: '{"GATE_TEST_FIRST": "no-read"}'
+      artifact-path: gate-record.txt
+      artifact-name: gate-again-records
+      command: |
+        test ! -e .gate-template
+        echo "attempt $GATE_ATTEMPT of $GATE_ATTEMPTS" > gate-record.txt
+        if [ "$GATE_ATTEMPT" = 1 ]; then echo "$GATE_TEST_FIRST"; else echo pass; fi >> "$GATE_VERDICT_FILE"
+
+  gate-check:
+    needs: [changes, gate-once, gate-again]
+    if: needs.changes.outputs.match == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: gate-again-records-attempt-*
+          path: records
+      - name: Each call gives the verdict of its last attempt, and each attempt uploads its records
+        shell: bash
+        env:
+          ONCE: ${{ needs.gate-once.outputs.verdict }} ${{ needs.gate-once.outputs.attempts }} ${{ needs.gate-once.outputs.first-verdict }}
+          AGAIN: ${{ needs.gate-again.outputs.verdict }} ${{ needs.gate-again.outputs.attempts }} ${{ needs.gate-again.outputs.first-verdict }}
+        run: |
+          echo "gate-once: $ONCE"
+          echo "gate-again: $AGAIN"
+          test "$ONCE" = "pass 1 pass"
+          test "$AGAIN" = "pass 2 no-read"
+          grep -qx "attempt 1 of 2" records/gate-again-records-attempt-1/gate-record.txt
+          grep -qx "attempt 2 of 2" records/gate-again-records-attempt-2/gate-record.txt
+
   actions-ok:
     name: Actions OK
     if: ${{ !cancelled() }}
-    needs: [changes, green-main, setup-cue, setup-playwright, setup-playwright-warning, cue-ci, coverage-deadline, data-stamps, pages, pages-check, lockfile, release-build, release-publish, release-tag, release-tree, release-tree-check, release-check, gate-summary-last]
+    needs: [changes, green-main, setup-cue, setup-playwright, setup-playwright-warning, cue-ci, coverage-deadline, data-stamps, pages, pages-check, lockfile, release-build, release-publish, release-tag, release-tree, release-tree-check, release-check, gate-summary-last, gate-once, gate-again, gate-check]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}
