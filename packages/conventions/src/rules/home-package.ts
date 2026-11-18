@@ -86,6 +86,7 @@ export const homePackage: Rule = {
       description: "`change`: only the lines that the change adds (a pull request, or `--base`). `all`: each line of each tracked file, for a sweep of the copies that exist.",
     },
   },
+  changeScoped: true,
   check(context, options) {
     const scope = options["scope"];
     if (scope !== "change" && scope !== "all") throw new Error(`The option scope is "change" or "all", not ${JSON.stringify(scope)}.`);
