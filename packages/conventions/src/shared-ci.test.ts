@@ -1,12 +1,11 @@
 // The rule shared-ci on fixture repositories: a ci.yml that calls the shared CI, one with its own steps, a missing
 // ci.yml, local copies of a shared workflow and of a shared action, and the template itself.
-import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { runChecks, type RuleResult } from "./index.ts";
 import { SHARED_ACTIONS, SHARED_WORKFLOWS, callsSharedCi } from "./rules/shared-ci.ts";
+import { gitFixtures } from "@mark1russell7/rigor-testkit/git-fixture";
 
 // The lists of the rule are the files of the template: a new shared workflow or action without a change here fails.
 describe("the shared lists", () => {
@@ -19,9 +18,8 @@ describe("the shared lists", () => {
   });
 });
 
-const temp = mkdtempSync(join(tmpdir(), "conventions-shared-ci-"));
-afterAll(() => rmSync(temp, { recursive: true, force: true }));
-let fixtures = 0;
+const repos = gitFixtures("conventions-shared-ci-");
+afterAll(() => repos.remove());
 
 const ID = "shared-ci";
 const CI = ".github/workflows/ci.yml";
@@ -34,17 +32,14 @@ const ownSteps = ["name: CI", "", "on:", "  pull_request:", "", "jobs:", "  run:
 
 /** This function makes a git repository with the files, and gives its root. */
 function repository(files: Readonly<Record<string, string>>, name = "one"): string {
-  const root = join(temp, String(fixtures++));
+  const root = repos.folder();
   mkdirSync(root, { recursive: true });
   writeFileSync(join(root, "package.json"), `{ "name": "${name}" }\n`);
   for (const [file, text] of Object.entries(files)) {
     mkdirSync(dirname(join(root, file)), { recursive: true });
     writeFileSync(join(root, file), text);
   }
-  for (const args of [["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "-m", "first"]]) {
-    const result = spawnSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", ...args], { cwd: root, encoding: "utf8" });
-    if (result.status !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr}`);
-  }
+  repos.stageAll(root);
   return root;
 }
 

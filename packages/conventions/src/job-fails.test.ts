@@ -1,33 +1,28 @@
 // The rule job-fails on fixture repositories: continue-on-error on a job and on a test step, "|| true" after a test,
 // a later read of the outcome, and the entries of the option advisory with their day and their reason.
-import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { runChecks, type RuleResult } from "./index.ts";
 import { hiddenFailures, jobFails, parseAdvisory, startsTests, swallowsTests } from "./rules/job-fails.ts";
 import { shellCode } from "./workflow.ts";
+import { gitFixtures } from "@mark1russell7/rigor-testkit/git-fixture";
 
-const temp = mkdtempSync(join(tmpdir(), "conventions-job-fails-"));
-afterAll(() => rmSync(temp, { recursive: true, force: true }));
-let fixtures = 0;
+const repos = gitFixtures("conventions-job-fails-");
+afterAll(() => repos.remove());
 
 const ID = "job-fails";
 
 /** This function makes a git repository with the files and the option advisory, and gives its root. */
 function repository(files: Record<string, string>, advisory?: readonly string[]): string {
-  const root = join(temp, String(fixtures++));
+  const root = repos.folder();
   const conventions = advisory === undefined ? {} : { conventions: { rules: { [ID]: { advisory, reason: "Two browser jobs are advisory for a time." } } } };
   const manifest = `${JSON.stringify({ name: "one", ...conventions }, null, 2)}\n`;
   for (const [file, text] of Object.entries({ "package.json": manifest, ...files })) {
     mkdirSync(dirname(join(root, file)), { recursive: true });
     writeFileSync(join(root, file), text);
   }
-  for (const args of [["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "-m", "first"]]) {
-    const result = spawnSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", ...args], { cwd: root, encoding: "utf8" });
-    if (result.status !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr}`);
-  }
+  repos.stageAll(root);
   return root;
 }
 

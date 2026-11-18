@@ -1,15 +1,13 @@
 // The rule pages-after-release on fixture repositories: each form of the triggers, the fix, its second run, and what the rule leaves alone.
-import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { runChecks, runFix, type RuleResult } from "./index.ts";
 import { isDaily, pagesTriggers } from "./rules/pages-after-release.ts";
+import { gitFixtures } from "@mark1russell7/rigor-testkit/git-fixture";
 
-const temp = mkdtempSync(join(tmpdir(), "conventions-pages-release-"));
-afterAll(() => rmSync(temp, { recursive: true, force: true }));
-let fixtures = 0;
+const repos = gitFixtures("conventions-pages-release-");
+afterAll(() => repos.remove());
 
 const ID = "pages-after-release";
 const FILE = ".github/workflows/pages.yml";
@@ -19,18 +17,13 @@ const CALL = "jobs:\n  pages:\n    uses: mark1russell7/template/.github/workflow
 
 const pages = (on: readonly string[], jobs: string = CALL): string => ["name: Pages", "", "on:", ...on, "", jobs].join("\n");
 
-/** This function makes a git repository with the files, and gives its root. */
+/**
+ * This function makes a git repository with the files in its index, and gives its root. The rule reads only the list of
+ * the files and the remote, so the repository needs no commit.
+ */
 function repository(files: Record<string, unknown>): string {
-  const root = join(temp, String(fixtures++));
-  mkdirSync(root, { recursive: true });
-  for (const [file, text] of Object.entries(files)) {
-    mkdirSync(dirname(join(root, file)), { recursive: true });
-    writeFileSync(join(root, file), typeof text === "string" ? text : `${JSON.stringify(text, null, 2)}\n`);
-  }
-  for (const args of [["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "-m", "first"]]) {
-    const result = spawnSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", ...args], { cwd: root, encoding: "utf8" });
-    if (result.status !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr}`);
-  }
+  const root = repos.fixture(files);
+  repos.stageAll(root);
   return root;
 }
 

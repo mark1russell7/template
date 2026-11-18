@@ -1,17 +1,15 @@
 // The rule service-run-main on fixture repositories: a server package that starts run() only in src/main.ts, one that
 // starts it in another module, a test file, a package with no src/main.ts, and the calls that are not a start. The run()
 // of a value of a tool entry, as the pool of /channel, is not a start.
-import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { runChecks, type RuleResult } from "./index.ts";
 import { runCalls } from "./rules/service-run-main.ts";
+import { gitFixtures } from "@mark1russell7/rigor-testkit/git-fixture";
 
-const temp = mkdtempSync(join(tmpdir(), "conventions-service-run-main-"));
-afterAll(() => rmSync(temp, { recursive: true, force: true }));
-let fixtures = 0;
+const repos = gitFixtures("conventions-service-run-main-");
+afterAll(() => repos.remove());
 
 const ID = "service-run-main";
 const SERVER = '{ "name": "api", "dependencies": { "@mark1russell7/service": "^1.0.0" } }\n';
@@ -21,17 +19,14 @@ const MODULE = [IMPORT, 'export const api = () => service("api");', ""].join("\n
 
 /** This function makes a git repository of one package with the files, and gives its root. */
 function repository(files: Readonly<Record<string, string>>, manifest = SERVER): string {
-  const root = join(temp, String(fixtures++));
+  const root = repos.folder();
   mkdirSync(root, { recursive: true });
   writeFileSync(join(root, "package.json"), manifest);
   for (const [file, text] of Object.entries(files)) {
     mkdirSync(dirname(join(root, file)), { recursive: true });
     writeFileSync(join(root, file), text);
   }
-  for (const args of [["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "-m", "first"]]) {
-    const result = spawnSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", ...args], { cwd: root, encoding: "utf8" });
-    if (result.status !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr}`);
-  }
+  repos.stageAll(root);
   return root;
 }
 

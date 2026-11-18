@@ -1,31 +1,26 @@
 // The rule setup-cue on fixture repositories: the forms of a hand-written install of the cue CLI, comments, and the
 // shared action itself.
-import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { runChecks, type RuleResult } from "./index.ts";
 import { cueDownloads } from "./rules/setup-cue.ts";
+import { gitFixtures } from "@mark1russell7/rigor-testkit/git-fixture";
 
-const temp = mkdtempSync(join(tmpdir(), "conventions-setup-cue-"));
-afterAll(() => rmSync(temp, { recursive: true, force: true }));
-let fixtures = 0;
+const repos = gitFixtures("conventions-setup-cue-");
+afterAll(() => repos.remove());
 
 const ID = "setup-cue";
 const URL = "https://github.com/cue-lang/cue/releases/download/v0.15.1/cue_v0.15.1_linux_amd64.tar.gz";
 
 /** This function makes a git repository with the files, and gives its root. */
 function repository(files: Record<string, string>): string {
-  const root = join(temp, String(fixtures++));
+  const root = repos.folder();
   for (const [file, text] of Object.entries({ "package.json": '{ "name": "one" }\n', ...files })) {
     mkdirSync(dirname(join(root, file)), { recursive: true });
     writeFileSync(join(root, file), text);
   }
-  for (const args of [["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "-m", "first"]]) {
-    const result = spawnSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", ...args], { cwd: root, encoding: "utf8" });
-    if (result.status !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr}`);
-  }
+  repos.stageAll(root);
   return root;
 }
 

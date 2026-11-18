@@ -1,14 +1,6 @@
 // conventions fix on fixture repositories: each fix that a rule declares, an edit that is stale, and the bin.
-import { spawnSync } from "node:child_process";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import {
   replaceLine,
@@ -20,43 +12,15 @@ import {
   type Rule,
 } from "./index.ts";
 import { hasImportMetaMain } from "./rules/main-check.ts";
+import { gitFixtures } from "@mark1russell7/rigor-testkit/git-fixture";
 
-const temp = mkdtempSync(join(tmpdir(), "conventions-fix-"));
-afterAll(() => rmSync(temp, { recursive: true, force: true }));
-let fixtures = 0;
+const repos = gitFixtures("conventions-fix-");
+afterAll(() => repos.remove());
 
 /** This function writes the files of a fixture repository, commits them, and gives its root. */
 function repo(files: Record<string, unknown>): string {
-  const root = join(temp, String(fixtures++));
-  mkdirSync(root, { recursive: true });
-  for (const [file, text] of Object.entries(files)) {
-    mkdirSync(dirname(join(root, file)), { recursive: true });
-    writeFileSync(
-      join(root, file),
-      typeof text === "string" ? text : `${JSON.stringify(text, null, 2)}\n`,
-    );
-  }
-  for (const args of [
-    ["init", "-q", "-b", "main"],
-    ["add", "-A"],
-    ["commit", "-q", "-m", "first"],
-  ]) {
-    const result = spawnSync(
-      "git",
-      [
-        "-c",
-        "user.name=test",
-        "-c",
-        "user.email=test@example.com",
-        "-c",
-        "commit.gpgsign=false",
-        ...args,
-      ],
-      { cwd: root, encoding: "utf8" },
-    );
-    if (result.status !== 0)
-      throw new Error(`git ${args.join(" ")}: ${result.stderr}`);
-  }
+  const root = repos.fixture(files);
+  repos.commitAll(root);
   return root;
 }
 

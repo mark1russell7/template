@@ -1,14 +1,13 @@
 // The rule push-main-only on fixture repositories: each form of `on`, the fix, its second run, and the exceptions.
-import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { runChecks, runFix, type CheckOptions, type RuleResult } from "./index.ts";
+import { gitFixtures } from "@mark1russell7/rigor-testkit/git-fixture";
 
-const temp = mkdtempSync(join(tmpdir(), "conventions-push-"));
-afterAll(() => rmSync(temp, { recursive: true, force: true }));
-let fixtures = 0;
+const repos = gitFixtures("conventions-push-");
+afterAll(() => repos.remove());
+const { temp, git } = repos;
 
 const ID = "push-main-only";
 const FILE = ".github/workflows/ci.yml";
@@ -17,18 +16,13 @@ const JOBS = ["permissions: {}", "", "jobs:", "  a:", "    runs-on: ubuntu-lates
 
 const workflow = (on: readonly string[], jobs: readonly string[] = JOBS): string => [...on, "", ...jobs, ""].join("\n");
 
-/** This function makes a git repository with the files, and gives its root. */
+/**
+ * This function makes a git repository with the files in its index, and gives its root. The rule reads only the list of
+ * the files and the HEAD of the remote, so the repository needs no commit.
+ */
 function repository(files: Record<string, unknown>): string {
-  const root = join(temp, String(fixtures++));
-  mkdirSync(root, { recursive: true });
-  for (const [file, text] of Object.entries(files)) {
-    mkdirSync(dirname(join(root, file)), { recursive: true });
-    writeFileSync(join(root, file), typeof text === "string" ? text : `${JSON.stringify(text, null, 2)}\n`);
-  }
-  for (const args of [["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "-m", "first"]]) {
-    const result = spawnSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", ...args], { cwd: root, encoding: "utf8" });
-    if (result.status !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr}`);
-  }
+  const root = repos.fixture(files);
+  repos.stageAll(root);
   return root;
 }
 
@@ -243,9 +237,10 @@ describe("push-main-only", () => {
   });
 
   it("reads the default branch from the HEAD of the remote", () => {
-    const root = one(workflow(["on:", "  push:", "    branches: [master]", "  pull_request:", "  workflow_dispatch:"]));
-    spawnSync("git", ["update-ref", "refs/remotes/origin/master", "HEAD"], { cwd: root });
-    spawnSync("git", ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/master"], { cwd: root });
+    const root = repos.fixture({ "package.json": { name: "one" }, [FILE]: workflow(["on:", "  push:", "    branches: [master]", "  pull_request:", "  workflow_dispatch:"]) });
+    repos.commitAll(root);
+    git(root, "update-ref", "refs/remotes/origin/master", "HEAD");
+    git(root, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/master");
     expect(check(root).breaks).toEqual([]);
   });
 
