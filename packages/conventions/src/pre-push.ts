@@ -393,15 +393,26 @@ export function parsePrePushArgs(args: readonly string[]): PrePushArgs | undefin
 }
 
 /**
+ * The options of each git start of the check. With them, a git configuration starts no command: no hook, no external diff
+ * and no file system monitor. A textconv driver has its own name, so each diff command also gives `--no-textconv`.
+ */
+const SAFE_GIT_OPTIONS: readonly string[] = ["-c", "core.hooksPath=/dev/null", "-c", "diff.external=", "-c", "core.fsmonitor=false"];
+
+/** This function gives the git function of the check in `root`: `runGit` with the safe options before the arguments. */
+export function checkGit(root: string): (args: readonly string[]) => string | undefined {
+  return (args) => runGit(root, [...SAFE_GIT_OPTIONS, ...args]);
+}
+
+/**
  * This function starts the command `pre-push` in the root of the git working tree of `io.cwd`. The bin and the bundle
- * `private-names.mjs` of the shared actions use it. Only the git hook reads `io.stdin`.
+ * `private-names.mjs` of the shared actions use it. Only the git hook reads `io.stdin`. Each git start uses `checkGit`.
  */
 export function runPrePushArgs(args: PrePushArgs, io: Pick<CliIo, "cwd" | "env" | "stderr" | "stdin">): number {
-  const top = runGit(io.cwd, ["rev-parse", "--show-toplevel"])?.trim() ?? "";
+  const top = checkGit(io.cwd)(["rev-parse", "--show-toplevel"])?.trim() ?? "";
   const root = top === "" ? io.cwd : top;
   const { remote, url, base, head } = args;
   const where = { remote, ...(url === undefined ? {} : { url }), ...(base === undefined ? {} : { base }), ...(head === undefined ? {} : { head }) };
-  return prePush({ ...where, input: base === undefined ? (io.stdin ?? "") : "", env: io.env, root, git: (gitArgs) => runGit(root, gitArgs) }, io);
+  return prePush({ ...where, input: base === undefined ? (io.stdin ?? "") : "", env: io.env, root, git: checkGit(root) }, io);
 }
 
 /** The marker line of the hook that `conventions hook install` writes. The command rewrites only a hook with this line. */

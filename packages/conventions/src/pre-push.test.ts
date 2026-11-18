@@ -29,11 +29,12 @@ import {
   privatePatterns,
   privateTextBreaks,
   runCli,
+  runGit,
   runPrePushArgs,
   type CliIo,
   type NameRule,
 } from "./index.ts";
-import { addedRuns, FIRST_PRE_PUSH_VERSION } from "./pre-push.ts";
+import { addedRuns, checkGit, FIRST_PRE_PUSH_VERSION } from "./pre-push.ts";
 
 /** The private probe of each test. No real name is private here. */
 const PROBE = "zz-test-pattern-7316";
@@ -773,6 +774,37 @@ describe("the arguments and the settings of conventions pre-push", () => {
     const code = runPrePushArgs(args, { cwd: join(root, "deep", "er"), env: { CONVENTIONS_PRIVATE_NAMES_FILE: listFile() }, stderr: (out) => (stderr += out) });
     expect(code).toBe(1);
     expect(stderr).toMatch(/^conventions pre-push: 1 commits, \d+ lines read, 1 breaks\. The check fails\.\n/);
+  });
+
+  it("starts git with no command of the git configuration: no hook, no external diff, no textconv driver and no file system monitor", () => {
+    const { root, base } = repository();
+    commit(root, { ".gitattributes": "*.md diff=poison\n", "notes.md": `1\nthe ${PROBE}\n` }, "second");
+    const slash = (path: string): string => path.replace(/\\/g, "/");
+    const marker = join(temp, `marker-${String(fixtures++)}.txt`);
+    const script = join(temp, `poison-${String(fixtures++)}.sh`);
+    writeFileSync(script, `#!/bin/sh\necho "$0" >> "${slash(marker)}"\n`, { mode: 0o755 });
+    mkdirSync(join(root, "poison-hooks"));
+    writeFileSync(join(root, "poison-hooks", "pre-push"), `#!/bin/sh\n"${slash(script)}"\n`, { mode: 0o755 });
+    const config: [string, string][] = [
+      ["diff.external", slash(script)],
+      ["diff.poison.textconv", slash(script)],
+      ["core.fsmonitor", slash(script)],
+      ["core.hooksPath", "poison-hooks"],
+    ];
+    for (const [key, value] of config) git(root, "config", key, value);
+    // The configuration is live: a plain git start that reads the index starts the command of core.fsmonitor
+    expect(runGit(root, ["status", "--short"])).toBeDefined();
+    expect(existsSync(marker)).toBe(true);
+    rmSync(marker);
+    expect(checkGit(root)(["status", "--short"])).toBeDefined();
+    let stderr = "";
+    const args = parsePrePushArgs(["--base", base]);
+    if (args === undefined) throw new Error("The arguments do not parse");
+    const code = runPrePushArgs(args, { cwd: root, env: { CONVENTIONS_PRIVATE_NAMES_FILE: listFile() }, stderr: (out) => (stderr += out) });
+    // The textconv driver gives an empty text, and the external diff gives no patch: then the check finds no name
+    expect(stderr).toMatch(/^conventions pre-push: 1 commits, \d+ lines read, 1 breaks\. The check fails\.\n/);
+    expect(code).toBe(1);
+    expect(existsSync(marker)).toBe(false);
   });
 
   it("reads the entry of one rule, and not the other entries", () => {
