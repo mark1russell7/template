@@ -95,9 +95,25 @@ export async function page<T>(path: string, jq: string, options?: GhOptions): Pr
   return parseLines<T>(await gh(["api", path, "--jq", jq], options));
 }
 
-/** This function gives the body of one read of `gh api` as text, for example the log of a job. */
+/**
+ * The flag that lets `gh api` write a body with terminal escape sequences. A newer `gh` refuses such a body without it,
+ * and its error names the flag. An older `gh` does not know the flag. On 2026-11-18 the runner's `gh` refused each of
+ * 217 job logs, because the logs hold color codes.
+ */
+export const ESCAPE_FLAG = "--allow-escape-sequences";
+
+/**
+ * This function gives the body of one read of `gh api` as text, for example the log of a job. When `gh` refuses the body
+ * because of its escape sequences, the function reads it again with `ESCAPE_FLAG`. The caller parses the text and does
+ * not write it to a terminal.
+ */
 export async function text(path: string, options?: GhOptions): Promise<string> {
-  return gh(["api", path], options);
+  try {
+    return await gh(["api", path], options);
+  } catch (error) {
+    if (!errorText(error).includes(ESCAPE_FLAG)) throw error;
+    return gh(["api", ESCAPE_FLAG, path], options);
+  }
 }
 
 /** This function gives one JSON value for each line of a text that is not empty. */

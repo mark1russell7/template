@@ -14,7 +14,10 @@ export interface Home {
   readonly covers: string;
   /** The packages of the home. A planned home has no package yet. */
   readonly packages: readonly string[];
-  /** The repository of the home, as owner/name. */
+  /**
+   * The repository of the home, as owner/name. The rules of the homes take the name under each owner of `OWNERS`,
+   * so a move between the owners does not wait on this field.
+   */
   readonly repo: string;
   /**
    * The other repositories that hold code of the home while it moves, as owner/name: the source or the target of the move.
@@ -470,7 +473,7 @@ export const HOMES: readonly Home[] = [
     title: "The duplication atlas",
     covers: "function shapes, clone classes, shared names and packages by purpose over all public repositories, and the static analysis of code for bugs, also in the repositories of others",
     packages: [],
-    repo: "mark1russell7/codeatlas",
+    repo: "metrograph-labs/codeatlas",
     state: "unpublished",
     words: ["duplicate", "clone", "copy", "static analysis", "analyzer"],
   },
@@ -490,7 +493,7 @@ export const HOMES: readonly Home[] = [
     covers: "one event format based on CAP (the Common Alerting Protocol), a source adapter for each feed (describe, fetch, map, check), the merge of duplicate reports into one incident (idempotent and order-free), priority as a calculation, routes over channels with acknowledgement and escalation, the health and coverage of each source, the fault suite of the pipeline",
     packages: [],
     pending: ["@mark1russell7/alerts"],
-    repo: "mark1russell7/alerts",
+    repo: "metrograph-labs/alerts",
     state: "planned",
     words: ["alert", "alerts", "warning", "emergency", "cap", "common alerting protocol", "incident", "escalate", "escalation", "acknowledge", "severity", "urgency", "weather alert", "coverage", "heartbeat"],
     note: "The planned packages are @mark1russell7/alerts (the core) and one package for each source and each channel. It knows no person and no place: the places and keys of a user are input data. Sending goes through @procedures/notify, fetches through polite-crawler, geography through @mark1russell7/geo, the service loop through @mark1russell7/service, fault tests through rigor-chaos and rigor-proxy.",

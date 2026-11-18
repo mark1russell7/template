@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Clock } from "@mark1russell7/service";
-import { type Exec, RETRY, errorText, gh, lines, pool, publicRepos, transient } from "../lib/gh.ts";
+import { ESCAPE_FLAG, type Exec, RETRY, errorText, gh, lines, pool, publicRepos, text, transient } from "../lib/gh.ts";
 
 /** An error as `execFile` gives it: the message, and the standard error of `gh`. */
 const ghError = (stderr: string): Error => Object.assign(new Error("Command failed: gh api x"), { stderr });
@@ -67,6 +67,32 @@ test("gh gives the error at once for an error of the request, and after the last
   await assert.rejects(gh(["api", "x"], { exec: down, clock: fake }), (error: unknown) => /HTTP 502/.test(errorText(error)));
   assert.equal(down.calls, RETRY.tries);
   assert.equal(fake.waits.length, RETRY.tries - 1);
+});
+
+test("text reads a body again with the escape flag only when gh asks for the flag", async () => {
+  // The error of the runner's gh on 2026-11-18, for a job log with color codes.
+  const refused = ghError(`the response contains terminal escape sequences; pass ${ESCAPE_FLAG} to output it anyway`);
+  const calls: (readonly string[])[] = [];
+  const answers: (Error | string)[] = [refused, "\u001b[36mlog\u001b[0m\n"];
+  const exec: Exec = async (args) => {
+    calls.push(args);
+    const answer = answers.shift() ?? "never";
+    if (answer instanceof Error) throw answer;
+    return answer;
+  };
+  assert.equal(await text("repos/o/r/actions/jobs/1/logs", { exec, clock: clock() }), "\u001b[36mlog\u001b[0m\n");
+  assert.deepEqual(calls, [
+    ["api", "repos/o/r/actions/jobs/1/logs"],
+    ["api", ESCAPE_FLAG, "repos/o/r/actions/jobs/1/logs"],
+  ]);
+  // An older gh gives the body at once: one start, with no flag.
+  const plain = script(["log\n"]);
+  assert.equal(await text("x", { exec: plain, clock: clock() }), "log\n");
+  assert.equal(plain.calls, 1);
+  // Another error of the request stays an error, and the function does not try the flag.
+  const notFound = script([ghError("gh: Not Found (HTTP 404)"), "never"]);
+  await assert.rejects(text("x", { exec: notFound, clock: clock() }), /Command failed/);
+  assert.equal(notFound.calls, 1);
 });
 
 test("publicRepos reads each owner in order, and stops on a name that two owners have", async () => {
