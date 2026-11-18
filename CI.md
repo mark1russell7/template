@@ -170,7 +170,8 @@ The ruleset names only the summary checks. Thus it does not change when a job is
 - A gate workflow must start on each pull request, with no `paths` filter. Otherwise its summary check does not start, and the ruleset blocks the pull request. To skip the work, use the action `changes` and an `if` on the other jobs ("A gate with paths").
 - Set the ruleset once with `node scripts/workflows/ruleset-ci-ok.ts <owner/repo> --apply`. Without `--apply`, it only prints the changes. It reads the checks of the newest of the last 5 pull requests into the default branch where "CI OK" passed. It adds each check with a name `<Name> OK` that passed there and that no ruleset names. It skips a repository where "CI OK" did not pass on any of the 5. A check that starts only on a push to `main` is not added, because it does not start on a pull request.
 - To make the summary checks the only checks of the ruleset, add `--only-summary`. Then the script also removes each check that started in the same workflow run as that "CI OK", because "CI OK" covers it. It deletes a ruleset with no rule left. Then a repository can join or split the jobs of its CI, and its ruleset stays correct.
-- The workflow `rulesets.yml` runs the script with `--check` each day. The check changes nothing. It fails when a public repository has a summary check that passed and that no ruleset names. Thus a new repository gets its ruleset after its first merged pull request: the summary of the red run gives the command that adds it. A repository with no "CI OK" that passed is a no read, not a pass.
+- The workflow `rulesets.yml` starts the script with `--check` each day. The check changes nothing. It fails when a public repository has a summary check that passed and that no ruleset names. The summary of the red run gives the command that adds the ruleset.
+- The check also reads the settings of each repository that is not a fork ("The settings of a new repository"). It fails for a repository with `ci.yml` and no ruleset, also before its first merged pull request. The summary then gives the command of `scripts/stamp/settings.ts`. A repository with no "CI OK" that passed and no fault is a no read, not a pass.
 
 ### One run for each commit
 
@@ -793,7 +794,7 @@ The job `site` of `ci.yml` checks the site of each pull request, and "CI OK" nee
 - `github-token: true` gives the build `GITHUB_TOKEN`, with the read permissions of the build job.
 - The workflow gets the actions of the same template commit as the workflow file. A second checkout gets them.
 - Each public repository has a site. The rule `pages-site` of `@mark1russell7/conventions` needs a call of this workflow without `deploy: false`.
-- The Pages source of the repository is "GitHub Actions". To set it, start `gh api -X POST repos/<owner>/<repo>/pages -f build_type=workflow` one time.
+- The Pages source of the repository is "GitHub Actions". `scripts/stamp/settings.ts` sets it ("The settings of a new repository").
 
 ### The compare of the site check
 
@@ -1010,3 +1011,23 @@ The job `publish` of `release.yml` uses the pinned form of `npm-publish`, also i
 The stamp (`scripts/stamp/main.ts`, started by `new-repo.ps1`) copies only the files that its list `KEEP` names. It does not copy the shared workflows, the actions or `actions-test.yml`. It changes each local path and each pin of the template to the pinned form, with the commit of the template that it copies. The job `stamp` of `ci.yml` makes a repository. With no hand edit, that repository must pass its install, its checks, its Pages build and the site check.
 
 The job starts the stamp with `--link`. Then each package of the template in that repository is a `link:` to its folder in the commit, not a range from npm. Thus a pull request can change a rule and the files that the stamp writes together. Without `--link`, the repository gets the rule from npm, which does not have the change before the release.
+
+### The settings of a new repository
+
+Some settings of a repository are on GitHub, not in its files. The stamp cannot write them. After `gh repo create` with the push of the first commit, start:
+
+```sh
+node scripts/stamp/settings.ts <owner>/<name> --from <folder> --apply
+```
+
+Without `--apply`, the script only prints the steps. The default of `--from` is the folder `<name>` next to the template. The script sets four settings, in this order:
+
+1. The dependency graph. Without it, the dependency review fails on each pull request.
+2. A ruleset of the default branch. It names each summary check of the workflows of the folder that start on a pull request: `CI OK` first, then `Security OK`. Only GitHub Actions can give the checks.
+3. The Pages source "GitHub Actions", when the folder has `pages.yml`.
+4. Auto-merge. It comes last, because before the ruleset `gh pr merge --auto` merges with no check.
+
+- The script keeps each setting that the repository has. A second start changes nothing.
+- The script refuses a repository with no commit on its default branch. The ruleset stops a push without its checks, so push the first commit first.
+- The daily check of `rulesets.yml` reads the settings that anyone can read: the ruleset, the dependency graph and the Pages source. A repository that misses one fails the check. Auto-merge needs the admin role to read, so the check does not read it.
+- The check reads the dependency graph from the SBOM request. HTTP 404 is a fault. A different error is a no read.
