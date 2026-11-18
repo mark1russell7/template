@@ -88,6 +88,16 @@ export const HOMES: readonly Home[] = [
     note: "The entry /fresh runs each arm of each pair in a fresh process, and the entry /supervise stops a case that passes its time budget. Five repositories have their own harness today (vex, packing, highways, layout-stack, typeset). Do not grow a local harness: the shared one replaces them.",
   },
   {
+    area: "capacity",
+    title: "Performance and capacity models",
+    covers: "the cost of one request in CPU time, memory, garbage collection time, event-loop lag and network bytes, as laws over each load variable (request rate, size and duration, concurrency, heap size, process age), for Node, the service runner and each app; the knee of each law; the scale rule of a service (the load at which it needs one more instance, and the memory and CPU of each instance), with intervals",
+    packages: ["@mark1russell7/capacity"],
+    repo: "mark1russell7/capacity",
+    state: "unpublished",
+    words: ["capacity", "scalability", "scale rule", "saturation", "utilization", "queueing", "knee", "autoscale", "cost per request", "usl", "overhead", "sizing"],
+    note: "It holds the models and the rules, not the measurement: runs go through rigor-bench, fits through rigor-statistics, load schedules through rigor-chaos, event-loop lag through @mark1russell7/lag. Timed runs are in CI only. The scale rule of a service feeds its IaC.",
+  },
+  {
     area: "test-generation",
     title: "Test helpers and test generation",
     covers: "property tests on fast-check, pairwise and covering arrays, metamorphic relations, chaos and load schedules, shared test fixtures, the capture of the OpenTelemetry SDK and the propagation gate for tests",
