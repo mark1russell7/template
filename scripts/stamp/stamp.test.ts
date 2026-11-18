@@ -6,7 +6,7 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { minuteField, scheduleMinute } from "../../packages/conventions/src/rules/runner-budget.ts";
 import { parseRoadmap } from "../../packages/site-pages/src/index.ts";
-import { checkStamp, firstRoadmap, pinWorkflow, type RootManifest, rootScripts, stamp, workflowShape } from "./stamp.ts";
+import { checkStamp, firstRoadmap, pinWorkflow, type RootManifest, rootScripts, stamp, stampRoot, workflowShape } from "./stamp.ts";
 
 const template = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -60,6 +60,7 @@ describe("the stamp", () => {
     for (const path of ["package.json", "packages/site/package.json"]) assert.doesNotMatch(read(out, path), /workspace:/);
     const root = JSON.parse(read(out, "package.json")) as { name: string; devDependencies: Record<string, string> };
     assert.equal(root.name, "demo-repo-monorepo");
+    assert.equal(Object.hasOwn(root, "conventions"), false, "The repository gets the exceptions of the template");
     assert.equal(root.devDependencies["@mark1russell7/conventions"], "^9.8.7");
     assert.equal(root.devDependencies["@mark1russell7/template-cli"], "^9.8.7");
   });
@@ -155,6 +156,17 @@ describe("rootScripts", () => {
   });
 });
 
+describe("stampRoot", () => {
+  it("leaves out the exceptions of the template, because each one names a file that the repository does not get", () => {
+    const exceptions = { rules: { "typed-scripts": { generated: ["made-up/bundles/*.mjs"], reason: "A made-up build writes these files." } } };
+    const source: RootManifest = { name: "template-monorepo", private: true, scripts: {}, devDependencies: {}, conventions: exceptions };
+    const root = stampRoot(source, "demo-repo", new Set<string>(), () => "^1.0.0");
+    assert.equal(Object.hasOwn(root, "conventions"), false);
+    assert.equal(root["private"], true);
+    assert.deepEqual(source["conventions"], exceptions);
+  });
+});
+
 describe("pinWorkflow", () => {
   it("pins a local path and moves an old pin", () => {
     const sha = "a".repeat(40);
@@ -185,7 +197,9 @@ describe("checkStamp", () => {
     root.scripts["own"] = "node own.ts";
     root.devDependencies["playwright"] = "^1.56.1";
     for (const dep of Object.keys(root.devDependencies)) if (root.devDependencies[dep] === "^9.8.7") root.devDependencies[dep] = "^0.1.0";
-    writeFileSync(join(out, "package.json"), `${JSON.stringify(root, null, 2)}\n`);
+    // The exceptions of the repository are its own
+    const own = { ...root, conventions: { rules: { "typed-scripts": { ignore: ["own.mjs"], reason: "A made-up tool reads this file." } } } };
+    writeFileSync(join(out, "package.json"), `${JSON.stringify(own, null, 2)}\n`);
     assert.deepEqual(states(out), {});
   });
 
