@@ -1,15 +1,18 @@
-# The ruleset of each public repository: scripts/workflows/ruleset-ci-ok.ts --check reads, for each public repository
-# that is not archived, the summary checks ("CI OK", "Security OK") that passed on its last merged pull requests, and
-# fails when no ruleset of its default branch names one of them. A new repository then gets its ruleset after its
-# first merged pull request: the red run goes to the owner of the template, who starts the command in the summary.
-# A repository with no "CI OK" that passed yet is a no read in the summary, never a pass. The run changes nothing,
-# so its token only reads: the script reads public data. It needs no install: the script imports only node: modules
-# and the list of the owners, which has no import.
+# The ruleset and the settings of each public repository: scripts/workflows/ruleset-ci-ok.ts --check reads, for each
+# public repository that is not archived, the summary checks ("CI OK", "Security OK") that passed on its last merged
+# pull requests, and fails when no ruleset of its default branch names one of them. It also reads the settings that
+# anyone can read: a ruleset when the repository has ci.yml, the dependency graph, and a Pages source when it has
+# pages.yml. A fault of a setting fails the run also for a new repository with no merged pull request, so the window
+# between the first push and the first merge stays held. The red run goes to the owner of the template, who starts the
+# command in the summary (scripts/stamp/settings.ts sets the settings). A repository with no "CI OK" that passed and
+# no fault is a no read in the summary, never a pass. The run changes nothing, so its token only reads: the script
+# reads public data. It needs no install: the script imports only node: modules and the list of the owners, which
+# has no import.
 name: Rulesets
 
 on:
   workflow_dispatch:
-  # Each day, so a new repository waits a day at most for its ruleset
+  # Each day, so a new repository waits a day at most for its ruleset and its settings
   schedule:
     - cron: "32 7 * * *"
   push:
@@ -27,7 +30,7 @@ concurrency:
 
 jobs:
   check:
-    name: The ruleset of each public repository
+    name: The ruleset and the settings of each public repository
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

@@ -25,16 +25,47 @@ export interface Row {
 
 /**
  * This function gives the folders of the packages whose test script starts Vitest, from the JSON of
- * `pnpm ls -r --json --depth -1`. The root of the workspace is not in the list when it has packages.
+ * `pnpm ls -r --json --depth -1`. The list has the root of a workspace with packages, except when its Vitest config
+ * declares projects. A run of that root starts the tests of the packages again.
  */
-export function vitestDirs(list: unknown, root: string, testScriptOf: (dir: string) => string | undefined): string[] {
+export function vitestDirs(
+  list: unknown,
+  root: string,
+  testScriptOf: (dir: string) => string | undefined,
+  declaresProjects: (dir: string) => boolean,
+): string[] {
   if (!Array.isArray(list)) throw new Error("The list of pnpm is not a JSON array.");
   const dirs = list.map((p) => String((p as { path?: unknown }).path ?? "")).filter((path) => path !== "");
-  const packages = dirs.length > 1 ? dirs.filter((path) => resolve(path) !== resolve(root)) : dirs;
+  // A root whose test script only starts the scripts of the packages (pnpm -r test) does not start Vitest, so the
+  // filter of the test script below removes it. A root that is a package with its own tests stays.
+  const packages = dirs.length > 1 && declaresProjects(root) ? dirs.filter((path) => resolve(path) !== resolve(root)) : dirs;
   return packages
     .filter((path) => /\bvitest\b/.test(testScriptOf(path) ?? ""))
     .map((path) => relative(root, path).replaceAll("\\", "/") || ".")
     .toSorted();
+}
+
+const EXTENSIONS = ["ts", "mts", "cts", "js", "mjs", "cjs"];
+/** The configs that Vitest reads, in its order: the first `vitest.config` file, else the first `vite.config` file. */
+const CONFIGS = ["vitest.config", "vite.config"].flatMap((name) => EXTENSIONS.map((ext) => `${name}.${ext}`));
+/** The workspace files of Vitest 3. Vitest 4 removed them, and a config declares `projects` in their place. */
+const WORKSPACES = [...EXTENSIONS, "json"].map((ext) => `vitest.workspace.${ext}`);
+
+/**
+ * This function tells if the folder declares Vitest projects. It finds a workspace file of Vitest, or the key
+ * `projects` or `workspace` in the config that Vitest reads. The argument `read` gives the text of a file, or undefined.
+ */
+export function declaresProjects(dir: string, read: (file: string) => string | undefined = readIfFile): boolean {
+  if (WORKSPACES.some((name) => read(resolve(dir, name)) !== undefined)) return true;
+  for (const name of CONFIGS) {
+    const text = read(resolve(dir, name));
+    if (text !== undefined) return /\b(?:projects|workspace)\s*:/.test(text);
+  }
+  return false;
+}
+
+function readIfFile(file: string): string | undefined {
+  return existsSync(file) ? readFileSync(file, "utf8") : undefined;
 }
 
 const pct = (m: { readonly pct: number | "Unknown" }): number => (typeof m.pct === "number" ? m.pct : 100);
@@ -68,7 +99,7 @@ function main(argv: readonly string[]): number {
       const file = resolve(dir, "package.json");
       return existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as { scripts?: { test?: string } }).scripts?.test : undefined;
     };
-    for (const dir of vitestDirs(list, process.cwd(), testScriptOf)) process.stdout.write(`${dir}\n`);
+    for (const dir of vitestDirs(list, process.cwd(), testScriptOf, (dir) => declaresProjects(dir))) process.stdout.write(`${dir}\n`);
     return 0;
   }
   if (command === "summary") {

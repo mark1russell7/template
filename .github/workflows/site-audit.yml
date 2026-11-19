@@ -105,6 +105,7 @@ jobs:
     outputs:
       list: ${{ steps.sites.outputs.list }}
       owners: ${{ steps.sites.outputs.owners }}
+      shards: ${{ steps.sites.outputs.shards }}
     steps:
       # The script reads the list of the owners from its home, the package conventions.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -116,7 +117,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-      # The output list has the names of the sites, and the output owners has the owner of each name.
+      # The output list has the names of the sites, the output owners has the owner of each name, and the output shards
+      # has the shards of the job nav (at most 8 sites in each).
       - name: The sites
         id: sites
         env:
@@ -224,20 +226,23 @@ jobs:
           path: ${{ runner.temp }}/site-audit
           if-no-files-found: warn
 
+  # One job for each shard of at most 8 sites (site-list.ts), not one job for each site. Each job waits for a runner of
+  # the account and sets up the browser once. On 2026-11-18, one job for each site gave 55 jobs, two at one time, so each
+  # waited in the queue after the last: the job nav took 3 h 23 min. A shard takes approximately 15 minutes.
   nav:
     needs: [changes, sites]
     if: needs.changes.outputs.match == 'true' && needs.sites.outputs.list != '[]'
+    name: nav (${{ matrix.shard.name }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     permissions:
       contents: read
     strategy:
       fail-fast: false
       # Two jobs at one time, so that the run has a peak of 3 jobs with the job audit on the shared runners of the account.
-      # A nav job takes approximately one minute. The wait for a runner, not this limit, gives the length of a full run.
       max-parallel: 2
       matrix:
-        repo: ${{ fromJSON(needs.sites.outputs.list) }}
+        shard: ${{ fromJSON(needs.sites.outputs.shards) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -257,46 +262,64 @@ jobs:
         with:
           command: ${{ runner.temp }}/site-check-playwright/node_modules/.bin/playwright-core
           browsers: chromium
-      - name: The navigation of ${{ matrix.repo }}
+      # The crawl of each site of the shard. On a pull request, or with the input preview-bar, the same crawl follows with
+      # the bar that the Pages workflow writes into each page: the screenshots show the bar on the live site, and the crawl
+      # tells which problems the bar solves. A failed site does not stop the loop. After the last site, the step names each
+      # failed site in the summary and fails (site-list.test.ts starts this step with a fake crawl).
+      - name: The navigation of the sites of shard ${{ matrix.shard.name }}
         shell: bash
         env:
-          OWNER: ${{ fromJSON(needs.sites.outputs.owners)[matrix.repo] }}
-          REPO: ${{ matrix.repo }}
+          SHARD: ${{ matrix.shard.name }}
+          SITES: ${{ join(matrix.shard.sites, ' ') }}
+          URLS: ${{ join(matrix.shard.urls, ' ') }}
+          BAR: ${{ github.event_name == 'pull_request' || inputs.preview-bar }}
         run: |
           set -uo pipefail
-          out="$RUNNER_TEMP/site-nav/$REPO"
-          mkdir -p "$out"
-          owner="${OWNER,,}"
-          if [ "${REPO,,}" = "$owner.github.io" ]; then url="https://$owner.github.io/"; else url="https://$owner.github.io/$REPO/"; fi
-          code=0
-          node packages/site-pages/src/check/main.ts nav --url "$url" --shots "$out" --timeout 45000 > "$out/nav.log" 2>&1 || code=$?
-          cat "$out/nav.log"
-          echo "$code $url" > "$out/code.txt"
-          # Exit code 1 is a site with problems, and the audit is a report. Exit code 2 or no report is a failed audit.
-          if [ "$code" -eq 2 ] || [ ! -f "$out/report.json" ]; then exit 1; fi
-      # The same crawl, with the bar that the Pages workflow writes into each page: the screenshots show the bar on the
-      # live site, and the crawl tells which problems the bar solves.
-      - name: The navigation of ${{ matrix.repo }} with the site bar
-        if: github.event_name == 'pull_request' || inputs.preview-bar
-        shell: bash
-        env:
-          OWNER: ${{ fromJSON(needs.sites.outputs.owners)[matrix.repo] }}
-          REPO: ${{ matrix.repo }}
-        run: |
-          set -uo pipefail
-          out="$RUNNER_TEMP/site-nav/$REPO/bar"
-          mkdir -p "$out"
-          owner="${OWNER,,}"
-          if [ "${REPO,,}" = "$owner.github.io" ]; then url="https://$owner.github.io/"; else url="https://$owner.github.io/$REPO/"; fi
-          code=0
-          node packages/site-pages/src/check/main.ts nav --url "$url" --preview-bar --require-bar --shots "$out" --timeout 45000 > "$out/nav.log" 2>&1 || code=$?
-          cat "$out/nav.log"
-          if [ "$code" -eq 2 ] || [ ! -f "$out/report.json" ]; then exit 1; fi
-      - name: The report of ${{ matrix.repo }}
+          # A name of a repository and an address of a site have no space.
+          read -ra sites <<< "$SITES"
+          read -ra urls <<< "$URLS"
+          if [ "${#sites[@]}" -eq 0 ] || [ "${#sites[@]}" -ne "${#urls[@]}" ]; then
+            echo "::error title=Site navigation%3A shard $SHARD::the shard has ${#sites[@]} sites and ${#urls[@]} addresses."
+            exit 1
+          fi
+          failed=()
+          # One crawl: the folder of its report, its name in a message, and the other options of the command. Exit code 1
+          # is a site with problems, and the audit is a report. Exit code 2, a crawl longer than 10 minutes (exit code
+          # 124) or no report is a failed audit.
+          crawl() {
+            local out="$1" what="$2" code=0
+            shift 2
+            mkdir -p "$out"
+            timeout 10m node packages/site-pages/src/check/main.ts nav --url "$url" --shots "$out" --timeout 45000 "$@" < /dev/null > "$out/nav.log" 2>&1 || code=$?
+            cat "$out/nav.log"
+            echo "$code $url" > "$out/code.txt"
+            if [ "$code" -eq 2 ] || [ "$code" -eq 124 ] || [ ! -f "$out/report.json" ]; then
+              echo "::error title=Site navigation%3A no report::$repo: $what gave exit code $code and no report."
+              return 1
+            fi
+            return 0
+          }
+          for at in "${!sites[@]}"; do
+            repo="${sites[$at]}"
+            url="${urls[$at]}"
+            echo "::group::$repo"
+            if ! crawl "$RUNNER_TEMP/site-nav/$repo" "the crawl"; then
+              failed+=("$repo")
+            elif [ "$BAR" = "true" ] && ! crawl "$RUNNER_TEMP/site-nav/$repo/bar" "the crawl with the site bar" --preview-bar --require-bar; then
+              failed+=("$repo")
+            fi
+            echo "::endgroup::"
+          done
+          if [ "${#failed[@]}" -gt 0 ]; then
+            echo "Shard $SHARD: ${#failed[@]} of ${#sites[@]} sites gave no report: ${failed[*]}" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "Shard $SHARD: each of the ${#sites[@]} sites gave a report." | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: The reports of shard ${{ matrix.shard.name }}
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: site-nav-${{ matrix.repo }}
+          name: site-nav-shard-${{ matrix.shard.index }}
           path: ${{ runner.temp }}/site-nav
           if-no-files-found: warn
 

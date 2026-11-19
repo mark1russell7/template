@@ -78,7 +78,7 @@ export const homePackage: Rule = {
   reason:
     "Each area of code has one home package (conventions map). A local copy of a helper of another area drifts from the home and splits the fixes: on 2026-11-02 the repositories had 68 local statistics functions (median, quantile, bootstrap and more) in 14 repositories, while @mark1russell7/rigor-statistics was on npm. The check examines only the lines that a change adds, so the copies that exist do not break, and the count can only go down.",
   fix: "Import the function from its home. If the home does not have it, add it to the home in a pull request of the home repository, then import it. A function that only has the name of a signature and does another thing gets a new name.",
-  sources: [{ repo: "private", rule: "direction-18", doc: "docs/STRATEGY.md (2026-11-02, one map of homes, checked when the code is written)" }],
+  sources: [{ repo: "private", rule: "direction-18", doc: "a decision of 2026-11-02: one map of homes, checked when the code is written" }],
   options: {
     scope: {
       type: "string",

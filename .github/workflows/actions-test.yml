@@ -110,6 +110,10 @@ jobs:
         uses: ./.github/actions/changes
         with:
           pull-request: ${{ steps.pull.outputs.found == 'true' && steps.pull.outputs.number || '' }}
+          # A push to main decides with the files of its push, as a pull request does. A change of only the version of
+          # a package.json is not a file of the tests: the release of that version packs the packages.
+          push-files: "true"
+          version-bumps: skip
           # The same files as on.push.paths
           paths: |
             .github/actions/**

@@ -6,7 +6,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { checkReport, missingChecks } from "./ruleset-ci-ok.ts";
+import { checkReport, httpStatusOf, missingChecks, settingsFaults, type SettingsRead } from "./ruleset-ci-ok.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -33,7 +33,7 @@ describe("checkReport", () => {
       { repo: "o/new", state: "no read", reason: 'no "CI OK" that passed on the last 5 pull requests into main' },
     ]);
     assert.equal(code, 0);
-    assert.match(text, /0 miss a check, 1 no read, 1 have each check\./);
+    assert.match(text, /0 miss a check or a setting, 1 no read, 1 have each check\./);
     assert.doesNotMatch(text, /--apply/);
   });
 
@@ -53,6 +53,53 @@ describe("checkReport", () => {
   it("is a no read, not a pass, for a repository with no read", () => {
     const { text } = checkReport([{ repo: "o/x", state: "no read", reason: "the GitHub API gave an error (see the log)" }]);
     assert.match(text, /\| o\/x \| no read \| the GitHub API gave an error \(see the log\) \|/);
+  });
+
+  it("exits 1 for a fault of a setting, also with no missing check, and gives the command of the settings", () => {
+    const { code, text } = checkReport([
+      { repo: "o/new", state: "missing", missing: [], faults: ["no ruleset on the default branch"] },
+      { repo: "o/b", state: "missing", missing: ["Security OK"], faults: ["the dependency graph is off"] },
+    ]);
+    assert.equal(code, 1);
+    assert.match(text, /\| o\/new \| missing \| no ruleset on the default branch \|/);
+    assert.match(text, /\| o\/b \| missing \| no ruleset names Security OK; the dependency graph is off \|/);
+    assert.match(text, /`node scripts\/workflows\/ruleset-ci-ok\.ts o\/b --only-summary --apply`/);
+    assert.match(text, /`node scripts\/stamp\/settings\.ts o\/new --apply`/);
+    assert.match(text, /`node scripts\/stamp\/settings\.ts o\/b --apply`/);
+  });
+});
+
+describe("settingsFaults", () => {
+  const ok: SettingsRead = { fork: false, required: ["CI OK"], workflows: [".github/workflows/ci.yml", ".github/workflows/pages.yml"], hasPages: true, sbom: 200 };
+
+  it("finds no fault for a repository with each setting", () => {
+    assert.deepEqual(settingsFaults(ok), { faults: [], unread: [] });
+  });
+
+  it("finds a new repository with ci.yml and no ruleset: the check breaks for it", () => {
+    assert.deepEqual(settingsFaults({ ...ok, required: [] }).faults, ["no ruleset on the default branch"]);
+    assert.deepEqual(settingsFaults({ ...ok, required: [], workflows: [] }).faults, []);
+  });
+
+  it("finds the dependency graph off at HTTP 404, and gives another answer as a no read", () => {
+    assert.deepEqual(settingsFaults({ ...ok, sbom: 404 }).faults, ["the dependency graph is off"]);
+    assert.deepEqual(settingsFaults({ ...ok, sbom: 403 }), { faults: [], unread: ["the dependency graph gave HTTP 403"] });
+  });
+
+  it("finds a repository with pages.yml and no Pages source", () => {
+    assert.deepEqual(settingsFaults({ ...ok, hasPages: false }).faults, ["no Pages source"]);
+    assert.deepEqual(settingsFaults({ ...ok, hasPages: false, workflows: [".github/workflows/ci.yml"] }).faults, []);
+  });
+
+  it("reads no setting of a fork", () => {
+    assert.deepEqual(settingsFaults({ fork: true, required: [], workflows: [".github/workflows/ci.yml"], hasPages: false, sbom: 404 }), { faults: [], unread: [] });
+  });
+});
+
+describe("httpStatusOf", () => {
+  it("reads the status in the text of an error of gh", () => {
+    assert.equal(httpStatusOf("gh: Not Found (HTTP 404)"), 404);
+    assert.equal(httpStatusOf("connection reset"), undefined);
   });
 });
 

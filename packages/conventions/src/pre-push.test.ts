@@ -438,6 +438,27 @@ describe("conventions pre-push", () => {
     expect(stderr).toMatch(/^conventions pre-push: 1 commits, \d+ lines read, 0 breaks\.\n$/);
   });
 
+  it("does not read the commits of main again when a branch that the remote has merges main", () => {
+    const { root, base } = repository();
+    git(root, "checkout", "-q", "-b", "feature");
+    const pushed = commit(root, { "feature.md": "1\n" }, "a clean feature");
+    git(root, "checkout", "-q", "main");
+    // Main adds the probe and removes it later. A new commit with the probe stops a push, but these commits are on the remote
+    commit(root, { "old.md": `${PROBE}\n` }, `an old ${PROBE} commit`);
+    const main = commit(root, { "old.md": "1\n" }, "remove the old line");
+    git(root, "update-ref", "refs/remotes/origin/main", main);
+    git(root, "update-ref", "refs/remotes/origin/feature", pushed);
+    git(root, "checkout", "-q", "feature");
+    git(root, "merge", "-q", "--no-edit", "main");
+    const head = commit(root, { "feature.md": "1\n2\n" }, "a clean change after the merge");
+    const { code, stderr } = push(root, `refs/heads/feature ${head} refs/heads/feature ${pushed}\n`);
+    expect(code).toBe(0);
+    expect(stderr).toMatch(/^conventions pre-push: 2 commits, \d+ lines read, 0 breaks\.\n$/);
+    // The remote sha alone still limits the push when the remote branches do not have main
+    git(root, "update-ref", "refs/remotes/origin/main", base);
+    expect(push(root, `refs/heads/feature ${head} refs/heads/feature ${pushed}\n`).code).toBe(1);
+  });
+
   it("skips a deleted ref", () => {
     const { root, base } = repository();
     const { code, stderr } = push(root, `(delete) ${ZEROS} refs/heads/old ${base}\n`);

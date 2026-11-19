@@ -96,7 +96,7 @@ export function publishedMinorRule(lookup: RegistryLookup = npmLookup, now: () =
     reason:
       "A caret range of a 0.x version cannot reach the next minor, and a lockfile can hold an old version that a range admits. A test that holds the choices of today does not show it, so a consumer can stay behind for many releases with no failure.",
     fix: "Raise the range of the dependency to the newest published minor, and update the lockfile. Read the changes of the release first.",
-    sources: [{ repo: "private", rule: "published-minor", doc: "docs/STRATEGY.md (2026-11-04, a consumer behind a published minor)" }],
+    sources: [{ repo: "private", rule: "published-minor", doc: "a decision of 2026-11-04: a consumer behind a published minor" }],
     options: {
       packages: { type: "strings", default: [], description: "The patterns of the package names that the rule examines, for example `@scope/*`. With no pattern, the rule does not start." },
       graceDays: { type: "number", default: 0, description: "The days that a consumer has, from the first publish of a minor that it does not have." },

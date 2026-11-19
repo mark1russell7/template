@@ -99,13 +99,18 @@ const BUILD_FOLDERS = ["dist", "build"];
 const SOURCE_FOLDERS = ["src"];
 
 /**
- * The files and the folders of the tests. The default options exclude them, and the rule of the dev dependencies skips
- * them. A test file has the suffix `.test`, `.spec` or `.e2e`. A helper of the tests adds one word with a hyphen to
- * the suffix, for example `fixtures.test-util.ts` or `setup.spec-helpers.ts`. The word is an alternative, not an
- * optional group: dependency-cruiser refuses a pattern with a repetition inside a repetition, as a slow pattern.
+ * The files and the folders that run only with the dev dependencies: tests, benchmarks and their helpers. The default
+ * options exclude them, and the rule of the dev dependencies skips them. A test file has the suffix `.test`, `.spec`
+ * or `.e2e`. A benchmark file has the suffix `.bench`, as in vitest bench. A helper adds one word with a hyphen to the
+ * suffix, for example `fixtures.test-util.ts`, `setup.spec-helpers.ts` or `slow.test-setup.ts` (a setup file of
+ * vitest).
+ *
+ * The word is an alternative, not an optional group: dependency-cruiser refuses a pattern with a repetition inside a
+ * repetition, as a slow pattern. A folder `bench` or `benchmarks` holds the cases of a bench harness, for example
+ * @mark1russell7/rigor-bench. CI starts them with the dev dependencies.
  */
-const TEST_FILES = "\\.(test|spec|e2e)(\\.|-[a-z]+\\.)[cm]?[jt]sx?$";
-const TEST_FOLDERS = "/(test|tests|e2e|__tests__|fixtures)/";
+const TEST_FILES = "\\.(test|spec|e2e|bench)(\\.|-[a-z]+\\.)[cm]?[jt]sx?$";
+const TEST_FOLDERS = "/(test|tests|e2e|__tests__|fixtures|bench|benchmarks)/";
 
 /**
  * A config file of a bundler. Its package is bundled: the build holds each import. A tsdown build, for example,
