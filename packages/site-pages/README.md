@@ -160,7 +160,7 @@ site-pages bar --out dist --repo owner/name --pages "Demo=demo/,Docs=docs/" --si
 - Its CSS has its own class names, so the CSS of the site does not change the bar. It follows the light and the dark scheme. Its rows wrap at 360 px.
 - The command can start two times on one folder. The second start gives the same pages.
 
-In `reusable-pages.yml`, the input `site-bar: true` starts the command before the upload. Then `site-pages nav --require-bar` crawls the built site, and a failure stops the deploy.
+In `reusable-pages.yml`, the input `site-bar: true` starts the command before the upload. Then `site-pages nav --require-bar` crawls the built site, and a failure stops the deploy. Thus a site that turns on the bar removes the links of the bar from its own header in the same change. Then each page has one row of links.
 
 ## The scroll cue of the built pages
 
@@ -196,6 +196,7 @@ The command fails for each of these problems:
 - A link goes to a page that gives a status of 400 or more.
 - A click on a link to `releases/` or `status/` does not show the page of site-pages. A single-page application can catch the click and show its own page.
 - With `--require-bar`, a page has no shared site bar.
+- A page with the bar shows a link of the bar again in its own header or navigation. The check compares the target pages. The name of the site that links to the home counts too. A link to a part of the same page, for example `#use`, does not count. A link in a footer does not count.
 
 The crawl opens at most `--max-pages` pages (default: 60). When it stops at this limit, the pages that it did not open are a "no read". A no-read is not a pass: the command fails, and `report.json` lists the pages in `unread`. The summary shows their count and their paths. In `site-audit.yml`, each no-read is a warning on the check of the pull request.
 
