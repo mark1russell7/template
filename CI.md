@@ -1018,11 +1018,11 @@ A repository pins each shared workflow and action to a commit of `main`:
 uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<full commit SHA> # main
 ```
 
-- Renovate reads the comment `# main` and moves the pin to the newest commit of `main` (the preset of `renovate/`). The manager `github-actions` does this since Renovate 43.84.0.
-- These updates come in one group, "template workflows and actions", with no wait. The pull request gets the label `train-merge`. The release train merges it when CI passes and no release of the repository is open.
-- The group comes on Monday before 06:00 (New York time). A workflow change during a release makes the tag job fail with HTTP 403 (`RELEASING.md`).
-- Renovate does not change `release.yml`. The release session moves the pins of `release.yml` with `scripts/release/bump-pins.ts` (`RELEASING.md`).
-- A change of the template that must not wait for Renovate goes out with `bump-pins.ts --file <workflow>` (`RELEASING.md`).
+- The template sync of the release train moves the pins to the newest commit of `main` (the rule `pins` of `mark1russell7/release-train`). Renovate does not move them (`renovate/README.md`, "The pins of the template").
+- The train moves the pins only when the files of a pin changed since its commit, and all the pins of a repository move together.
+- The train keeps the pins of `release.yml` while a version is in flight. A workflow change during a release makes the tag job fail with HTTP 403 (`RELEASING.md`).
+- In the template repository, which the train does not sync, Renovate moves the pins: one group, "template workflows and actions", on Monday before 06:00 (New York time).
+- A change of the template that must not wait for the next sync of the train goes out with `bump-pins.ts --file <workflow>` (`RELEASING.md`).
 - Renovate also moves `CLAUDE_CODE_VERSION` of `reusable-ai-review.yml` to the newest version on npm. A person reviews and merges that pull request.
 
 ### The packages of the workflow scripts

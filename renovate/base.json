@@ -78,9 +78,17 @@
       "groupSlug": "github-actions"
     },
     {
-      "description": "The shared workflows and actions of the template follow main (@<commit> # main): one weekly PR for all the pins of a repository. The manager github-actions reads '# main' as a branch (Renovate 43.84.0 or later). A commit of main has no release date, so the pin moves with no wait. The schedule stays the quiet Monday window also when a repository changes its own schedule: a workflow change during a release makes the tag job fail (HTTP 403, RELEASING.md).",
+      "description": "Renovate does not move the pins of the shared workflows and actions of the template (@<commit> # main). The template sync of the release train moves them (the rule pins of mark1russell7/release-train): it moves the pins only when the files of a pin changed, it keeps the pins of release.yml while a version is in flight, and it does not move a pin to a file that main does not have. One owner gives one pull request for each change (renovate/README.md).",
       "matchManagers": ["github-actions"],
       "matchPackageNames": ["mark1russell7/template"],
+      "enabled": false
+    },
+    {
+      "description": "The release train does not sync the template repository, so Renovate moves the pins of the template in that repository only: one weekly PR for all its pins. The manager github-actions reads '# main' as a branch (Renovate 43.84.0 or later). A commit of main has no release date, so the pin moves with no wait. The schedule is the quiet Monday window: a workflow change during a release makes the tag job fail (HTTP 403, RELEASING.md).",
+      "matchRepositories": ["mark1russell7/template"],
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["mark1russell7/template"],
+      "enabled": true,
       "minimumReleaseAge": null,
       "schedule": ["before 6am on monday"],
       "groupName": "template workflows and actions",
