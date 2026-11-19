@@ -61,6 +61,7 @@ PRIVATE_PATTERNS_VARIABLE: build/index.d.ts#PRIVATE_PATTERNS_VARIABLE
 type PackageInfo: build/index.d.ts#PackageInfo
 type PagesCall: build/index.d.ts#PagesCall
 type PathFilter: build/index.d.ts#PathFilter
+type PrePushArgs: build/index.d.ts#PrePushArgs
 type PrePushOptions: build/index.d.ts#PrePushOptions
 type PrivateNameList: build/index.d.ts#PrivateNameList
 PrivateNameListError: build/index.d.ts#PrivateNameListError
@@ -173,7 +174,9 @@ pagesSite: build/index.d.ts#pagesSite
 parseAdvisory: build/index.d.ts#parseAdvisory
 parseConfig: build/index.d.ts#parseConfig
 parseJsonc: build/index.d.ts#parseJsonc
+parsePrePushArgs: build/index.d.ts#parsePrePushArgs
 parsePrivateNames: build/index.d.ts#parsePrivateNames
+parseRuleConfig: build/index.d.ts#parseRuleConfig
 parseWorkspaceGlobs: build/workspace.chunk.d.ts#parseWorkspaceGlobs
 pathNameHit: build/index.d.ts#pathNameHit
 pathsOf: build/index.d.ts#pathsOf
@@ -211,6 +214,7 @@ runChecks: build/index.d.ts#runChecks
 runCli: build/index.d.ts#runCli
 runFix: build/index.d.ts#runFix
 runGit: build/index.d.ts#runGit
+runPrePushArgs: build/index.d.ts#runPrePushArgs
 runnerBudget: build/index.d.ts#runnerBudget
 scheduleMinute: build/index.d.ts#scheduleMinute
 scriptsOf: build/index.d.ts#scriptsOf
@@ -548,6 +552,14 @@ interface PathFilter {
   readonly line: number;
   readonly trigger: string;
   readonly key: string;
+}
+
+### build/index.d.ts#PrePushArgs
+interface PrePushArgs {
+  readonly remote: string;
+  readonly url?: string;
+  readonly base?: string;
+  readonly head?: string;
 }
 
 ### build/index.d.ts#PrePushOptions
@@ -976,8 +988,14 @@ export declare function parseConfig(value: unknown, rules: readonly Rule[]): Con
 ### build/index.d.ts#parseJsonc
 export declare function parseJsonc(text: string): unknown;
 
+### build/index.d.ts#parsePrePushArgs
+export declare function parsePrePushArgs(args: readonly string[]): PrePushArgs | undefined;
+
 ### build/index.d.ts#parsePrivateNames
 export declare function parsePrivateNames(text: string): PrivateNameList;
+
+### build/index.d.ts#parseRuleConfig
+export declare function parseRuleConfig(value: unknown, rule: Rule): RuleConfig;
 
 ### build/index.d.ts#pathNameHit
 export declare function pathNameHit(list: PrivateNameList, path: string): NameHit | undefined;
@@ -1086,6 +1104,9 @@ export declare function runFix(options: CheckOptions): FixResult;
 
 ### build/index.d.ts#runGit
 export declare function runGit(root: string, args: readonly string[]): string | undefined;
+
+### build/index.d.ts#runPrePushArgs
+export declare function runPrePushArgs(args: PrePushArgs, io: Pick<CliIo, "cwd" | "env" | "stderr" | "stdin">): number;
 
 ### build/index.d.ts#runnerBudget
 export declare const runnerBudget: Rule;

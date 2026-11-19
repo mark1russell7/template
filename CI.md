@@ -106,15 +106,17 @@ A pull request from a fork gets no secret, so the private patterns are not exami
 
 The secret `CONVENTIONS_PRIVATE_NAMES` is optional. It has the JSON text of a private name list, in the format of `packages/conventions/schema/private-names.schema.json`. The step "Private names of the change" of the job `checks` uses it on a pull request:
 
-- The step starts `conventions pre-push --base <base> --head <head>`, the check of the git hook `pre-push`. It uses the same list, seeds, permitted files and common-word filter as the hook.
+- The step starts the bundle `.github/actions/bundles/private-names.mjs` from the checkout of the shared actions. The bundle is the check of the git hook `pre-push` (`conventions pre-push --base <base> --head <head>`). It uses the same list, seeds, permitted files and common-word filter as the hook.
 - It examines each commit of the change: its message, its paths and its added lines. It also examines the title and the body of the pull request.
 - On a pull request, the base is the first parent of the merge commit, and the head is the second parent. On a dispatched run, the base comes from the job `pull`, and the head is the checkout.
 - The step first masks each seed, each pattern and each id of the list in the log. It writes the list to a file under `$RUNNER_TEMP`, and removes the file at the end.
-- A break shows the commit, the path, the line and the number of the name in the list. It does not show the text or the id. A break fails the job.
-- Only the first cell of the matrix starts the step.
+- A break shows the commit, the path, the line and the number of the name in the list. It does not show the text or the id.
+- A break does not stop the install and the scripts. The step "Private names result" after the scripts fails the job.
+- Only the first cell of the matrix of a pull request starts the step.
 - With no secret, the step writes a `::warning` and a line of the job summary that tell "no read" and the reason. It does not fail. A pull request from a fork or from Dependabot gets no secret.
-- A repository with a `@mark1russell7/conventions` that has no command `pre-push --base` also gets "no read". The command came in version 0.46.4.
-- A run with no pull request, for example a push to the default branch, is not examined. Its job summary tells it.
+- A run with no pull request, for example a push to the default branch, does not start the step.
+- The step comes before the install. It starts no command of the repository and no code of an installed package. A pull request of Renovate is not from a fork, so it gets the secret. A changed dependency cannot read the list.
+- The test `scripts/workflows/private-names.test.ts` starts the step on a fixture with installed packages. It fails when the step starts `pnpm`, `npx`, `npm`, a bin or a package of the fixture.
 
 A caller gives the secret by name, or with `secrets: inherit`:
 

@@ -8,7 +8,7 @@ import { dirname, join, resolve } from "node:path";
 import { addedFiles } from "./change.ts";
 import { findHomes, HOMES, mapMarkdown, mapText, mergeHomes, readOverlay, type Home } from "./map.ts";
 import { parseConfig, type ConventionsConfig } from "./config.ts";
-import { installHook, prePush } from "./pre-push.ts";
+import { installHook, parsePrePushArgs, runPrePushArgs } from "./pre-push.ts";
 import { matchesAny, runGit, type Break, type Manifest, type PackageInfo, type Rule, type RuleContext } from "./rule.ts";
 import { RULES } from "./rules/index.ts";
 import { packageFolders, relativePath } from "./workspace.ts";
@@ -507,29 +507,12 @@ function runMap(args: readonly string[], io: CliIo): number {
  * the check of a change in CI. Then the remote is `origin`.
  */
 function runPrePush(args: readonly string[], io: CliIo): number {
-  const positional: string[] = [];
-  const range: { base?: string; head?: string } = {};
-  let usage = false;
-  for (let index = 0; index < args.length; index++) {
-    const arg = args[index] ?? "";
-    if (arg === "--base" || arg === "--head") {
-      const value = args[++index];
-      if (value === undefined || value === "" || value.startsWith("-")) usage = true;
-      else range[arg === "--base" ? "base" : "head"] = value;
-    } else if (arg.startsWith("-")) usage = true;
-    else positional.push(arg);
-  }
-  const { base, head } = range;
-  const remote = base === undefined ? positional[0] : "origin";
-  if (usage || remote === undefined || (base === undefined ? head !== undefined || positional.length > 2 : positional.length > 0)) {
+  const parsed = parsePrePushArgs(args);
+  if (parsed === undefined) {
     io.stderr(`conventions: The command pre-push takes the name of the remote and, after it, its URL. In CI, it takes --base <ref> and, as an option, --head <ref>.\n\n${USAGE}`);
     return 2;
   }
-  const top = runGit(io.cwd, ["rev-parse", "--show-toplevel"])?.trim() ?? "";
-  const root = top === "" ? io.cwd : top;
-  const url = base === undefined ? positional[1] : undefined;
-  const change = base === undefined ? {} : { base, ...(head === undefined ? {} : { head }) };
-  return prePush({ remote, ...(url === undefined ? {} : { url }), ...change, input: base === undefined ? (io.stdin ?? "") : "", env: io.env, root, git: (gitArgs) => runGit(root, gitArgs) }, io);
+  return runPrePushArgs(parsed, io);
 }
 
 /** The command `hook install`: it writes the git hook pre-push. */
