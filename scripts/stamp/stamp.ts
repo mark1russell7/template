@@ -123,12 +123,15 @@ function templatePackages(template: string, sha: string, tracked: readonly strin
 
 /**
  * This function gives the root package.json of a repository from the one of the template. A package of the template
- * gets the range that `range` gives, because the repository does not have the workspace of the template.
+ * gets the range that `range` gives, because the repository does not have the workspace of the template. The field
+ * `conventions` goes: it holds the exceptions of the template, and each one names a file of the template. A new
+ * repository does not get these files, so the runner reports each such exception as stale.
  */
 export function stampRoot(template: RootManifest, name: string, packages: ReadonlySet<string> | ReadonlyMap<string, string>, range: (name: string) => string): RootManifest {
   const dev = { ...template.devDependencies, "@mark1russell7/template-cli": "workspace:*" };
+  const { conventions: _ownExceptions, ...shared } = template;
   return {
-    ...template,
+    ...shared,
     name: `${name}-monorepo`,
     scripts: rootScripts(template.scripts),
     devDependencies: Object.fromEntries(

@@ -980,8 +980,8 @@ describe("gate-trigger", () => {
 
 describe("home-package", () => {
   /** A repository of `repo` with a first commit, and a second commit that adds `added` to src/a.ts. */
-  function changed(added: string, repo = "mark1russell7/other"): string {
-    const root = fixture({ "package.json": { name: "one" }, "src/a.ts": "export function median(values: number[]): number {\n  return values[0] ?? 0;\n}\n" });
+  function changed(added: string, repo = "mark1russell7/other", manifest: Record<string, unknown> = { name: "one" }): string {
+    const root = fixture({ "package.json": manifest, "src/a.ts": "export function median(values: number[]): number {\n  return values[0] ?? 0;\n}\n" });
     commitAll(root);
     git(root, "remote", "add", "origin", `https://github.com/${repo}.git`);
     git(root, "tag", "base");
@@ -1068,6 +1068,14 @@ describe("home-package", () => {
     expect(rule(root, "home-package", { env: {} }).status).toBe("skipped");
     writeFileSync(join(root, "package.json"), JSON.stringify({ name: "one", conventions: { rules: { "home-package": { scope: "all", reason: "a sweep of the copies" } } } }));
     expect(rule(root, "home-package", { env: {} }).breaks.map((item) => item.line)).toEqual([1]);
+  });
+
+  it("keeps an entry of generated or ignore that matches no break, because the breaks depend on the change", () => {
+    // A change that leaves the generated bundles as they are gives no break in them (template, 2026-11-18)
+    const manifest = { name: "one", conventions: { rules: { "home-package": { generated: ["bundles/*.mjs"], ignore: ["src/old.ts"], reason: "a build writes the bundles" } } } };
+    const result = rule(changed("// the end\n", "mark1russell7/other", manifest), "home-package", { base: "base", env: {} });
+    expect(result.breaks).toEqual([]);
+    expect(result.status).toBe("pass");
   });
 
   it("has signatures that compile, and no name that two homes claim", () => {
