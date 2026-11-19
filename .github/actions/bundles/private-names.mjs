@@ -1144,7 +1144,9 @@ function prePush(options, io) {
 		const listed = ZERO.test(remoteSha) ? options.git(others) : options.git([
 			"rev-list",
 			localSha,
-			`^${remoteSha}`
+			"--not",
+			remoteSha,
+			`--remotes=${options.remote}`
 		]) ?? options.git(others);
 		if (listed === void 0) {
 			io.stderr(`conventions pre-push: git cannot list the new commits of ${localRef ?? localSha}. The push stops.\n`);
