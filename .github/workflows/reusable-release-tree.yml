@@ -59,7 +59,7 @@ jobs:
       # The script is TypeScript with only the built-in modules of Node.js: no install, only type stripping
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version: 26
           package-manager-cache: false
       - name: The tree of the commit passed CI
         id: tree
