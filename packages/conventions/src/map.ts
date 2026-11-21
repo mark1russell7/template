@@ -420,12 +420,12 @@ export const HOMES: readonly Home[] = [
   {
     area: "guidebook",
     title: "Guidebooks of cited knowledge",
-    covers: "a core of cited units (a quote, a summary or a fact), each with its source, its license and a source gate; add-ons for plans (steps keyed by a case and a phase) and for topics (a graph of prerequisites)",
+    covers: "a core of cited units (a quote, a summary or a fact), each with its source, its license and a source gate; add-ons for plans (steps keyed by a case and a phase), for topics (a graph of prerequisites) and for a library (the catalog of offline bundles: each bundle a cited source with its size, license, version and checksum)",
     packages: [],
     pending: ["@mark1russell7/guidebook"],
     repo: "mark1russell7/guidebook",
     state: "planned",
-    words: ["guidebook", "guide", "handbook", "manual", "knowledge base", "citation", "cited", "source license", "how-to", "plan library", "steps", "prerequisites", "curriculum"],
+    words: ["guidebook", "guide", "handbook", "manual", "knowledge base", "citation", "cited", "source license", "how-to", "plan library", "steps", "prerequisites", "curriculum", "offline library", "offline bundle", "zim", "kiwix"],
     note: "The core names no topic. The graph of prerequisites uses @mark1russell7/collections. A quote comes only from a public-domain or licensed source, with its citation. Text helpers come from plain-text, the printed form from browser runs.",
   },
   {
