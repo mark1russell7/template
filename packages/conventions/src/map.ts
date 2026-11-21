@@ -320,12 +320,12 @@ export const HOMES: readonly Home[] = [
   {
     area: "system-stack",
     title: "System stacks, their risks, spend and copies",
-    covers: "a system stack as data: each part (service, provider, account, host, network, power feed, person, secret) is a record with its needs and its failure domain; risks as queries over it (the parts whose failure stops a function, the failures a function survives, the chance that it works, a gate); the cost of each part with plans, prices and hard monthly limits (stack-spend); OpenTofu files from the records with a cost gate before the files exist (stack-tofu)",
-    packages: ["@mark1russell7/system-stack", "@mark1russell7/stack-risk", "@mark1russell7/stack-spend", "@mark1russell7/stack-tofu"],
+    covers: "a system stack as data: each part (service, provider, account, host, network, power feed, person, secret) is a record with its needs and its failure domain; risks as queries over it (the parts whose failure stops a function, the failures a function survives, the chance that it works, a gate); the cost of each part with plans, prices and hard monthly limits (stack-spend); OpenTofu files from the records with a cost gate before the files exist (stack-tofu); the live lists of the parts from their sources, with a gate on old records (stack-feeds); the placement of the parts as a query, with the chance, the cost and the front of the two (stack-placement); the setup inside a host from the records, as typed steps in the order of the needs and a POSIX script that checks before it changes (stack-setup)",
+    packages: ["@mark1russell7/system-stack", "@mark1russell7/stack-risk", "@mark1russell7/stack-spend", "@mark1russell7/stack-tofu", "@mark1russell7/stack-feeds", "@mark1russell7/stack-placement", "@mark1russell7/stack-setup"],
     repo: "mark1russell7/system-stack",
     state: "published",
-    words: ["system stack", "redundancy", "single point of failure", "spof", "failure domain", "shared cause", "reliability", "spend cap", "monthly cap", "opentofu", "terraform", "infrastructure as code", "iac"],
-    note: "The live records of a stack are input data: the repository holds the schema, the queries and sample data only. The path queries (minimum hitting set, two-terminal reliability) come from @mark1russell7/collections. The placement of copies over providers (stack-placement) and one catalog of layers in the core, shared with netdiag, are in work. The entry /availability of @mark1russell7/algebra gives its delay curves to stack-risk and is then deprecated.",
+    words: ["system stack", "redundancy", "single point of failure", "spof", "failure domain", "shared cause", "reliability", "spend cap", "monthly cap", "opentofu", "terraform", "infrastructure as code", "iac", "placement", "host setup", "provisioning", "inventory feed"],
+    note: "The live records of a stack are input data: the repository holds the schema, the queries and sample data only. The path queries (minimum hitting set, two-terminal reliability) come from @mark1russell7/collections. One catalog of layers in the core, shared with netdiag, is in work. The entry /availability of @mark1russell7/algebra gives its delay curves to stack-risk and is then deprecated.",
   },
   {
     area: "3d-stages",
