@@ -4,7 +4,9 @@ description: >-
   on.pull_request.paths), so its summary check "<Name> OK" is always there for the ruleset. This action decides
   if the gate jobs run. A run of a different event is a match, except when the input pull-request gives the pull request
   of the run, for example a run that workflow_dispatch starts on the branch of a pull request. Then the action reads the
-  files of that pull request. When it cannot tell the files of the commit of the run, the gate runs.
+  files of that pull request. With the input push-files, a push run reads the files of its push. With the input
+  version-bumps, a change of only the line "version" of a package.json is not a file of the gate. When it cannot tell
+  the files of the commit of the run, the gate runs.
 inputs:
   paths:
     description: >-
@@ -22,6 +24,17 @@ inputs:
       its head is the commit of the run (GITHUB_SHA), before and after the read of the files. Empty, a different head or
       a failed read gives a match. A pull_request run reads the pull request of its event, not this input.
     default: ""
+  push-files:
+    description: >-
+      "true": a push run reads the files of its push, the comparison of github.event.before and the commit of the run.
+      A push with no commit before it (a new branch), a commit of the run that is not ahead of that commit (a forced
+      push), 300 files or more (the limit of the API) or a failed read gives a match. "false": a push run is a match.
+    default: "false"
+  version-bumps:
+    description: >-
+      "skip": a package.json whose change is only its line "version" is not a file of the gate. A change of a version
+      starts no code, and the release of the version builds and packs it. "count": each file counts.
+    default: "count"
   token:
     description: A GitHub token that can read the files of the pull request (permission "pull-requests read").
     default: ${{ github.token }}
@@ -43,6 +56,9 @@ runs:
         PULL: ${{ inputs.pull-request }}
         PATHS: ${{ inputs.paths }}
         IGNORE: ${{ inputs.paths-ignore }}
+        BEFORE: ${{ github.event.before }}
+        PUSH_FILES: ${{ inputs.push-files }}
+        VERSION_BUMPS: ${{ inputs.version-bumps }}
       run: |
         # The gate runs, and the log gives the reason.
         gate_runs() {
@@ -51,10 +67,20 @@ runs:
           exit 0
         }
         head_of() { gh api "repos/$GITHUB_REPOSITORY/pulls/$1" --jq '.head.sha'; }
-        # A run of a different event reads the files of the pull request of the input only on the head of that pull
-        # request. Each other case fails open: the gate runs.
+        # The filter of each file of the API: its name, and the old name of a moved file. A package.json whose only
+        # changed lines are one line "version" out and one line "version" in gives "version-bump <name>". A file with no
+        # patch, for example a large file, counts as a change of more than the version.
+        FILE='if (.status == "modified" and (.filename | test("(^|/)package\\.json$")) and ((.patch // "") | [splits("\n") | select(test("^[-+]"))] | length == 2 and all(test("^[-+]\\s*\"version\": *\"[^\"]*\",?\\s*$")))) then "version-bump " + .filename else .filename, (.previous_filename // empty) end'
+        # A push run reads the files of its push only with the input push-files. A run of a different event reads the
+        # files of the pull request of the input only on the head of that pull request. Each other case fails open: the
+        # gate runs.
         dispatched=false
-        if [ "$EVENT" != pull_request ] && [ "$EVENT" != pull_request_target ]; then
+        pushed=false
+        if [ "$EVENT" = push ] && [ "$PUSH_FILES" = true ]; then
+          [[ "$BEFORE" =~ ^[0-9a-f]{40}$ ]] && [[ ! "$BEFORE" =~ ^0+$ ]] || gate_runs "The push has no commit before it (\"$BEFORE\"), for example the push of a new branch."
+          echo "The event is push, and the input push-files is true. The action reads the files of the push from $BEFORE to $GITHUB_SHA."
+          pushed=true
+        elif [ "$EVENT" != pull_request ] && [ "$EVENT" != pull_request_target ]; then
           [ -n "$PULL" ] || gate_runs "The event is $EVENT, not a pull request, and the input pull-request is empty."
           [[ "$PULL" =~ ^[1-9][0-9]{0,9}$ ]] || gate_runs "The input pull-request is \"$PULL\", not the number of a pull request."
           head=$(head_of "$PULL") || gate_runs "The read of the head of #$PULL failed."
@@ -63,9 +89,16 @@ runs:
           NUMBER=$PULL
           dispatched=true
         fi
+        if [ "$pushed" = true ]; then
+          # The first lines give the cases that the files cannot decide. GitHub gives at most 300 files of a comparison.
+          gh api "repos/$GITHUB_REPOSITORY/compare/$BEFORE...$GITHUB_SHA" \
+            --jq "(if .status != \"ahead\" then \"not-ahead \" + .status else empty end), (if ((.files // []) | length) >= 300 then \"files-limit\" else empty end), ((.files // [])[] | $FILE)" > files \
+            || gate_runs "The read of the files of the push failed."
+          status=$(sed -n 's/^not-ahead //p' files)
+          [ -z "$status" ] || gate_runs "The commit of the run is not ahead of the commit before the push (status \"$status\"), for example after a forced push."
+          ! grep -qx files-limit files || gate_runs "The push has 300 files or more, the limit of the API."
         # The new and the old name of each file. GitHub gives at most 3000 files of a pull request.
-        if ! gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$NUMBER/files?per_page=100" \
-          --jq '.[] | .filename, (.previous_filename // empty)' > files; then
+        elif ! gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$NUMBER/files?per_page=100" --jq ".[] | $FILE" > files; then
           # A pull_request run fails, so a person starts it again. A run of a different event runs the gate.
           [ "$dispatched" = false ] || gate_runs "The read of the files of #$NUMBER failed."
           exit 1
@@ -80,6 +113,15 @@ runs:
           head=$(head_of "$NUMBER") || gate_runs "The second read of the head of #$NUMBER failed."
           [ "$head" = "$GITHUB_SHA" ] || gate_runs "The head of #$NUMBER moved to ${head:-(none)} during the read of its files."
         fi
+        # A change of only the line "version" of a package.json is a file of the gate only with version-bumps "count"
+        bumps=$(grep -c '^version-bump ' files || true)
+        if [ "$VERSION_BUMPS" = skip ]; then
+          grep -v '^version-bump ' files > kept || true
+          [ "$bumps" -eq 0 ] || echo "Files with a change of only the line \"version\" of a package.json: $bumps. They are not files of the gate (the input version-bumps)."
+        else
+          sed 's/^version-bump //' files > kept
+        fi
+        mv kept files
         match=$(jq -R -s -r --arg paths "$PATHS" --arg ignore "$IGNORE" -f "$GITHUB_ACTION_PATH/match.jq" files)
         echo "$count files. Match: $match."
         echo "match=$match" >> "$GITHUB_OUTPUT"

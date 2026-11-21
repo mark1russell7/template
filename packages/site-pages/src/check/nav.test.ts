@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { crawlSite, navProblems, navSummary, navUnread, navUnreadText, repositoryOfUrl, runNavCli, sitemapPaths, sitePath, type NavLink, type NavPage } from "./nav.ts";
+import { barRepeats, crawlSite, navProblems, navSummary, navUnread, navUnreadText, repositoryOfUrl, runNavCli, sitemapPaths, sitePath, type NavLink, type NavPage } from "./nav.ts";
 
 const home = new URL("https://owner.github.io/repo/");
 
@@ -104,6 +104,37 @@ describe("navProblems", () => {
   it("asks each page for the site bar with requireBar", () => {
     const pages = [page("", 0, [link("a/")], { bar: true }), page("a/", 1, [back])];
     expect(navProblems({ pages, sitemap: [], clicks: [] }, home, { maxClicks: 2, requireBar: true })).toEqual(["/a/ has no site bar"]);
+  });
+
+  it("fails a page whose header shows a link of the site bar again, with one problem for each page", () => {
+    const bar = [link(home.href, { text: "Home", place: "bar" }), link("releases/", { text: "Releases", place: "bar" }), link("https://github.com/owner/repo", { text: "GitHub", place: "bar" })];
+    const header = [link(home.href, { text: "repo", place: "header" }), link("releases/", { text: "Releases", place: "header" }), link("https://github.com/owner/repo", { text: "GitHub", place: "header" })];
+    const pages = [page("", 0, [...bar, ...header], { bar: true }), page("releases/", 1, [...bar, header[1] as NavLink], { bar: true })];
+    expect(navProblems({ pages, sitemap: [], clicks: [] }, home, rules)).toEqual([
+      'the header of the home page shows 3 links of the site bar again: "repo", "Releases", "GitHub". Remove them from the header of the site',
+      'the header of /releases/ shows a link of the site bar again: "Releases". Remove it from the header of the site',
+    ]);
+  });
+});
+
+describe("barRepeats", () => {
+  const bar = [link(home.href, { text: "Home", place: "bar" }), link("releases/", { text: "Releases", place: "bar" })];
+
+  it("gives no repeat for a page with no bar, a hidden header link, a link to a part of the page, and a link of the body or the footer", () => {
+    expect(barRepeats({ bar: false, links: [...bar, link("releases/", { place: "header" })] })).toEqual([]);
+    const links = [
+      ...bar,
+      link("releases/", { place: "header", visible: false }),
+      link(home.href, { text: "Use it", place: "header", inPage: true }),
+      link("releases/", { text: "the releases" }),
+      link("status/", { text: "Status", place: "header" }),
+    ];
+    expect(barRepeats({ bar: true, links })).toEqual([]);
+  });
+
+  it("gives each visible link of the header to a URL of the bar", () => {
+    const brand = link(home.href, { text: "repo", place: "header" });
+    expect(barRepeats({ bar: true, links: [...bar, brand, link("releases/", { text: "Releases", place: "header" })] })).toEqual([brand, link("releases/", { text: "Releases", place: "header" })]);
   });
 });
 

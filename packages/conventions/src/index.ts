@@ -12,7 +12,7 @@
  * conventions hook install
  * ```
  */
-export { defaultOptions, parseConfig, type ConventionsConfig, type RuleConfig } from "./config.ts";
+export { defaultOptions, parseConfig, parseRuleConfig, type ConventionsConfig, type RuleConfig } from "./config.ts";
 export {
   cleanPath,
   codePackages,
@@ -25,6 +25,7 @@ export {
   parseJsonc,
   readJsonc,
   replaceLine,
+  repositoryOfRemote,
   RULE_WARN_DAYS,
   runGit,
   specifiersOf,
@@ -117,10 +118,21 @@ export {
   type NameRule,
   type PrivateNameList,
 } from "./private-names.ts";
-export { HOOK_MARKER, installHook, NO_READ_LINE, PRE_PUSH_HOOK, prePush, type HookOptions, type PrePushOptions } from "./pre-push.ts";
+export {
+  HOOK_MARKER,
+  installHook,
+  NO_READ_LINE,
+  parsePrePushArgs,
+  PRE_PUSH_HOOK,
+  prePush,
+  runPrePushArgs,
+  type HookOptions,
+  type PrePushArgs,
+  type PrePushOptions,
+} from "./pre-push.ts";
 export { hasImportMetaMain, REAL_COMPARE } from "./rules/main-check.ts";
 export { roadmapOfLine } from "./rules/roadmap-parses.ts";
-export { repositoryOfRemote, scheduleMinute } from "./rules/runner-budget.ts";
+export { scheduleMinute } from "./rules/runner-budget.ts";
 export { declaredName, messageOf, repoOf, reposOf, signaturesOf } from "./rules/home-package.ts";
 export { moduleMessage, modulesOf, moduleUses, type HomeModule, type ModuleUse } from "./rules/home-module.ts";
 export { HOME_EXPORTS } from "./home-exports.ts";
@@ -163,4 +175,4 @@ export {
 export { findHomes, HOMES, MAP_RULE, mapMarkdown, mapText, mergeHomes, npmDrift, npmNames, readOverlay, type Home, type HomeState, type NpmDrift, type NpmDriftKind, type NpmPresence } from "./map.ts";
 export { changelogSection, MAX_NOTES, npmUrl, releaseNotes, tagName } from "./release-text.ts";
 export { OWNERS, ownerOf, ownersOf, sharedNames, type Owner } from "./owners.ts";
-export { globFolders, globToRegExp, packageFolders, workspaceGlobs } from "./workspace.ts";
+export { globFolders, globToRegExp, isWorkspaceFolder, packageFolders, parseWorkspaceGlobs, workspaceGlobs } from "./workspace.ts";

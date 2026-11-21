@@ -179,7 +179,7 @@ An unknown rule, an unknown option, or an exception or a changed option without 
 | `--no-base` | Do not use a default base. |
 | `--json` | Write the result as JSON. |
 | `pre-push <remote> [<url>]` | Examine the new commits of a push with the private name list. The git hook `pre-push` starts it. |
-| `pre-push --base <ref> [--head <ref>]` | Examine the commits of `<base>..<head>` (the default head is `HEAD`) and the text of the pull request of the run, with the same rules. The shared CI starts it. |
+| `pre-push --base <ref> [--head <ref>]` | Examine the commits of `<base>..<head>` (the default head is `HEAD`) and the text of the pull request of the run, with the same rules. The shared CI starts a bundle of this command before the install. |
 | `hook install` | Write the git hook `pre-push`. In CI, or outside a git repository, the command does nothing. |
 
 A run that `workflow_dispatch` starts has no pull request in its event file. A person can start the gates of a pull request in this way. For such a run, the shared CI finds the pull request of the branch, and gives two environment variables to the check:
@@ -308,17 +308,19 @@ The package also exports the functions of the tool:
 - `runChecks(options)` starts the rules and gives the result of each rule. `runFix(options)` writes the edits and gives the changed files and the last result. `runCli(args, io)` is the bin.
 - `replaceLine(text, line, lines)` gives the text with one line replaced, for the edits of a rule.
 - `formatResult(result)`, `summaryMarkdown(result)`, `annotations(result)` and `listRules(config)` give the output.
-- `parseConfig(value, rules)` and `readConfig(root)` read the field `conventions`.
+- `parseConfig(value, rules)` and `readConfig(root)` read the field `conventions`. `parseRuleConfig(value, rule)` reads the entry of one rule, and not the other entries.
 - `OWNERS` is the list of the owners, with `ownerOf(login)`, `ownersOf(value)` and `sharedNames(repos)`. The subpath `@mark1russell7/conventions/owners` gives them and no other code.
 - `HOMES` is the map of homes. `findHomes(query)` finds the homes of words, and `mapMarkdown(homes)` and `mapText(homes)` write them. `readOverlay(file)` and `mergeHomes(base, extra)` add more homes.
 - `tagName(name, version, packageCount)` gives the git tag of a version. `releaseNotes(name, version, changelog)` gives the text of its GitHub release, with `changelogSection`, `npmUrl` and `MAX_NOTES`. The script `scripts/release/tags.ts` keeps the same rule, and a test compares the two.
 - `RULES` and each rule, with the helpers `isGitSpecifier`, `isPinned`, `isSourcePath` and `parseJsonc`.
-- `packageFolders(root, globs)`, `globFolders(root, glob)`, `globToRegExp(glob)` and `workspaceGlobs(root)` find the package folders of a repository.
-- The subpath `@mark1russell7/conventions/workspace` gives these four functions and `reportFolders(root, globs)`, and no other code. `reportFolders` adds a public root that the globs leave out. `@mark1russell7/api-report` imports them from this subpath.
+- `packageFolders(root, globs)`, `globFolders(root, glob)`, `globToRegExp(glob)` and `workspaceGlobs(root)` find the package folders of a repository. Like pnpm, `packageFolders` leaves out the folders `node_modules`, `bower_components`, `test` and `tests`.
+- `parseWorkspaceGlobs(text)` reads the globs of the text of `pnpm-workspace.yaml`. `isWorkspaceFolder(folder, globs)` tells if the globs take a folder. These two functions have no input or output.
+- The subpath `@mark1russell7/conventions/workspace` gives these six functions and `reportFolders(root, globs)`, and no other code. `reportFolders` adds a public root that the globs leave out. `@mark1russell7/api-report` imports them from this subpath.
+- The selector of precise CI is `src/select.ts`. It is not an export: the action `select` of the template runs a bundle of it. `CI.md` of the template tells the rules.
 - `privateTextBreaks(name, text, privates, options)` gives the breaks of one text. The rule `no-local-paths` and the command `pre-push` use it. `privates` has the list (`names`) and the patterns (`patterns`).
 - `parsePrivateNames(text)` parses and checks a private name list. It throws a `PrivateNameListError` with a reason that shows no value of the list.
 - `lineNameHit(list, line, place)`, `pathNameHit(list, path)`, `firstNameMatch(line, names)`, `isCommonUse(line, index, rule)` and `isAllowedHit(allow, repo, path, id)` find the names of the list. They have no input or output.
 - `lineNameHits(list, line, place)` and `nameMatches(line, names)` give each name of a line, one hit for each name. A scan that counts the names uses them. The gate takes the first hit.
 - `privateNamesFiles(env, git)`, `privateNamesFile(env, git)`, `privatePatterns(env)` and `invalidPatternBreaks(patterns)` read the settings and the patterns. `privateNamesFiles` gives each path, and `privateNamesFile` gives one.
 - `mergePrivateNames(lists)` merges the lists in order. It throws a `PrivateNameListError` when two lists have the same id.
-- `prePush(options, io)` is the command `pre-push`. With the option `base`, it is the check of a change in CI. `installHook(options, io)` is the command `hook install`. `PRE_PUSH_HOOK` is the text of the hook.
+- `prePush(options, io)` is the command `pre-push`. With the option `base`, it is the check of a change in CI. `parsePrePushArgs(args)` reads its arguments, and `runPrePushArgs(args, io)` starts it in the git root. The bundle `private-names.mjs` of the shared actions uses these two functions. `installHook(options, io)` is the command `hook install`. `PRE_PUSH_HOOK` is the text of the hook.

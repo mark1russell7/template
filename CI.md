@@ -70,6 +70,7 @@ When `check:api` fails, the job writes the API reports again and uploads them as
 
 With `coverage: true`, the job `coverage` starts `vitest run` with coverage in each package whose `test` script starts Vitest. The job has the first runner and the first Node.js version of the matrix. It starts at the same time as the job `checks`, so the coverage does not make the checks slower.
 
+- The root of a workspace with packages is a package of the list when its `test` script starts Vitest. A root whose Vitest config declares `projects` is not in the list, because its run starts the tests of the packages again.
 - Before the tests, the job installs, starts the command `setup` and the build scripts. These are each `build` or `build:*` script before `test` in `scripts`, or the scripts of `coverage-scripts`.
 - The job has its own time limit, `coverage-timeout-minutes` (30). The install, the command `setup`, the scripts and the tests stop at a deadline 2 minutes before that limit. Each package that the deadline stopped fails the step, and the message names it.
 - A job that reaches its time limit gets the result `cancelled`, also with `continue-on-error`, and the CI fails. A step that stops at the deadline fails only the step. Thus the job ends with its summary and its artifact.
@@ -105,15 +106,17 @@ A pull request from a fork gets no secret, so the private patterns are not exami
 
 The secret `CONVENTIONS_PRIVATE_NAMES` is optional. It has the JSON text of a private name list, in the format of `packages/conventions/schema/private-names.schema.json`. The step "Private names of the change" of the job `checks` uses it on a pull request:
 
-- The step starts `conventions pre-push --base <base> --head <head>`, the check of the git hook `pre-push`. It uses the same list, seeds, permitted files and common-word filter as the hook.
+- The step starts the bundle `.github/actions/bundles/private-names.mjs` from the checkout of the shared actions. The bundle is the check of the git hook `pre-push` (`conventions pre-push --base <base> --head <head>`). It uses the same list, seeds, permitted files and common-word filter as the hook.
 - It examines each commit of the change: its message, its paths and its added lines. It also examines the title and the body of the pull request.
 - On a pull request, the base is the first parent of the merge commit, and the head is the second parent. On a dispatched run, the base comes from the job `pull`, and the head is the checkout.
 - The step first masks each seed, each pattern and each id of the list in the log. It writes the list to a file under `$RUNNER_TEMP`, and removes the file at the end.
-- A break shows the commit, the path, the line and the number of the name in the list. It does not show the text or the id. A break fails the job.
-- Only the first cell of the matrix starts the step.
+- A break shows the commit, the path, the line and the number of the name in the list. It does not show the text or the id.
+- A break does not stop the install and the scripts. The step "Private names result" after the scripts fails the job.
+- Only the first cell of the matrix of a pull request starts the step.
 - With no secret, the step writes a `::warning` and a line of the job summary that tell "no read" and the reason. It does not fail. A pull request from a fork or from Dependabot gets no secret.
-- A repository with a `@mark1russell7/conventions` that has no command `pre-push --base` also gets "no read". The command came in version 0.46.4.
-- A run with no pull request, for example a push to the default branch, is not examined. Its job summary tells it.
+- A run with no pull request, for example a push to the default branch, does not start the step.
+- The step comes before the install. It starts no command of the repository and no code of an installed package. A pull request of Renovate is not from a fork, so it gets the secret. A changed dependency cannot read the list.
+- The test `scripts/workflows/private-names.test.ts` starts the step on a fixture with installed packages. It fails when the step starts `pnpm`, `npx`, `npm`, a bin or a package of the fixture.
 
 A caller gives the secret by name, or with `secrets: inherit`:
 
@@ -189,7 +192,8 @@ The ruleset names only the summary checks. Thus it does not change when a job is
 - A gate workflow must start on each pull request, with no `paths` filter. Otherwise its summary check does not start, and the ruleset blocks the pull request. To skip the work, use the action `changes` and an `if` on the other jobs ("A gate with paths").
 - Set the ruleset once with `node scripts/workflows/ruleset-ci-ok.ts <owner/repo> --apply`. Without `--apply`, it only prints the changes. It reads the checks of the newest of the last 5 pull requests into the default branch where "CI OK" passed. It adds each check with a name `<Name> OK` that passed there and that no ruleset names. It skips a repository where "CI OK" did not pass on any of the 5. A check that starts only on a push to `main` is not added, because it does not start on a pull request.
 - To make the summary checks the only checks of the ruleset, add `--only-summary`. Then the script also removes each check that started in the same workflow run as that "CI OK", because "CI OK" covers it. It deletes a ruleset with no rule left. Then a repository can join or split the jobs of its CI, and its ruleset stays correct.
-- The workflow `rulesets.yml` runs the script with `--check` each day. The check changes nothing. It fails when a public repository has a summary check that passed and that no ruleset names. Thus a new repository gets its ruleset after its first merged pull request: the summary of the red run gives the command that adds it. A repository with no "CI OK" that passed is a no read, not a pass.
+- The workflow `rulesets.yml` starts the script with `--check` each day. The check changes nothing. It fails when a public repository has a summary check that passed and that no ruleset names. The summary of the red run gives the command that adds the ruleset.
+- The check also reads the settings of each repository that is not a fork ("The settings of a new repository"). It fails for a repository with `ci.yml` and no ruleset, also before its first merged pull request. The summary then gives the command of `scripts/stamp/settings.ts`. A repository with no "CI OK" that passed and no fault is a no read, not a pass.
 
 ### One run for each commit
 
@@ -298,6 +302,10 @@ Without the input, a dispatched run in a private repository examines no change, 
 A gate that is only about some files (a bench of the core, a corpus) starts on each pull request too. Two shared actions do the rest:
 
 - `changes` reads the files of the pull request and gives `match`. It has the patterns of `on.pull_request.paths`: `*` does not match `/`, `**` matches each part of a path, and `!` takes files out. A different event is a match, but a run of `workflow_dispatch` can give its pull request (refer to "A dispatched run of a gate").
+- Two inputs of `changes` take out more runs. Their defaults keep the behavior above:
+  - With `push-files: "true"`, a push run reads the files of its push, from `github.event.before` to the commit of the run. A new branch, a forced push, 300 files or more, or a failed read gives a match.
+  - With `version-bumps: skip`, a `package.json` whose only change is its line `"version"` is not a file of the gate. The release of that version builds and packs the package.
+    A gap: a test that reads the version of its own package does not run on a change of only the version. Keep such a test in a gate with no `version-bumps: skip`, or let the release check the version.
 - `gate-summary` is the step of the summary job. It passes when each job passed. When `changes` gives `match: false`, a skipped gate job passes too. A failure, a cancel or another skip fails it.
 - A skip is green only after a pass. Give each job that `allow-skip` names a line `<job id>=<check name>` in `last-result`, and give the summary job `checks: read`. A skip of that job then reads the last result of its check on the commit:
   - A pass passes, and a failure fails the summary.
@@ -387,6 +395,29 @@ The action `changes` skips a whole gate job when no file of the gate changes. A 
 - The summary gives the minutes of each class, each kind and each job by name. It also gives the minutes that each part of a selector can save. The part "packages" is an upper bound: the test time times the share of the packages that the change does not touch.
 - The artifact `ci-minutes` has `ci-minutes.json` with each record of a job and of a pull request. A later study takes its quantiles from these records with no new read.
 - The token of GitHub Actions has 1000 reads each hour. Before each repository, the read examines the limit. When too few reads are left, it waits for the next hour of the token, up to 65 minutes. Else it stops and names each repository that it did not read. The scheduled run fails when the read cannot read a repository.
+
+### The selection
+
+The selector reads the change of a pull request and the workspace. It tells which packages the change can affect, and which shared jobs read them. At this time it runs in shadow mode: it writes a record, and each job still runs. A later step skips a job only when the records show that the selector misses no failure.
+
+- In the job `checks`, the first job of the matrix of a pull request starts the action `select`. The step comes after the deepen step and before the install.
+- The action runs the bundle `.github/actions/bundles/select.mjs`. The bundle has each dependency in it and imports only modules of Node.js. Thus the step needs no install and runs no code of the repository.
+- The change is the diff from the merge base to the head. A changed package selects itself and each package that depends on it, in each dependency field.
+- The rules fail open. A global file selects everything: the lockfile, the root `package.json`, `pnpm-workspace.yaml`, a root config, a workflow or a local action. A new or removed `package.json` also selects everything.
+- A file outside the folder of the workspace selects everything. When the selector cannot read the change, the record is "no read", not a smaller selection.
+- For each job, the record gives the choice and its cause (`because`). The cause is a global file, a file that the selector cannot place, the packages, the paths or none.
+- The record has the format `selection/1`, the commit of the shared actions (`ref`) and the time of the step (`durationMs`). The artifact `selection` keeps it for 14 days.
+- The summary of the run shows a table of the jobs, with the choice and the cause of each job.
+- The step has `continue-on-error`, so its failure does not change the result of the CI.
+- To stop the step in a repository, set the repository variable `CI_SELECTION` to `off`.
+
+The selector is the entry `src/select.ts` of the package `conventions`. Each change of its source needs a new bundle in the same commit:
+
+```sh
+pnpm build:actions
+```
+
+The script `check:actions` builds the bundles again and fails when a committed bundle is not current. The script `test` of the root starts it.
 
 ## The queue
 
@@ -801,6 +832,7 @@ The job `site` of `ci.yml` checks the site of each pull request, and "CI OK" nee
 - The workflow `site-audit.yml` of the template checks the live home of each public site each Monday. Start it by hand from the Actions tab.
 - The audit does not fail for a bad site. Its artifact `site-audit` has the screenshots, `report.json` of each site and `audit.json`.
 - The job `nav` of the audit starts `site-pages nav` on each site. Its artifact `site-nav` has the screenshots, `report.json` of each site and `nav.json`.
+- The job `nav` has one job for each shard of 8 sites or fewer, not one job for each site. Each job waits for a runner of the account.
 - Each pull request starts `site-audit.yml`, so its check "Site audit OK" is always there. A pull request that changes `site-audit.yml` or the crawl starts the job `nav`. A pull request that changes the site check starts the job `compare`.
 - `site-bar: true` writes the shared site bar into each built HTML page. `site-bar-pages` names the pages of the bar, for example `Demo=demo/,Docs=docs/`. `site-bar-npm` gives the npm link.
 - With `site-bar: true`, the crawl `site-pages nav` examines the built site. A page with no bar, a page more than 2 clicks from home or a page with no way back stops the deploy.
@@ -812,7 +844,7 @@ The job `site` of `ci.yml` checks the site of each pull request, and "CI OK" nee
 - `github-token: true` gives the build `GITHUB_TOKEN`, with the read permissions of the build job.
 - The workflow gets the actions of the same template commit as the workflow file. A second checkout gets them.
 - Each public repository has a site. The rule `pages-site` of `@mark1russell7/conventions` needs a call of this workflow without `deploy: false`.
-- The Pages source of the repository is "GitHub Actions". To set it, start `gh api -X POST repos/<owner>/<repo>/pages -f build_type=workflow` one time.
+- The Pages source of the repository is "GitHub Actions". `scripts/stamp/settings.ts` sets it ("The settings of a new repository").
 
 ### The compare of the site check
 
@@ -988,11 +1020,11 @@ A repository pins each shared workflow and action to a commit of `main`:
 uses: mark1russell7/template/.github/workflows/reusable-ci.yml@<full commit SHA> # main
 ```
 
-- Renovate reads the comment `# main` and moves the pin to the newest commit of `main` (the preset of `renovate/`). The manager `github-actions` does this since Renovate 43.84.0.
-- These updates come in one group, "template workflows and actions", with no wait. The pull request gets the label `train-merge`. The release train merges it when CI passes and no release of the repository is open.
-- The group comes on Monday before 06:00 (New York time). A workflow change during a release makes the tag job fail with HTTP 403 (`RELEASING.md`).
-- Renovate does not change `release.yml`. The release session moves the pins of `release.yml` with `scripts/release/bump-pins.ts` (`RELEASING.md`).
-- A change of the template that must not wait for Renovate goes out with `bump-pins.ts --file <workflow>` (`RELEASING.md`).
+- The template sync of the release train moves the pins to the newest commit of `main` (the rule `pins` of `mark1russell7/release-train`). Renovate does not move them (`renovate/README.md`, "The pins of the template").
+- The train moves the pins only when the files of a pin changed since its commit, and all the pins of a repository move together.
+- The train keeps the pins of `release.yml` while a version is in flight. A workflow change during a release makes the tag job fail with HTTP 403 (`RELEASING.md`).
+- In the template repository, which the train does not sync, Renovate moves the pins: one group, "template workflows and actions", on Monday before 06:00 (New York time).
+- A change of the template that must not wait for the next sync of the train goes out with `bump-pins.ts --file <workflow>` (`RELEASING.md`).
 - Renovate also moves `CLAUDE_CODE_VERSION` of `reusable-ai-review.yml` to the newest version on npm. A person reviews and merges that pull request.
 
 ### The packages of the workflow scripts
@@ -1029,3 +1061,23 @@ The job `publish` of `release.yml` uses the pinned form of `npm-publish`, also i
 The stamp (`scripts/stamp/main.ts`, started by `new-repo.ps1`) copies only the files that its list `KEEP` names. It does not copy the shared workflows, the actions or `actions-test.yml`. It changes each local path and each pin of the template to the pinned form, with the commit of the template that it copies. The job `stamp` of `ci.yml` makes a repository. With no hand edit, that repository must pass its install, its checks, its Pages build and the site check.
 
 The job starts the stamp with `--link`. Then each package of the template in that repository is a `link:` to its folder in the commit, not a range from npm. Thus a pull request can change a rule and the files that the stamp writes together. Without `--link`, the repository gets the rule from npm, which does not have the change before the release.
+
+### The settings of a new repository
+
+Some settings of a repository are on GitHub, not in its files. The stamp cannot write them. After `gh repo create` with the push of the first commit, start:
+
+```sh
+node scripts/stamp/settings.ts <owner>/<name> --from <folder> --apply
+```
+
+Without `--apply`, the script only prints the steps. The default of `--from` is the folder `<name>` next to the template. The script sets four settings, in this order:
+
+1. The dependency graph. Without it, the dependency review fails on each pull request.
+2. A ruleset of the default branch. It names each summary check of the workflows of the folder that start on a pull request: `CI OK` first, then `Security OK`. Only GitHub Actions can give the checks.
+3. The Pages source "GitHub Actions", when the folder has `pages.yml`.
+4. Auto-merge. It comes last, because before the ruleset `gh pr merge --auto` merges with no check.
+
+- The script keeps each setting that the repository has. A second start changes nothing.
+- The script refuses a repository with no commit on its default branch. The ruleset stops a push without its checks, so push the first commit first.
+- The daily check of `rulesets.yml` reads the settings that anyone can read: the ruleset, the dependency graph and the Pages source. A repository that misses one fails the check. Auto-merge needs the admin role to read, so the check does not read it.
+- The check reads the dependency graph from the SBOM request. HTTP 404 is a fault. A different error is a no read.

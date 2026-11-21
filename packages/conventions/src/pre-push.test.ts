@@ -16,7 +16,10 @@ import {
   mergePrivateNames,
   nameMatches,
   NO_READ_LINE,
+  noLocalPaths,
+  parsePrePushArgs,
   parsePrivateNames,
+  parseRuleConfig,
   pathNameHit,
   PRE_PUSH_HOOK,
   prePush,
@@ -26,6 +29,7 @@ import {
   privatePatterns,
   privateTextBreaks,
   runCli,
+  runPrePushArgs,
   type CliIo,
   type NameRule,
 } from "./index.ts";
@@ -434,6 +438,27 @@ describe("conventions pre-push", () => {
     expect(stderr).toMatch(/^conventions pre-push: 1 commits, \d+ lines read, 0 breaks\.\n$/);
   });
 
+  it("does not read the commits of main again when a branch that the remote has merges main", () => {
+    const { root, base } = repository();
+    git(root, "checkout", "-q", "-b", "feature");
+    const pushed = commit(root, { "feature.md": "1\n" }, "a clean feature");
+    git(root, "checkout", "-q", "main");
+    // Main adds the probe and removes it later. A new commit with the probe stops a push, but these commits are on the remote
+    commit(root, { "old.md": `${PROBE}\n` }, `an old ${PROBE} commit`);
+    const main = commit(root, { "old.md": "1\n" }, "remove the old line");
+    git(root, "update-ref", "refs/remotes/origin/main", main);
+    git(root, "update-ref", "refs/remotes/origin/feature", pushed);
+    git(root, "checkout", "-q", "feature");
+    git(root, "merge", "-q", "--no-edit", "main");
+    const head = commit(root, { "feature.md": "1\n2\n" }, "a clean change after the merge");
+    const { code, stderr } = push(root, `refs/heads/feature ${head} refs/heads/feature ${pushed}\n`);
+    expect(code).toBe(0);
+    expect(stderr).toMatch(/^conventions pre-push: 2 commits, \d+ lines read, 0 breaks\.\n$/);
+    // The remote sha alone still limits the push when the remote branches do not have main
+    git(root, "update-ref", "refs/remotes/origin/main", base);
+    expect(push(root, `refs/heads/feature ${head} refs/heads/feature ${pushed}\n`).code).toBe(1);
+  });
+
   it("skips a deleted ref", () => {
     const { root, base } = repository();
     const { code, stderr } = push(root, `(delete) ${ZEROS} refs/heads/old ${base}\n`);
@@ -545,6 +570,18 @@ describe("conventions pre-push", () => {
     expect(code).toBe(1);
     expect(stderr).toContain("CONVENTIONS_PRIVATE_PATTERNS:2  Line 2 of CONVENTIONS_PRIVATE_PATTERNS is not a valid regular expression.");
     expect(stderr).not.toContain("qx-unclosed");
+  });
+
+  it("keeps the home folder exceptions of package.json when the entry of another rule has an error", () => {
+    const { root, base } = repository();
+    const home = ["", "home", "alice", "x"].join("/");
+    const conventions = { rules: { "no-local-paths": { ignore: ["fixtures/**"], reason: "test fixtures" }, "a-rule-that-is-not-known": { off: "x" } } };
+    const head = commit(root, { "package.json": `${JSON.stringify({ name: "one", conventions })}\n`, "fixtures/a.txt": `${home}\n` }, "second");
+    expect(push(root, `refs/heads/main ${head} refs/heads/main ${base}\n`).code).toBe(0);
+    // An error in the entry of no-local-paths gives the defaults, so the home folder counts
+    const broken = { rules: { "no-local-paths": { ignore: ["fixtures/**"] } } };
+    const next = commit(root, { "package.json": `${JSON.stringify({ name: "one", conventions: broken })}\n` }, "third");
+    expect(push(root, `refs/heads/main ${next} refs/heads/main ${base}\n`).code).toBe(1);
   });
 
   it("starts from the bin with the standard input and the URL, and gives exit code 2 without a remote", () => {
@@ -733,5 +770,38 @@ describe("conventions hook install", () => {
     expect(runCli(["hook", "install"], io)).toBe(0);
     expect(existsSync(join(root, ".git", "hooks", "pre-push"))).toBe(false);
     expect(runCli(["hook"], io)).toBe(2);
+  });
+});
+
+describe("the arguments and the settings of conventions pre-push", () => {
+  it("reads the arguments of the hook and of a check in CI, and refuses other arguments", () => {
+    expect(parsePrePushArgs(["origin"])).toEqual({ remote: "origin" });
+    expect(parsePrePushArgs(["origin", HTTPS])).toEqual({ remote: "origin", url: HTTPS });
+    expect(parsePrePushArgs(["--base", "abc"])).toEqual({ remote: "origin", base: "abc" });
+    expect(parsePrePushArgs(["--head", "def", "--base", "abc"])).toEqual({ remote: "origin", base: "abc", head: "def" });
+    for (const args of [[], ["a", "b", "c"], ["origin", "--head", "def"], ["--base"], ["--base", ""], ["--base", "-x"], ["--base", "abc", "origin"], ["--other"]]) {
+      expect(parsePrePushArgs(args), JSON.stringify(args)).toBeUndefined();
+    }
+  });
+
+  it("starts the check of a change in the git root of the folder, as the bundle of the shared actions does", () => {
+    const { root, base } = repository();
+    commit(root, { "notes.md": `1\nthe ${PROBE}\n` }, "second");
+    mkdirSync(join(root, "deep", "er"), { recursive: true });
+    let stderr = "";
+    const args = parsePrePushArgs(["--base", base]);
+    if (args === undefined) throw new Error("The arguments do not parse");
+    const code = runPrePushArgs(args, { cwd: join(root, "deep", "er"), env: { CONVENTIONS_PRIVATE_NAMES_FILE: listFile() }, stderr: (out) => (stderr += out) });
+    expect(code).toBe(1);
+    expect(stderr).toMatch(/^conventions pre-push: 1 commits, \d+ lines read, 1 breaks\. The check fails\.\n/);
+  });
+
+  it("reads the entry of one rule, and not the other entries", () => {
+    expect(parseRuleConfig(undefined, noLocalPaths)).toEqual({ ignore: [], options: { allow: [], patterns: [] } });
+    expect(parseRuleConfig({ rules: { other: 1 } }, noLocalPaths)).toEqual({ ignore: [], options: { allow: [], patterns: [] } });
+    expect(parseRuleConfig({ unknown: true, rules: { "no-local-paths": { off: "a reason" } } }, noLocalPaths)).toEqual({ off: "a reason", ignore: [], options: { allow: [], patterns: [] } });
+    expect(() => parseRuleConfig([], noLocalPaths)).toThrow("The field conventions of package.json must be an object.");
+    expect(() => parseRuleConfig({ rules: [] }, noLocalPaths)).toThrow("conventions.rules must be an object");
+    expect(() => parseRuleConfig({ rules: { "no-local-paths": { ignore: ["a/**"] } } }, noLocalPaths)).toThrow('conventions.rules["no-local-paths"].ignore needs a reason');
   });
 });
