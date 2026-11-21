@@ -59,6 +59,10 @@ describe("the search", () => {
     expect(findHomes("telemetry capture")[0]?.area).toBe("test-generation");
     expect(findHomes("in-memory exporter")[0]?.area).toBe("test-generation");
     expect(findHomes("otel capture")[0]?.area).toBe("test-generation");
+    expect(findHomes("mutation")[0]?.area).toBe("test-generation");
+    expect(findHomes("stryker")[0]?.area).toBe("test-generation");
+    expect(findHomes("render check")[0]?.area).toBe("repo-structure");
+    expect(findHomes("result")[0]?.area).toBe("optional");
     expect(findHomes("pushover")[0]?.area).toBe("notifications");
     expect(findHomes("text message")[0]?.area).toBe("notifications");
     expect(findHomes("geohash")[0]?.area).toBe("geography");

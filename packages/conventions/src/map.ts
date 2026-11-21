@@ -100,11 +100,11 @@ export const HOMES: readonly Home[] = [
   {
     area: "test-generation",
     title: "Test helpers and test generation",
-    covers: "property tests on fast-check, pairwise and covering arrays, metamorphic relations, chaos and load schedules, shared test fixtures, the capture of the OpenTelemetry SDK and the propagation gate for tests",
-    packages: ["@mark1russell7/rigor-testkit", "@mark1russell7/rigor-chaos", "@mark1russell7/rigor-proxy"],
+    covers: "property tests on fast-check, pairwise and covering arrays, metamorphic relations, chaos and load schedules, shared test fixtures, the capture of the OpenTelemetry SDK and the propagation gate for tests, mutation testing and coverage (@mark1russell7/rigor-mutation and the reusable workflow reusable-mutation.yml of template)",
+    packages: ["@mark1russell7/rigor-testkit", "@mark1russell7/rigor-chaos", "@mark1russell7/rigor-proxy", "@mark1russell7/rigor-mutation"],
     repo: "mark1russell7/rigor",
     state: "published",
-    words: ["test", "testing", "property", "fast-check", "arbitrary", "pairwise", "metamorphic", "chaos", "load", "fake", "fastcheck", "covering", "combinatorial", "fault", "injection", "soak", "stress", "throughput", "shrink", "capture", "in-memory", "exporter", "testkit"],
+    words: ["test", "testing", "property", "fast-check", "arbitrary", "pairwise", "metamorphic", "chaos", "load", "fake", "fastcheck", "covering", "combinatorial", "fault", "injection", "soak", "stress", "throughput", "shrink", "capture", "in-memory", "exporter", "testkit", "mutation", "mutant", "stryker", "coverage"],
     note: "rigor-testkit has model-based tests on fast-check, the capture of the OpenTelemetry SDK for tests (captureTelemetry, entry /otel), the propagation gate (entry /propagation) and a scripted HTTP server with a wire record of each reply (entry /http). rigor-chaos has seeded fault plans (delay, cut, reset, split frame, reorder, duplicate, stall) as data, next to its load schedules. rigor-proxy applies a plan to TCP, WebSocket and HTTP streams and records each fault. Pairwise and covering arrays and metamorphic relations are planned in mark1russell7/rigor. @mark1russell7/vex-testkit is only for Vex domains. A fake shell for tests is in @procedures/shell.",
   },
   {
@@ -235,9 +235,9 @@ export const HOMES: readonly Home[] = [
   },
   {
     area: "optional",
-    title: "Optional values",
+    title: "Optional values and results",
     covers:
-      "a value that is present or absent, and Result, a value or an error (1.2.0), with the functor and monad laws; typed reads of unknown values (planned entry /read): the record check isRecord, field readers that give undefined on a wrong type, decoders that give a Result with the path of the bad field",
+      "a value that is present or absent, and Result, a value or an error (1.2.0), with the functor and monad laws; typed reads of unknown values (entry /read, 1.5.0): the record check isRecord, field readers that give undefined on a wrong type, decoders that give a Result with the path of the bad field",
     packages: ["@mark1russell7/optional"],
     repo: "mark1russell7/optional",
     state: "published",
@@ -479,11 +479,11 @@ export const HOMES: readonly Home[] = [
   {
     area: "repo-structure",
     title: "Repository structure, CI and conventions",
-    covers: "new repositories and packages, the CUE presets, shared CI workflows, the API report, import boundaries, the conventions check, the release and status pages",
+    covers: "new repositories and packages, the CUE presets, shared CI workflows, the API report, import boundaries, the conventions check, the release and status pages, the browser check of a built site (site-pages check)",
     packages: ["@mark1russell7/conventions", "@mark1russell7/template-cli", "@mark1russell7/cue", "@mark1russell7/api-report", "@mark1russell7/boundaries", "@mark1russell7/site-pages"],
     repo: "mark1russell7/template",
     state: "published",
-    words: ["template", "ci", "workflow", "tsconfig", "package.json", "lint", "site", "pages"],
+    words: ["template", "ci", "workflow", "tsconfig", "package.json", "lint", "site", "pages", "render", "screenshot", "built"],
   },
   {
     area: "prose",
