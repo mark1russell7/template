@@ -153,7 +153,19 @@ export { lockedVersions, minorOf, publishedMinorRule, reachOf, type Minor } from
 export { NPM_REGISTRY, npmLookup, SHIPPED_FIELDS, UNSHIPPED_FILES, unreleasedChangeRule, type RegistryAnswer, type RegistryLookup } from "./rules/unreleased-change.ts";
 export { namedVersions, setVersions } from "./rules/version-title.ts";
 export { hiddenFailures, parseAdvisory, startsTests, swallowsTests, type Advisory, type HiddenFailure } from "./rules/job-fails.ts";
-export { readAction, readWorkflow, type Workflow, type WorkflowInput, type WorkflowJob, type WorkflowStep } from "./workflow.ts";
+export {
+  parseWorkflow,
+  readAction,
+  readWorkflow,
+  type ParsedJob,
+  type ParsedStep,
+  type ParsedWorkflow,
+  type Workflow,
+  type WorkflowInput,
+  type WorkflowJob,
+  type WorkflowPermissions,
+  type WorkflowStep,
+} from "./workflow.ts";
 export { blockHash, githubFetch, HOME_TIMEOUT_MS, sharedDocsRule, type HomeAnswer, type HomeFetch } from "./rules/shared-docs.ts";
 export {
   annotations,

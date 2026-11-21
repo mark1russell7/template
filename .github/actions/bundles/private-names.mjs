@@ -10,6 +10,10 @@ const RULE_FIELDS = [
 	"generated",
 	"reason"
 ];
+/**
+* This function tells if a value is a record: an object that is not a list. The parser reader of `workflow.ts` uses it
+* too. The home of this check is the planned entry `/read` of `@mark1russell7/optional`.
+*/
 const isObject$1 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 const isStrings = (value) => Array.isArray(value) && value.every((item) => typeof item === "string");
 /** This function gives the options of a rule with their defaults. */

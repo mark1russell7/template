@@ -33,7 +33,11 @@ export interface ConventionsConfig {
 /** The fields of the configuration of a rule that are not options. */
 const RULE_FIELDS = ["off", "ignore", "generated", "reason"];
 
-const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+/**
+ * This function tells if a value is a record: an object that is not a list. The parser reader of `workflow.ts` uses it
+ * too. The home of this check is the planned entry `/read` of `@mark1russell7/optional`.
+ */
+export const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isStrings = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === "string");
 

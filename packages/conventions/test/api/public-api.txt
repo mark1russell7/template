@@ -60,6 +60,9 @@ PRIVATE_NAME_LIST: build/index.d.ts#PRIVATE_NAME_LIST
 PRIVATE_PATTERNS_VARIABLE: build/index.d.ts#PRIVATE_PATTERNS_VARIABLE
 type PackageInfo: build/index.d.ts#PackageInfo
 type PagesCall: build/index.d.ts#PagesCall
+type ParsedJob: build/index.d.ts#ParsedJob
+type ParsedStep: build/index.d.ts#ParsedStep
+type ParsedWorkflow: build/index.d.ts#ParsedWorkflow
 type PathFilter: build/index.d.ts#PathFilter
 type PrePushArgs: build/index.d.ts#PrePushArgs
 type PrePushOptions: build/index.d.ts#PrePushOptions
@@ -94,6 +97,7 @@ USAGE: build/index.d.ts#USAGE
 type Workflow: build/index.d.ts#Workflow
 type WorkflowInput: build/index.d.ts#WorkflowInput
 type WorkflowJob: build/index.d.ts#WorkflowJob
+type WorkflowPermissions: build/index.d.ts#WorkflowPermissions
 type WorkflowStep: build/index.d.ts#WorkflowStep
 type YamlFault: build/index.d.ts#YamlFault
 annotations: build/index.d.ts#annotations
@@ -177,6 +181,7 @@ parseJsonc: build/index.d.ts#parseJsonc
 parsePrePushArgs: build/index.d.ts#parsePrePushArgs
 parsePrivateNames: build/index.d.ts#parsePrivateNames
 parseRuleConfig: build/index.d.ts#parseRuleConfig
+parseWorkflow: build/index.d.ts#parseWorkflow
 parseWorkspaceGlobs: build/workspace.chunk.d.ts#parseWorkspaceGlobs
 pathNameHit: build/index.d.ts#pathNameHit
 pathsOf: build/index.d.ts#pathsOf
@@ -547,6 +552,36 @@ interface PagesCall {
   readonly deploys: boolean;
 }
 
+### build/index.d.ts#ParsedJob
+interface ParsedJob {
+  readonly id: string;
+  readonly if: string;
+  readonly needs: readonly string[];
+  readonly uses: string;
+  readonly permissions: WorkflowPermissions;
+  readonly secrets: readonly string[];
+  readonly steps: readonly ParsedStep[];
+}
+
+### build/index.d.ts#ParsedStep
+interface ParsedStep {
+  readonly label: string;
+  readonly if: string;
+  readonly uses: string;
+  readonly secrets: readonly string[];
+}
+
+### build/index.d.ts#ParsedWorkflow
+interface ParsedWorkflow {
+  readonly file: string;
+  readonly name: string;
+  readonly triggers: readonly string[];
+  readonly permissions: WorkflowPermissions;
+  readonly secrets: readonly string[];
+  readonly jobs: readonly ParsedJob[];
+  readonly faults: readonly YamlFault[];
+}
+
 ### build/index.d.ts#PathFilter
 interface PathFilter {
   readonly line: number;
@@ -753,6 +788,9 @@ interface WorkflowJob {
   readonly needs: readonly string[];
   readonly steps: readonly WorkflowStep[];
 }
+
+### build/index.d.ts#WorkflowPermissions
+type WorkflowPermissions = string | Readonly<Record<string, string>> | null;
 
 ### build/index.d.ts#WorkflowStep
 interface WorkflowStep {
@@ -996,6 +1034,9 @@ export declare function parsePrivateNames(text: string): PrivateNameList;
 
 ### build/index.d.ts#parseRuleConfig
 export declare function parseRuleConfig(value: unknown, rule: Rule): RuleConfig;
+
+### build/index.d.ts#parseWorkflow
+export declare function parseWorkflow(file: string, text: string): ParsedWorkflow;
 
 ### build/index.d.ts#pathNameHit
 export declare function pathNameHit(list: PrivateNameList, path: string): NameHit | undefined;

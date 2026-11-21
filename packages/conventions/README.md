@@ -323,4 +323,10 @@ The package also exports the functions of the tool:
 - `lineNameHits(list, line, place)` and `nameMatches(line, names)` give each name of a line, one hit for each name. A scan that counts the names uses them. The gate takes the first hit.
 - `privateNamesFiles(env, git)`, `privateNamesFile(env, git)`, `privatePatterns(env)` and `invalidPatternBreaks(patterns)` read the settings and the patterns. `privateNamesFiles` gives each path, and `privateNamesFile` gives one.
 - `mergePrivateNames(lists)` merges the lists in order. It throws a `PrivateNameListError` when two lists have the same id.
+- `readWorkflow(file, text)` and `readAction(file, text)` read a workflow or a composite action by the indent of its lines. The site of the template shows their result.
+- `parseWorkflow(file, text)` reads a workflow with the YAML parser. It gives the triggers, the permissions, the jobs and their steps, and the secrets that each job and each step read. A gate uses this reader.
+  - `permissions` is `null` when the key is not there. Else it is a text (for example `read-all`) or a record (for example `{}`).
+  - A secret is `secrets.NAME` or `secrets['NAME']` in an expression, or in the value of a key `if`. The name `*` is the whole context, and `inherit` is `secrets: inherit`.
+  - The reader does not throw. A file that does not parse gives its `faults` and no job, because GitHub starts no job of it. Two documents and a version of YAML that is not 1.2 are faults too.
+  - `yamlFaults(text)` gives the faults of the parser alone. The rule `workflow-parses` uses it.
 - `prePush(options, io)` is the command `pre-push`. With the option `base`, it is the check of a change in CI. `parsePrePushArgs(args)` reads its arguments, and `runPrePushArgs(args, io)` starts it in the git root. The bundle `private-names.mjs` of the shared actions uses these two functions. `installHook(options, io)` is the command `hook install`. `PRE_PUSH_HOOK` is the text of the hook.
