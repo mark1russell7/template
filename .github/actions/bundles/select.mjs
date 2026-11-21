@@ -251,6 +251,30 @@ const DEPENDENCY_FIELDS = [
 	"peerDependencies",
 	"optionalDependencies"
 ];
+/**
+* This function reads the output of `git cat-file --batch` for `count` names. It gives the text of each blob, or
+* undefined for a name that git does not have or that is not a blob. It gives fewer than `count` entries when the output
+* ends early.
+*/
+function parseCatFileBatch(out, count) {
+	const data = Buffer.from(out.buffer, out.byteOffset, out.byteLength);
+	const texts = [];
+	let at = 0;
+	while (texts.length < count) {
+		const end = data.indexOf(10, at);
+		if (end < 0) break;
+		const header = data.toString("utf8", at, end).split(" ");
+		at = end + 1;
+		const size = Number(header.at(-1));
+		if (header.length !== 3 || !/^[0-9a-f]+$/.test(header[0] ?? "") || !Number.isInteger(size)) {
+			texts.push(void 0);
+			continue;
+		}
+		texts.push(header[1] === "blob" ? data.toString("utf8", at, at + size) : void 0);
+		at += size + 1;
+	}
+	return texts;
+}
 
 /**
 * The selector of precise CI (CI.md, "The selection"). It reads the change of a pull request and the workspace of the
@@ -597,18 +621,11 @@ function readAt(cwd, commit, paths) {
 		input,
 		maxBuffer: 268435456
 	});
-	let at = 0;
-	for (const path of paths) {
-		const end = data.indexOf(10, at);
-		if (end < 0) break;
-		const header = data.subarray(at, end).toString("utf8");
-		at = end + 1;
-		const match = /^[0-9a-f]+ blob (\d+)$/.exec(header);
-		if (match === null) continue;
-		const size = Number(match[1]);
-		texts.set(path, data.subarray(at, at + size).toString("utf8"));
-		at += size + 1;
-	}
+	const shown = parseCatFileBatch(data, paths.length);
+	paths.forEach((path, index) => {
+		const text = shown[index];
+		if (text !== void 0) texts.set(path, text);
+	});
 	return texts;
 }
 /** This function gives the selection of a change from git. It throws when git cannot read the change. */

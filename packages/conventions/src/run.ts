@@ -9,7 +9,7 @@ import { addedFiles } from "./change.ts";
 import { findHomes, HOMES, mapMarkdown, mapText, mergeHomes, readOverlay, type Home } from "./map.ts";
 import { parseConfig, type ConventionsConfig } from "./config.ts";
 import { installHook, parsePrePushArgs, runPrePushArgs } from "./pre-push.ts";
-import { matchesAny, runGit, type Break, type Manifest, type PackageInfo, type Rule, type RuleContext } from "./rule.ts";
+import { matchesAny, runGit, runGitShow, type Break, type Manifest, type PackageInfo, type Rule, type RuleContext } from "./rule.ts";
 import { RULES } from "./rules/index.ts";
 import { packageFolders, relativePath } from "./workspace.ts";
 
@@ -80,6 +80,11 @@ export function createContext(root: string, config: ConventionsConfig, options: 
     .filter((dir) => resolve(dir) !== resolve(root))
     .map((dir) => readPackage(root, dir));
   let files: readonly string[] | undefined | null = null;
+  // The rules read the same facts of git (the merge base, the range, a file at a commit). A check starts git one time
+  // for each list of arguments and for each file at a commit, because each process start costs time and, on Windows,
+  // kernel memory that the system does not free.
+  const outputs = new Map<string, string | undefined>();
+  const shown = new Map<string, string | undefined>();
   return {
     root,
     rootPackage,
@@ -94,7 +99,17 @@ export function createContext(root: string, config: ConventionsConfig, options: 
       }
       return files;
     },
-    git: (args) => runGit(root, args),
+    git(args) {
+      const key = args.join("\0");
+      if (!outputs.has(key)) outputs.set(key, runGit(root, args));
+      return outputs.get(key);
+    },
+    gitShow(specs) {
+      const missing = [...new Set(specs.filter((spec) => !shown.has(spec)))];
+      const texts = runGitShow(root, missing);
+      missing.forEach((spec, index) => shown.set(spec, texts[index]));
+      return specs.map((spec) => shown.get(spec));
+    },
   };
 }
 

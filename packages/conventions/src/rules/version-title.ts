@@ -3,7 +3,7 @@
  */
 import { rangeOf } from "../change.ts";
 import { namesPullRequestFile, pullRequestOfRun } from "../pull-request.ts";
-import type { Break, Rule, RuleContext } from "../rule.ts";
+import { showFiles, type Break, type Rule, type RuleContext } from "../rule.ts";
 
 /** A version of SemVer, with an optional pre-release. */
 const SEMVER = String.raw`\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?`;
@@ -26,9 +26,8 @@ export function namedVersions(title: string): string[] {
   return found;
 }
 
-/** This function gives the version of a `package.json` at a commit, or undefined. */
-function versionAt(context: RuleContext, commit: string, file: string): string | undefined {
-  const text = context.git(["show", `${commit}:${file}`]);
+/** This function gives the version in the text of a `package.json`, or undefined. */
+function versionIn(text: string | undefined): string | undefined {
   if (text === undefined) return undefined;
   try {
     const value = (JSON.parse(text) as { version?: unknown }).version;
@@ -42,13 +41,37 @@ function versionAt(context: RuleContext, commit: string, file: string): string |
 export function setVersions(context: RuleContext, from: string, to: string): string[] | undefined {
   const out = context.git(["diff", "--name-only", "--no-renames", from, to, "--", "package.json", "**/package.json"]);
   if (out === undefined) return undefined;
-  const versions: string[] = [];
-  for (const file of out.split(/\r?\n/).filter((line) => line !== "")) {
-    const after = versionAt(context, to, file);
-    if (after !== undefined && after !== versionAt(context, from, file) && !versions.includes(after)) versions.push(after);
-  }
-  return versions;
+  return setVersionsOf(context, [{ from, to, files: out.split(/\r?\n/).filter((line) => line !== "") }])[0];
 }
+
+/** A change from the commit `from` to the commit `to`, with the `package.json` files that it changes. */
+interface ManifestChange {
+  readonly from: string;
+  readonly to: string;
+  readonly files: readonly string[];
+}
+
+/** This function gives the versions that each change sets, with one read of git for all the files of all the changes. */
+function setVersionsOf(context: RuleContext, changes: readonly ManifestChange[]): string[][] {
+  const texts = showFiles(
+    context,
+    changes.flatMap((change) => change.files.flatMap((file) => [`${change.to}:${file}`, `${change.from}:${file}`])),
+  );
+  let index = 0;
+  return changes.map((change) => {
+    const versions: string[] = [];
+    for (let file = 0; file < change.files.length; file++) {
+      const after = versionIn(texts[index]);
+      const before = versionIn(texts[index + 1]);
+      index += 2;
+      if (after !== undefined && after !== before && !versions.includes(after)) versions.push(after);
+    }
+    return versions;
+  });
+}
+
+/** This function tells if a path is a `package.json` file. */
+const isManifest = (file: string): boolean => file === "package.json" || file.endsWith("/package.json");
 
 /**
  * This function gives the versions that a merge of HEAD into `base` sets, with `fork` as the merge base. They are the
@@ -58,11 +81,16 @@ export function setVersions(context: RuleContext, from: string, to: string): str
 function mergeSetVersions(context: RuleContext, base: string, fork: string): string[] | undefined {
   const out = context.git(["diff", "--name-only", "--no-renames", fork, "HEAD", "--", "package.json", "**/package.json"]);
   if (out === undefined) return undefined;
+  const files = out.split(/\r?\n/).filter((line) => line !== "");
+  const texts = showFiles(
+    context,
+    files.flatMap((file) => [`HEAD:${file}`, `${fork}:${file}`, `${base}:${file}`]),
+  );
   const versions: string[] = [];
-  for (const file of out.split(/\r?\n/).filter((line) => line !== "")) {
-    const after = versionAt(context, "HEAD", file);
+  for (let index = 0; index < files.length; index++) {
+    const after = versionIn(texts[3 * index]);
     if (after === undefined || versions.includes(after)) continue;
-    if (after !== versionAt(context, fork, file) && after !== versionAt(context, base, file)) versions.push(after);
+    if (after !== versionIn(texts[3 * index + 1]) && after !== versionIn(texts[3 * index + 2])) versions.push(after);
   }
   return versions;
 }
@@ -124,18 +152,29 @@ export const versionTitle: Rule = {
     // A push, or a range of `--base`: each commit on the first-parent line, against its first parent
     const range = rangeOf(context, { push: true });
     if ("skipped" in range) return range;
-    const out = context.git(["rev-list", "--first-parent", ...range.log]);
+    // One start of git gives each commit on the first-parent line, its parents, its title and the files that it changes
+    // against its first parent (--first-parent gives the diff of a merge against its first parent too). A commit with
+    // no parent in the checkout (the first commit, or the edge of a shallow clone) has no change to examine.
+    const out = context.git(["log", "--first-parent", "--no-renames", "--name-only", "--format=%x1e%H%x00%P%x00%s", ...range.log]);
     if (out === undefined) return { skipped: "git cannot give the commits of the change" };
-    const breaks: Break[] = [];
-    for (const commit of out.split(/\r?\n/).filter((line) => line !== "")) {
-      const title = context.git(["log", "-1", "--format=%s", commit])?.trim();
-      if (title === undefined || namedVersions(title).length === 0) continue;
-      if (context.git(["rev-parse", "--verify", "--quiet", `${commit}^1^{commit}`]) === undefined) continue;
-      const set = setVersions(context, `${commit}^1`, commit);
-      if (set === undefined) continue;
-      const found = breakOf(title, set, "package.json", `The commit ${commit.slice(0, 7)}`);
-      if (found !== undefined) breaks.push(found);
+    const titled: { commit: string; title: string; change: ManifestChange }[] = [];
+    for (const record of out.split("\x1e").slice(1)) {
+      const [head = "", ...names] = record.split(/\r?\n/);
+      const [commit = "", parents = "", subject = ""] = head.split("\0");
+      const title = subject.trim();
+      if (namedVersions(title).length === 0 || parents.trim() === "") continue;
+      const files = names.map((name) => name.trim()).filter(isManifest);
+      titled.push({ commit, title, change: { from: `${commit}^1`, to: commit, files } });
     }
+    const sets = setVersionsOf(
+      context,
+      titled.map((entry) => entry.change),
+    );
+    const breaks: Break[] = [];
+    titled.forEach(({ commit, title }, index) => {
+      const found = breakOf(title, sets[index] ?? [], "package.json", `The commit ${commit.slice(0, 7)}`);
+      if (found !== undefined) breaks.push(found);
+    });
     return breaks;
   },
 };

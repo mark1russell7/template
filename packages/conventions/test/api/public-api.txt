@@ -176,6 +176,7 @@ pagesAfterRelease: build/index.d.ts#pagesAfterRelease
 pagesCalls: build/index.d.ts#pagesCalls
 pagesSite: build/index.d.ts#pagesSite
 parseAdvisory: build/index.d.ts#parseAdvisory
+parseCatFileBatch: build/index.d.ts#parseCatFileBatch
 parseConfig: build/index.d.ts#parseConfig
 parseJsonc: build/index.d.ts#parseJsonc
 parsePrePushArgs: build/index.d.ts#parsePrePushArgs
@@ -219,6 +220,7 @@ runChecks: build/index.d.ts#runChecks
 runCli: build/index.d.ts#runCli
 runFix: build/index.d.ts#runFix
 runGit: build/index.d.ts#runGit
+runGitShow: build/index.d.ts#runGitShow
 runPrePushArgs: build/index.d.ts#runPrePushArgs
 runnerBudget: build/index.d.ts#runnerBudget
 scheduleMinute: build/index.d.ts#scheduleMinute
@@ -231,6 +233,7 @@ setupCue: build/index.d.ts#setupCue
 sharedCi: build/index.d.ts#sharedCi
 sharedDocsRule: build/index.d.ts#sharedDocsRule
 sharedNames: build/owners.d.ts#sharedNames
+showFiles: build/index.d.ts#showFiles
 signaturesOf: build/index.d.ts#signaturesOf
 siteCheckInCi: build/index.d.ts#siteCheckInCi
 sourceMain: build/index.d.ts#sourceMain
@@ -689,6 +692,7 @@ interface RuleContext {
   readonly today?: string;
   gitFiles(): readonly string[] | undefined;
   git(args: readonly string[]): string | undefined;
+  gitShow?(specs: readonly string[]): readonly (string | undefined)[];
 }
 
 ### build/index.d.ts#RuleOutcome
@@ -1020,6 +1024,9 @@ export declare const pagesSite: Rule;
 ### build/index.d.ts#parseAdvisory
 export declare function parseAdvisory(entry: string): Advisory | undefined;
 
+### build/index.d.ts#parseCatFileBatch
+export declare function parseCatFileBatch(out: Uint8Array, count: number): (string | undefined)[];
+
 ### build/index.d.ts#parseConfig
 export declare function parseConfig(value: unknown, rules: readonly Rule[]): ConventionsConfig;
 
@@ -1146,6 +1153,9 @@ export declare function runFix(options: CheckOptions): FixResult;
 ### build/index.d.ts#runGit
 export declare function runGit(root: string, args: readonly string[]): string | undefined;
 
+### build/index.d.ts#runGitShow
+export declare function runGitShow(root: string, specs: readonly string[]): (string | undefined)[];
+
 ### build/index.d.ts#runPrePushArgs
 export declare function runPrePushArgs(args: PrePushArgs, io: Pick<CliIo, "cwd" | "env" | "stderr" | "stdin">): number;
 
@@ -1178,6 +1188,9 @@ export declare const sharedCi: Rule;
 
 ### build/index.d.ts#sharedDocsRule
 export declare function sharedDocsRule(fetchHomes?: HomeFetch): Rule;
+
+### build/index.d.ts#showFiles
+export declare function showFiles(context: Pick<RuleContext, "git" | "gitShow">, specs: readonly string[]): readonly (string | undefined)[];
 
 ### build/index.d.ts#signaturesOf
 export declare function signaturesOf(homes: readonly Home[]): Signature[];

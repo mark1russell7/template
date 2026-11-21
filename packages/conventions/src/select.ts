@@ -15,7 +15,7 @@ import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, posix } from "node:path";
 import { getDescendants } from "@mark1russell7/collections/dag";
 import { globToRegExp } from "@mark1russell7/files/glob";
-import { DEPENDENCY_FIELDS } from "./rule.ts";
+import { DEPENDENCY_FIELDS, parseCatFileBatch } from "./rule.ts";
 import { byCode, isWorkspaceFolder, parseWorkspaceGlobs } from "./workspace.ts";
 
 /** The name of the format of the selection. */
@@ -305,18 +305,11 @@ function readAt(cwd: string, commit: string, paths: readonly string[]): Map<stri
   if (paths.length === 0) return texts;
   const input = paths.map((path) => `${commit}:${path}\n`).join("");
   const data = execFileSync("git", ["cat-file", "--batch"], { cwd, input, maxBuffer: 256 * 1024 * 1024 });
-  let at = 0;
-  for (const path of paths) {
-    const end = data.indexOf(0x0a, at);
-    if (end < 0) break;
-    const header = data.subarray(at, end).toString("utf8");
-    at = end + 1;
-    const match = /^[0-9a-f]+ blob (\d+)$/.exec(header);
-    if (match === null) continue;
-    const size = Number(match[1]);
-    texts.set(path, data.subarray(at, at + size).toString("utf8"));
-    at += size + 1;
-  }
+  const shown = parseCatFileBatch(data, paths.length);
+  paths.forEach((path, index) => {
+    const text = shown[index];
+    if (text !== undefined) texts.set(path, text);
+  });
   return texts;
 }
 

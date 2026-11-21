@@ -92,8 +92,20 @@ export interface RuleContext {
   readonly today?: string;
   /** This function gives the files that git tracks, relative to the root, or undefined when the root is not in a git repository. */
   gitFiles(): readonly string[] | undefined;
-  /** This function starts git in the root, and gives its output, or undefined when git fails. */
+  /** This function starts git in the root, and gives its output, or undefined when git fails. A context of createContext starts git one time for each list of arguments. */
   git(args: readonly string[]): string | undefined;
+  /**
+   * This function gives the text of the file of each `<commit>:<path>` (as `git show` does), or undefined for each one
+   * that git does not have. A context of createContext starts git one time for all of them (`git cat-file --batch`).
+   * A context with no such function reads each one with `git show`: use showFiles, which handles the two.
+   */
+  gitShow?(specs: readonly string[]): readonly (string | undefined)[];
+}
+
+/** This function gives the text of the file of each `<commit>:<path>`, or undefined, in one start of git when the context can. */
+export function showFiles(context: Pick<RuleContext, "git" | "gitShow">, specs: readonly string[]): readonly (string | undefined)[] {
+  if (specs.length === 0) return [];
+  return context.gitShow !== undefined ? context.gitShow(specs) : specs.map((spec) => context.git(["show", spec]));
 }
 
 /** The result of a rule: a list of breaks (empty when the rule passes), or the reason why the rule did not start. */
@@ -213,6 +225,51 @@ export function readJsonc(file: string): unknown {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * This function gives the text of the blob of each `<commit>:<path>` in `root`, with one start of `git cat-file --batch`.
+ * It gives undefined for each name that git does not have or that is not a file. A name with a line break goes to
+ * `git show`.
+ */
+export function runGitShow(root: string, specs: readonly string[]): (string | undefined)[] {
+  const batch = specs.filter((spec) => !/[\r\n]/.test(spec));
+  let texts: readonly (string | undefined)[] = [];
+  if (batch.length > 0) {
+    const result = spawnSync("git", ["cat-file", "--batch"], { cwd: root, input: `${batch.join("\n")}\n`, maxBuffer: 256 * 1024 * 1024, windowsHide: true });
+    texts = result.error || result.status !== 0 ? batch.map(() => undefined) : parseCatFileBatch(result.stdout, batch.length);
+  }
+  const indexOf = new Map(batch.map((spec, index) => [spec, index] as const));
+  return specs.map((spec) => {
+    const index = indexOf.get(spec);
+    return index !== undefined && index < texts.length ? texts[index] : runGit(root, ["show", spec]);
+  });
+}
+
+/**
+ * This function reads the output of `git cat-file --batch` for `count` names. It gives the text of each blob, or
+ * undefined for a name that git does not have or that is not a blob. It gives fewer than `count` entries when the output
+ * ends early.
+ */
+export function parseCatFileBatch(out: Uint8Array, count: number): (string | undefined)[] {
+  const data = Buffer.from(out.buffer, out.byteOffset, out.byteLength);
+  const texts: (string | undefined)[] = [];
+  let at = 0;
+  while (texts.length < count) {
+    const end = data.indexOf(0x0a, at);
+    if (end < 0) break;
+    // The header is "<object> <type> <size>", or "<name> missing" (or "ambiguous") when git does not have the name.
+    const header = data.toString("utf8", at, end).split(" ");
+    at = end + 1;
+    const size = Number(header.at(-1));
+    if (header.length !== 3 || !/^[0-9a-f]+$/.test(header[0] ?? "") || !Number.isInteger(size)) {
+      texts.push(undefined);
+      continue;
+    }
+    texts.push(header[1] === "blob" ? data.toString("utf8", at, at + size) : undefined);
+    at += size + 1;
+  }
+  return texts;
 }
 
 /** This function starts git in `root` with `args`, and gives its output, or undefined when git fails. */
