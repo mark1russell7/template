@@ -5,7 +5,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { rangeOf } from "../change.ts";
-import { cleanPath, hasFile, lineOf, matchesAny, versionedPackages, type Break, type Manifest, type PackageInfo, type Rule, type RuleContext } from "../rule.ts";
+import { cleanPath, hasFile, lineOf, matchesAny, showFiles, versionedPackages, type Break, type Manifest, type PackageInfo, type Rule, type RuleContext } from "../rule.ts";
 
 /**
  * The answer of the registry for one package, or an error. The answer has each version that npm has or had (none for a
@@ -219,7 +219,12 @@ export function unreleasedChangeRule(lookup: RegistryLookup = npmLookup): Rule {
       const fork = push ? range.ends[0] : context.git(["merge-base", ...range.ends])?.trim();
       const notes: string[] = [];
       if (fork === undefined) notes.push(`the checkout does not have the merge base of ${range.ends.join(" and ")}, so the rule cannot tell if the change sets a version`);
-      const manifestAt = (ref: string, pkg: PackageInfo): Manifest | undefined => (ref === "HEAD" ? pkg.manifest : parseManifest(context.git(["show", `${ref}:${pkg.file}`])));
+      // One start of git reads the manifest of each package at each commit of the range and at the merge base.
+      const refs = [...new Set([range.ends[0], range.ends[1], ...(fork === undefined ? [] : [fork])])].filter((ref) => ref !== "HEAD");
+      const specs = published.flatMap((pkg) => refs.map((ref) => `${ref}:${pkg.file}`));
+      const shown = showFiles(context, specs);
+      const texts = new Map(specs.map((spec, index) => [spec, shown[index]] as const));
+      const manifestAt = (ref: string, pkg: PackageInfo): Manifest | undefined => (ref === "HEAD" ? pkg.manifest : parseManifest(texts.has(`${ref}:${pkg.file}`) ? texts.get(`${ref}:${pkg.file}`) : context.git(["show", `${ref}:${pkg.file}`])));
       const versionOf = (manifest: Manifest | undefined): string | undefined => (typeof manifest?.["version"] === "string" ? manifest["version"] : undefined);
 
       const candidates: Candidate[] = [];
