@@ -228,8 +228,9 @@ export function readJsonc(file: string): unknown {
 }
 
 /**
- * This function gives the text of the blob of each `<commit>:<path>` in `root`, or undefined for each one that git does not
- * have or that is not a file, with one start of `git cat-file --batch`. A name with a line break goes to `git show`.
+ * This function gives the text of the blob of each `<commit>:<path>` in `root`, with one start of `git cat-file --batch`.
+ * It gives undefined for each name that git does not have or that is not a file. A name with a line break goes to
+ * `git show`.
  */
 export function runGitShow(root: string, specs: readonly string[]): (string | undefined)[] {
   const batch = specs.filter((spec) => !/[\r\n]/.test(spec));
@@ -246,8 +247,9 @@ export function runGitShow(root: string, specs: readonly string[]): (string | un
 }
 
 /**
- * This function reads the output of `git cat-file --batch` for `count` names: the text of each blob, or undefined for a
- * name that git does not have or that is not a blob. It gives fewer than `count` entries when the output ends early.
+ * This function reads the output of `git cat-file --batch` for `count` names. It gives the text of each blob, or
+ * undefined for a name that git does not have or that is not a blob. It gives fewer than `count` entries when the output
+ * ends early.
  */
 export function parseCatFileBatch(out: Uint8Array, count: number): (string | undefined)[] {
   const data = Buffer.from(out.buffer, out.byteOffset, out.byteLength);
