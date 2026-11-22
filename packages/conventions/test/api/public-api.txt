@@ -81,6 +81,7 @@ type RuleConfig: build/index.d.ts#RuleConfig
 type RuleContext: build/index.d.ts#RuleContext
 type RuleOutcome: build/index.d.ts#RuleOutcome
 type RuleResult: build/index.d.ts#RuleResult
+SECURITY_FILE: build/index.d.ts#SECURITY_FILE
 SECURITY_SCAN_COMMIT: build/index.d.ts#SECURITY_SCAN_COMMIT
 SECURITY_SCAN_INPUTS: build/index.d.ts#SECURITY_SCAN_INPUTS
 SECURITY_TIMEOUT_MINUTES: build/index.d.ts#SECURITY_TIMEOUT_MINUTES
@@ -142,6 +143,7 @@ isAllowedHit: build/index.d.ts#isAllowedHit
 isCommonUse: build/index.d.ts#isCommonUse
 isGitSpecifier: build/index.d.ts#isGitSpecifier
 isPinned: build/index.d.ts#isPinned
+isSecurityGate: build/index.d.ts#isSecurityGate
 isSourcePath: build/index.d.ts#isSourcePath
 isWorkspaceFolder: build/workspace.chunk.d.ts#isWorkspaceFolder
 jobFails: build/index.d.ts#jobFails
@@ -232,7 +234,9 @@ runnerBudget: build/index.d.ts#runnerBudget
 scheduleMinute: build/index.d.ts#scheduleMinute
 scriptsOf: build/index.d.ts#scriptsOf
 securityCallers: build/index.d.ts#securityCallers
+securityGate: build/index.d.ts#securityGate
 securityOneJob: build/index.d.ts#securityOneJob
+securityWorkflow: build/index.d.ts#securityWorkflow
 serviceRunMain: build/index.d.ts#serviceRunMain
 setVersions: build/index.d.ts#setVersions
 setupCue: build/index.d.ts#setupCue
@@ -724,6 +728,9 @@ interface RuleResult {
   readonly noRead?: string;
 }
 
+### build/index.d.ts#SECURITY_FILE
+export declare const SECURITY_FILE: string;
+
 ### build/index.d.ts#SECURITY_SCAN_COMMIT
 export declare const SECURITY_SCAN_COMMIT: string;
 
@@ -955,6 +962,9 @@ export declare function isGitSpecifier(spec: string): boolean;
 
 ### build/index.d.ts#isPinned
 export declare function isPinned(spec: string, fullSha: boolean): boolean;
+
+### build/index.d.ts#isSecurityGate
+export declare function isSecurityGate(text: string): boolean;
 
 ### build/index.d.ts#isSourcePath
 export declare function isSourcePath(path: string): boolean;
@@ -1208,8 +1218,14 @@ export declare function scriptsOf(scripts: Readonly<Record<string, unknown>>, na
 ### build/index.d.ts#securityCallers
 export declare function securityCallers(text: string): SecurityCaller[];
 
+### build/index.d.ts#securityGate
+export declare const securityGate: Rule;
+
 ### build/index.d.ts#securityOneJob
 export declare const securityOneJob: Rule;
+
+### build/index.d.ts#securityWorkflow
+export declare function securityWorkflow(repository: string, commit?: string): string;
 
 ### build/index.d.ts#serviceRunMain
 export declare const serviceRunMain: Rule;

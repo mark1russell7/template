@@ -428,7 +428,13 @@ jobs:
         run: |
           text="$(node next/.github/actions/pull-of-run/locked-version.ts next/pnpm-lock.yaml @mark1russell7/text)"
           yaml="$(node next/.github/actions/pull-of-run/locked-version.ts next/pnpm-lock.yaml yaml)"
-          npm install --no-save --no-package-lock --ignore-scripts --prefix next/scripts/workflows "@mark1russell7/text@${text}" "yaml@${yaml}"
+          # The script imports packages/conventions/src/workflow.ts, so the packages go to the root node_modules of next.
+          # The root package.json of next has workspace dependencies that npm cannot read, so npm installs them in a
+          # folder of their own, and next/node_modules is a link to it. ln -T fails when next/node_modules exists.
+          deps="$RUNNER_TEMP/site-compare-deps"
+          mkdir -p "$deps"
+          npm install --no-save --no-package-lock --ignore-scripts --prefix "$deps" "@mark1russell7/text@${text}" "yaml@${yaml}"
+          ln -sT "$deps/node_modules" next/node_modules
       - name: Playwright for the site check
         shell: bash
         run: npm install --prefix "$RUNNER_TEMP/site-check-playwright" --no-save --no-package-lock --no-audit --no-fund "playwright-core@1.64.1"

@@ -189,6 +189,7 @@ The ruleset names only the summary checks. Thus it does not change when a job is
 
 - Add each new job of the gate to `needs` of `ci-ok`.
 - The conventions rule `summary-job` finds a gate (`ci.yml`, `security.yml`) with no summary job, and its fix adds one.
+- The conventions rule `security-gate` finds a repository with the gate `ci.yml` and no security gate, and its fix writes `security.yml` as the stamp writes it. Then add `Security OK` to the ruleset.
 - `release.yml` uses `ci.yml` with `contents: read` only. A called job cannot get more permissions than its caller. Thus a gate job that needs more (the scans need `security-events: write`, a download of an artifact of another run needs `actions: read`) stays in its own workflow, with its own summary job.
 - A gate workflow must start on each pull request, with no `paths` filter. Otherwise its summary check does not start, and the ruleset blocks the pull request. To skip the work, use the action `changes` and an `if` on the other jobs ("A gate with paths").
 - Set the ruleset once with `node scripts/workflows/ruleset-ci-ok.ts <owner/repo> --apply`. Without `--apply`, it only prints the changes. It reads the checks of the newest of the last 5 pull requests into the default branch where "CI OK" passed. It adds each check with a name `<Name> OK` that passed there and that no ruleset names. It skips a repository where "CI OK" did not pass on any of the 5. A check that starts only on a push to `main` is not added, because it does not start on a pull request.
@@ -1037,7 +1038,8 @@ Some workflow scripts import a package of the template, for example `@mark1russe
 - Thus a bump of the lockfile, for example by the release train, also moves each such install. No pin in a workflow stays behind.
 - `reusable-queue.yml` and the action `pull-of-run` install `@mark1russell7/text` in this way.
 - The job `rules` of `ci.yml` installs `@mark1russell7/text` and `@mark1russell7/service` in this way, into `scripts`. Thus `scripts/workflows` and `scripts/lib` both find them.
-- The job `compare` of `site-audit.yml` installs `@mark1russell7/text` and `yaml` in this way, into `scripts/workflows`. The site compare imports the workflow reader of conventions, and that reader imports `yaml`.
+- The job `compare` of `site-audit.yml` installs `@mark1russell7/text` and `yaml` in this way. The site compare imports the workflow reader of conventions, and that reader imports `yaml`.
+- Thus the job puts the two packages in a temporary folder, and `next/node_modules` is a link to it. The script and `packages/conventions` both find them there.
 - A test of `scripts/workflows/locked-version.test.ts` fails when a workflow or an action installs a package of the lockfile at a version in its text.
 - The script imports only Node.js modules, because it starts before the install.
 
