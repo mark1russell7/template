@@ -18,6 +18,11 @@ const ID = "security-gate";
 const CI = ".github/workflows/ci.yml";
 const COMMIT = "1111111111111111111111111111111111111111";
 
+/** The event of a run in a public repository: the rule reads the visibility there. */
+const publicEvent = join(temp, "public-event.json");
+writeFileSync(publicEvent, JSON.stringify({ repository: { private: false } }));
+const PUBLIC: Readonly<Record<string, string>> = { GITHUB_EVENT_PATH: publicEvent };
+
 /** A gate ci.yml: a pull request trigger and one job. */
 const ciGate = (trigger = "  pull_request:"): string =>
   ["name: CI", "", "on:", trigger, "  push:", "    branches: [main]", "", "permissions: {}", "", "jobs:", "  ci-ok:", "    name: CI OK", "    runs-on: ubuntu-latest", "    timeout-minutes: 10", "    steps:", "      - run: echo ok", ""].join("\n");
@@ -39,7 +44,7 @@ function repository(files: Readonly<Record<string, string>>, remote: string | nu
   return root;
 }
 
-function check(root: string, env: Readonly<Record<string, string>> = {}): RuleResult {
+function check(root: string, env: Readonly<Record<string, string>> = PUBLIC): RuleResult {
   const result = runChecks({ root, only: [ID], env }).rules[0];
   if (result === undefined) throw new Error("no result");
   return result;
@@ -73,15 +78,15 @@ describe("the rule security-gate", () => {
     expect(result.breaks).toHaveLength(1);
     expect(result.breaks[0]?.file).toBe(SECURITY_FILE);
     expect(result.breaks[0]?.edits).toEqual([{ file: SECURITY_FILE, before: "", after: securityWorkflow("o/one") }]);
-    expect(runFix({ root, only: [ID] }).changed).toEqual([SECURITY_FILE]);
+    expect(runFix({ root, only: [ID], env: PUBLIC }).changed).toEqual([SECURITY_FILE]);
     expect(readFileSync(join(root, SECURITY_FILE), "utf8")).toBe(securityWorkflow("o/one"));
     expect(check(root).breaks).toEqual([]);
-    expect(runFix({ root, only: [ID] }).changed).toEqual([]);
+    expect(runFix({ root, only: [ID], env: PUBLIC }).changed).toEqual([]);
   });
 
   it("takes the repository from GITHUB_REPOSITORY before the remote", () => {
     const root = repository({ [CI]: ciGate() });
-    expect(check(root, { GITHUB_REPOSITORY: "o/two" }).breaks[0]?.edits?.[0]?.after).toBe(securityWorkflow("o/two"));
+    expect(check(root, { ...PUBLIC, GITHUB_REPOSITORY: "o/two" }).breaks[0]?.edits?.[0]?.after).toBe(securityWorkflow("o/two"));
   });
 
   it("passes a repository with a security gate in any workflow file", () => {
@@ -110,5 +115,12 @@ describe("the rule security-gate", () => {
     expect([hidden.status, hidden.note]).toEqual(["skipped", "the repository is private"]);
     writeFileSync(event, JSON.stringify({ repository: { private: false } }));
     expect(check(root, { GITHUB_EVENT_PATH: event }).breaks).toHaveLength(1);
+  });
+
+  it("skips a repository with no event file, so a local fix writes no security.yml into a private repository", () => {
+    const root = repository({ [CI]: ciGate() });
+    const unknown = check(root, {});
+    expect([unknown.status, unknown.note]).toEqual(["skipped", "no event file of GitHub Actions gives the visibility of the repository"]);
+    expect(runFix({ root, only: [ID], env: {} }).changed).toEqual([]);
   });
 });

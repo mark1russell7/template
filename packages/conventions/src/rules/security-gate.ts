@@ -128,7 +128,11 @@ export const securityGate: Rule = {
     const candidates = onDisk && !workflows.includes(SECURITY_FILE) ? [...workflows, SECURITY_FILE] : workflows;
     if (candidates.some((file) => isSecurityGate(read(file) ?? ""))) return [];
     // A private repository has no paid Actions minutes, and CodeQL and the dependency review run only in a public repository
-    if (repositoryIsPublic(context) === false) return { skipped: "the repository is private" };
+    const visibility = repositoryIsPublic(context);
+    if (visibility === false) return { skipped: "the repository is private" };
+    // Outside a run of GitHub Actions, no event file gives the visibility. The rule writes no file for public repositories into
+    // a repository that can be private. CI and the release train give the event file
+    if (visibility === undefined) return { skipped: "no event file of GitHub Actions gives the visibility of the repository" };
     const message = "The repository has the gate ci.yml and no security gate (a job \"Security OK\" with the action security-scan).";
     if (onDisk) return [{ file: SECURITY_FILE, message, fix: `A person must change it, because ${SECURITY_FILE} is there and is not a security gate. ${securityGate.fix}` }];
     const remote = context.git(["remote", "get-url", "origin"]);
