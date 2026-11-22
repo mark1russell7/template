@@ -37,6 +37,23 @@ describe("checkReport", () => {
     assert.doesNotMatch(text, /--apply/);
   });
 
+  it("lists the repositories with no CI on one line, out of the table, and exits 0", () => {
+    const { code, text } = checkReport([
+      { repo: "o/a", state: "have", checks: ["CI OK"] },
+      { repo: "o/fork", state: "no CI" },
+      { repo: "o/o", state: "no CI" },
+    ]);
+    assert.equal(code, 0);
+    assert.match(text, /0 miss a check or a setting, 0 no read, 1 have each check\. 2 have no CI\./);
+    assert.match(text, /^No CI \(no active workflow ci\.yml, so no check to require\): o\/fork, o\/o\.$/m);
+    assert.doesNotMatch(text, /\| o\/fork \|/);
+  });
+
+  it("keeps a repository with no CI out of the count line when there is none", () => {
+    const { text } = checkReport([{ repo: "o/a", state: "have", checks: ["CI OK"] }]);
+    assert.doesNotMatch(text, /no CI/);
+  });
+
   it("exits 1 when a repository misses a check, lists it first, and gives the command that adds the ruleset", () => {
     const { code, text } = checkReport([
       { repo: "o/a", state: "have", checks: ["CI OK"] },

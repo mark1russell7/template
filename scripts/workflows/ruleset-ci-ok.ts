@@ -30,6 +30,10 @@
 // runs the check each day, so each new repository gets its ruleset after its first merged pull request. --check does
 // not read the checks that --only-summary removes. With GITHUB_STEP_SUMMARY, it also writes a table there.
 //
+// A repository with no active workflow ci.yml and no "CI OK" that passed has no gate, so it has no check to require: a fork
+// (GitHub turns off the workflows of a fork), the profile repository, or a repository whose workflow ci.yml GitHub turned
+// off. --check lists it on one line as "no CI", out of the table. It is not a no read: the check reads it, and it has no gate.
+//
 // --check also reads the settings of each repository that is not a fork, as anyone can read them (settingsFaults):
 // a ruleset when the repository has the workflow ci.yml, the dependency graph (the SBOM request gives 404 when it is
 // off), and a Pages source when the repository has the workflow pages.yml. A fault of a setting fails the check also
@@ -91,7 +95,7 @@ export interface SettingsRead {
   readonly fork: boolean;
   /** The required checks of the default branch, from each ruleset of any name. */
   readonly required: readonly string[];
-  /** The paths of the workflows. The check reads them only with no required check or no Pages source. */
+  /** The paths of the active workflows. */
   readonly workflows: readonly string[];
   readonly hasPages: boolean;
   /** The HTTP status of the request for the SBOM of the dependency graph. */
@@ -225,29 +229,33 @@ export function missingChecks(passed: ReadonlySet<string>, required: readonly st
 export type CheckState =
   | { readonly repo: string; readonly state: "have"; readonly checks: readonly string[] }
   | { readonly repo: string; readonly state: "missing"; readonly missing: readonly string[]; readonly faults?: readonly string[] }
-  | { readonly repo: string; readonly state: "no read"; readonly reason: string };
+  | { readonly repo: string; readonly state: "no read"; readonly reason: string }
+  | { readonly repo: string; readonly state: "no CI" };
 
 /** The text of the column Checks for a state. */
 function detailOf(s: CheckState): string {
   if (s.state === "have") return s.checks.join(", ");
   if (s.state === "no read") return s.reason;
+  if (s.state === "no CI") return "no active workflow ci.yml";
   return [...(s.missing.length > 0 ? [`no ruleset names ${s.missing.join(", ")}`] : []), ...(s.faults ?? [])].join("; ");
 }
 
 /** The report of --check: a Markdown table, and the exit code (1 when a repository misses a check). */
 export function checkReport(states: readonly CheckState[]): { text: string; code: number } {
-  const order = { missing: 0, "no read": 1, have: 2 } as const;
+  const order = { missing: 0, "no read": 1, have: 2, "no CI": 3 } as const;
   const sorted = [...states].sort((a, b) => order[a.state] - order[b.state] || a.repo.localeCompare(b.repo));
   const count = (state: CheckState["state"]): number => states.filter((s) => s.state === state).length;
   const lines = [
     "## The ruleset and the settings of each public repository",
     "",
-    `${count("missing")} miss a check or a setting, ${count("no read")} no read, ${count("have")} have each check.`,
+    `${count("missing")} miss a check or a setting, ${count("no read")} no read, ${count("have")} have each check.${count("no CI") > 0 ? ` ${count("no CI")} have no CI.` : ""}`,
     "",
     "| Repository | State | Checks |",
     "| --- | --- | --- |",
   ];
-  for (const s of sorted) lines.push(`| ${s.repo} | ${s.state} | ${detailOf(s)} |`);
+  for (const s of sorted) if (s.state !== "no CI") lines.push(`| ${s.repo} | ${s.state} | ${detailOf(s)} |`);
+  const noCi = sorted.filter((s) => s.state === "no CI").map((s) => s.repo);
+  if (noCi.length > 0) lines.push("", `No CI (no active workflow ci.yml, so no check to require): ${noCi.join(", ")}.`);
   const missing = sorted.filter((s) => s.state === "missing");
   const checks = missing.filter((s) => s.missing.length > 0);
   const settings = missing.filter((s) => (s.faults ?? []).length > 0);
@@ -268,14 +276,16 @@ function check(repos: readonly string[]): number {
       const branch = info.default_branch;
       const rules = json<BranchRule[]>(["api", `repos/${repo}/rules/branches/${encodeURIComponent(branch)}`]);
       const required = rules.filter((r) => r.type === "required_status_checks").flatMap((r) => r.parameters?.required_status_checks ?? []).map((c) => c.context);
-      // A fork reads no setting. The workflows are a read only for a repository with no required check or no Pages source.
-      const needsWorkflows = !info.fork && (required.length === 0 || !info.has_pages);
-      const workflows = needsWorkflows ? json<{ workflows: { path: string }[] }>(["api", `repos/${repo}/actions/workflows?per_page=100`]).workflows.map((w) => w.path) : [];
+      // The active workflows: a repository with no active ci.yml has no gate. A fork reads no setting.
+      const workflows = json<{ workflows: { path: string; state: string }[] }>(["api", `repos/${repo}/actions/workflows?per_page=100`])
+        .workflows.filter((w) => w.state === "active")
+        .map((w) => w.path);
       const sbom = info.fork ? 200 : statusOf(["api", `repos/${repo}/dependency-graph/sbom`]);
       const { faults, unread } = settingsFaults({ fork: info.fork, required, workflows, hasPages: info.has_pages, sbom });
       const { passed } = passedSummaries(repo, branch);
       if (!passed.has(CHECK)) {
         if (faults.length > 0) states.push({ repo, state: "missing", missing: [], faults });
+        else if (!workflows.includes(CI_WORKFLOW) && unread.length === 0) states.push({ repo, state: "no CI" });
         else states.push({ repo, state: "no read", reason: [`no "${CHECK}" that passed on the last 5 pull requests into ${branch}`, ...unread].join("; ") });
         continue;
       }
