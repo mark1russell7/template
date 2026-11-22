@@ -296,6 +296,33 @@ siteShell: build/vite.d.ts#siteShell
 siteStamps: build/vite.d.ts#siteStamps
 themeScript: build/vite.d.ts#themeScript
 
+## ./offline (build/offline/index.d.ts): names
+
+FALLBACK_HEADER: build/offline/index.d.ts#FALLBACK_HEADER
+MANIFEST_FILE: build/offline/index.d.ts#MANIFEST_FILE
+MAX_FILE_BYTES: build/offline/index.d.ts#MAX_FILE_BYTES
+type OfflineFile: build/offline/index.d.ts#OfflineFile
+type OfflineIcon: build/offline/index.d.ts#OfflineIcon
+type PrecacheList: build/offline/index.d.ts#PrecacheList
+type PrecacheOptions: build/offline/index.d.ts#PrecacheOptions
+SERVICE_WORKER_FILE: build/offline/index.d.ts#SERVICE_WORKER_FILE
+type ServiceWorkerInput: build/offline/index.d.ts#ServiceWorkerInput
+type SiteOfflineConfig: build/offline/index.d.ts#SiteOfflineConfig
+type SiteOfflineOptions: build/offline/index.d.ts#SiteOfflineOptions
+type SiteOfflinePlugin: build/offline/index.d.ts#SiteOfflinePlugin
+type SiteOfflineTag: build/offline/index.d.ts#SiteOfflineTag
+type SkippedFile: build/offline/index.d.ts#SkippedFile
+type WebManifest: build/offline/index.d.ts#WebManifest
+type WebManifestOptions: build/offline/index.d.ts#WebManifestOptions
+cachePrefix: build/offline/index.d.ts#cachePrefix
+offlineBase: build/offline/index.d.ts#offlineBase
+offlineCacheName: build/offline/index.d.ts#offlineCacheName
+precacheList: build/offline/index.d.ts#precacheList
+registerScript: build/offline/index.d.ts#registerScript
+serviceWorkerSource: build/offline/index.d.ts#serviceWorkerSource
+siteOffline: build/offline/index.d.ts#siteOffline
+webManifest: build/offline/index.d.ts#webManifest
+
 ## ./scroll-cue.css: no declaration file for ./styles/scroll-cue.css
 
 file ./scroll-cue.css: styles/scroll-cue.css
@@ -1618,6 +1645,158 @@ export declare function versionCommitTime(repoDir: string, file: string): string
 
 ### build/index.d.ts#versionOfTag
 export declare function versionOfTag(tag: string): TagVersion | null;
+
+### build/offline/index.d.ts#FALLBACK_HEADER
+export declare const FALLBACK_HEADER = "x-site-offline";
+
+### build/offline/index.d.ts#MANIFEST_FILE
+export declare const MANIFEST_FILE = "manifest.webmanifest";
+
+### build/offline/index.d.ts#MAX_FILE_BYTES
+export declare const MAX_FILE_BYTES: number;
+
+### build/offline/index.d.ts#OfflineFile
+interface OfflineFile {
+  readonly path: string;
+  readonly bytes: number;
+}
+
+### build/offline/index.d.ts#OfflineIcon
+interface OfflineIcon {
+  readonly src: string;
+  readonly sizes: string;
+  readonly type: string;
+  readonly purpose?: "any" | "maskable" | "monochrome" | undefined;
+}
+
+### build/offline/index.d.ts#PrecacheList
+interface PrecacheList {
+  readonly urls: readonly string[];
+  readonly skipped: readonly SkippedFile[];
+}
+
+### build/offline/index.d.ts#PrecacheOptions
+interface PrecacheOptions {
+  readonly base: string;
+  readonly maxFileBytes?: number | undefined;
+  readonly exclude?: readonly RegExp[] | undefined;
+}
+
+### build/offline/index.d.ts#SERVICE_WORKER_FILE
+export declare const SERVICE_WORKER_FILE = "service-worker.js";
+
+### build/offline/index.d.ts#ServiceWorkerInput
+interface ServiceWorkerInput {
+  readonly base: string;
+  readonly cache: string;
+  readonly urls: readonly string[];
+}
+
+### build/offline/index.d.ts#SiteOfflineConfig
+interface SiteOfflineConfig {
+  readonly root: string;
+  readonly base: string;
+  readonly build: {
+    readonly outDir: string;
+    readonly write?: boolean | undefined;
+  };
+  readonly logger?: {
+    info(message: string): void;
+  } | undefined;
+}
+
+### build/offline/index.d.ts#SiteOfflineOptions
+interface SiteOfflineOptions {
+  readonly manifest: WebManifestOptions | false;
+  readonly maxFileBytes?: number | undefined;
+  readonly exclude?: readonly RegExp[] | undefined;
+  readonly onList?: ((list: PrecacheList & {
+    readonly cache: string;
+  }) => void) | undefined;
+}
+
+### build/offline/index.d.ts#SiteOfflinePlugin
+interface SiteOfflinePlugin {
+  readonly name: string;
+  readonly apply: "build";
+  readonly enforce: "post";
+  configResolved(config: SiteOfflineConfig): void;
+  transformIndexHtml(): SiteOfflineTag[];
+  closeBundle(): void;
+}
+
+### build/offline/index.d.ts#SiteOfflineTag
+type SiteOfflineTag = {
+  readonly tag: "link";
+  readonly attrs: {
+    readonly rel: "manifest";
+    readonly href: string;
+  };
+  readonly injectTo: "head";
+} | {
+  readonly tag: "script";
+  readonly attrs: {
+    readonly type: "module";
+  };
+  readonly children: string;
+  readonly injectTo: "body";
+};
+
+### build/offline/index.d.ts#SkippedFile
+interface SkippedFile {
+  readonly path: string;
+  readonly reason: string;
+}
+
+### build/offline/index.d.ts#WebManifest
+interface WebManifest {
+  readonly name: string;
+  readonly short_name: string;
+  readonly description?: string;
+  readonly start_url: string;
+  readonly scope: string;
+  readonly display: "standalone";
+  readonly theme_color?: string;
+  readonly background_color?: string;
+  readonly icons: readonly OfflineIcon[];
+}
+
+### build/offline/index.d.ts#WebManifestOptions
+interface WebManifestOptions {
+  readonly name: string;
+  readonly shortName?: string | undefined;
+  readonly description?: string | undefined;
+  readonly themeColor?: string | undefined;
+  readonly backgroundColor?: string | undefined;
+  readonly icons?: readonly OfflineIcon[] | undefined;
+}
+
+### build/offline/index.d.ts#cachePrefix
+export declare function cachePrefix(base: string): string;
+
+### build/offline/index.d.ts#offlineBase
+export declare function offlineBase(base: string): string;
+
+### build/offline/index.d.ts#offlineCacheName
+export declare function offlineCacheName(base: string, files: readonly {
+  readonly url: string;
+  readonly content: Uint8Array | string;
+}[]): string;
+
+### build/offline/index.d.ts#precacheList
+export declare function precacheList(files: readonly OfflineFile[], options: PrecacheOptions): PrecacheList;
+
+### build/offline/index.d.ts#registerScript
+export declare function registerScript(base: string): string;
+
+### build/offline/index.d.ts#serviceWorkerSource
+export declare function serviceWorkerSource(input: ServiceWorkerInput): string;
+
+### build/offline/index.d.ts#siteOffline
+export declare function siteOffline(options: SiteOfflineOptions): SiteOfflinePlugin;
+
+### build/offline/index.d.ts#webManifest
+export declare function webManifest(options: WebManifestOptions, base: string): WebManifest;
 
 ### build/vite.d.ts#RehypeNode
 export interface RehypeNode {

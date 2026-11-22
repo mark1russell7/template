@@ -479,11 +479,11 @@ export const HOMES: readonly Home[] = [
   {
     area: "repo-structure",
     title: "Repository structure, CI and conventions",
-    covers: "new repositories and packages, the CUE presets, shared CI workflows, the API report, import boundaries, the conventions check, the release and status pages, the browser check of a built site (site-pages check)",
+    covers: "new repositories and packages, the CUE presets, shared CI workflows, the API report, import boundaries, the conventions check, the release and status pages, the browser check of a built site (site-pages check), the offline shell of a built site (entry /offline of site-pages: manifest, service worker, the offline check)",
     packages: ["@mark1russell7/conventions", "@mark1russell7/template-cli", "@mark1russell7/cue", "@mark1russell7/api-report", "@mark1russell7/boundaries", "@mark1russell7/site-pages"],
     repo: "mark1russell7/template",
     state: "published",
-    words: ["template", "ci", "workflow", "tsconfig", "package.json", "lint", "site", "pages", "render", "screenshot", "built"],
+    words: ["template", "ci", "workflow", "tsconfig", "package.json", "lint", "site", "pages", "render", "screenshot", "built", "offline", "manifest", "pwa", "service worker"],
   },
   {
     area: "prose",
