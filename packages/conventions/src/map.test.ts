@@ -43,6 +43,8 @@ describe("the search", () => {
     expect(findHomes("quantile")[0]?.area).toBe("statistics");
     expect(findHomes("seeded random")[0]?.area).toBe("random");
     expect(findHomes("math")[0]?.area).toBe("exact-math");
+    expect(findHomes("simplex")[0]?.area).toBe("exact-math");
+    expect(findHomes("linear program")[0]?.area).toBe("exact-math");
     expect(findHomes("line break")[0]?.area).toBe("text");
     expect(findHomes("atomic write")[0]?.area).toBe("system-io");
     expect(findHomes("expand home")[0]?.area).toBe("files");
@@ -115,7 +117,7 @@ describe("the command map", () => {
     expect(stdout).toMatch(/^Before you write a helper, find its home in this map\./);
     expect(stdout).toContain("| Statistics | `@mark1russell7/rigor-statistics` |");
     expect(stdout).toContain("| Benchmarks and speed gates | `@mark1russell7/rigor-bench` |");
-    expect(stdout).toContain("`@mark1russell7/rational`, `@mark1russell7/expression` (not on npm) |");
+    expect(stdout).toContain("`@mark1russell7/rational`, `@mark1russell7/expression` (not on npm), `@mark1russell7/linear` (not on npm) |");
   });
 
   it("finds the areas of words, and reads an overlay", () => {
