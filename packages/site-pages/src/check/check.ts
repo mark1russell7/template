@@ -15,7 +15,7 @@ import { parseArgs } from "node:util";
 import { findBrowser, launch, NoReplyError, type Browser, type Page } from "./browser.ts";
 import { MEASURE, probeExpression, type Cut, type Measure, type ProbeCheck } from "./measure.ts";
 import { probeScript, TYPESCRIPT_PROBE } from "./probe.ts";
-import { FALLBACK_HEADER } from "../offline/shell.ts";
+import { FALLBACK_HEADER } from "./offline-header.ts";
 import { serve } from "./serve.ts";
 
 /** A view narrower than this width in CSS pixels is a phone. */

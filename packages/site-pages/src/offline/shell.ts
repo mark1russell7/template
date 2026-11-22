@@ -6,18 +6,15 @@
  */
 
 import { createHash } from "node:crypto";
+import { FALLBACK_HEADER } from "../check/offline-header.ts";
+
+export { FALLBACK_HEADER };
 
 /** The file of the service worker, in the root of the built site. */
 export const SERVICE_WORKER_FILE = "service-worker.js";
 
 /** The file of the web manifest, in the root of the built site. */
 export const MANIFEST_FILE = "manifest.webmanifest";
-
-/**
- * The header of the home page that the worker gives in place of a page that it does not keep. The gate
- * `site-pages check --offline` reads it. Thus a page of the check that the worker does not keep fails.
- */
-export const FALLBACK_HEADER = "x-site-offline";
 
 /** The default limit of the size of one kept file: 10 MiB. A larger file stays out of the cache. */
 export const MAX_FILE_BYTES: number = 10 * 1024 * 1024;
