@@ -89,7 +89,9 @@ SHARED_CI: build/index.d.ts#SHARED_CI
 SHARED_WORKFLOWS: build/index.d.ts#SHARED_WORKFLOWS
 SHIPPED_FIELDS: build/index.d.ts#SHIPPED_FIELDS
 STRICT_OPTIONS: build/index.d.ts#STRICT_OPTIONS
+SUMMARY_GATES: build/index.d.ts#SUMMARY_GATES
 type SecurityCaller: build/index.d.ts#SecurityCaller
+type SummaryJob: build/index.d.ts#SummaryJob
 TRAIN_SCOPES: build/index.d.ts#TRAIN_SCOPES
 type TextBreakOptions: build/index.d.ts#TextBreakOptions
 UNSHIPPED_FILES: build/index.d.ts#UNSHIPPED_FILES
@@ -100,6 +102,7 @@ type WorkflowJob: build/index.d.ts#WorkflowJob
 type WorkflowPermissions: build/index.d.ts#WorkflowPermissions
 type WorkflowStep: build/index.d.ts#WorkflowStep
 type YamlFault: build/index.d.ts#YamlFault
+addSummaryJob: build/index.d.ts#addSummaryJob
 annotations: build/index.d.ts#annotations
 apiReportScript: build/index.d.ts#apiReportScript
 authorOf: build/index.d.ts#authorOf
@@ -126,6 +129,7 @@ globFolders: build/workspace.chunk.d.ts#globFolders
 globToRegExp: build/workspace.chunk.d.ts#globToRegExp
 hasFile: build/index.d.ts#hasFile
 hasImportMetaMain: build/index.d.ts#hasImportMetaMain
+hasSummaryJob: build/index.d.ts#hasSummaryJob
 hasTests: build/index.d.ts#hasTests
 hiddenFailures: build/index.d.ts#hiddenFailures
 homeModule: build/index.d.ts#homeModule
@@ -236,9 +240,13 @@ sharedNames: build/owners.d.ts#sharedNames
 showFiles: build/index.d.ts#showFiles
 signaturesOf: build/index.d.ts#signaturesOf
 siteCheckInCi: build/index.d.ts#siteCheckInCi
+skippableJobs: build/index.d.ts#skippableJobs
 sourceMain: build/index.d.ts#sourceMain
 specifiersOf: build/index.d.ts#specifiersOf
+startsOnPullRequest: build/index.d.ts#startsOnPullRequest
 startsTests: build/index.d.ts#startsTests
+summaryJob: build/index.d.ts#summaryJob
+summaryJobRule: build/index.d.ts#summaryJobRule
 summaryMarkdown: build/index.d.ts#summaryMarkdown
 summaryName: build/index.d.ts#summaryName
 swallowsTests: build/index.d.ts#swallowsTests
@@ -739,10 +747,25 @@ export declare const SHIPPED_FIELDS: readonly string[];
 ### build/index.d.ts#STRICT_OPTIONS
 export declare const STRICT_OPTIONS: readonly ["strict", "noImplicitAny", "strictNullChecks", "strictFunctionTypes", "strictBindCallApply", "strictPropertyInitialization", "strictBuiltinIteratorReturn", "noImplicitThis", "useUnknownInCatchVariables", "alwaysStrict", "noUncheckedIndexedAccess", "exactOptionalPropertyTypes", "noImplicitOverride", "noImplicitReturns", "noFallthroughCasesInSwitch", "noPropertyAccessFromIndexSignature", "erasableSyntaxOnly"];
 
+### build/index.d.ts#SUMMARY_GATES
+export declare const SUMMARY_GATES: readonly string[];
+
 ### build/index.d.ts#SecurityCaller
 interface SecurityCaller {
   readonly line: number;
   readonly id: string;
+}
+
+### build/index.d.ts#SummaryJob
+interface SummaryJob {
+  readonly jobIndent: string;
+  readonly unit: string;
+  readonly id: string;
+  readonly name: string;
+  readonly needs: readonly string[];
+  readonly allow: readonly string[];
+  readonly grouped: boolean;
+  readonly commit: string;
 }
 
 ### build/index.d.ts#TRAIN_SCOPES
@@ -809,6 +832,13 @@ interface YamlFault {
   readonly column: number;
   readonly message: string;
 }
+
+### build/index.d.ts#addSummaryJob
+export declare function addSummaryJob(text: string, file: string, commit?: string): {
+  text: string;
+} | {
+  reason: string;
+};
 
 ### build/index.d.ts#annotations
 export declare function annotations(result: CheckResult): string;
@@ -885,6 +915,9 @@ export declare const hasFile: (dir: string, file: string) => boolean;
 
 ### build/index.d.ts#hasImportMetaMain
 export declare function hasImportMetaMain(range: unknown): boolean;
+
+### build/index.d.ts#hasSummaryJob
+export declare function hasSummaryJob(text: string): boolean;
 
 ### build/index.d.ts#hasTests
 export declare function hasTests(files: readonly string[], folder: string): boolean;
@@ -1198,14 +1231,26 @@ export declare function signaturesOf(homes: readonly Home[]): Signature[];
 ### build/index.d.ts#siteCheckInCi
 export declare const siteCheckInCi: Rule;
 
+### build/index.d.ts#skippableJobs
+export declare function skippableJobs(needsOf: ReadonlyMap<string, readonly string[]>, own: ReadonlySet<string>): Set<string>;
+
 ### build/index.d.ts#sourceMain
 export declare const sourceMain: Rule;
 
 ### build/index.d.ts#specifiersOf
 export declare function specifiersOf(manifest: Manifest, field: string): [string, string][];
 
+### build/index.d.ts#startsOnPullRequest
+export declare function startsOnPullRequest(text: string): boolean;
+
 ### build/index.d.ts#startsTests
 export declare function startsTests(line: string): boolean;
+
+### build/index.d.ts#summaryJob
+export declare function summaryJob(s: SummaryJob): string[];
+
+### build/index.d.ts#summaryJobRule
+export declare const summaryJobRule: Rule;
 
 ### build/index.d.ts#summaryMarkdown
 export declare function summaryMarkdown(result: CheckResult): string;

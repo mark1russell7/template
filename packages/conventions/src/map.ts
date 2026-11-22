@@ -171,7 +171,7 @@ export const HOMES: readonly Home[] = [
   {
     area: "system-io",
     title: "Files, commands, git, GitHub and npm",
-    covers: "atomic file and JSON writes, globs, safe commands with argv and no shell, git, the GitHub CLI and API, npm registry lookups and the use measures of a package (weekly downloads, dependents from deps.dev, jsDelivr hits, each a pure request builder and extractor with the fetch as a parameter), HTTP requests, JSON, YAML and CSV, environment variables",
+    covers: "atomic file and JSON writes, globs, safe commands with argv and no shell, git, the GitHub CLI and API, npm registry lookups and the use measures of a package (weekly downloads, dependents from deps.dev, jsDelivr hits, each a pure request builder and extractor with the fetch as a parameter), HTTP requests, the frame and CSP rules of a response, JSON, YAML and CSV, environment variables",
     packages: ["@procedures/fs", "@procedures/shell", "@procedures/git", "@procedures/gh", "@procedures/npm", "@procedures/http", "@procedures/json", "@procedures/env"],
     repo: "mark1russell7/client",
     state: "published",
