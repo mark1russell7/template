@@ -294,7 +294,7 @@ The repositories have more than one owner: the personal account and an organizat
 import { OWNERS, ownersOf, repoKeyer, sharedNames } from "@mark1russell7/conventions/owners";
 ```
 
-The subpath `@mark1russell7/conventions/owners` has no import, so a workflow with a sparse checkout and no install can import its source. `ownersOf(value)` reads a list of logins with commas, and gives each owner for an empty list. `sharedNames(repos)` gives each repository name that two owners have. `repoKeyer(repos)` gives the record key of each repository: the name when one owner has the name, and `owner/name` when two owners have it. Thus a reader that keys its records by the name keeps its old keys, and two repositories with one name become two records.
+The subpath `@mark1russell7/conventions/owners` has no import, so a workflow with a sparse checkout and no install can import its source. `ownersOf(value)` reads a list of logins with commas, and gives each owner for an empty list. `sharedNames(repos)` gives each repository name that two owners have. `repoKeyer(repos)` gives the record key of each repository: the name when one owner has the name, and `owner/name` when two owners have it. Thus a reader that keys its records by the name keeps its old keys, and two repositories with one name become two records. A second argument sets the separator: `repoKeyer(repos, "~")` gives `owner~name`, for a key in a file name or a database id.
 
 ## Add a rule
 
@@ -312,7 +312,7 @@ The package also exports the functions of the tool:
 - `replaceLine(text, line, lines)` gives the text with one line replaced, for the edits of a rule.
 - `formatResult(result)`, `summaryMarkdown(result)`, `annotations(result)` and `listRules(config)` give the output.
 - `parseConfig(value, rules)` and `readConfig(root)` read the field `conventions`. `parseRuleConfig(value, rule)` reads the entry of one rule, and not the other entries.
-- `OWNERS` is the list of the owners, with `ownerOf(login)`, `ownersOf(value)`, `sharedNames(repos)` and `repoKeyer(repos)`. The subpath `@mark1russell7/conventions/owners` gives them and no other code.
+- `OWNERS` is the list of the owners, with `ownerOf(login)`, `ownersOf(value)`, `sharedNames(repos)` and `repoKeyer(repos, separator)`. The subpath `@mark1russell7/conventions/owners` gives them and no other code.
 - `HOMES` is the map of homes. `findHomes(query)` finds the homes of words, and `mapMarkdown(homes)` and `mapText(homes)` write them. `readOverlay(file)` and `mergeHomes(base, extra)` add more homes.
 - `tagName(name, version, packageCount)` gives the git tag of a version. `releaseNotes(name, version, changelog)` gives the text of its GitHub release, with `changelogSection`, `npmUrl` and `MAX_NOTES`. The script `scripts/release/tags.ts` keeps the same rule, and a test compares the two.
 - `RULES` and each rule, with the helpers `isGitSpecifier`, `isPinned`, `isSourcePath` and `parseJsonc`.

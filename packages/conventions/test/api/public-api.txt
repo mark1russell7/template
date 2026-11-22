@@ -1333,7 +1333,7 @@ export declare function ownerOf(login: string): Owner | undefined;
 export declare function ownersOf(value: string | undefined): string[];
 
 ### build/owners.d.ts#repoKeyer
-export declare function repoKeyer(repos: readonly RepoRef[]): (repo: RepoRef) => string;
+export declare function repoKeyer(repos: readonly RepoRef[], separator?: string): (repo: RepoRef) => string;
 
 ### build/owners.d.ts#sharedNames
 export declare function sharedNames(repos: readonly RepoRef[]): string[];

@@ -41,4 +41,15 @@ describe("the owners", () => {
     expect(keyOf({ owner: "someone-else", name: "RUNNER-GATE-TEST" })).toBe("someone-else/RUNNER-GATE-TEST");
     expect(repoKeyer([])({ owner: "mark1russell7", name: "vex" })).toBe("vex");
   });
+
+  it("takes a separator for a key in a file name or a database id, and refuses a separator that a login or a name can have", () => {
+    const repos = [
+      { owner: "mark1russell7", name: "runner-gate-test" },
+      { owner: "metrograph-labs", name: "runner-gate-test" },
+      { owner: "mark1russell7", name: "vex" },
+    ];
+    expect(repos.map(repoKeyer(repos, "~"))).toEqual(["mark1russell7~runner-gate-test", "metrograph-labs~runner-gate-test", "vex"]);
+    expect(repos.map(repoKeyer(repos))).toEqual(repos.map(repoKeyer(repos, "/")));
+    for (const bad of ["", "-", ".", "_", "a", "Z", "7", "x~", "~-"]) expect(() => repoKeyer(repos, bad), bad).toThrow(/separator/u);
+  });
 });
