@@ -43,6 +43,8 @@ describe("the search", () => {
     expect(findHomes("quantile")[0]?.area).toBe("statistics");
     expect(findHomes("seeded random")[0]?.area).toBe("random");
     expect(findHomes("math")[0]?.area).toBe("exact-math");
+    expect(findHomes("simplex")[0]?.area).toBe("exact-math");
+    expect(findHomes("linear program")[0]?.area).toBe("exact-math");
     expect(findHomes("line break")[0]?.area).toBe("text");
     expect(findHomes("atomic write")[0]?.area).toBe("system-io");
     expect(findHomes("expand home")[0]?.area).toBe("files");
