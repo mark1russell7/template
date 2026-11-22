@@ -1038,6 +1038,8 @@ Some workflow scripts import a package of the template, for example `@mark1russe
 - Thus a bump of the lockfile, for example by the release train, also moves each such install. No pin in a workflow stays behind.
 - `reusable-queue.yml` and the action `pull-of-run` install `@mark1russell7/text` in this way.
 - The job `rules` of `ci.yml` installs `@mark1russell7/text` and `@mark1russell7/service` in this way, into `scripts`. Thus `scripts/workflows` and `scripts/lib` both find them.
+- The job `compare` of `site-audit.yml` installs `@mark1russell7/text` and `yaml` in this way. The site compare imports the workflow reader of conventions, and that reader imports `yaml`.
+- Thus the job puts the two packages in a temporary folder, and `next/node_modules` is a link to it. The script and `packages/conventions` both find them there.
 - A test of `scripts/workflows/locked-version.test.ts` fails when a workflow or an action installs a package of the lockfile at a version in its text.
 - The script imports only Node.js modules, because it starts before the install.
 

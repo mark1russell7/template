@@ -15,6 +15,7 @@ import { parseArgs } from "node:util";
 import { findBrowser, launch, NoReplyError, type Browser, type Page } from "./browser.ts";
 import { MEASURE, probeExpression, type Cut, type Measure, type ProbeCheck } from "./measure.ts";
 import { probeScript, TYPESCRIPT_PROBE } from "./probe.ts";
+import { FALLBACK_HEADER } from "./offline-header.ts";
 import { serve } from "./serve.ts";
 
 /** A view narrower than this width in CSS pixels is a phone. */
@@ -56,6 +57,12 @@ export interface CheckOptions {
   callMs?: number | undefined;
   /** The time limit of the scroll and of the islands of a view, for `revealExpression`. The default is `ISLAND_LIMIT_MS`. */
   islandMs?: number | undefined;
+  /**
+   * When true, the check also opens each page with the network off, at the first width and in the first scheme. It needs `out`.
+   * A new browser opens the home page, and waits until a service worker of the site controls the page. Then the check stops the
+   * server and cuts the network of the page. A view fails when the worker does not answer the page, or gives the home page in its place.
+   */
+  offline?: boolean | undefined;
   log?: ((line: string) => void) | undefined;
 }
 
@@ -115,6 +122,8 @@ export interface ViewResult {
   shot?: string | undefined;
   /** The problems of the first try, when the browser did not answer and the check tried the view again in a new browser. */
   retried?: string[] | undefined;
+  /** True for a view with the network off (the option `offline`). */
+  offline?: boolean | undefined;
 }
 
 /** The result of `checkSite`. */
@@ -207,6 +216,7 @@ export async function checkSite(options: CheckOptions): Promise<CheckResult> {
   if (options.pages.length === 0) throw new Error("no page to check");
   const probes = pageProbes(options);
   if (options.out === undefined && options.url === undefined) throw new Error("give out or url");
+  if (options.offline === true && options.out === undefined) throw new Error("the offline check needs out: it stops the server of the folder to cut the network");
   const server = options.out !== undefined ? await serve(options.out, options.base ?? "/") : undefined;
   const views: ViewResult[] = [];
   let homeUrl: URL;
@@ -253,8 +263,26 @@ export async function checkSite(options: CheckOptions): Promise<CheckResult> {
             }
           }
           views.push(view);
-          log(`${view.ok ? "PASS" : "FAIL"}${view.retried ? " (retried)" : ""} ${path} ${width} ${scheme}${view.measure ? ` scrollWidth=${view.measure.scrollWidth} innerWidth=${view.measure.innerWidth}` : ""}${view.probe ? ` probe ${view.probe.filter((c) => c.ok).length}/${view.probe.length}` : ""}${view.problems.length > 0 ? `\n  - ${view.problems.join("\n  - ")}` : ""}`);
+          log(viewLine(view));
         }
+      }
+    }
+    if (options.offline === true && server !== undefined) {
+      // A new browser has a new profile, so no worker of an earlier view helps the offline views.
+      ({ page, events } = await restart());
+      const notReady = await offlineReady(page, homeUrl.href, options.timeoutMs);
+      await server.close();
+      await page.send("Network.emulateNetworkConditions", { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+      const width = options.widths[0] ?? 1280;
+      const scheme = options.schemes[0] ?? "light";
+      for (const path of options.pages) {
+        const target = new URL(path.replace(/^\/+/, ""), homeUrl).href;
+        const view: ViewResult =
+          notReady === undefined
+            ? (await checkView(page, events, { target, path, width, scheme, probe: undefined, options, offline: true })).view
+            : { page: path, width, scheme, ok: false, problems: [notReady], offline: true };
+        views.push(view);
+        log(viewLine(view));
       }
     }
   } finally {
@@ -267,6 +295,47 @@ export async function checkSite(options: CheckOptions): Promise<CheckResult> {
     writeFileSync(join(options.shots, "summary.md"), summary(result));
   }
   return result;
+}
+
+/** This function gives the log line of a view. */
+function viewLine(view: ViewResult): string {
+  const measure = view.measure ? ` scrollWidth=${view.measure.scrollWidth} innerWidth=${view.measure.innerWidth}` : "";
+  const probe = view.probe ? ` probe ${view.probe.filter((c) => c.ok).length}/${view.probe.length}` : "";
+  const problems = view.problems.length > 0 ? `\n  - ${view.problems.join("\n  - ")}` : "";
+  return `${view.ok ? "PASS" : "FAIL"}${view.retried ? " (retried)" : ""} ${view.page} ${view.width} ${view.scheme}${view.offline ? " offline" : ""}${measure}${probe}${problems}`;
+}
+
+/**
+ * This function gives a page expression that waits until a service worker of the site controls the page. The expression gives an
+ * empty text when a worker controls the page, else the problem.
+ */
+export function offlineReadyExpression(limitMs: number): string {
+  return `(async () => {
+  if (!("serviceWorker" in navigator)) return "the browser has no service worker API";
+  const end = performance.now() + ${String(limitMs)};
+  const later = new Promise((done) => setTimeout(() => done(false), ${String(limitMs)}));
+  const ready = await Promise.race([navigator.serviceWorker.ready.then(() => true), later]);
+  if (!ready) return "no service worker of the site became active in ${String(limitMs)} ms: the site has no offline copy";
+  while (!navigator.serviceWorker.controller && performance.now() < end) await new Promise((done) => setTimeout(done, 50));
+  return navigator.serviceWorker.controller ? "" : "the service worker of the site did not take control of the page in ${String(limitMs)} ms";
+})()`;
+}
+
+/** This function opens the home page with the network on, and waits for its service worker. It gives the problem, or undefined. */
+async function offlineReady(page: Page, home: string, timeoutMs: number): Promise<string | undefined> {
+  try {
+    const loaded = page.once("Page.loadEventFired", timeoutMs);
+    const navigation = (await page.send("Page.navigate", { url: home })) as { errorText?: string };
+    if (navigation.errorText) {
+      loaded.catch(() => {});
+      return `the home page did not open before the network went off: ${navigation.errorText}`;
+    }
+    await loaded;
+    const problem = await page.evaluate<string>(offlineReadyExpression(timeoutMs));
+    return problem === "" ? undefined : problem;
+  } catch (error) {
+    return `the check did not see the service worker of the site: ${error instanceof Error ? error.message : String(error)}`;
+  }
 }
 
 /**
@@ -288,11 +357,20 @@ interface Events {
   reset(): void;
   /** This function gives the problems. A refused request to a path that `other` matches is not a problem. */
   problems(other?: RegExp): string[];
+  /** This function gives the last answer of a document with the given request URL, since the last `reset`. */
+  document(url: string): DocumentAnswer | undefined;
+}
+
+/** The answer of a document. `fromServiceWorker` tells if the worker gave it. `fallback` tells if it is the home page in place of another page. */
+interface DocumentAnswer {
+  fromServiceWorker: boolean;
+  fallback: boolean;
 }
 
 function watch(page: Page, origin: string): Events {
   let problems: string[] = [];
   let refused: { url: string; status: number }[] = [];
+  let documents = new Map<string, DocumentAnswer>();
   const urls = new Map<string, string>();
   const own = (url: string) => {
     try {
@@ -316,8 +394,12 @@ function watch(page: Page, origin: string): Events {
     urls.set(String(params["requestId"]), String((params["request"] as { url: string }).url));
   });
   page.on("Network.responseReceived", (params) => {
-    const response = params["response"] as { url: string; status: number };
+    const response = params["response"] as { url: string; status: number; fromServiceWorker?: boolean; headers?: Record<string, string> };
     if (response.status >= 400 && own(response.url)) refused.push(response);
+    if (params["type"] === "Document") {
+      const header = Object.entries(response.headers ?? {}).find(([name]) => name.toLowerCase() === FALLBACK_HEADER)?.[1];
+      documents.set(urls.get(String(params["requestId"])) ?? response.url, { fromServiceWorker: response.fromServiceWorker === true, fallback: header === "fallback" });
+    }
   });
   page.on("Network.loadingFailed", (params) => {
     const url = urls.get(String(params["requestId"])) ?? "";
@@ -328,7 +410,9 @@ function watch(page: Page, origin: string): Events {
     reset: () => {
       problems = [];
       refused = [];
+      documents = new Map();
     },
+    document: (url) => documents.get(url),
     problems: (other) => {
       const shown = refused.filter((response) => other?.test(new URL(response.url).pathname) !== true);
       return [...new Set([...problems, ...shown.map((response) => `HTTP ${response.status}: ${response.url}`)])];
@@ -344,11 +428,13 @@ interface ViewInput {
   /** The code of the probe of this view, or undefined for no probe. */
   probe: string | undefined;
   options: CheckOptions;
+  /** True for a view with the network off. */
+  offline?: boolean | undefined;
 }
 
 async function checkView(page: Page, events: Events, input: ViewInput): Promise<{ view: ViewResult; hung: boolean }> {
   const { target, path, width, scheme, probe, options } = input;
-  const view: ViewResult = { page: path, width, scheme, ok: false, problems: [] };
+  const view: ViewResult = { page: path, width, scheme, ok: false, problems: [], ...(input.offline === true ? { offline: true } : {}) };
   let other: RegExp | undefined;
   let hung = false;
   try {
@@ -378,7 +464,7 @@ async function checkView(page: Page, events: Events, input: ViewInput): Promise<
     view.problems.push(...cutProblems(measure.cut, width));
     if (measure.text === 0) view.problems.push("the page shows no text");
     if (options.shots) {
-      const file = join(options.shots, `${pageSlug(path)}-${width}-${scheme}.png`);
+      const file = join(options.shots, `${pageSlug(path)}-${width}-${scheme}${input.offline === true ? "-offline" : ""}.png`);
       const height = Math.min(Math.max(measure.height, 1), 8000);
       const shot = (await page.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true, clip: { x: 0, y: 0, width, height, scale: 1 } })) as { data: string };
       writeFileSync(file, Buffer.from(shot.data, "base64"));
@@ -394,9 +480,18 @@ async function checkView(page: Page, events: Events, input: ViewInput): Promise<
     hung = error instanceof NoReplyError;
     view.problems.push(error instanceof Error ? error.message : String(error));
   }
+  if (input.offline === true && view.problems.length === 0) view.problems.push(...offlineProblems(events.document(target)));
   view.problems.push(...events.problems(other));
   view.ok = view.problems.length === 0;
   return { view, hung };
+}
+
+/** This function gives the problems of the answer of a page with the network off. A page with no seen answer is a problem: the check cannot tell. */
+function offlineProblems(answer: DocumentAnswer | undefined): string[] {
+  if (answer === undefined) return ["the check saw no answer of the page, so it cannot tell if the service worker keeps the page"];
+  if (!answer.fromServiceWorker) return ["the service worker did not answer the page"];
+  if (answer.fallback) return ["the service worker does not keep the page: it gave the home page in its place"];
+  return [];
 }
 
 /** This function makes a text safe for a cell of a Markdown table. It escapes `\`, `|`, `<` and `>`. It changes each new line to a space. */
@@ -418,7 +513,7 @@ export function summary(result: CheckResult): string {
     "| --- | ---: | --- | --- | --- |",
     ...result.views.map(
       (view) =>
-        `| \`${view.page}\` | ${view.width} | ${view.scheme} | ${view.ok ? "pass" : "**fail**"}${view.retried ? " (retried)" : ""}${view.probe ? ` (probe ${view.probe.filter((c) => c.ok).length}/${view.probe.length})` : ""} | ${view.problems.map(cell).join("<br>")} |`,
+        `| \`${view.page}\`${view.offline ? " (offline)" : ""} | ${view.width} | ${view.scheme} | ${view.ok ? "pass" : "**fail**"}${view.retried ? " (retried)" : ""}${view.probe ? ` (probe ${view.probe.filter((c) => c.ok).length}/${view.probe.length})` : ""} | ${view.problems.map(cell).join("<br>")} |`,
     ),
     "",
   ];
@@ -463,6 +558,10 @@ Options:
                        Playwright, else Chrome or Edge)
   --settle <ms>        The wait after the load event (default: 1500)
   --timeout <ms>       The time limit of a page load (default: 30000)
+  --offline            Also opens each page with the network off, at the first width and scheme.
+                       A new browser opens the home page and waits for the service worker of the
+                       site. Then the check stops the server. A page fails when the worker does not
+                       answer it. It needs --out.
   --help               Shows this text
 
 With $GITHUB_STEP_SUMMARY, the check adds its table to the job summary.
@@ -489,6 +588,7 @@ export async function runCheckCli(argv: readonly string[], io: CheckIo): Promise
         browser: { type: "string" },
         settle: { type: "string" },
         timeout: { type: "string" },
+        offline: { type: "boolean" },
         help: { type: "boolean" },
       },
     }));
@@ -509,6 +609,7 @@ export async function runCheckCli(argv: readonly string[], io: CheckIo): Promise
   const out = text("out");
   const url = text("url");
   if ((out === undefined) === (url === undefined)) return usage("give --out or --url, not both");
+  if (values["offline"] === true && out === undefined) return usage("--offline needs --out: the check stops the server of the folder to cut the network");
   const widths = list("widths", "360,400,1280").map(Number);
   if (widths.length === 0 || widths.some((width) => !Number.isInteger(width) || width < 200 || width > 4000)) return usage("--widths must be whole numbers from 200 to 4000");
   const schemes = list("schemes", "light,dark");
@@ -581,6 +682,7 @@ export async function runCheckCli(argv: readonly string[], io: CheckIo): Promise
     browser: text("browser"),
     settleMs,
     timeoutMs,
+    offline: values["offline"] === true,
     log: (line) => io.stdout(`${line}\n`),
   });
   const failed = result.views.filter((view) => !view.ok).length;

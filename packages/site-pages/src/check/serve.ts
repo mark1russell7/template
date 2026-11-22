@@ -93,6 +93,11 @@ export async function serve(root: string, base: string): Promise<StaticServer> {
   if (address === null || typeof address === "string") throw new Error("the server has no port");
   return {
     url: `http://127.0.0.1:${address.port}${base.endsWith("/") ? base : `${base}/`}`,
-    close: () => new Promise((done) => server.close(() => done())),
+    // The server also closes the open connections, so a browser that keeps a connection cannot load a page after the close.
+    close: () =>
+      new Promise((done) => {
+        server.close(() => done());
+        server.closeAllConnections();
+      }),
   };
 }

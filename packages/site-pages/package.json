@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package",
   "name": "@mark1russell7/site-pages",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "A release timeline page and a live status page for the site of a GitHub repository: JSON data and standalone HTML, made at deploy time.",
   "keywords": [
     "github-pages",
@@ -33,6 +33,7 @@
     "./explorer": "./src/explorer/index.ts",
     "./config": "./src/config/site-config.ts",
     "./vite": "./src/vite.ts",
+    "./offline": "./src/offline/index.ts",
     "./scroll-cue.css": "./styles/scroll-cue.css",
     "./shell.css": "./styles/shell.css",
     "./explorer.css": "./styles/explorer.css",
@@ -80,6 +81,11 @@
         "types": "./build/vite.d.ts",
         "import": "./build/vite.js",
         "default": "./build/vite.js"
+      },
+      "./offline": {
+        "types": "./build/offline/index.d.ts",
+        "import": "./build/offline/index.js",
+        "default": "./build/offline/index.js"
       },
       "./scroll-cue.css": "./styles/scroll-cue.css",
       "./shell.css": "./styles/shell.css",

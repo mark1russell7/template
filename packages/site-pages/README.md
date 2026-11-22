@@ -688,6 +688,60 @@ The file sets no look for the content. Buttons, cards, code and tables stay in t
 
 A site with its own look does not import `shell.css`. It uses only the plugin and `showBuild`, or nothing from this section.
 
+## The offline shell of a site
+
+The entry `@mark1russell7/site-pages/offline` is for `vite.config.ts`. Its plugin `siteOffline` lets a built site open with no network. A phone can also install the site as an app.
+
+```ts
+import { defineConfig } from "vite";
+import { siteOffline } from "@mark1russell7/site-pages/offline";
+
+export default defineConfig({
+  root: "site",
+  plugins: [siteOffline({ manifest: { name: "Field notes", icons: [{ src: "icon.svg", sizes: "any", type: "image/svg+xml" }] } })],
+});
+```
+
+The plugin operates only in a build. It does these three operations:
+
+- It adds a manifest link and a small script to each HTML page. The script registers the service worker. A failure goes to `console.warn`, so a browser with no service worker shows the page as usual.
+- It writes `manifest.webmanifest`. The app starts at the site home, and its scope is the site home.
+- It writes `service-worker.js`. The worker keeps each file of the built folder. These files include the files of the public folder and of other plugins.
+
+Put `siteOffline` last in the list of plugins. A file that a step after the Vite build adds is not in the list of the worker.
+
+These files stay out of the cache:
+
+- source maps,
+- the files and folders with a name that starts with a dot,
+- each file larger than `maxFileBytes` (the default is 10 MiB),
+- each file that a pattern of `exclude` matches. A pattern examines the path from the root of the folder.
+
+The worker answers a request of a kept file from its cache. The path of a folder gives its `index.html`. A navigation to a page that the worker does not keep goes to the network. With no network, it gets the home page from the cache, with the header `x-site-offline: fallback`. The worker does not answer other requests.
+
+The name of the cache has the base of the site and a SHA-256 hash of the kept files. A new build with a changed file gives a new name. The new worker then removes the old cache of the same base, and only that cache.
+
+The worker keeps only the built files. It keeps no data of the site. Data that the site reads or writes goes offline through its own store.
+
+The base of the site must be a path from the root of the origin, for example `/` or `/name/`. A relative base, for example `./`, stops the build.
+
+| Export of `./offline` | Operation |
+| --- | --- |
+| `siteOffline({ manifest, maxFileBytes, exclude, onList })` | Makes the plugin. The value `false` for `manifest` writes no manifest. `onList` gets the kept files and the files that stay out. |
+| `precacheList(files, { base, maxFileBytes, exclude })` | Gives the URLs that the worker keeps, in order, and the reason of each file that stays out. It has no I/O. |
+| `offlineCacheName(base, files)` | Gives the name of the cache from the URLs and the contents of the kept files. |
+| `serviceWorkerSource({ base, cache, urls })` | Gives the source of the service worker. |
+| `webManifest(options, base)` | Gives the web manifest. |
+| `registerScript(base)` | Gives the script that registers the worker, for a page without the plugin. |
+
+The command `site-pages check --out <dir> --offline` is the gate of the offline shell. After the usual views, it opens the home page in a new browser and waits until a service worker controls the page. Then it stops its server, cuts the network of the page, and opens each page again, at the first width and in the first scheme. An offline view fails for each of these problems:
+
+- No service worker of the site becomes active in the time limit of a page load.
+- The worker does not answer the page, or gives the home page in its place.
+- Each problem of a usual view, for example a request that fails.
+
+The option `--offline` needs `--out`, because the check stops the server of the folder to cut the network.
+
 ## The response explorer
 
 The entry `@mark1russell7/site-pages/explorer` shows a measured response in the browser. A visitor chooses a measure, varies one or two dimensions, and holds or facets the others. The view shows the measured points, the fitted curve or surface, and its held-out error in plain words. The record has the format `response-records/1` of `@mark1russell7/rigor-statistics`.
