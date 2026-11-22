@@ -43,10 +43,11 @@ export function ownersOf(value: string | undefined): string[] {
 }
 
 /**
- * This function gives each repository name that more than one owner has, in lower case and in order. A reader that keys
- * its records by the name of the repository must stop on such a name, because the two repositories become one record.
+ * This function gives each repository name that more than one owner has, in lower case and in order. If a reader keys its
+ * records by the name alone, the two repositories of such a name become one record. Thus the reader takes its keys from
+ * `repoKeyer`.
  */
-export function sharedNames(repos: readonly { readonly owner: string; readonly name: string }[]): string[] {
+export function sharedNames(repos: readonly RepoRef[]): string[] {
   const owners = new Map<string, Set<string>>();
   for (const repo of repos) {
     const name = repo.name.toLowerCase();
@@ -56,4 +57,30 @@ export function sharedNames(repos: readonly { readonly owner: string; readonly n
     .filter(([, logins]) => logins.size > 1)
     .map(([name]) => name)
     .sort();
+}
+
+/** A repository: the login of its owner and its name, as the API gives them. */
+export interface RepoRef {
+  /** The login of the owner. */
+  readonly owner: string;
+  /** The name of the repository. */
+  readonly name: string;
+}
+
+/**
+ * This function gives the record key of each repository of a list. The key is the name when one owner has the name, and
+ * `owner/name` when more than one owner has it (see `sharedNames`).
+ *
+ * - The records of a name that one owner has keep the key that they had before the second owner came.
+ * - Two repositories with one name become two records, so a fork in the other owner stops no reader.
+ * - The key of a repository that is not in the list is its name, unless the list has its name with more than one owner.
+ * - The separator is `/` by default. A key for a file name or a database id takes a separator that no login and no name has, for example `~`.
+ * - A separator that a login or a name can have gives an error, because two keys can then be equal.
+ */
+export function repoKeyer(repos: readonly RepoRef[], separator: string = "/"): (repo: RepoRef) => string {
+  if (separator === "" || /[A-Za-z0-9._-]/u.test(separator)) {
+    throw new Error(`The separator "${separator}" is empty or has a character that a login or a repository name can have.`);
+  }
+  const shared = new Set(sharedNames(repos));
+  return (repo) => (shared.has(repo.name.toLowerCase()) ? `${repo.owner}${separator}${repo.name}` : repo.name);
 }
