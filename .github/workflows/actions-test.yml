@@ -451,6 +451,7 @@ jobs:
       checks: read
     steps:
       - name: Each fault leg with best-effort has the warning with its cause
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
