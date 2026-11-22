@@ -439,7 +439,9 @@ jobs:
           test -s "$RUNNER_TEMP/blank.png"
 
   # The warning of best-effort is in the annotations of each fault leg with best-effort. A job reads them after the
-  # end of those legs.
+  # end of those legs. A rerun of only the failed jobs does not run the legs again, so the job reads the jobs of all
+  # attempts and takes the newest attempt of each leg. Each read of the API has 3 tries, 10 and 20 seconds apart, so
+  # one network fault does not make the run red.
   setup-playwright-warning:
     needs: setup-playwright
     runs-on: ubuntu-latest
@@ -449,14 +451,26 @@ jobs:
       checks: read
     steps:
       - name: Each fault leg with best-effort has the warning with its cause
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # One read of the API, with 3 tries. The output goes to the file $1, so a failed try leaves no partial output.
+          read_api() {
+            local out=$1; shift
+            for try in 1 2 3; do
+              if gh api "$@" > "$out"; then return 0; fi
+              [ "$try" = 3 ] || { echo "The read of the API failed (try $try of 3). The next try starts in $((try * 10)) seconds."; sleep $((try * 10)); }
+            done
+            echo "::error::The read of the API failed 3 times: $*"
+            return 1
+          }
           check() {
-            url=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs" --paginate \
-              --jq ".jobs[] | select(.name == \"setup-playwright ($1, best-effort, Node.js 26)\") | .check_run_url")
-            [ -n "$url" ] || { echo "::error::The leg $1 with best-effort was not found."; exit 1; }
-            gh api "$url/annotations" --paginate --jq '.[] | "\(.annotation_level): \(.message)"' > "$RUNNER_TEMP/$1.txt"
+            read_api "$RUNNER_TEMP/$1-jobs.txt" "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100" --paginate \
+              --jq ".jobs[] | select(.name == \"setup-playwright ($1, best-effort, Node.js 26)\") | \"\\(.run_attempt) \\(.check_run_url)\""
+            url=$(sort -n "$RUNNER_TEMP/$1-jobs.txt" | tail -n 1 | cut -d ' ' -f 2)
+            [ -n "$url" ] || { echo "::error::The leg $1 with best-effort was not found in any attempt."; exit 1; }
+            read_api "$RUNNER_TEMP/$1.txt" "$url/annotations" --paginate --jq '.[] | "\(.annotation_level): \(.message)"'
             echo "$1:"
             cat "$RUNNER_TEMP/$1.txt"
             grep -qE "^warning: The system packages of the browsers are not installed: \"playwright install-deps chromium\" $2\\. " "$RUNNER_TEMP/$1.txt"
