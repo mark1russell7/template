@@ -58,6 +58,13 @@ runs:
     # a new package, so a 404 gets 5 more tries, 30 seconds apart, before the step counts the package as new.
     # The output "published" tells the tag job which versions this run published. The trap writes it also when the
     # step stops with an error after some publishes.
+    # Two runs can publish the same version: two merges a minute apart with no version change between them. The
+    # later run then gets a conflict that names the version: E409 "Cannot publish over previously staged version"
+    # while the first run still stages it, or E403 "cannot publish over the previously published versions" after it.
+    # The step does not try again. It reads the registry for the version 20 times, 30 seconds apart (10 minutes).
+    # When the version comes, the step gives a warning, counts the version as on npm (not in "published") and goes on
+    # to the next tarball. When it does not come, the step stops with an error. NPM_PUBLISH_POLL_SECONDS changes
+    # the 30 seconds; the tests set it to 0.
     # The dist-tag comes from dist-tag.ts, with the "latest" of the packument that the step read immediately before
     # the publish. A version above that "latest" gets "latest", and a lower version gets "latest-<major>.<minor>". Thus two
     # runs that publish in either order do not move "latest" back. A pre-release gets "next". The summary of the run
@@ -106,6 +113,13 @@ runs:
             echo "::error::npm got no token for $1 (ENEEDAUTH): the trusted publisher is missing or expired. A new trust expires when no publish uses it in 2 days. The owner starts scripts/release/npm-bootstrap.ts --replace-trust again, then this workflow (RELEASING.md)."
           fi
         }
+        # Gives 0 when the registry has the version $2 of the package $1, with the query string around the cache.
+        on_npm() {
+          local status
+          status=$(curl -sS -o packument.json -w '%{http_code}' "https://registry.npmjs.org/${1//\//%2f}?t=$(date +%s%N)") || return 1
+          [ "$status" = "200" ] && node -e 'process.exit(require("./packument.json").versions?.[process.argv[1]] ? 0 : 1)' "$2"
+        }
+        poll_seconds="${NPM_PUBLISH_POLL_SECONDS:-30}"
         new_packages=()
         while read -r name version file; do
           [ -n "$name" ] || continue
@@ -138,10 +152,28 @@ runs:
             echo "Dry run: npm publish ./release/$file --access public --provenance --tag $tag"
             continue
           fi
+          other_run=false
           for attempt in 1 2 3; do
             rm -rf npm-logs
             if npm publish "./release/$file" --access public --provenance --tag "$tag" --fetch-retries 0 --logs-dir "$PWD/npm-logs" 2>&1 | tee publish.log; then
               break
+            fi
+            if grep -qiE "Cannot publish over previously staged version|cannot publish over the previously published version" publish.log; then
+              for look in {1..20}; do
+                if on_npm "$name" "$version"; then
+                  other_run=true
+                  break
+                fi
+                [ "$look" != 20 ] || break
+                echo "npm has a conflict for $name $version: another run publishes it. Look $look of 20; the next look starts in $poll_seconds seconds."
+                sleep "$poll_seconds"
+              done
+              if [ "$other_run" = true ]; then
+                echo "::warning::$name $version is on npm, but another run published it: this run got a conflict for the same version. This run does not count it as published."
+                break
+              fi
+              echo "::error::npm gave a conflict for $name $version, but the version did not come on npm in 20 looks. Examine the other release runs of this version."
+              exit 1
             fi
             if ! grep -qE "E429|E5[0-9][0-9]|TLOG_CREATE_ENTRY_ERROR|CREATE_SIGNING_CERTIFICATE_ERROR|ETIMEDOUT|ECONNRESET" publish.log || [ "$attempt" = 3 ]; then
               echo "::error::npm did not publish $name $version."
@@ -151,6 +183,7 @@ runs:
             echo "npm or Sigstore gave a temporary error (429, 5xx, a transparency-log conflict or a failed signing certificate). The next try starts in $((attempt * 60)) seconds."
             sleep $((attempt * 60))
           done
+          [ "$other_run" = false ] || continue
           published+=("$name@$version")
           if [ -n "$above" ]; then superseded+=("\`$name@$version\`: dist-tag \`$tag\`, superseded by $above"); fi
         done < release/packages.txt
