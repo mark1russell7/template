@@ -74,8 +74,13 @@ export interface RepoRef {
  * - The records of a name that one owner has keep the key that they had before the second owner came.
  * - Two repositories with one name become two records, so a fork in the other owner stops no reader.
  * - The key of a repository that is not in the list is its name, unless the list has its name with more than one owner.
+ * - The separator is `/` by default. A key for a file name or a database id takes a separator that no login and no name has, for example `~`.
+ * - A separator that a login or a name can have gives an error, because two keys can then be equal.
  */
-export function repoKeyer(repos: readonly RepoRef[]): (repo: RepoRef) => string {
+export function repoKeyer(repos: readonly RepoRef[], separator: string = "/"): (repo: RepoRef) => string {
+  if (separator === "" || /[A-Za-z0-9._-]/u.test(separator)) {
+    throw new Error(`The separator "${separator}" is empty or has a character that a login or a repository name can have.`);
+  }
   const shared = new Set(sharedNames(repos));
-  return (repo) => (shared.has(repo.name.toLowerCase()) ? `${repo.owner}/${repo.name}` : repo.name);
+  return (repo) => (shared.has(repo.name.toLowerCase()) ? `${repo.owner}${separator}${repo.name}` : repo.name);
 }
