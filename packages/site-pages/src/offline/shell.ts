@@ -49,7 +49,12 @@ export interface PrecacheList {
 
 /** This function gives the base with one `/` at the start and one `/` at the end. */
 export function offlineBase(base: string): string {
-  const inner = base.replace(/^\/+|\/+$/g, "");
+  // A loop, not a regular expression: the time of /\/+$/ grows as the square of the count of "/" (CodeQL js/polynomial-redos).
+  let start = 0;
+  let end = base.length;
+  while (start < end && base[start] === "/") start += 1;
+  while (end > start && base[end - 1] === "/") end -= 1;
+  const inner = base.slice(start, end);
   return inner === "" ? "/" : `/${inner}/`;
 }
 

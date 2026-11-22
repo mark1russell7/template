@@ -20,6 +20,15 @@ describe("offlineBase", () => {
     expect(offlineBase("site")).toBe("/site/");
     expect(offlineBase("/site")).toBe("/site/");
     expect(offlineBase("//a/b//")).toBe("/a/b/");
+    expect(offlineBase("///")).toBe("/");
+  });
+
+  // With the expression /\/+$/, each of these inputs takes minutes, so the test stops at its time limit.
+  it("gives the base of a long run of slashes with no slow expression", () => {
+    const slashes = "/".repeat(200_000);
+    expect(offlineBase(`${slashes}a`)).toBe("/a/");
+    expect(offlineBase(`a${slashes}`)).toBe("/a/");
+    expect(offlineBase(`a${slashes}b`)).toBe(`/a${slashes}b/`);
   });
 });
 
