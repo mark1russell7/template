@@ -21,7 +21,8 @@
 //   4. With --only-summary, the summary checks become the only required checks of the gate. A required check
 //      that ran in the same workflow run as the "CI OK" that passed in step 1 comes out of each ruleset: "CI OK"
 //      needs each job of its workflow and fails on a skip or a failure of one (CI.md), so it covers the check.
-//      A rule with no check left goes out of its ruleset, and a ruleset with no rule left is deleted. A check of
+//      A rule with no check left goes out of its ruleset. A ruleset with no rule left is disabled, not deleted: it
+//      keeps its rules, so its owner can read it and turn it on again. A disabled ruleset does not change. A check of
 //      another workflow stays. A repository can then join or split the jobs of its CI and keep its ruleset.
 //
 // --check changes nothing and exits 1 when a repository has a summary check that passed in step 1 and that no ruleset
@@ -189,6 +190,8 @@ function dropCovered(repo: string, covered: ReadonlySet<string>, apply: boolean)
   let changed = 0;
   for (const listed of json<{ id: number }[]>(["api", `repos/${repo}/rulesets?includes_parents=false`])) {
     const set = json<Ruleset>(["api", `repos/${repo}/rulesets/${listed.id}`]);
+    // A disabled ruleset requires no check, so it has nothing to drop.
+    if (set.enforcement === "disabled") continue;
     const dropped: string[] = [];
     const rules: BranchRule[] = [];
     for (const rule of set.rules ?? []) {
@@ -203,11 +206,11 @@ function dropCovered(repo: string, covered: ReadonlySet<string>, apply: boolean)
     }
     if (dropped.length === 0) continue;
     const what = `${dropped.map((c) => `"${c}"`).join(", ")} from the ruleset "${set.name}"`;
-    const end = rules.length === 0 ? ", and delete the ruleset, because no rule is left" : "";
+    const end = rules.length === 0 ? ", and disable the ruleset (it keeps its rules), because no rule is left" : "";
     if (!apply) {
       console.log(`would  ${repo}: remove ${what}${end}. "${CHECK}" covers them.`);
     } else if (rules.length === 0) {
-      gh(["api", "-X", "DELETE", `repos/${repo}/rulesets/${set.id}`]);
+      gh(["api", "-X", "PUT", `repos/${repo}/rulesets/${set.id}`, "--input", "-"], JSON.stringify({ enforcement: "disabled" }));
       console.log(`removed ${repo}: ${what}${end}.`);
     } else {
       const body = { name: set.name, target: set.target, enforcement: set.enforcement, conditions: set.conditions, bypass_actors: set.bypass_actors ?? [], rules };
