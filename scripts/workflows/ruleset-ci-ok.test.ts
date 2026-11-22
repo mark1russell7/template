@@ -49,6 +49,18 @@ describe("checkReport", () => {
     assert.doesNotMatch(text, /\| o\/fork \|/);
   });
 
+  it("lists the forks on one line, out of the table, and exits 0", () => {
+    const { code, text } = checkReport([
+      { repo: "o/a", state: "have", checks: ["CI OK"] },
+      { repo: "p/fork", state: "fork" },
+      { repo: "o/o", state: "no CI" },
+    ]);
+    assert.equal(code, 0);
+    assert.match(text, /0 miss a check or a setting, 0 no read, 1 have each check\. 1 have no CI\. 1 is a fork\./);
+    assert.match(text, /^Forks \(their pull requests go to the source, so the check has no pull request to read and no ruleset to require\): p\/fork\.$/m);
+    assert.doesNotMatch(text, /\| p\/fork \|/);
+  });
+
   it("keeps a repository with no CI out of the count line when there is none", () => {
     const { text } = checkReport([{ repo: "o/a", state: "have", checks: ["CI OK"] }]);
     assert.doesNotMatch(text, /no CI/);
