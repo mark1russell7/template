@@ -6,6 +6,7 @@ import { changelogVersion } from "./changelog-version.ts";
 import { cuePreset } from "./cue-preset.ts";
 import { gateAfterCancel } from "./gate-after-cancel.ts";
 import { gateTrigger } from "./gate-trigger.ts";
+import { securityGate } from "./security-gate.ts";
 import { securityOneJob } from "./security-one-job.ts";
 import { summaryJobRule } from "./summary-job.ts";
 import { setupCue } from "./setup-cue.ts";
@@ -82,6 +83,7 @@ export const RULES: readonly Rule[] = [
   gateAfterCancel,
   gateTrigger,
   securityOneJob,
+  securityGate,
   summaryJobRule,
   sharedCi,
   setupCue,
@@ -100,4 +102,4 @@ export const RULES: readonly Rule[] = [
 ];
 
 export { publishedMinor };
-export { apiReportScript, changelogVersion, coverageProvider, cuePreset, exportsRequire, gateAfterCancel, gateTrigger, securityOneJob, securityOverrides, serviceRunMain, setupCue, sharedCi, summaryJobRule, homeModule, homePackage, jobFails, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, packNoBuildinfo, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, playwrightInstall, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, siteCheckInCi, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, versionTitle, workflowParses, workspaceProtocol, publishTextSafe };
+export { apiReportScript, changelogVersion, coverageProvider, cuePreset, exportsRequire, gateAfterCancel, gateTrigger, securityGate, securityOneJob, securityOverrides, serviceRunMain, setupCue, sharedCi, summaryJobRule, homeModule, homePackage, jobFails, licenseFile, mainCheck, mainRunsFinish, noBuildOutput, noLocalPaths, packNoBuildinfo, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, playwrightInstall, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, sharedDocs, siteCheckInCi, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, versionTitle, workflowParses, workspaceProtocol, publishTextSafe };
