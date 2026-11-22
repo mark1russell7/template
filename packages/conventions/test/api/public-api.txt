@@ -75,6 +75,7 @@ RULES: build/index.d.ts#RULES
 RULE_WARN_DAYS: build/index.d.ts#RULE_WARN_DAYS
 type RegistryAnswer: build/index.d.ts#RegistryAnswer
 type RegistryLookup: build/index.d.ts#RegistryLookup
+type RepoRef: build/owners.d.ts#RepoRef
 type Rule: build/index.d.ts#Rule
 type RuleConfig: build/index.d.ts#RuleConfig
 type RuleContext: build/index.d.ts#RuleContext
@@ -212,6 +213,7 @@ readWorkflow: build/index.d.ts#readWorkflow
 releaseFiles: build/index.d.ts#releaseFiles
 releaseNotes: build/index.d.ts#releaseNotes
 replaceLine: build/index.d.ts#replaceLine
+repoKeyer: build/owners.d.ts#repoKeyer
 repoOf: build/index.d.ts#repoOf
 reposOf: build/index.d.ts#reposOf
 repositoryIsPublic: build/index.d.ts#repositoryIsPublic
@@ -279,8 +281,10 @@ workspaceGlobs: build/workspace.chunk.d.ts#workspaceGlobs
 
 OWNERS: build/owners.d.ts#OWNERS
 Owner: build/owners.d.ts#Owner
+RepoRef: build/owners.d.ts#RepoRef
 ownerOf: build/owners.d.ts#ownerOf
 ownersOf: build/owners.d.ts#ownersOf
+repoKeyer: build/owners.d.ts#repoKeyer
 sharedNames: build/owners.d.ts#sharedNames
 
 ## bin: 1 commands
@@ -1316,17 +1320,23 @@ export interface Owner {
   readonly macos: number;
 }
 
+### build/owners.d.ts#RepoRef
+export interface RepoRef {
+  readonly owner: string;
+  readonly name: string;
+}
+
 ### build/owners.d.ts#ownerOf
 export declare function ownerOf(login: string): Owner | undefined;
 
 ### build/owners.d.ts#ownersOf
 export declare function ownersOf(value: string | undefined): string[];
 
+### build/owners.d.ts#repoKeyer
+export declare function repoKeyer(repos: readonly RepoRef[]): (repo: RepoRef) => string;
+
 ### build/owners.d.ts#sharedNames
-export declare function sharedNames(repos: readonly {
-  readonly owner: string;
-  readonly name: string;
-}[]): string[];
+export declare function sharedNames(repos: readonly RepoRef[]): string[];
 
 ### build/workspace.chunk.d.ts#globFolders
 declare function globFolders(root: string, glob: string): string[];
