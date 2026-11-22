@@ -140,10 +140,15 @@ describe("dist-tag.ts", () => {
 });
 
 // The step "Publish" of action.yml, started by bash as GitHub starts it, with a fake curl that serves packument files
-// and a fake npm that writes its arguments to a log. It needs bash, so it does not start on Windows.
+// and a fake npm that writes its arguments to a log (and can refuse a tarball with a conflict). It needs bash, so it
+// does not start on Windows.
 describe("the step Publish", { skip: process.platform === "win32" ? "the step needs bash" : false }, () => {
   /** This function starts the step on a registry of packuments and a list of tarballs, and gives what it did. */
-  const publish = (registry: Record<string, unknown>, packages: readonly string[]): { status: number | null; log: string; npm: string[]; output: string; summary: string } => {
+  const publish = (
+    registry: Record<string, unknown>,
+    packages: readonly string[],
+    fakeNpm: readonly string[] = [],
+  ): { status: number | null; log: string; npm: string[]; output: string; summary: string; looks: number } => {
     const folder = mkdtempSync(join(tmpdir(), "npm-publish-step-"));
     try {
       const bin = join(folder, "bin");
@@ -159,15 +164,16 @@ describe("the step Publish", { skip: process.platform === "win32" ? "the step ne
           'out=""; url=""',
           'while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2 ;; -w) shift 2 ;; -*) shift ;; *) url="$1"; shift ;; esac; done',
           'name="${url#https://registry.npmjs.org/}"; name="${name%%[?]*}"; name="${name//%2f/__}"',
+          'echo "$name" >> "$CURL_LOG"',
           'if [ -f "$FAKE_REGISTRY/$name.json" ]; then cp "$FAKE_REGISTRY/$name.json" "$out"; printf 200; else printf 500; fi',
           "",
         ].join("\n"),
       );
-      writeFileSync(join(bin, "npm"), ["#!/usr/bin/env bash", 'echo "$*" >> "$NPM_LOG"', ""].join("\n"));
+      writeFileSync(join(bin, "npm"), ["#!/usr/bin/env bash", 'echo "$*" >> "$NPM_LOG"', ...fakeNpm, ""].join("\n"));
       for (const tool of ["curl", "npm"]) chmodSync(join(bin, tool), 0o755);
       const step = join(folder, "step.sh");
       writeFileSync(step, runBlock(action, "    - name: Publish\n"));
-      const files = { npm: join(folder, "npm.log"), output: join(folder, "output"), summary: join(folder, "summary") };
+      const files = { npm: join(folder, "npm.log"), curl: join(folder, "curl.log"), output: join(folder, "output"), summary: join(folder, "summary") };
       for (const file of Object.values(files)) writeFileSync(file, "");
       const run = spawnSync("bash", ["--noprofile", "--norc", "-eo", "pipefail", step], {
         cwd: work,
@@ -179,6 +185,8 @@ describe("the step Publish", { skip: process.platform === "win32" ? "the step ne
           ACTION_PATH: join(import.meta.dirname, "npm-publish"),
           FAKE_REGISTRY: store,
           NPM_LOG: files.npm,
+          CURL_LOG: files.curl,
+          NPM_PUBLISH_POLL_SECONDS: "0",
           GITHUB_OUTPUT: files.output,
           GITHUB_STEP_SUMMARY: files.summary,
         },
@@ -189,6 +197,7 @@ describe("the step Publish", { skip: process.platform === "win32" ? "the step ne
         npm: readFileSync(files.npm, "utf8").split("\n").filter((line) => line !== ""),
         output: readFileSync(files.output, "utf8"),
         summary: readFileSync(files.summary, "utf8"),
+        looks: readFileSync(files.curl, "utf8").split("\n").filter((line) => line !== "").length,
       };
     } finally {
       rmSync(folder, { recursive: true, force: true });
@@ -235,5 +244,42 @@ describe("the step Publish", { skip: process.platform === "win32" ? "the step ne
     assert.equal(result.npm.length, 1, result.log);
     assert.equal(result.output, "published=a@0.1.1\n");
     assert.match(result.log, /::error::The step cannot choose the dist-tag of b 0\.2\.0/u);
+  });
+
+  /**
+   * Lines of the fake npm that refuse the tarball of a 0.1.1 with a conflict of npm. With a packument, they also put
+   * it on the registry, as another run that publishes the same version does.
+   */
+  const conflict = (line: string, packument?: unknown): string[] => [
+    'case "$2" in',
+    "  *a-0.1.1.tgz)",
+    `    echo '${line}' >&2`,
+    ...(packument === undefined ? [] : [`    echo '${JSON.stringify(packument)}' > "$FAKE_REGISTRY/a.json"`]),
+    "    exit 1 ;;",
+    "esac",
+  ];
+  const staged = 'npm error 409 Conflict - PUT https://registry.npmjs.org/a - Cannot publish over previously staged version "0.1.1".';
+  const before = { a: { "dist-tags": { latest: "0.1.0" }, versions: { "0.1.0": {} } }, b: { "dist-tags": { latest: "0.1.0" }, versions: { "0.1.0": {} } } };
+
+  it("counts a version that another run published as on npm after a conflict, with a warning, and goes on to the next tarball", () => {
+    const after = { "dist-tags": { latest: "0.1.1" }, versions: { "0.1.0": {}, "0.1.1": {} } };
+    for (const line of [staged, "npm error 403 Forbidden - PUT https://registry.npmjs.org/a - You cannot publish over the previously published versions: 0.1.1."]) {
+      const result = publish(before, ["a 0.1.1 a-0.1.1.tgz", "b 0.2.0 b-0.2.0.tgz"], conflict(line, after));
+      assert.equal(result.status, 0, result.log);
+      assert.equal(result.npm.length, 2, `${line}\n${result.npm.join("\n")}`);
+      assert.ok(result.npm[1]?.startsWith(args("b-0.2.0.tgz", "latest")), result.npm.join("\n"));
+      assert.equal(result.output, "published=b@0.2.0\n");
+      assert.match(result.log, /::warning::a 0\.1\.1 is on npm, but another run published it/u);
+      assert.equal(result.looks, 3, result.log);
+    }
+  });
+
+  it("stops with an error when the version of a conflict does not come on npm in 20 looks, and does not try again", () => {
+    const result = publish(before, ["a 0.1.1 a-0.1.1.tgz", "b 0.2.0 b-0.2.0.tgz"], conflict(staged));
+    assert.equal(result.status, 1, result.log);
+    assert.equal(result.npm.length, 1, result.npm.join("\n"));
+    assert.equal(result.output, "published=\n");
+    assert.equal(result.looks, 21, result.log);
+    assert.match(result.log, /::error::npm gave a conflict for a 0\.1\.1, but the version did not come on npm in 20 looks/u);
   });
 });
