@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { byCode } from "../workspace.ts";
 import { repositoryOfRemote, type Break, type Rule } from "../rule.ts";
-import { WORKFLOW } from "../workflow.ts";
+import { WORKFLOW, keyValue } from "../workflow.ts";
 import { repositoryIsPublic } from "./license-file.ts";
 import { scheduleMinute } from "./runner-budget.ts";
 import { SECURITY_SCAN_COMMIT } from "./security-one-job.ts";
@@ -16,18 +16,22 @@ import { startsOnPullRequest } from "./summary-job.ts";
 /** The path of the security gate in a repository. */
 export const SECURITY_FILE: string = ".github/workflows/security.yml";
 
+/** The action security-scan of the template, in the template (`./`) and pinned in another repository. */
+const SCAN_ACTIONS: readonly string[] = ["./.github/actions/security-scan", "mark1russell7/template/.github/actions/security-scan"];
+
 /** The deprecated shared workflow of the scans. The rule `security-one-job` changes its caller to one job. */
-const REUSABLE_SECURITY = /(^|\/)\.github\/workflows\/reusable-security\.ya?ml(@|\s|$)/m;
+const REUSABLE_SECURITY: readonly string[] = [".github/workflows/reusable-security.yml", ".github/workflows/reusable-security.yaml"];
 
-/** A step that uses the action security-scan of the template, pinned or local. */
-const SECURITY_SCAN = /^\s*-?\s*uses:\s*(?:mark1russell7\/template\/|\.\/)\.github\/actions\/security-scan(?:@|\s|$)/m;
-
-/** A job with the name `Security OK`. */
-const SECURITY_OK = /^\s+name:\s*["']?Security OK["']?\s*(?:#.*)?$/m;
-
-/** This function tells if a workflow is a security gate: a job `Security OK`, the action security-scan, or the shared workflow of the scans. */
+/**
+ * This function tells if a workflow is a security gate. A security gate has a job `Security OK`, a step with the action
+ * security-scan, or a job that uses the shared workflow of the scans. It reads each line with the reader of the workflows.
+ */
 export function isSecurityGate(text: string): boolean {
-  return SECURITY_OK.test(text) || SECURITY_SCAN.test(text) || REUSABLE_SECURITY.test(text);
+  return text.split("\n").some((line) => {
+    if (keyValue(line, "name") === "Security OK") return true;
+    const target = (keyValue(line, "uses") ?? "").split("@")[0] ?? "";
+    return SCAN_ACTIONS.includes(target) || REUSABLE_SECURITY.some((file) => target === `./${file}` || target.endsWith(`/${file}`));
+  });
 }
 
 /**
@@ -90,7 +94,7 @@ const STANDARD: readonly string[] = [
   "      - uses: mark1russell7/template/.github/actions/security-scan@COMMIT # main",
 ];
 
-/** This function gives the security gate of a repository: the file of the template, with the pin of the action and the minute of the repository. */
+/** This function gives the security gate of a repository. It is the file of the template, with the pin of the action and the minute of the repository. */
 export function securityWorkflow(repository: string, commit: string = SECURITY_SCAN_COMMIT): string {
   const minute = String(scheduleMinute(repository, SECURITY_FILE));
   return `${STANDARD.join("\n").replace("@COMMIT", `@${commit}`).replace('"MINUTE ', `"${minute} `)}\n`;
