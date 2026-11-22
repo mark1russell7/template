@@ -10,7 +10,16 @@
  * api-report check
  * ```
  */
-export { parseDeclarations, statementsOf, type DeclarationInfo, type ImportBinding, type LocalExport, type Reexport } from "./declarations.ts";
+export {
+  declarationKinds,
+  parseDeclarations,
+  statementsOf,
+  type DeclarationInfo,
+  type DeclarationKind,
+  type ImportBinding,
+  type LocalExport,
+  type Reexport,
+} from "./declarations.ts";
 export { diffLines, unifiedDiff, type DiffLine, type UnifiedDiffOptions } from "./diff.ts";
 export {
   binsOf,
@@ -26,13 +35,13 @@ export {
   type EntryFile,
   type Manifest,
 } from "./entries.ts";
+export { apiModel, packageModel, type ApiDeclaration, type ApiEntry, type ApiModel, type ApiName, type ApiNameKind } from "./model.ts";
 export { pageFaults, reportEntries, type ApiPage, type FrontmatterValue } from "./page.ts";
 export { referencePage } from "./reference.ts";
 export { apiReport, DEFAULT_TOOL, HEADER_LINES, packageReport, type PackageReportOptions, type ReportOptions } from "./report.ts";
 export {
   formatResult,
   readConfig,
-  reportFolders,
   REPORT_FILE,
   runCli,
   runReports,
@@ -45,4 +54,4 @@ export {
   type RunOptions,
   type RunResult,
 } from "./run.ts";
-export { globFolders, globToRegExp, packageFolders, workspaceGlobs } from "@mark1russell7/conventions/workspace";
+export { globFolders, globToRegExp, packageFolders, reportFolders, workspaceGlobs } from "@mark1russell7/conventions/workspace";

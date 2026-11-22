@@ -1,0 +1,71 @@
+# The tree job of the standard npm release (RELEASING.md, CI.md "A tree that passed CI"). The release.yml of a
+# repository calls it before its CI gates:
+#
+#   tree:
+#     uses: mark1russell7/template/.github/workflows/reusable-release-tree.yml@<commit> # main
+#     permissions:
+#       actions: read
+#       contents: read
+#       issues: read
+#       pull-requests: read
+#
+# The job tells if the tree of the release commit already passed CI in its pull request. It starts
+# scripts/workflows/verified-tree.ts of the template commit of this file, so a repository needs no copy of the
+# script. The output "verified" is "true" only when each rule of the script holds. A no, a no read and a failure
+# of this job give no "true": then the release starts its CI gates, as before.
+#
+# The job runs no code of the repository and changes nothing. Its token reads the commit, the pull requests,
+# the compare, the timeline and the runs and jobs of the workflow of the gates.
+name: Reusable release tree
+
+on:
+  workflow_call:
+    inputs:
+      workflow:
+        description: The workflow file of the CI gates of the pull request, in .github/workflows.
+        type: string
+        default: ci.yml
+      jobs:
+        description: The jobs of that workflow that must pass, one name on each line.
+        type: string
+        default: CI OK
+    outputs:
+      verified:
+        description: '"true" when the tree of the commit passed the CI of its pull request. Each other value is a no.'
+        value: ${{ jobs.tree.outputs.verified }}
+      reason:
+        description: The reason code of the answer (CI.md, "A tree that passed CI").
+        value: ${{ jobs.tree.outputs.reason }}
+
+jobs:
+  tree:
+    name: A tree that passed CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      verified: ${{ steps.tree.outputs.verified }}
+      reason: ${{ steps.tree.outputs.reason }}
+    steps:
+      # The script of the same template commit as this file, not a copy in the repository
+      - name: Get the script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .release-tree
+          sparse-checkout: scripts/workflows/verified-tree.ts
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      # The script is TypeScript with only the built-in modules of Node.js: no install, only type stripping
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: The tree of the commit passed CI
+        id: tree
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_FILE: ${{ inputs.workflow }}
+          REQUIRED_JOBS: ${{ inputs.jobs }}
+        run: node .release-tree/scripts/workflows/verified-tree.ts

@@ -143,6 +143,8 @@ The folder of `--shots` gets a screenshot of each view, `report.json` and `summa
 
 The check finds a browser in this order: `--browser`, `$SITE_CHECK_BROWSER`, the newest Chromium of Playwright, and then Chrome or Edge. The folder `src/check` imports only Node.js. Thus Node.js 22.18 or later can start `src/check/main.ts` with no install. The workflow `reusable-pages.yml` of the template uses it this way.
 
+The browser starts with no graphics card, and it draws WebGL in software (`--enable-unsafe-swiftshader`). Thus a page with a 3D picture shows the same picture on Windows, on macOS and on Linux.
+
 ## The site bar
 
 The command `site-pages bar` writes one shared bar into each HTML page of a built site. The bar comes first in the body of each page.
@@ -158,7 +160,7 @@ site-pages bar --out dist --repo owner/name --pages "Demo=demo/,Docs=docs/" --si
 - Its CSS has its own class names, so the CSS of the site does not change the bar. It follows the light and the dark scheme. Its rows wrap at 360 px.
 - The command can start two times on one folder. The second start gives the same pages.
 
-In `reusable-pages.yml`, the input `site-bar: true` starts the command before the upload. Then `site-pages nav --require-bar` crawls the built site, and a failure stops the deploy.
+In `reusable-pages.yml`, the input `site-bar: true` starts the command before the upload. Then `site-pages nav --require-bar` crawls the built site, and a failure stops the deploy. Thus a site that turns on the bar removes the links of the bar from its own header in the same change. Then each page has one row of links.
 
 ## The scroll cue of the built pages
 
@@ -171,6 +173,8 @@ site-pages cue --out dist
 - A code block that is wider than its box shows a fade at the edge with more content. A block that is not wider shows no cue.
 - A block with `data-overflow-ok` or with the class `scroll-cue` stays as it is. The text of `script`, `style` and `textarea` does not change.
 - In a browser with no scroll timelines, a small script gives `--scroll-cue-bg` the background color of the block. Thus the block keeps the color of its theme.
+- A script of a page can make a code block in the browser, for example from Markdown. Thus a page with a script of its own also gets the style and a small script. That script gives the cue to each code block that the page makes, by the same rules.
+- A page can put a code block in a box of its own that scrolls, and give the block the width of its text. When that box holds only the block and the text is wider than the box, the script gives the box the cue.
 - The command can start two times on one folder. The second start gives the same pages.
 
 In `reusable-pages.yml`, the input `scroll-cue` (default `true`) starts the command before the site check and the upload.
@@ -192,6 +196,7 @@ The command fails for each of these problems:
 - A link goes to a page that gives a status of 400 or more.
 - A click on a link to `releases/` or `status/` does not show the page of site-pages. A single-page application can catch the click and show its own page.
 - With `--require-bar`, a page has no shared site bar.
+- A page with the bar shows a link of the bar again in its own header or navigation. The check compares the target pages. The name of the site that links to the home counts too. A link to a part of the same page, for example `#use`, does not count. A link in a footer does not count.
 
 The crawl opens at most `--max-pages` pages (default: 60). When it stops at this limit, the pages that it did not open are a "no read". A no-read is not a pass: the command fails, and `report.json` lists the pages in `unread`. The summary shows their count and their paths. In `site-audit.yml`, each no-read is a warning on the check of the pull request.
 
@@ -222,18 +227,20 @@ The gate has three rules. A fault of one rule gives the exit code 1.
 
 1. Each page names a run, and each run has an id, a link, a date and its engine versions.
 2. The data of a page is at most 3 days old (`MAX_DATA_AGE_DAYS`), or a run on newer engines is in flight. The stamp of that run is at most 3 days old, so an old stamp does not hold the gate open.
-3. The engines of the newest run are at most 1 minor version behind npm at the start of the run (`MAX_MINORS_BEHIND`). A release during a long run does not fail the gate.
+3. The engines of the newest run are at most 1 minor version behind npm at the start of the run (`MAX_MINORS_BEHIND`). A release during a long run does not fail the gate. An engine that is a package of the same repository has its version from its `package.json` at the build commit, not from npm. The gate reads each `package.json` that git tracks.
 
-Stamps that pass also show one failing case for each page, in the log of each build. A measured page must fail one day after its limit, and after the start of its limit. A study with no limit must fail before the date of its run. A page with no failing case gives the exit code 1, so each site that uses the gate shows that the gate holds it.
+For an engine of the same repository, a break of rule 3 is a warning for 3 days (`VERSION_GRACE_DAYS`). The 3 days start at the commit that raised the version past the limit. Then the break is a fault, and the failing case is the end of the grace. The rule starts on 2026-11-30 (`WORKSPACE_RULE_START`). Before that start, each break is a warning. In a shallow clone, the gate cannot find the commit, so a break has no grace.
+
+Stamps that pass also show one failing case for each page, in the log of each build. The case is the first time at which the gate fails on the page. A measured page must fail one day after the limit of its data. When the data is old at the start of the limit, it fails at that start. A study with no limit must fail before the date of its run. A page with no failing case gives the exit code 1, so each site that uses the gate shows that the gate holds it.
 
 Two fields of a stamp change the age rule:
 
 - `"study": true` marks a study of the versions of its runs. The rule 3 does not apply. A study has a `limit`, or it has the field `noLimit`. Each other study fails the gate.
 - `"noLimit"` is for a study that no scheduled run can refresh: `{ "reproduce": "The code of the study is gone.", "today": "The page tells of one day." }`. The first text tells why no run of the current code can reproduce the numbers. It names the subject of the study, pinned to an exact version. The second text tells why the page claims nothing about today. The stamp line shows both, and tells that the page is a fixed study of that version.
 - `"limit"` sets a longer age limit: `{ "days": 7, "reason": "The scan is weekly.", "workflow": ".github/workflows/scan.yml" }`. The stamp line shows the limit and the reason. The schedule of that workflow must meet the limit, or the gate fails. A limit with no schedule fails. A limit over 14 days (`MAX_LIMIT_DAYS_WITHOUT_RULING`) also needs a `ruling`, a public https link for that site. A study has the same line, and its limit is at most 30 days (`MAX_STUDY_LIMIT_DAYS`), also with a ruling. Each run of the study names the full `commit` of the code that ran. A monthly line has a gap of 31 days, so it fails a limit of 30.
-- `"startsAt"` in a limit is the time at which the age rule and the commit rule start. The schedule rule applies at once. A site removes the field at the first green read of its workflow. The gate refuses a time after 2026-12-07 (`LAST_LIMIT_START`), so each limit turns on by that date.
+- `"startsAt"` in a limit is the time at which the age rule and the commit rule start. Before it, a break of these rules is a warning: `::warning::` in GitHub Actions. The start does not change the age, which is always the time of the check minus the date of the data. The schedule rule applies at once. A site removes the field at the first green read of its workflow. The gate refuses a time after 2026-12-07 (`LAST_LIMIT_START`), so each limit turns on by that date.
 
-When npm does not answer, the gate prints the rule 3 under `Not run` and does not fail. A workflow turns the gate on with the input `data-stamps` of `reusable-pages.yml`. A site with its own Pages workflow uses the action `data-stamps` of the template. The gate then runs from the template commit, so it needs no install.
+When npm does not answer for an engine that is not a package of the repository, the gate prints the rule 3 under `Not run`. It does not fail. A workflow turns the gate on with the input `data-stamps` of `reusable-pages.yml`. A site with its own Pages workflow uses the action `data-stamps` of the template. The gate then runs from the template commit, so it needs no install.
 
 `renderDataStamp(stamp)` gives the line that the page shows with its data: the run, its date, its engine versions and the run in flight. The line also shows the age of the oldest run at the build.
 
@@ -486,10 +493,12 @@ import "@mark1russell7/site-pages/scroll-cue.css";
 The class sets `overflow-x: auto`. A browser with scroll timelines keeps the background of the box, so a code block keeps the color of its theme. A browser with no scroll timelines gets the background color `--scroll-cue-bg` and a shade of the color `--scroll-cue-shade`. Set `--scroll-cue-bg` to the background color of the box:
 
 ```css
-.code {
+.code.scroll-cue {
   --scroll-cue-bg: var(--code-bg);
 }
 ```
+
+The rule that sets `--scroll-cue-bg` must be more specific than `.scroll-cue`, which sets the default `Canvas`. The command `site-pages cue` puts its style last in `<head>`. Thus a rule with only `pre` or `.code` loses, and the fade gets the wrong color.
 
 The fades run on a scroll timeline (`animation-timeline: scroll(self inline)`). In Chromium, `document.getAnimations()` gives each fade as a running animation with one iteration, and the fade does not end. A test that waits for the end of each animation, for example before an axe check of the contrast, then stops at its time limit. Such a test must skip each animation whose timeline is not `document.timeline`:
 
@@ -512,12 +521,18 @@ The entry `@mark1russell7/site-pages/chrome` has small helpers for the script of
 | Function | Operation |
 | --- | --- |
 | `h(tag, attrs, ...children)` | Makes an element. The attribute `class` sets the class name. `false`, `null` and `undefined` give no attribute and no child. |
+| `svg(tag, attrs, ...children)` | Makes an SVG element, with the rules of `h`. The attribute `class` sets the attribute `class`. |
 | `byId(id)` | Gives the element with the ID. It throws when the page has no such element. |
 | `setupTheme(button, storageKey)` | Makes a theme button: auto, light, dark, in turn. It sets `data-theme` on the `html` element and keeps the choice in `localStorage`. |
 | `currentTheme()`, `nextTheme(storageKey)`, `applyTheme(theme, storageKey)` | Read the theme, set the next theme, or set one theme. A site with its own button, for example a React component, uses them. |
 | `copyText(button, text, options)` | Copies a text. The button shows "Copied" or "Copy failed" for 1600 ms. |
 | `copyToClipboard(text)` | Copies a text with the Clipboard API, else with `document.execCommand`. It gives `true` after a copy. |
 | `showBuild(element, build, repository)` | Adds "Version 1.2.3, build abc1234 of 2026-11-03" to an element. The commit is a link to GitHub. |
+| `new Segmented(container, choices, current, onChange, axis)` | Makes a radio group with one focus stop. The arrow keys select the next button and move the focus to it. `set(value)` changes the value with no event. |
+| `rovingIndex(key, index, count, axis)` | Gives the index after an arrow key, with a wrap at each end. A tab list or a list of results uses it. |
+
+Put the role and the label of the group on the container, for example `<div role="radiogroup" aria-label="Unit">`. The axis `horizontal` uses only the left and right arrows, and `vertical` uses only the up and down arrows. The default `both` uses the four arrows.
+Add the class `sp-choices` of `demo.css` to the container. Then the buttons show as a row, and the button of the value shows as chosen.
 
 ```ts
 import { byId, copyText, h, setupTheme } from "@mark1russell7/site-pages/chrome";
@@ -538,6 +553,48 @@ The theme `auto` removes `data-theme`, and the CSS of the site then obeys `prefe
   } catch {}
 </script>
 ```
+
+## The parts of a live demo
+
+A home page shows the package at work: a visitor types or clicks, and the page shows the result of the real functions. The entry `@mark1russell7/site-pages/demo` has the parts that each demo uses. Like `./chrome`, it imports no Node.js module. The file `@mark1russell7/site-pages/demo.css` has their style.
+
+| Function | Operation |
+| --- | --- |
+| `examples(row, items, pick)` | Fills a row with one button for each example `[label, value]`. A click starts `pick` with the value. |
+| `verdict(pass, title, ...reason)` | Makes the line of a verdict: a check or a cross, a title in bold and a reason. The mark has the label "Pass" or "Fail". |
+| `setField(field, value)` | Sets the value of a field and sends an `input` event, as typing does. |
+| `markedText(parts, label)` | Shows a text in a box, with a `mark` element on each part with `hit`. `partsAt` and `partsOf` of `@mark1russell7/text/parts` give the parts. |
+
+The style gives these classes:
+
+| Class | Element |
+| --- | --- |
+| `sp-demo` | A section of the page with one demo. |
+| `sp-field` | A label with its input, its text box or its range. Put the text of the label in a `span`. |
+| `sp-pair` | Two or three fields side by side. On a phone, they are in one column. |
+| `sp-examples` | The row of `examples`. A button with `aria-pressed="true"` shows as chosen. |
+| `sp-choices` | A row of choices, for example a radio group. The button with `aria-checked="true"` shows as chosen. |
+| `sp-cards`, `sp-card` | One card for each version of a result. |
+
+```ts
+import "@mark1russell7/site-pages/demo.css";
+import { byId } from "@mark1russell7/site-pages/chrome";
+import { examples, markedText, setField, verdict } from "@mark1russell7/site-pages/demo";
+import { partsOf } from "@mark1russell7/text/parts";
+
+const input = byId<HTMLInputElement>("find");
+const result = byId("result");
+const show = (): void => {
+  const parts = partsOf("Is 1+1=2? Yes.", input.value);
+  const found = parts.some((part) => part.hit);
+  result.replaceChildren(verdict(found, found ? "Found:" : "Not found:", `the text has "${input.value}".`), markedText(parts, "The text"));
+};
+input.addEventListener("input", show);
+examples(byId("find-examples"), [["A question", "1+1=2?"], ["A word", "Yes"]], (value) => setField(input, value));
+show();
+```
+
+The style reads the tokens of a site when they exist, for example `--surface`, `--ink`, `--muted` and `--rule` of `shell.css`. Without them, it uses its own colors, in light and in dark. The tokens `--sp-pass`, `--sp-pass-bg`, `--sp-fail`, `--sp-fail-bg` and `--sp-hit` set the colors of a verdict and of a mark.
 
 ## The measures of a site
 
@@ -579,13 +636,17 @@ Two functions read a measure from GitHub at the build. Each result has the `at` 
 | Function | Measure |
 | --- | --- |
 | `githubGreenRun({ owner, repo, token, workflow })` | The scheduled runs of a workflow that passed in a row, from the newest run |
-| `githubReleaseLag({ owner, repo, token, tagPrefix, branch })` | The age in days of the oldest commit of the first-parent line of the branch that is not in the newest release of the tag prefix. A merge commit counts at its own date. Drafts and pre-releases do not count. |
+| `githubReleaseLag({ owner, repo, token, tagPrefix, branch, paths })` | The age in days of the oldest commit of the first-parent line of the branch that is not in the newest release of the tag prefix. A merge commit counts at its own date. Drafts and pre-releases do not count. With `paths` (for example `["packages/", "!packages/site/"]`), only a commit that changes a file in the paths counts. The last entry that matches a file decides. |
 
 ## The shell of a site
 
 The shell is the part of a page that is not its content. The package has two parts of the shell, and each part is optional.
 
 The entry `@mark1russell7/site-pages/vite` is for `vite.config.ts`. The plugin `siteShell` sets `base` from `SITE_BASE`, sets `build.target` to `es2022`, defines `__BUILD__`, and adds the theme script to the `head` of each HTML page.
+
+The plugin also adds an icon link to each HTML page with no icon link. Without an icon link, the browser asks for `/favicon.ico`. A project site on GitHub Pages has no such file, so the console shows a 404 error. The option `icon` sets the `href` of the icon. The value `false` adds no icon.
+
+The releases page and the status page have the same icon. `PageOptions.icon` sets its `href`. The root entry exports `SITE_ICON_HREF`, `iconLink(href)` and `hasIconLink(html)`, for a page without the plugin.
 
 ```ts
 import { defineConfig } from "vite";
@@ -608,7 +669,7 @@ showBuild(byId("build"), __BUILD__, "owner/my-site");
 
 | Export of `./vite` | Operation |
 | --- | --- |
-| `siteShell({ themeKey, packageFile })` | Makes the plugin. A `base` or a `build.target` in the config of the site has priority. |
+| `siteShell({ themeKey, packageFile, icon })` | Makes the plugin. A `base` or a `build.target` in the config of the site has priority. |
 | `siteStamps(input)` | Makes the plugin of the data stamps of a site. |
 | `themeScript(storageKey)` | Gives the text of the theme script, for a page without the plugin. |
 | `siteBase(env)` | Gives `SITE_BASE` with one `/` at the end, or `/`. |

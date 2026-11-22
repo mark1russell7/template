@@ -88,10 +88,24 @@ export interface RuleContext {
   readonly env: Readonly<Record<string, string | undefined>>;
   /** The base commit that `--base` gives, if any. */
   readonly base?: string;
+  /** The day of the check (`YYYY-MM-DD`, UTC), for a rule with exceptions that end. A rule takes the day of the clock when it is missing. */
+  readonly today?: string;
   /** This function gives the files that git tracks, relative to the root, or undefined when the root is not in a git repository. */
   gitFiles(): readonly string[] | undefined;
-  /** This function starts git in the root, and gives its output, or undefined when git fails. */
+  /** This function starts git in the root, and gives its output, or undefined when git fails. A context of createContext starts git one time for each list of arguments. */
   git(args: readonly string[]): string | undefined;
+  /**
+   * This function gives the text of the file of each `<commit>:<path>` (as `git show` does), or undefined for each one
+   * that git does not have. A context of createContext starts git one time for all of them (`git cat-file --batch`).
+   * A context with no such function reads each one with `git show`: use showFiles, which handles the two.
+   */
+  gitShow?(specs: readonly string[]): readonly (string | undefined)[];
+}
+
+/** This function gives the text of the file of each `<commit>:<path>`, or undefined, in one start of git when the context can. */
+export function showFiles(context: Pick<RuleContext, "git" | "gitShow">, specs: readonly string[]): readonly (string | undefined)[] {
+  if (specs.length === 0) return [];
+  return context.gitShow !== undefined ? context.gitShow(specs) : specs.map((spec) => context.git(["show", spec]));
 }
 
 /** The result of a rule: a list of breaks (empty when the rule passes), or the reason why the rule did not start. */
@@ -127,7 +141,16 @@ export interface Rule {
    */
   readonly failsFrom?: string;
   check(context: RuleContext, options: Options): RuleOutcome;
+  /**
+   * This function gives the reason when the rule cannot read a part of its cases, for example a private source that CI
+   * does not give. It gives undefined when the rule reads each part. The check then shows "no read" and the reason with
+   * the result, so a part with no read does not show as a pass. The status of the rule does not change.
+   */
+  noRead?(context: RuleContext, options: Options): string | undefined;
 }
+
+/** This function tells if the environment is a CI run: `CI` is `true` or `1`, or `GITHUB_ACTIONS` is `true`. */
+export const isCi = (env: Readonly<Record<string, string | undefined>>): boolean => ["true", "1"].includes((env["CI"] ?? "").toLowerCase()) || env["GITHUB_ACTIONS"] === "true";
 
 /** The fields of `package.json` that hold dependencies. */
 export const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"] as const;
@@ -204,11 +227,70 @@ export function readJsonc(file: string): unknown {
   }
 }
 
+/**
+ * This function gives the text of the blob of each `<commit>:<path>` in `root`, with one start of `git cat-file --batch`.
+ * It gives undefined for each name that git does not have or that is not a file. A name with a line break goes to
+ * `git show`.
+ */
+export function runGitShow(root: string, specs: readonly string[]): (string | undefined)[] {
+  const batch = specs.filter((spec) => !/[\r\n]/.test(spec));
+  let texts: readonly (string | undefined)[] = [];
+  if (batch.length > 0) {
+    const result = spawnSync("git", ["cat-file", "--batch"], { cwd: root, input: `${batch.join("\n")}\n`, maxBuffer: 256 * 1024 * 1024, windowsHide: true });
+    texts = result.error || result.status !== 0 ? batch.map(() => undefined) : parseCatFileBatch(result.stdout, batch.length);
+  }
+  const indexOf = new Map(batch.map((spec, index) => [spec, index] as const));
+  return specs.map((spec) => {
+    const index = indexOf.get(spec);
+    return index !== undefined && index < texts.length ? texts[index] : runGit(root, ["show", spec]);
+  });
+}
+
+/**
+ * This function reads the output of `git cat-file --batch` for `count` names. It gives the text of each blob, or
+ * undefined for a name that git does not have or that is not a blob. It gives fewer than `count` entries when the output
+ * ends early.
+ */
+export function parseCatFileBatch(out: Uint8Array, count: number): (string | undefined)[] {
+  const data = Buffer.from(out.buffer, out.byteOffset, out.byteLength);
+  const texts: (string | undefined)[] = [];
+  let at = 0;
+  while (texts.length < count) {
+    const end = data.indexOf(0x0a, at);
+    if (end < 0) break;
+    // The header is "<object> <type> <size>", or "<name> missing" (or "ambiguous") when git does not have the name.
+    const header = data.toString("utf8", at, end).split(" ");
+    at = end + 1;
+    const size = Number(header.at(-1));
+    if (header.length !== 3 || !/^[0-9a-f]+$/.test(header[0] ?? "") || !Number.isInteger(size)) {
+      texts.push(undefined);
+      continue;
+    }
+    texts.push(header[1] === "blob" ? data.toString("utf8", at, at + size) : undefined);
+    at += size + 1;
+  }
+  return texts;
+}
+
 /** This function starts git in `root` with `args`, and gives its output, or undefined when git fails. */
 export function runGit(root: string, args: readonly string[]): string | undefined {
   const result = spawnSync("git", [...args], { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024, windowsHide: true });
   if (result.error || result.status !== 0) return undefined;
   return result.stdout;
+}
+
+/** This function gives `owner/name` from a git remote URL, or undefined for a URL that is not of GitHub. */
+export function repositoryOfRemote(url: string): string | undefined {
+  const text = url.trim();
+  for (const prefix of ["git@github.com:", "ssh://git@github.com/", "https://github.com/", "http://github.com/", "git+https://github.com/"]) {
+    if (!text.startsWith(prefix)) continue;
+    let rest = text.slice(prefix.length);
+    if (rest.endsWith("/")) rest = rest.slice(0, -1);
+    if (rest.endsWith(".git")) rest = rest.slice(0, -4);
+    const parts = rest.split("/");
+    return parts.length === 2 && parts.every((part) => part !== "") ? rest : undefined;
+  }
+  return undefined;
 }
 
 /** This function tells if `file` exists in the folder `dir`. */
@@ -220,4 +302,23 @@ export const hasFile = (dir: string, file: string): boolean => existsSync(join(d
  */
 export function codePackages(context: Pick<RuleContext, "rootPackage" | "packages">): readonly PackageInfo[] {
   return context.packages.length > 0 ? context.packages : [context.rootPackage];
+}
+
+/**
+ * This function gives the root package and the code packages, each one time. The root counts also when the globs of the
+ * workspace leave it out. A repository can publish its root and keep a private site in its workspace.
+ */
+export function rootAndCodePackages(context: Pick<RuleContext, "rootPackage" | "packages">): readonly PackageInfo[] {
+  const all = [context.rootPackage, ...codePackages(context)];
+  return all.filter((pkg, index) => all.findIndex((other) => other.file === pkg.file) === index);
+}
+
+/**
+ * This function gives the packages with a release version. These are the packages of `rootAndCodePackages` that are not
+ * private and have a name and a version.
+ */
+export function versionedPackages(context: Pick<RuleContext, "rootPackage" | "packages">): readonly PackageInfo[] {
+  return rootAndCodePackages(context).filter(
+    (pkg) => pkg.manifest["private"] !== true && typeof pkg.manifest["name"] === "string" && typeof pkg.manifest["version"] === "string",
+  );
 }

@@ -3,6 +3,7 @@
 // ruleset"). The owner starts it, because a ruleset is a setting of the repository.
 //
 //   node scripts/workflows/ruleset-ci-ok.ts [<owner/repo> ...] [--only-summary] [--apply]
+//   node scripts/workflows/ruleset-ci-ok.ts [<owner/repo> ...] --check
 //
 // Without --apply, the script only prints what it would do. For each repository:
 //   1. It reads the check runs of the head commits of the last 5 pull requests that merged into the default
@@ -23,18 +24,94 @@
 //      A rule with no check left goes out of its ruleset, and a ruleset with no rule left is deleted. A check of
 //      another workflow stays. A repository can then join or split the jobs of its CI and keep its ruleset.
 //
-// With no repository, the script uses each public repository of mark1russell7 that is not archived.
+// --check changes nothing and exits 1 when a repository has a summary check that passed in step 1 and that no ruleset
+// names: then that repository has no ruleset yet (a new repository), or it lost one. A repository with no "CI OK"
+// that passed is a no read, never a pass: a new repository has no merged pull request yet. The workflow rulesets.yml
+// runs the check each day, so each new repository gets its ruleset after its first merged pull request. --check does
+// not read the checks that --only-summary removes. With GITHUB_STEP_SUMMARY, it also writes a table there.
+//
+// --check also reads the settings of each repository that is not a fork, as anyone can read them (settingsFaults):
+// a ruleset when the repository has the workflow ci.yml, the dependency graph (the SBOM request gives 404 when it is
+// off), and a Pages source when the repository has the workflow pages.yml. A fault of a setting fails the check also
+// for a new repository with no merged pull request, so the window between the first push and the first merge is held.
+// scripts/stamp/settings.ts sets the settings. Another answer of the SBOM request is a no read, never a pass.
+//
+// With no repository, the script uses each public repository that is not archived, of each owner of the package
+// conventions (packages/conventions/src/owners.ts).
 import { execFileSync } from "node:child_process";
+import { appendFileSync, realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { OWNERS } from "../../packages/conventions/src/owners.ts";
 
-const CHECK = "CI OK";
+export const CHECK = "CI OK";
 // The name of a summary job: one word or more, the first with a capital letter, then " OK" ("Joint bench OK").
-const SUMMARY = /^[A-Z][A-Za-z0-9]*( [A-Za-z0-9]+)* OK$/;
-const OWNER = "mark1russell7";
+export const SUMMARY: RegExp = /^[A-Z][A-Za-z0-9]*( [A-Za-z0-9]+)* OK$/;
 // The app id of GitHub Actions, so that only a check of Actions passes the rule.
-const ACTIONS_APP = 15368;
+export const ACTIONS_APP = 15368;
+// The workflows of the template that need a setting of the repository: CI needs a ruleset, Pages needs a Pages source.
+export const CI_WORKFLOW = ".github/workflows/ci.yml";
+export const PAGES_WORKFLOW = ".github/workflows/pages.yml";
 
 function gh(args: readonly string[], input?: string): string {
   return execFileSync("gh", args, { encoding: "utf8", input, stdio: ["pipe", "pipe", "pipe"] });
+}
+
+/** This function gives the HTTP status in the text of an error of gh ("gh: Not Found (HTTP 404)"), or undefined. */
+export function httpStatusOf(text: string): number | undefined {
+  const found = /\(HTTP (\d{3})\)/.exec(text);
+  return found?.[1] === undefined ? undefined : Number(found[1]);
+}
+
+/** This function gives the HTTP status of a request with no output: 200, or the status of the error of gh. */
+function statusOf(args: readonly string[]): number {
+  try {
+    gh([...args, "--silent"]);
+    return 200;
+  } catch (error) {
+    const status = httpStatusOf(error instanceof Error && "stderr" in error ? String(error.stderr) : String(error));
+    if (status === undefined) throw error;
+    return status;
+  }
+}
+
+/** This function gives the body of a ruleset of the default branch that needs each check in `checks`, with no bypass. */
+export function rulesetBody(checks: readonly string[]): Record<string, unknown> {
+  return {
+    name: checks[0],
+    target: "branch",
+    enforcement: "active",
+    conditions: { ref_name: { include: ["~DEFAULT_BRANCH"], exclude: [] } },
+    rules: [{ type: "required_status_checks", parameters: { strict_required_status_checks_policy: false, required_status_checks: checks.map((context) => ({ context, integration_id: ACTIONS_APP })) } }],
+  };
+}
+
+/** The settings of a repository that a person sets on GitHub, not in its files, as anyone can read them. */
+export interface SettingsRead {
+  /** A fork keeps the settings of its source, so the check reads none of them. */
+  readonly fork: boolean;
+  /** The required checks of the default branch, from each ruleset of any name. */
+  readonly required: readonly string[];
+  /** The paths of the workflows. The check reads them only with no required check or no Pages source. */
+  readonly workflows: readonly string[];
+  readonly hasPages: boolean;
+  /** The HTTP status of the request for the SBOM of the dependency graph. */
+  readonly sbom: number;
+}
+
+/**
+ * This function gives the faults of the settings of a repository. A new repository has them until a person sets the
+ * settings (`scripts/stamp/settings.ts`). A ruleset needs proof that its checks start on a pull request, so this function
+ * asks for a ruleset only when the repository has the workflow `ci.yml` of the template.
+ */
+export function settingsFaults(read: SettingsRead): { faults: string[]; unread: string[] } {
+  const faults: string[] = [];
+  const unread: string[] = [];
+  if (read.fork) return { faults, unread };
+  if (read.required.length === 0 && read.workflows.includes(CI_WORKFLOW)) faults.push("no ruleset on the default branch");
+  if (read.sbom === 404) faults.push("the dependency graph is off");
+  else if (read.sbom !== 200) unread.push(`the dependency graph gave HTTP ${String(read.sbom)}`);
+  if (!read.hasPages && read.workflows.includes(PAGES_WORKFLOW)) faults.push("no Pages source");
+  return { faults, unread };
 }
 
 function json<T>(args: readonly string[]): T {
@@ -75,8 +152,11 @@ interface Ruleset {
 
 function repositories(named: readonly string[]): string[] {
   if (named.length > 0) return [...named];
-  const repos = json<Repo[]>(["repo", "list", OWNER, "--visibility", "public", "--no-archived", "--limit", "500", "--json", "nameWithOwner,defaultBranchRef"]);
-  return repos.filter((r) => r.defaultBranchRef !== null).map((r) => r.nameWithOwner);
+  return OWNERS.flatMap((owner) =>
+    json<Repo[]>(["repo", "list", owner.login, "--visibility", "public", "--no-archived", "--limit", "500", "--json", "nameWithOwner,defaultBranchRef"])
+      .filter((r) => r.defaultBranchRef !== null)
+      .map((r) => r.nameWithOwner),
+  );
 }
 
 // The summary checks that passed on the head of the newest of the last 5 merged pull requests where "CI OK" passed,
@@ -135,10 +215,98 @@ function dropCovered(repo: string, covered: ReadonlySet<string>, apply: boolean)
   return changed;
 }
 
-function main(argv: readonly string[]): void {
+/** The summary checks that the ruleset must name ("CI OK" first), and the ones that no rule of the branch names. */
+export function missingChecks(passed: ReadonlySet<string>, required: readonly string[]): { wanted: string[]; missing: string[] } {
+  const wanted = [...passed].sort((a, b) => (a === CHECK ? -1 : b === CHECK ? 1 : a.localeCompare(b)));
+  return { wanted, missing: wanted.filter((c) => !required.includes(c)) };
+}
+
+/** The result of the check of one repository. */
+export type CheckState =
+  | { readonly repo: string; readonly state: "have"; readonly checks: readonly string[] }
+  | { readonly repo: string; readonly state: "missing"; readonly missing: readonly string[]; readonly faults?: readonly string[] }
+  | { readonly repo: string; readonly state: "no read"; readonly reason: string };
+
+/** The text of the column Checks for a state. */
+function detailOf(s: CheckState): string {
+  if (s.state === "have") return s.checks.join(", ");
+  if (s.state === "no read") return s.reason;
+  return [...(s.missing.length > 0 ? [`no ruleset names ${s.missing.join(", ")}`] : []), ...(s.faults ?? [])].join("; ");
+}
+
+/** The report of --check: a Markdown table, and the exit code (1 when a repository misses a check). */
+export function checkReport(states: readonly CheckState[]): { text: string; code: number } {
+  const order = { missing: 0, "no read": 1, have: 2 } as const;
+  const sorted = [...states].sort((a, b) => order[a.state] - order[b.state] || a.repo.localeCompare(b.repo));
+  const count = (state: CheckState["state"]): number => states.filter((s) => s.state === state).length;
+  const lines = [
+    "## The ruleset and the settings of each public repository",
+    "",
+    `${count("missing")} miss a check or a setting, ${count("no read")} no read, ${count("have")} have each check.`,
+    "",
+    "| Repository | State | Checks |",
+    "| --- | --- | --- |",
+  ];
+  for (const s of sorted) lines.push(`| ${s.repo} | ${s.state} | ${detailOf(s)} |`);
+  const missing = sorted.filter((s) => s.state === "missing");
+  const checks = missing.filter((s) => s.missing.length > 0);
+  const settings = missing.filter((s) => (s.faults ?? []).length > 0);
+  if (checks.length > 0) {
+    lines.push("", "Add the rulesets: `node scripts/workflows/ruleset-ci-ok.ts " + checks.map((s) => s.repo).join(" ") + " --only-summary --apply`");
+  }
+  for (const s of settings) {
+    lines.push("", `Set the settings of ${s.repo}, with its clone next to the clone of the template: \`node scripts/stamp/settings.ts ${s.repo} --apply\``);
+  }
+  return { text: `${lines.join("\n")}\n`, code: missing.length > 0 ? 1 : 0 };
+}
+
+function check(repos: readonly string[]): number {
+  const states: CheckState[] = [];
+  for (const repo of repos) {
+    try {
+      const info = json<{ default_branch: string; fork: boolean; has_pages: boolean }>(["api", `repos/${repo}`]);
+      const branch = info.default_branch;
+      const rules = json<BranchRule[]>(["api", `repos/${repo}/rules/branches/${encodeURIComponent(branch)}`]);
+      const required = rules.filter((r) => r.type === "required_status_checks").flatMap((r) => r.parameters?.required_status_checks ?? []).map((c) => c.context);
+      // A fork reads no setting. The workflows are a read only for a repository with no required check or no Pages source.
+      const needsWorkflows = !info.fork && (required.length === 0 || !info.has_pages);
+      const workflows = needsWorkflows ? json<{ workflows: { path: string }[] }>(["api", `repos/${repo}/actions/workflows?per_page=100`]).workflows.map((w) => w.path) : [];
+      const sbom = info.fork ? 200 : statusOf(["api", `repos/${repo}/dependency-graph/sbom`]);
+      const { faults, unread } = settingsFaults({ fork: info.fork, required, workflows, hasPages: info.has_pages, sbom });
+      const { passed } = passedSummaries(repo, branch);
+      if (!passed.has(CHECK)) {
+        if (faults.length > 0) states.push({ repo, state: "missing", missing: [], faults });
+        else states.push({ repo, state: "no read", reason: [`no "${CHECK}" that passed on the last 5 pull requests into ${branch}`, ...unread].join("; ") });
+        continue;
+      }
+      const { wanted, missing } = missingChecks(passed, required);
+      if (missing.length > 0 || faults.length > 0) states.push({ repo, state: "missing", missing, faults });
+      else if (unread.length > 0) states.push({ repo, state: "no read", reason: unread.join("; ") });
+      else states.push({ repo, state: "have", checks: wanted });
+    } catch (error) {
+      // The details go to the log only: the table has fixed text.
+      process.stderr.write(`${repo}: ${error instanceof Error ? error.message : String(error)}\n`);
+      states.push({ repo, state: "no read", reason: "the GitHub API gave an error (see the log)" });
+    }
+  }
+  const { text, code } = checkReport(states);
+  process.stdout.write(text);
+  const summary = process.env["GITHUB_STEP_SUMMARY"];
+  if (summary !== undefined && summary !== "") appendFileSync(summary, text);
+  return code;
+}
+
+function main(argv: readonly string[]): number {
+  const named = argv.filter((a) => !a.startsWith("--"));
+  if (argv.includes("--check")) {
+    if (argv.includes("--apply")) {
+      process.stderr.write("--check changes nothing, so it does not go with --apply.\n");
+      return 2;
+    }
+    return check(repositories(named));
+  }
   const apply = argv.includes("--apply");
   const onlySummary = argv.includes("--only-summary");
-  const named = argv.filter((a) => !a.startsWith("--"));
   let added = 0;
   let changed = 0;
   for (const repo of repositories(named)) {
@@ -151,8 +319,7 @@ function main(argv: readonly string[]): void {
     // The rules that apply to the branch, from each ruleset of any name.
     const rules = json<BranchRule[]>(["api", `repos/${repo}/rules/branches/${encodeURIComponent(branch)}`]);
     const checks = rules.filter((r) => r.type === "required_status_checks").flatMap((r) => r.parameters?.required_status_checks ?? []).map((c) => c.context);
-    const wanted = [...passed].sort((a, b) => (a === CHECK ? -1 : b === CHECK ? 1 : a.localeCompare(b)));
-    const missing = wanted.filter((c) => !checks.includes(c));
+    const { wanted, missing } = missingChecks(passed, checks);
     if (missing.length === 0) {
       console.log(`have   ${repo}: a ruleset names ${wanted.map((c) => `"${c}"`).join(" and ")} on ${branch}.`);
       if (onlySummary) changed += dropCovered(repo, covered, apply);
@@ -163,14 +330,7 @@ function main(argv: readonly string[]): void {
       if (onlySummary) changed += dropCovered(repo, covered, apply);
       continue;
     }
-    const body = {
-      name: missing[0],
-      target: "branch",
-      enforcement: "active",
-      conditions: { ref_name: { include: ["~DEFAULT_BRANCH"], exclude: [] } },
-      rules: [{ type: "required_status_checks", parameters: { strict_required_status_checks_policy: false, required_status_checks: missing.map((context) => ({ context, integration_id: ACTIONS_APP })) } }],
-    };
-    gh(["api", "-X", "POST", `repos/${repo}/rulesets`, "--input", "-"], JSON.stringify(body));
+    gh(["api", "-X", "POST", `repos/${repo}/rulesets`, "--input", "-"], JSON.stringify(rulesetBody(missing)));
     console.log(`added  ${repo}: a ruleset for ${missing.map((c) => `"${c}"`).join(" and ")} on ${branch}.`);
     added++;
     // The new ruleset names only summary checks, so step 4 does not change it.
@@ -178,6 +338,9 @@ function main(argv: readonly string[]): void {
   }
   const counts = onlySummary ? `${added} rulesets added, ${changed} rulesets with fewer checks.` : `${added} rulesets added.`;
   console.log(apply ? counts : "Nothing changed. Start again with --apply to change the rulesets.");
+  return 0;
 }
 
-main(process.argv.slice(2));
+if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
+  process.exitCode = main(process.argv.slice(2));
+}

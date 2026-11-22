@@ -11,8 +11,12 @@ This package gives the import boundaries of a pnpm workspace as a [dependency-cr
 | `not-a-declared-export` | An import of a workspace package does not resolve. The path is not in its `exports`, or the package is not built. |
 | `unknown-workspace-package` | An import in a scope of the workspace (for example `@x/typo`) does not resolve, and the name is not a workspace package or a declared dependency. |
 | `import-of-the-app-<package>` | A package imports an app. An app is a leaf of the graph. This rule is only on with the option `apps`. |
+| `run-time-import-of-a-dev-dependency` | A source file imports an npm package that is only in `devDependencies`. An install with `--prod` does not have the package. |
+| `run-time-import-of-a-dev-workspace-package-in-<package>` | A source file imports a workspace package that is only in `devDependencies` of its package. An install with `--prod` does not link it. |
 
-A type-only import is a boundary too. Tests, fixtures and declaration files are not part of a boundary.
+A type-only import is a boundary too. Tests, the helpers of the tests, fixtures and declaration files are not part of a boundary.
+
+The two rules of the dev dependencies examine only the source folders of each package (`sourceFolders`, default `src`). Tests, the helpers of the tests and fixtures are not in them. A type-only import of a dev dependency is correct: the build removes it. A package with a config file of a bundler (`vite`, `tsdown`, `tsup`, `rollup`, `rolldown` or `webpack`) is bundled. Its build holds each import, so the rules do not examine it. The option `bundled` changes this list.
 
 The rule `import-of-the-app-<package>` examines only the path of an import that resolves. When the name of an app does not resolve, `not-a-declared-export` finds the import.
 
@@ -57,6 +61,8 @@ Add the script `"check:boundaries": "depcruise --config .dependency-cruiser.ts p
 | `reference` | none | A text before each comment, for example the name of the decision record. The rules of `forbidden` get it too, when their comment does not start with it. |
 | `scopes` | the scopes of the workspace package names | The scopes of `unknown-workspace-package`. A list replaces the scopes. `{ add: ["@y"], remove: ["@x"] }` changes them. `[]` turns off the rule. |
 | `buildFolders` | `["dist", "build"]` | The build folders of each package. The analysis does not follow them. `[]` follows them. |
+| `sourceFolders` | `["src"]` | The source folders of each package. The rules of the dev dependencies examine their files. `[]` turns off these rules. |
+| `bundled` | each package with a config file of a bundler | The names of the packages whose build holds each import. The rules of the dev dependencies do not examine them. |
 | `forbidden` | none | More rules of the repository, after the rules of the boundaries. |
 | `options` | the default options | More options of dependency-cruiser. They replace the default options that have the same key. |
 
@@ -84,13 +90,25 @@ module.exports = boundaries(__dirname, {
 
 - `doNotFollow`: `node_modules` and the build folders of each package (`buildFolders`). An import of a different package stops at its entry, for example `packages/b/dist/index.js`. The analysis does not go into the imports of that built file. It also does not start from the files of a build folder.
 - `enhancedResolveOptions.conditionNames`: `["import", "node", "default"]`, as Node resolves an ESM import. An entry that is only for `require` does not resolve.
-- `exclude`: tests, fixtures, declaration files and `node_modules`.
+- `exclude`: tests, benchmarks, their helpers, fixtures and declaration files. A test file has the suffix `.test`, `.spec` or `.e2e`. A benchmark file has the suffix `.bench`, as in vitest bench. A helper adds one word with a hyphen to the suffix, for example `fixtures.test-util.ts`. Name a setup file of vitest in the same way, for example `slow.test-setup.ts`.
+- The default `exclude` also has the folders `test`, `tests`, `e2e`, `__tests__`, `fixtures`, `bench` and `benchmarks`. A bench folder holds the cases of a bench harness. CI starts them with the dev dependencies. A file in `node_modules` is in the graph as a leaf, because `doNotFollow` stops the analysis there. The rule `run-time-import-of-a-dev-dependency` needs it.
 
 To change a default option, give the option in `options`. For example, `options: { enhancedResolveOptions: { exportsFields: ["exports"], conditionNames: ["import", "require", "node", "default"], mainFields: ["module", "main"] } }` also resolves the entries for `require`.
 
 ## The parser
 
 dependency-cruiser reads TypeScript with the TypeScript compiler of the repository only for TypeScript 2 to 6. With TypeScript 7, or with no TypeScript, `boundaries()` sets the parser `swc` when `@swc/core` is installed. Without `@swc/core`, dependency-cruiser reads only JavaScript. For a check of built JavaScript, set `buildFolders: []`.
+
+## Changes in 0.3.2
+
+- The default `exclude` and the rules of the dev dependencies leave out benchmark files (`.bench`) and the folders `bench` and `benchmarks`. Before, a bench case that imports its harness from the dev dependencies was a finding of `run-time-import-of-a-dev-dependency`.
+
+## Changes in 0.3.0
+
+These changes can give different results than 0.2.0:
+
+- The new rules `run-time-import-of-a-dev-dependency` and `run-time-import-of-a-dev-workspace-package-in-<package>` find a run-time import of a dev dependency.
+- The default `exclude` does not have `node_modules`. The graph has each imported package as a leaf.
 
 ## Changes in 0.2.0
 
@@ -107,4 +125,5 @@ These changes can give different results than 0.1.0:
 - `workspacePackages(root, globs)` gives the packages of the workspace, their entries and their declared dependencies.
 - `workspaceScopes(packages, scopes)` gives the scopes of `unknown-workspace-package`.
 - `declaredDependencies(manifest)` gives the names in the dependency fields of a `package.json`.
+- `devOnlyDependencies(manifest)` gives the names that are only in `devDependencies` of a `package.json`.
 - `defaultOptions(root, { packages, buildFolders })`, `doNotFollowPaths(packages, buildFolders)` and `parserOptions(root)` give the default options.

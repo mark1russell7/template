@@ -12,7 +12,7 @@
  * conventions hook install
  * ```
  */
-export { defaultOptions, parseConfig, type ConventionsConfig, type RuleConfig } from "./config.ts";
+export { defaultOptions, parseConfig, parseRuleConfig, type ConventionsConfig, type RuleConfig } from "./config.ts";
 export {
   cleanPath,
   codePackages,
@@ -22,11 +22,15 @@ export {
   keyLine,
   lineOf,
   matchesAny,
+  parseCatFileBatch,
   parseJsonc,
   readJsonc,
   replaceLine,
+  repositoryOfRemote,
   RULE_WARN_DAYS,
   runGit,
+  runGitShow,
+  showFiles,
   specifiersOf,
   type AuditSource,
   type Break,
@@ -42,18 +46,25 @@ export {
 } from "./rule.ts";
 export {
   apiReportScript,
+  coverageProvider,
   cuePreset,
+  exportsRequire,
   gateTrigger,
+  homeModule,
   homePackage,
   licenseFile,
   mainCheck,
   noBuildOutput,
   noLocalPaths,
+  packNoBuildinfo,
   pagesAfterRelease,
   pagesSite,
   pinnedGitDeps,
   pipeFails,
+  jobFails,
   gateAfterCancel,
+  playwrightInstall,
+  publishTextSafe,
   pushMainOnly,
   releaseFiles,
   requiredScripts,
@@ -65,6 +76,7 @@ export {
   summaryJobRule,
   setupCue,
   sharedCi,
+  siteCheckInCi,
   sourceMain,
   testsRequired,
   trustPolicy,
@@ -85,6 +97,7 @@ export {
   PRIVATE_NAMES_FILE_VARIABLE,
   PRIVATE_PATTERNS_VARIABLE,
   privateNamesFile,
+  privateNamesFiles,
   privatePatterns,
   privateTextBreaks,
   type PrivatePattern,
@@ -97,6 +110,7 @@ export {
   isCommonUse,
   lineNameHit,
   lineNameHits,
+  mergePrivateNames,
   nameMatches,
   parsePrivateNames,
   pathNameHit,
@@ -108,11 +122,23 @@ export {
   type NameRule,
   type PrivateNameList,
 } from "./private-names.ts";
-export { HOOK_MARKER, installHook, NO_READ_LINE, PRE_PUSH_HOOK, prePush, type HookOptions, type PrePushOptions } from "./pre-push.ts";
+export {
+  HOOK_MARKER,
+  installHook,
+  NO_READ_LINE,
+  parsePrePushArgs,
+  PRE_PUSH_HOOK,
+  prePush,
+  runPrePushArgs,
+  type HookOptions,
+  type PrePushArgs,
+  type PrePushOptions,
+} from "./pre-push.ts";
 export { hasImportMetaMain, REAL_COMPARE } from "./rules/main-check.ts";
 export { roadmapOfLine } from "./rules/roadmap-parses.ts";
-export { repositoryOfRemote, scheduleMinute } from "./rules/runner-budget.ts";
-export { declaredName, messageOf, repoOf, signaturesOf } from "./rules/home-package.ts";
+export { scheduleMinute } from "./rules/runner-budget.ts";
+export { declaredName, messageOf, repoOf, reposOf, signaturesOf } from "./rules/home-package.ts";
+export { moduleMessage, modulesOf, moduleUses, type HomeModule, type ModuleUse } from "./rules/home-module.ts";
 export { HOME_EXPORTS } from "./home-exports.ts";
 export { authorOf, LICENSE_TEXTS, licenseFileOf, mitText, repositoryIsPublic } from "./rules/license-file.ts";
 export { GITHUB_YAML, yamlFaults, type YamlFault } from "./rules/workflow-parses.ts";
@@ -131,7 +157,20 @@ export { configsOfScript, scriptsOf } from "./rules/typed-files.ts";
 export { lockedVersions, minorOf, publishedMinorRule, reachOf, type Minor } from "./rules/published-minor.ts";
 export { NPM_REGISTRY, npmLookup, SHIPPED_FIELDS, UNSHIPPED_FILES, unreleasedChangeRule, type RegistryAnswer, type RegistryLookup } from "./rules/unreleased-change.ts";
 export { namedVersions, setVersions } from "./rules/version-title.ts";
-export { readAction, readWorkflow, type Workflow, type WorkflowInput, type WorkflowJob, type WorkflowStep } from "./workflow.ts";
+export { hiddenFailures, parseAdvisory, startsTests, swallowsTests, type Advisory, type HiddenFailure } from "./rules/job-fails.ts";
+export {
+  parseWorkflow,
+  readAction,
+  readWorkflow,
+  type ParsedJob,
+  type ParsedStep,
+  type ParsedWorkflow,
+  type Workflow,
+  type WorkflowInput,
+  type WorkflowJob,
+  type WorkflowPermissions,
+  type WorkflowStep,
+} from "./workflow.ts";
 export { blockHash, githubFetch, HOME_TIMEOUT_MS, sharedDocsRule, type HomeAnswer, type HomeFetch } from "./rules/shared-docs.ts";
 export {
   annotations,
@@ -150,6 +189,7 @@ export {
   type FixResult,
   type RuleResult,
 } from "./run.ts";
-export { findHomes, HOMES, MAP_RULE, mapMarkdown, mapText, mergeHomes, readOverlay, type Home, type HomeState } from "./map.ts";
+export { findHomes, HOMES, MAP_RULE, mapMarkdown, mapText, mergeHomes, npmDrift, npmNames, readOverlay, type Home, type HomeState, type NpmDrift, type NpmDriftKind, type NpmPresence } from "./map.ts";
 export { changelogSection, MAX_NOTES, npmUrl, releaseNotes, tagName } from "./release-text.ts";
-export { globFolders, globToRegExp, packageFolders, workspaceGlobs } from "./workspace.ts";
+export { OWNERS, ownerOf, ownersOf, sharedNames, type Owner } from "./owners.ts";
+export { globFolders, globToRegExp, isWorkspaceFolder, packageFolders, parseWorkspaceGlobs, workspaceGlobs } from "./workspace.ts";

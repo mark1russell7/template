@@ -6,7 +6,7 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { minuteField, scheduleMinute } from "../../packages/conventions/src/rules/runner-budget.ts";
 import { parseRoadmap } from "../../packages/site-pages/src/index.ts";
-import { checkStamp, firstRoadmap, pinWorkflow, type RootManifest, rootScripts, stamp, workflowShape } from "./stamp.ts";
+import { checkStamp, firstRoadmap, pinWorkflow, type RootManifest, rootScripts, stamp, stampRoot, workflowShape } from "./stamp.ts";
 
 const template = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -33,16 +33,26 @@ describe("the stamp", () => {
   it("gives the install command when the repository has a package name", async () => {
     const { out } = await stamped("@mark1russell7/demo");
     assert.match(read(out, "packages/site/index.html"), /pnpm add @mark1russell7\/demo/);
-    assert.match(read(out, ".github/workflows/pages.yml"), /packages: "@mark1russell7\/demo"/);
+    assert.equal((JSON.parse(read(out, ".github/site.json")) as { packages: string }).packages, "@mark1russell7/demo");
   });
 
-  it("names the site in the Pages workflow and pins the shared workflow", async () => {
+  it("names the site in the site config, and pins the shared workflows of the deploy and of the check", async () => {
     const { out, sha } = await stamped();
+    const text = read(out, ".github/site.json");
+    const site = JSON.parse(text) as Record<string, unknown>;
+    assert.equal(site["build"], "pnpm --filter @demo-repo/site run build");
+    assert.equal(site["out"], "packages/site/dist");
+    assert.equal(site["site-name"], "demo-repo");
+    assert.deepEqual(site["env"], { SITE_BASE: "/{repo}" });
+    assert.doesNotMatch(text, /@template\/site|"Template"|\{\{\w+\}\}/);
     const pages = read(out, ".github/workflows/pages.yml");
-    assert.match(pages, /build: pnpm --filter @demo-repo\/site run build/);
-    assert.match(pages, /out: packages\/site\/dist/);
     assert.ok(pages.includes(`reusable-pages.yml@${sha} # main`));
-    assert.doesNotMatch(pages, /@template\/site|site-name: Template|\{\{\w+\}\}/);
+    // The site values have one home: the Pages workflow gives none of them
+    assert.doesNotMatch(pages, /\n    with:\n/);
+    // The job site of ci.yml checks the site on each pull request, and CI OK needs it
+    const ci = read(out, ".github/workflows/ci.yml");
+    assert.ok(ci.includes(`uses: mark1russell7/template/.github/workflows/reusable-pages-check.yml@${sha} # main`));
+    assert.match(ci, /\n    needs: \[[^\]]*\bsite\b[^\]]*\]\n/);
   });
 
   it("leaves no range of a package that the repository does not have", async () => {
@@ -50,8 +60,24 @@ describe("the stamp", () => {
     for (const path of ["package.json", "packages/site/package.json"]) assert.doesNotMatch(read(out, path), /workspace:/);
     const root = JSON.parse(read(out, "package.json")) as { name: string; devDependencies: Record<string, string> };
     assert.equal(root.name, "demo-repo-monorepo");
+    assert.equal(Object.hasOwn(root, "conventions"), false, "The repository gets the exceptions of the template");
     assert.equal(root.devDependencies["@mark1russell7/conventions"], "^9.8.7");
     assert.equal(root.devDependencies["@mark1russell7/template-cli"], "^9.8.7");
+  });
+
+  it("with link, gives each package of the template from its folder in the clone, and each other package from npm", async () => {
+    const out = join(mkdtempSync(join(tmpdir(), "stamp-")), "demo-repo");
+    await stamp({ name: "demo-repo", description: "x", template, out, ref: "HEAD", latest: () => "9.8.7", link: true });
+    const root = JSON.parse(read(out, "package.json")) as { devDependencies: Record<string, string> };
+    const site = JSON.parse(read(out, "packages/site/package.json")) as { devDependencies: Record<string, string> };
+    const folder = (path: string): string => `link:${resolve(template, path).replace(/\\/g, "/")}`;
+    assert.equal(root.devDependencies["@mark1russell7/conventions"], folder("packages/conventions"));
+    assert.equal(root.devDependencies["@mark1russell7/template-cli"], folder("packages/cli"));
+    assert.equal(site.devDependencies["@mark1russell7/site-pages"], folder("packages/site-pages"));
+    assert.equal(site.devDependencies["vite"], "^9.8.7");
+    for (const range of [...Object.values(root.devDependencies), ...Object.values(site.devDependencies)]) {
+      if (range.startsWith("link:")) assert.ok(existsSync(join(range.slice("link:".length), "package.json")), range);
+    }
   });
 
   it("gives a roadmap that the Status page reads", async () => {
@@ -95,6 +121,20 @@ describe("the stamp", () => {
     assert.doesNotMatch(security, /\b(dependency-review|codeql|osv-upload): /);
   });
 
+  it("gives the queue, pinned to the shared workflow (CI.md, \"The queue\")", async () => {
+    const { out, sha } = await stamped();
+    const queue = read(out, ".github/workflows/queue.yml");
+    assert.ok(queue.includes(`uses: mark1russell7/template/.github/workflows/reusable-queue.yml@${sha} # main`));
+    assert.match(queue, /types: \[auto_merge_enabled\]/);
+  });
+
+  it("gives the lockfile workflow, pinned to the shared workflow (CI.md, \"The lockfile of a branch\")", async () => {
+    const { out, sha } = await stamped();
+    const lockfile = read(out, ".github/workflows/lockfile.yml");
+    assert.ok(lockfile.includes(`uses: mark1russell7/template/.github/workflows/reusable-lockfile.yml@${sha} # main`));
+    assert.match(lockfile, /\n {2}workflow_dispatch:\n/);
+  });
+
   it("stops when the folder exists", async () => {
     const { out } = await stamped();
     await assert.rejects(stamp({ name: "demo-repo", description: "x", template, out, ref: "HEAD", latest: () => "1.0.0" }), /The folder exists/);
@@ -113,6 +153,17 @@ describe("rootScripts", () => {
       package: "tsx packages/cli/src/index.ts package",
     });
     assert.deepEqual(scripts, { test: "pnpm -r run test", "check:api": "api-report check", typecheck: "pnpm -r run typecheck", package: "template package", template: "template repo" });
+  });
+});
+
+describe("stampRoot", () => {
+  it("leaves out the exceptions of the template, because each one names a file that the repository does not get", () => {
+    const exceptions = { rules: { "typed-scripts": { generated: ["made-up/bundles/*.mjs"], reason: "A made-up build writes these files." } } };
+    const source: RootManifest = { name: "template-monorepo", private: true, scripts: {}, devDependencies: {}, conventions: exceptions };
+    const root = stampRoot(source, "demo-repo", new Set<string>(), () => "^1.0.0");
+    assert.equal(Object.hasOwn(root, "conventions"), false);
+    assert.equal(root["private"], true);
+    assert.deepEqual(source["conventions"], exceptions);
   });
 });
 
@@ -146,7 +197,9 @@ describe("checkStamp", () => {
     root.scripts["own"] = "node own.ts";
     root.devDependencies["playwright"] = "^1.56.1";
     for (const dep of Object.keys(root.devDependencies)) if (root.devDependencies[dep] === "^9.8.7") root.devDependencies[dep] = "^0.1.0";
-    writeFileSync(join(out, "package.json"), `${JSON.stringify(root, null, 2)}\n`);
+    // The exceptions of the repository are its own
+    const own = { ...root, conventions: { rules: { "typed-scripts": { ignore: ["own.mjs"], reason: "A made-up tool reads this file." } } } };
+    writeFileSync(join(out, "package.json"), `${JSON.stringify(own, null, 2)}\n`);
     assert.deepEqual(states(out), {});
   });
 

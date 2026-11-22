@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { cronLines } from "@mark1russell7/site-pages";
 import { byCode } from "../workspace.ts";
-import { replaceLine, type Break, type Edit, type Rule } from "../rule.ts";
+import { repositoryOfRemote, replaceLine, type Break, type Edit, type Rule } from "../rule.ts";
 import { WORKFLOW, blockEnd, childIndent, indentOf, keyValue, workflowLines } from "../workflow.ts";
 
 /**
@@ -21,20 +21,6 @@ export function scheduleMinute(repository: string, file: string): number {
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
   return (hash % 59) + 1;
-}
-
-/** This function gives `owner/name` from a git remote URL, or undefined for a URL that is not of GitHub. */
-export function repositoryOfRemote(url: string): string | undefined {
-  const text = url.trim();
-  for (const prefix of ["git@github.com:", "ssh://git@github.com/", "https://github.com/", "http://github.com/", "git+https://github.com/"]) {
-    if (!text.startsWith(prefix)) continue;
-    let rest = text.slice(prefix.length);
-    if (rest.endsWith("/")) rest = rest.slice(0, -1);
-    if (rest.endsWith(".git")) rest = rest.slice(0, -4);
-    const parts = rest.split("/");
-    return parts.length === 2 && parts.every((part) => part !== "") ? rest : undefined;
-  }
-  return undefined;
 }
 
 /** This function tells if a workflow is a shared workflow (`on: workflow_call`). Its caller gives the concurrency group. */
@@ -178,7 +164,7 @@ export const runnerBudget: Rule = {
   reason:
     "All repositories of the account share 40 runners, and heavy work keeps at most 28 of them. On 2026-10-30, a matrix with no max-parallel and the sync pull requests of about 20 repositories filled 39 of the 40 runners, with 88 jobs in the queue. Each repository copied the weekly scan at `23 5 * * 1`, so all scans started at the same minute. A workflow with no concurrency group starts a new run on each push, and the old runs keep their runners.",
   fix: "Add `max-parallel: 3` (or less) under `strategy`. Add a concurrency group at the top of the workflow (`concurrency: { group: <name>-${{ github.event_name == 'pull_request' && github.ref || github.sha }}, cancel-in-progress: ${{ github.event_name == 'pull_request' }} }`), or in each job. Change the minute of each `cron` to the minute that the message gives; the hour and the days stay.",
-  sources: [{ repo: "private", rule: "runner-slots", doc: "docs/STRATEGY.md (2026-10-30, the runner slots: a cap of 40, heavy work at most 28)" }],
+  sources: [{ repo: "private", rule: "runner-slots", doc: "a decision of 2026-10-30: the runner slots: a cap of 40, heavy work at most 28" }],
   options: {
     maxParallel: { type: "number", default: 3, description: "The largest max-parallel of a matrix." },
     minute: { type: "boolean", default: true, description: "When false, the rule does not examine the minute of the schedules." },

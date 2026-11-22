@@ -7,6 +7,7 @@
  *
  * The check clicks each link to the Releases page and the Status page.
  * A single-page application can catch such a click and show its own page in place of the page of site-pages.
+ * A page with the site bar fails when its own header shows a link of the bar again.
  * The rules are functions with no I/O, so the tests call them with no browser.
  */
 
@@ -14,7 +15,7 @@ import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { barHtml, injectBar, parsePages, type BarOptions } from "../bar/bar.ts";
-import { findBrowser, launch, type Page } from "./browser.ts";
+import { findBrowser, launch, type Browser, type Page } from "./browser.ts";
 import { cell, PHONE_WIDTH, pageSlug, type CheckIo } from "./check.ts";
 import { serve } from "./serve.ts";
 
@@ -28,6 +29,13 @@ export interface NavLink {
   readonly target: string;
   /** True when the link has a size and the page does not hide it. */
   readonly visible: boolean;
+  /**
+   * The part of the page that holds the link. `bar` is the shared site bar. `header` is a header or a navigation block
+   * of the page, out of a footer. Undefined is the body.
+   */
+  readonly place?: "bar" | "header" | undefined;
+  /** True when the link goes to a part of the current page, for example `#use`. */
+  readonly inPage?: boolean | undefined;
 }
 
 /** One page that the crawl opened. */
@@ -147,6 +155,16 @@ export function sitemapPaths(xml: string, home: URL): string[] {
 /** The name of a page in a message: its path, or "the home page". */
 const named = (path: string) => (path === "" ? "the home page" : `/${path}`);
 
+/**
+ * This function gives the visible links of the header of a page that go to the same URL as a link of the site bar.
+ * A link to a part of the current page is not a repeat. A page with no bar has no repeat.
+ */
+export function barRepeats(page: Pick<NavPage, "bar" | "links">): NavLink[] {
+  if (!page.bar) return [];
+  const bar = new Set(page.links.filter((link) => link.place === "bar").map((link) => link.href));
+  return page.links.filter((link) => link.place === "header" && link.visible && link.inPage !== true && bar.has(link.href));
+}
+
 /** This function gives the problems of a crawl. It reads no file and opens no page. */
 export function navProblems(result: Pick<NavResult, "pages" | "sitemap" | "clicks"> & { readonly unread?: readonly string[] }, home: URL, options: Pick<NavOptions, "maxClicks" | "requireBar">): string[] {
   const problems: string[] = [];
@@ -170,6 +188,11 @@ export function navProblems(result: Pick<NavResult, "pages" | "sitemap" | "click
       else if (!page.homeAtPhone) problems.push(`${named(page.path)} shows no link back to home at ${NAV_PHONE_WIDTH} px`);
     }
     if (options.requireBar && !page.bar) problems.push(`${named(page.path)} has no site bar`);
+    const repeats = barRepeats(page);
+    if (repeats.length > 0) {
+      const texts = repeats.map((link) => `"${link.text}"`).join(", ");
+      problems.push(`the header of ${named(page.path)} shows ${repeats.length === 1 ? "a link" : `${repeats.length} links`} of the site bar again: ${texts}. Remove ${repeats.length === 1 ? "it" : "them"} from the header of the site`);
+    }
     for (const link of page.links) {
       if (link.target !== "" && link.target !== "_self" && sitePath(link.href, home) !== undefined) {
         problems.push(`the link "${link.text}" of ${named(page.path)} opens ${named(sitePath(link.href, home) ?? "")} in a new tab, so the back button of the browser does not go back`);
@@ -204,11 +227,17 @@ export const NAV_SCAN = `(() => {
     }
     return box.right > 0 && box.left < innerWidth;
   };
+  const here = new URL(location.href);
+  here.hash = "";
+  const place = (a) => a.closest("[data-site-bar]") ? "bar" : !a.closest("footer, [role=contentinfo]") && a.closest("header, nav, [role=banner], [role=navigation]") ? "header" : undefined;
   const links = [...document.querySelectorAll("a[href]")].map((a) => {
     const url = new URL(a.getAttribute("href"), location.href);
+    const full = url.href;
     url.hash = "";
+    // A link with a fragment (also an empty one, "#") to the current page goes to a part of the page
+    const inPage = full !== url.href && url.href === here.href;
     const text = (a.textContent || a.getAttribute("aria-label") || a.getAttribute("title") || "").replace(/\\s+/g, " ").trim().slice(0, 80);
-    return { href: url.href, text, target: a.getAttribute("target") || "", visible: shown(a) };
+    return { href: url.href, text, target: a.getAttribute("target") || "", visible: shown(a), place: place(a), inPage };
   });
   return { links, bar: document.querySelector("[data-site-bar]") !== null, spHeader: document.querySelector(".sp-header") !== null, path: location.pathname };
 })()`;
@@ -314,12 +343,13 @@ export async function crawlSite(options: NavOptions): Promise<NavResult> {
   const start = server?.url ?? options.url;
   if (start === undefined) throw new Error("give out or url");
   const home = new URL(start.endsWith("/") ? start : `${start}/`);
-  const browser = await launch(executable, options.timeoutMs);
+  let browser: Browser | undefined;
   const pages: NavPage[] = [];
   const clicks: NavClick[] = [];
   let sitemap: string[] = [];
   let left: string[] = [];
   try {
+    browser = await launch(executable, options.timeoutMs);
     const { page } = browser;
     await Promise.all([page.send("Page.enable"), page.send("Runtime.enable")]);
     if (options.previewBar !== undefined) await previewBar(page, home, options.previewBar);
@@ -377,7 +407,8 @@ export async function crawlSite(options: NavOptions): Promise<NavResult> {
       }
     }
   } finally {
-    await browser.close();
+    // A browser that does not start throws in the try. The server then also closes, so the process can exit.
+    await browser?.close();
     await server?.close();
   }
   const unread = navUnread(left, pages, sitemap);

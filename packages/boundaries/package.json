@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package",
   "name": "@mark1russell7/boundaries",
-  "version": "0.2.1",
+  "version": "0.3.2",
   "description": "The import boundaries of a pnpm workspace as a dependency-cruiser configuration: each package is imported only through the entries of its package.json.",
   "keywords": [
     "dependency-cruiser",
@@ -71,6 +71,7 @@
   "devDependencies": {
     "@mark1russell7/cue": "^2.0.0",
     "@types/node": "^26.6.4",
+    "@vitest/coverage-v8": "^5.0.3",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3",
     "dependency-cruiser": "^18.7.0",

@@ -6,12 +6,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { cronLines } from "@mark1russell7/site-pages";
 import { byCode } from "../workspace.ts";
-import type { Break, Rule, RuleContext } from "../rule.ts";
+import { repositoryOfRemote, type Break, type Rule, type RuleContext } from "../rule.ts";
 import { WORKFLOW, applySplices, blockEnd, childIndent, childKeys, indentOf, keyValue, workflowLines, type Splice } from "../workflow.ts";
 import { listItems } from "./gate-trigger.ts";
 import { PAGES_WORKFLOWS, pagesCalls } from "./pages-site.ts";
 import { defaultBranch } from "./push-main-only.ts";
-import { repositoryOfRemote, scheduleMinute } from "./runner-budget.ts";
+import { scheduleMinute } from "./runner-budget.ts";
 
 /** The file of the release flow. */
 const RELEASE_FILE = ".github/workflows/release.yml";

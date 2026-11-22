@@ -58,6 +58,10 @@ runs:
     # a new package, so a 404 gets 5 more tries, 30 seconds apart, before the step counts the package as new.
     # The output "published" tells the tag job which versions this run published. The trap writes it also when the
     # step stops with an error after some publishes.
+    # The dist-tag comes from dist-tag.ts, with the "latest" of the packument that the step read immediately before
+    # the publish. A version above that "latest" gets "latest", and a lower version gets "latest-<major>.<minor>". Thus two
+    # runs that publish in either order do not move "latest" back. A pre-release gets "next". The summary of the run
+    # lists each version that did not get "latest", with the version that supersedes it.
     # When npm refuses a publish, trust_hints tells the cause of the two known failures of the trusted publisher. The
     # debug log of npm (--logs-dir) has the verbose lines of the OIDC exchange, which the output of npm does not show.
     # The action has no registry-url, so after a failed exchange npm has no token and stops with ENEEDAUTH.
@@ -73,6 +77,7 @@ runs:
       env:
         DRY_RUN: ${{ inputs.dry-run }}
         NEW_PACKAGES: ${{ inputs.new-packages }}
+        ACTION_PATH: ${{ github.action_path }}
       run: |
         set -o pipefail
         if [ "$NEW_PACKAGES" != error ] && [ "$NEW_PACKAGES" != warning ]; then
@@ -80,7 +85,19 @@ runs:
           exit 1
         fi
         published=()
-        trap 'echo "published=${published[*]}" >> "$GITHUB_OUTPUT"' EXIT
+        superseded=()
+        # Also after an error: the tag job reads "published", and the summary tells each superseded version.
+        finish() {
+          echo "published=${published[*]}" >> "$GITHUB_OUTPUT"
+          if [ ${#superseded[@]} -gt 0 ]; then
+            {
+              echo "### Versions that did not get the dist-tag latest"
+              echo
+              for line in "${superseded[@]}"; do echo "- $line"; done
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+        }
+        trap finish EXIT
         trust_hints() {
           if grep -qsE "OIDC token exchange error - package not found|POST 404 [^ ]*/-/npm/v1/oidc/token/exchange/|code E404" publish.log npm-logs/*.log; then
             echo "::error::npm refused the OIDC token exchange for $1 (\"package not found\" or 404, npm/cli#9969). For a repository with the immutable OIDC subject of GitHub, the trusted publisher must name no GitHub environment. RELEASING.md tells how to correct it."
@@ -109,8 +126,14 @@ runs:
             echo "$name $version is on npm."
             continue
           fi
-          tag=latest
-          case "$version" in *-*) tag=next ;; esac
+          if ! decision=$(node "$ACTION_PATH/dist-tag.ts" "$version" packument.json); then
+            echo "::error::The step cannot choose the dist-tag of $name $version, so it publishes nothing more."
+            exit 1
+          fi
+          read -r tag above <<< "$decision"
+          if [ -n "$above" ]; then
+            echo "::notice::$name $version gets the dist-tag $tag, not latest: npm has the higher latest $above."
+          fi
           if [ "$DRY_RUN" = true ]; then
             echo "Dry run: npm publish ./release/$file --access public --provenance --tag $tag"
             continue
@@ -129,6 +152,7 @@ runs:
             sleep $((attempt * 60))
           done
           published+=("$name@$version")
+          if [ -n "$above" ]; then superseded+=("\`$name@$version\`: dist-tag \`$tag\`, superseded by $above"); fi
         done < release/packages.txt
         if [ ${#new_packages[@]} -gt 0 ] && [ "$NEW_PACKAGES" = warning ]; then
           echo "::warning::These packages are not on npm, and this run did not publish them: ${new_packages[*]}. The owner bootstraps each new package once (RELEASING.md)."

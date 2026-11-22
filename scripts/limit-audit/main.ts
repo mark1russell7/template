@@ -1,0 +1,112 @@
+// The audit of the time limits. `limit-audit.ts` has the rules, and its test does not start this file.
+//
+//   node scripts/limit-audit/main.ts [--owners a,b] [--repos a,b] [--hours 24] [--ci-runs 3] [--out <folder>] [--strict] [--fails-from YYYY-MM-DD]
+//
+// For each public repository of the owners (default: each owner of the package conventions) that is not archived (or each one of --repos), the script reads the runs of
+// the default branch that started in the last --hours hours. It reads the jobs of each run that did not pass and each run with a second
+// attempt, if the run took a minute or more, and the newest --ci-runs runs of ci.yml. Then it reads the annotations of each cancelled job of a
+// minute or more and of each job coverage. It writes limit-audit.json and the summary into --out, and an annotation for each finding.
+// With --strict, exit code 1 tells that the script could not read a repository (a no-read is never a pass), or that a
+// job stopped at a limit on or after the day --fails-from. Before that day, a stop gives a warning. An empty
+// --fails-from fails at once. Without --strict, the audit is a report, and only a wrong command line fails (exit code 2).
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { parseArgs } from "node:util";
+import { lines, pool, publicRepos } from "../lib/gh.ts";
+import { ownersOf } from "../../packages/conventions/src/owners.ts";
+import {
+  type Finding,
+  type Job,
+  type Run,
+  annotation,
+  exitCode,
+  failsOn,
+  jobFindings,
+  newestCiRuns,
+  readsJob,
+  readsRun,
+  render,
+} from "./limit-audit.ts";
+
+const { values } = parseArgs({
+  options: {
+    owners: { type: "string", default: "" },
+    repos: { type: "string", default: "" },
+    hours: { type: "string", default: "24" },
+    "ci-runs": { type: "string", default: "3" },
+    out: { type: "string", default: "limit-audit" },
+    strict: { type: "boolean", default: false },
+    "fails-from": { type: "string", default: "" },
+  },
+});
+const hours = Number(values.hours);
+const ciCount = Number(values["ci-runs"]);
+if (!Number.isInteger(hours) || hours < 1 || !Number.isInteger(ciCount) || ciCount < 0) {
+  console.error("Usage: --hours is a whole number of 1 or more, and --ci-runs a whole number of 0 or more.");
+  process.exit(2);
+}
+const failsFrom = values["fails-from"];
+const today = new Date().toISOString().slice(0, 10);
+try {
+  failsOn(failsFrom, today);
+} catch (error) {
+  console.error(`Usage: --fails-from: ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(2);
+}
+const owners = ownersOf(values.owners);
+const since = new Date(Date.now() - hours * 3_600_000).toISOString().replace(/\.\d+Z$/, "Z");
+
+const all = await publicRepos(owners);
+const wanted = values.repos
+  .split(",")
+  .map((name) => name.trim())
+  .filter(Boolean);
+const repos = wanted.length > 0 ? all.filter((repo) => wanted.includes(repo.name)) : all;
+const notRead: string[] = wanted.filter((name) => !repos.some((repo) => repo.name === name)).map((name) => `${name} (no public repository)`);
+
+const findings: Finding[] = [];
+let calls = 0;
+const results = await pool(repos, 4, async (repo) => {
+  const full = `${repo.owner}/${repo.name}`;
+  try {
+    const runs = await lines<Run>(
+      `repos/${full}/actions/runs?branch=${encodeURIComponent(repo.default_branch)}&created=%3E%3D${since}&per_page=100&exclude_pull_requests=true`,
+      ".workflow_runs[] | select(.event != \"pull_request\") | {id, name, path, event, status, conclusion, html_url, created_at, run_attempt, run_started_at, updated_at} | tojson",
+    );
+    calls++;
+    const ci = newestCiRuns(runs, ciCount);
+    const found: Finding[] = [];
+    for (const r of runs.filter((r) => readsRun(r, ci))) {
+      const jobs = await lines<Job>(
+        `repos/${full}/actions/runs/${r.id}/jobs?filter=all&per_page=100`,
+        ".jobs[] | {id, name, conclusion, run_attempt, started_at, completed_at} | tojson",
+      );
+      calls++;
+      for (const job of jobs.filter(readsJob)) {
+        const messages = await lines<string>(`repos/${full}/check-runs/${job.id}/annotations?per_page=100`, ".[] | .message | tojson");
+        calls++;
+        found.push(...jobFindings(repo.name, r, job, messages));
+      }
+    }
+    return { repo: repo.name, found, error: undefined };
+  } catch (error) {
+    const text = error instanceof Error ? error.message.split("\n").find((line) => line.trim() !== "") ?? error.message : String(error);
+    return { repo: repo.name, found: [] as Finding[], error: text };
+  }
+});
+for (const result of results) {
+  findings.push(...result.found);
+  if (result.error !== undefined) notRead.push(`${result.repo} (${result.error.slice(0, 120)})`);
+}
+
+const out = resolve(values.out);
+mkdirSync(out, { recursive: true });
+writeFileSync(join(out, "limit-audit.json"), `${JSON.stringify({ date: new Date().toISOString(), since, hours, repos: repos.length, calls, notRead, findings }, null, 2)}\n`);
+const summary = render(findings, repos.length, notRead, hours);
+writeFileSync(join(out, "summary.md"), `${summary.join("\n")}\n`);
+if (process.env["GITHUB_STEP_SUMMARY"]) appendFileSync(process.env["GITHUB_STEP_SUMMARY"], `${summary.join("\n")}\n`);
+for (const finding of findings) console.log(annotation(finding, failsFrom, today));
+for (const repo of notRead) console.log(`::error title=Time limit audit%3A no read::The audit could not read ${repo}.`);
+console.log(summary.join("\n"));
+console.log(`${calls} API reads.`);
+process.exit(exitCode(findings, notRead, values.strict, failsFrom, today));

@@ -1,8 +1,15 @@
 /**
- * A small reader of GitHub workflow files, by the indent of the lines. The rules that read workflows share it. It
- * knows the block form, the inline values of keys and the block scalars (`|` and `>`) that the workflows of the template
- * use. `readWorkflow` gives the parts of a shared workflow that the site of the template shows.
+ * The readers of GitHub workflow files. The rules that read workflows share them.
+ *
+ * - The line reader reads by the indent of the lines. It knows the block form, the inline values of keys and the block
+ *   scalars (`|` and `>`) that the workflows of the template use. `readWorkflow` gives the parts of a shared workflow
+ *   that the site of the template shows.
+ * - `parseWorkflow` reads with the YAML parser of the package `yaml`. It gives the facts that a security gate needs: the
+ *   triggers, the permissions, the secrets that each job reads, and the steps. A gate uses this reader, not the line reader.
  */
+import { parseAllDocuments, type Document } from "yaml";
+import { errorMessage } from "@mark1russell7/text";
+import { isObject } from "./config.ts";
 
 /** A workflow file. */
 export const WORKFLOW: RegExp = /^\.github\/workflows\/[^/]+\.ya?ml$/;
@@ -11,6 +18,39 @@ export const indentOf = (line: string): number => line.length - line.trimStart()
 
 /** This function gives the lines of a workflow, with each line of a comment made empty. */
 export const workflowLines = (text: string): string[] => text.split(/\r?\n/).map((line) => (line.trimStart().startsWith("#") ? "" : line));
+
+/**
+ * This function gives a line of a shell script with each quoted text as `""` and with no comment. A word in a quote or a
+ * comment is thus not a command. A double quote can hold `\"`. A quote that does not close stays as it is.
+ *
+ * The function reads the line one time. The regular expression `"(?:[^"\\]|\\.)*"` starts a new search at each `"`.
+ * On a line of many `\"` with no closing quote, its time is the square of the length (CodeQL `js/polynomial-redos`).
+ * Here, a failed search for the closing `"` reads the line to its end. Each later `"` then has no closing quote too.
+ * Thus each kind of quote fails at most one time.
+ */
+export function shellCode(line: string): string {
+  let out = "";
+  let open: { readonly double: boolean; readonly single: boolean } = { double: true, single: true };
+  let i = 0;
+  while (i < line.length) {
+    const char = line.charAt(i);
+    const double = char === '"' && open.double;
+    if (double || (char === "'" && open.single)) {
+      let end = i + 1;
+      while (end < line.length && line.charAt(end) !== char) end += double && line.charAt(end) === "\\" ? 2 : 1;
+      if (end < line.length) {
+        out += '""';
+        i = end + 1;
+        continue;
+      }
+      open = double ? { ...open, double: false } : { ...open, single: false };
+    }
+    out += char;
+    i += 1;
+  }
+  const comment = out.search(/(?:^|\s)#/);
+  return comment >= 0 ? out.slice(0, comment) : out;
+}
 
 /** This function removes a comment at the end of a value, and the quotes around it. */
 export function valueOf(raw: string): string {
@@ -56,6 +96,31 @@ export function childKeys(lines: readonly string[], index: number): number[] {
   const keys: number[] = [];
   for (let i = index + 1; i < blockEnd(lines, index); i++) if ((lines[i] ?? "").trim() !== "" && indentOf(lines[i] ?? "") === indent) keys.push(i);
   return keys;
+}
+
+/** This function gives the end of the list under the key at the line `key`, for example `steps`. A list can have the same indent as its key. */
+export function listEnd(lines: readonly string[], key: number): number {
+  const indent = indentOf(lines[key] ?? "");
+  for (let at = key + 1; at < lines.length; at++) {
+    const line = lines[at] ?? "";
+    if (line.trim() === "") continue;
+    if (indentOf(line) < indent || (indentOf(line) === indent && !line.trimStart().startsWith("- "))) return at;
+  }
+  return lines.length;
+}
+
+/** This function gives the lines of the items (`- `) of the list under the key at the line `key`. */
+export function listItems(lines: readonly string[], key: number): number[] {
+  const end = listEnd(lines, key);
+  let indent: number | undefined;
+  const starts: number[] = [];
+  for (let at = key + 1; at < end; at++) {
+    const line = lines[at] ?? "";
+    if (line.trim() === "") continue;
+    indent ??= indentOf(line);
+    if (indentOf(line) === indent && line.trimStart().startsWith("- ")) starts.push(at);
+  }
+  return starts;
 }
 
 /** A change of the lines: at the index `at`, remove `remove` lines and put `insert` in their place. */
@@ -285,4 +350,209 @@ export function readAction(file: string, text: string): Workflow {
   const stepsEntry = keys.get("using")?.value === "composite" ? keys.get("steps") : undefined;
   const jobs: WorkflowJob[] = stepsEntry ? [{ id: "steps", if: "", needs: [], steps: stepsOf(lines, stepsEntry.line) }] : [];
   return { file, kind: "action", name: top.get("name")?.value ?? file, summary: top.get("description")?.value ?? "", inputs, jobs };
+}
+
+/** A fault of the YAML of a file: its line and column (from 1), and the first line of the message of the parser. */
+export interface YamlFault {
+  readonly line: number;
+  readonly column: number;
+  readonly message: string;
+}
+
+/** This constant is the options of the parser. With `prettyErrors`, each error has its line and its column. */
+const PARSE = { prettyErrors: true } as const;
+
+/** This function gives the errors of the parser for each document of a text. */
+function faultsOf(documents: readonly Document.Parsed[]): YamlFault[] {
+  const faults: YamlFault[] = [];
+  for (const document of documents) {
+    for (const error of document.errors) {
+      const at = error.linePos?.[0];
+      // The pretty message repeats the lines of the file after its first line
+      faults.push({ line: at?.line ?? 1, column: at?.col ?? 1, message: (error.message.split("\n")[0] ?? error.code).replace(/:$/, "") });
+    }
+  }
+  return faults;
+}
+
+/** This function gives the faults of a YAML text. A text with no fault gives an empty list. */
+export function yamlFaults(text: string): YamlFault[] {
+  return faultsOf(parseAllDocuments(text, PARSE));
+}
+
+/**
+ * The permissions of a workflow or a job (`permissions`).
+ *
+ * - `null`: the key is not there. A job then gets the permissions of its workflow, and a workflow gets the default of the
+ *   repository.
+ * - A text: `read-all`, `write-all`, or another value as JSON text (`permissions:` with no value gives `null` as text).
+ * - A record: the level of each scope, for example `{ contents: "read" }`. The record `{}` gives no scope to the token.
+ */
+export type WorkflowPermissions = string | Readonly<Record<string, string>> | null;
+
+/** A step of a job, as the YAML parser reads it. */
+export interface ParsedStep {
+  /** The name of the step, or else its action, its first command or its id, as in {@link WorkflowStep}. */
+  readonly label: string;
+  /** The condition of the step (`if`), or an empty text. */
+  readonly if: string;
+  /** The action of the step (`uses`), with no pin, or an empty text. */
+  readonly uses: string;
+  /** The secrets that the expressions of the step read. The name `*` is the whole context, as in `toJSON(secrets)`. */
+  readonly secrets: readonly string[];
+}
+
+/** A job of a workflow, as the YAML parser reads it. */
+export interface ParsedJob {
+  readonly id: string;
+  /** The condition of the job (`if`), or an empty text. */
+  readonly if: string;
+  readonly needs: readonly string[];
+  /** The workflow that the job calls (`uses`), with no pin, or an empty text. */
+  readonly uses: string;
+  readonly permissions: WorkflowPermissions;
+  /** The secrets that the job and its steps read. The name `inherit` is `secrets: inherit`, and `*` is the whole context. */
+  readonly secrets: readonly string[];
+  readonly steps: readonly ParsedStep[];
+}
+
+/** The facts of a workflow file from the YAML parser. */
+export interface ParsedWorkflow {
+  /** The file name, for example `ci.yml`. */
+  readonly file: string;
+  /** The value of `name`, or the file name. */
+  readonly name: string;
+  /** The events of `on`, in the order of the file. */
+  readonly triggers: readonly string[];
+  readonly permissions: WorkflowPermissions;
+  /** The secrets that each part of the file reads, with each job. */
+  readonly secrets: readonly string[];
+  readonly jobs: readonly ParsedJob[];
+  /**
+   * The faults of the file. GitHub starts no job of a file that does not parse, so a file with a fault gives no trigger
+   * and no job. A gate fails on each fault. The reader also refuses two documents in one file. It refuses a version of
+   * YAML that is not 1.2, because YAML 1.1 reads the key `on` as `true`.
+   */
+  readonly faults: readonly YamlFault[];
+}
+
+/** This function gives the text of a value of the parser: a string as it is, and another value as JSON text. */
+const textOf = (value: unknown): string => (typeof value === "string" ? value : (JSON.stringify(value) ?? ""));
+
+/** This function gives the text of a key that can be absent, with no space at its ends. No value gives an empty text. */
+const optionalText = (value: unknown): string => (value === undefined || value === null ? "" : textOf(value).trim());
+
+/** This function gives the values of a key that holds one value or a list of values. */
+const listValues = (value: unknown): string[] => (value === undefined || value === null ? [] : Array.isArray(value) ? value.map(textOf) : [textOf(value)]);
+
+/** This function gives the permissions of a workflow or of a job. */
+function permissionsOf(owner: Readonly<Record<string, unknown>>): WorkflowPermissions {
+  if (!Object.hasOwn(owner, "permissions")) return null;
+  const value = owner["permissions"];
+  if (!isObject(value)) return textOf(value);
+  return Object.fromEntries(Object.entries(value).map(([scope, level]) => [scope, textOf(level)]));
+}
+
+/** This function gives the events of the key `on`: one event, a list of events, or a map with an event as each key. */
+function triggersOf(on: unknown): string[] {
+  if (isObject(on)) return Object.keys(on);
+  return listValues(on);
+}
+
+/**
+ * This regular expression finds a reference to a secret in an expression: `secrets.NAME`, `secrets['NAME']`, or the
+ * context `secrets` with no name. The names of the contexts of GitHub are not case-sensitive.
+ */
+const SECRET = /(?<![\w.-])secrets(?![\w-])\s*(?:\.\s*([A-Za-z_][\w-]*)|\[\s*'([^']*)'\s*\])?/gi;
+
+/**
+ * This function gives the expressions of a text: the parts between `${{` and `}}`. An expression with no `}}` goes to
+ * the end of the text, so a reference in it still counts.
+ */
+function expressionsOf(text: string): string[] {
+  const out: string[] = [];
+  let at = text.indexOf("${{");
+  while (at >= 0) {
+    const end = text.indexOf("}}", at + 3);
+    out.push(text.slice(at + 3, end < 0 ? undefined : end));
+    if (end < 0) break;
+    at = text.indexOf("${{", end + 2);
+  }
+  return out;
+}
+
+/**
+ * This function adds the secrets that a value of the parser reads: each string in it, and in its lists and maps. The
+ * value of a key `if` is an expression also with no `${{ }}`, as GitHub reads it. The keys of a map are not expressions.
+ */
+function addSecrets(value: unknown, key: string, into: Set<string>, seen: Set<object>): void {
+  if (typeof value === "string") {
+    for (const body of key === "if" ? [value] : expressionsOf(value)) for (const match of body.matchAll(SECRET)) into.add(match[1] ?? match[2] ?? "*");
+    return;
+  }
+  if (typeof value !== "object" || value === null || seen.has(value)) return;
+  // An alias of YAML gives the same object at two places of the value, so each object counts one time
+  seen.add(value);
+  if (Array.isArray(value)) for (const item of value) addSecrets(item, "", into, seen);
+  else for (const [name, item] of Object.entries(value)) addSecrets(item, name, into, seen);
+}
+
+/** This function gives the secrets that a value of the parser reads. */
+function secretsOf(value: unknown): Set<string> {
+  const secrets = new Set<string>();
+  addSecrets(value, "", secrets, new Set());
+  return secrets;
+}
+
+/** This function reads a step: the same label as the line reader gives, its condition, its action and its secrets. */
+function parsedStep(value: unknown): ParsedStep {
+  const step = isObject(value) ? value : {};
+  const uses = actionOf(optionalText(step["uses"]));
+  const label = optionalText(step["name"]) || uses || (optionalText(step["run"]).split("\n")[0] ?? "") || optionalText(step["id"]) || "step";
+  return { label, if: optionalText(step["if"]), uses, secrets: [...secretsOf(step)] };
+}
+
+/** This function reads a job. */
+function parsedJob(id: string, value: unknown): ParsedJob {
+  const job = isObject(value) ? value : {};
+  const secrets = secretsOf(job);
+  if (job["secrets"] === "inherit") secrets.add("inherit");
+  return {
+    id,
+    if: optionalText(job["if"]),
+    needs: listValues(job["needs"]),
+    uses: actionOf(optionalText(job["uses"])),
+    permissions: permissionsOf(job),
+    secrets: [...secrets],
+    steps: Array.isArray(job["steps"]) ? job["steps"].map(parsedStep) : [],
+  };
+}
+
+/** This function gives the line (from 1) of the offset `at` of a text. */
+const lineAt = (text: string, at: number): number => text.slice(0, at).split("\n").length;
+
+/**
+ * This function reads a workflow file with the YAML parser. The file name goes into the result. It does not throw: each
+ * problem is a fault of the result. A file with a fault gives no trigger and no job.
+ */
+export function parseWorkflow(file: string, text: string): ParsedWorkflow {
+  const documents = parseAllDocuments(text, PARSE);
+  const faults = faultsOf(documents);
+  const [first, second] = documents;
+  if (second !== undefined) faults.push({ line: lineAt(text, second.range[0]), column: 1, message: `The file has ${documents.length} YAML documents, and a workflow is one document` });
+  const version = first?.directives?.yaml.version ?? "1.2";
+  if (version !== "1.2") faults.push({ line: 1, column: 1, message: `The file asks for YAML ${version}, and the reader takes only YAML 1.2` });
+  const none: ParsedWorkflow = { file, name: file, triggers: [], permissions: null, secrets: [], jobs: [], faults };
+  if (first === undefined || faults.length > 0) return none;
+  try {
+    const top: unknown = first.toJS();
+    if (!isObject(top)) return none;
+    const jobs = isObject(top["jobs"]) ? Object.entries(top["jobs"]).map(([id, job]) => parsedJob(id, job)) : [];
+    const secrets = secretsOf(top);
+    if (jobs.some((job) => job.secrets.includes("inherit"))) secrets.add("inherit");
+    return { file, name: optionalText(top["name"]) || file, triggers: triggersOf(top["on"]), permissions: permissionsOf(top), secrets: [...secrets], jobs, faults };
+  } catch (error) {
+    // The parser throws for too many aliases, and a deep value can stop the stack
+    return { ...none, faults: [{ line: 1, column: 1, message: errorMessage(error) }] };
+  }
 }

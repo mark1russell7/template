@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { gzipSync } from "node:zlib";
-import { caretLine, installedManifest, shippedDifferences, tarballFiles } from "./unchanged.ts";
+import { caretLine, differenceText, installedManifest, pendingPackages, shippedDifferences, tarballFiles } from "./unchanged.ts";
 
 // A small ustar writer, enough for the tests: regular files, folders and pax path records.
 function header(name: string, size: number, type: string, mtime: number): Buffer {
@@ -84,6 +84,12 @@ test("green: a change of devDependencies or of a script that is not an install s
   assert.deepEqual(differences(BASE, packed), []);
 });
 
+test("green: a change of packageManager (an update of pnpm)", () => {
+  const published = { ...BASE, "package.json": manifest({ dependencies: { a: "^1.0.0" }, packageManager: "pnpm@10.34.7" }) };
+  const packed = { ...BASE, "package.json": manifest({ dependencies: { a: "^1.0.0" }, packageManager: "pnpm@10.34.9" }) };
+  assert.deepEqual(differences(published, packed), []);
+});
+
 test("green: the key order of package.json does not count", () => {
   const packed = { ...BASE, "package.json": JSON.stringify({ scripts: { build: "tsc" }, devDependencies: { vitest: "^3.0.0" }, dependencies: { a: "^1.0.0" }, main: "build/index.js", version: "0.1.23", name: "@scope/core" }) };
   assert.deepEqual(differences(BASE, packed), []);
@@ -132,4 +138,24 @@ test("the installed manifest keeps install scripts and drops the others", () => 
   const kept = JSON.parse(installedManifest(raw)) as Record<string, unknown>;
   assert.deepEqual(kept["scripts"], { postinstall: "node x.js" });
   assert.equal(kept["devDependencies"], undefined);
+});
+
+test("the text of a difference names the version and each path", () => {
+  assert.equal(
+    differenceText("@scope/core@0.1.23", ["README.md (changed)"]),
+    "@scope/core@0.1.23 is on npm, but these shipped files differ from it:\n    README.md (changed)",
+  );
+});
+
+test("the text of a difference gives at most 20 paths, then a count", () => {
+  const paths = Array.from({ length: 23 }, (_, i) => `build/${i}.js (added)`);
+  const text = differenceText("@scope/core@0.1.23", paths);
+  assert.match(text, /build\/19\.js \(added\)\n {4}and 3 more$/u);
+  assert.doesNotMatch(text, /build\/20\.js/u);
+});
+
+test("RELEASE_PENDING gives the names, separated by spaces, commas or lines", () => {
+  assert.deepEqual([...pendingPackages("@x/a @x/b,@x/c\n@x/d")], ["@x/a", "@x/b", "@x/c", "@x/d"]);
+  assert.deepEqual([...pendingPackages("")], []);
+  assert.deepEqual([...pendingPackages(undefined)], []);
 });

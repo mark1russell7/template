@@ -3,32 +3,15 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseAllDocuments } from "yaml";
 import { byCode } from "../workspace.ts";
 import type { Break, Rule } from "../rule.ts";
+import { yamlFaults } from "../workflow.ts";
+
+// The YAML faults live with the parser reader of workflow.ts. This module gives them again for its old importers.
+export { yamlFaults, type YamlFault } from "../workflow.ts";
 
 /** A file that GitHub reads as YAML: a workflow, or the file `action.yml` of an action of the repository. */
 export const GITHUB_YAML: RegExp = /^\.github\/(?:workflows\/[^/]+|actions\/(?:[^/]+\/)*action)\.ya?ml$/;
-
-/** A fault of the YAML of a file: its line and column (from 1), and the first line of the message of the parser. */
-export interface YamlFault {
-  readonly line: number;
-  readonly column: number;
-  readonly message: string;
-}
-
-/** This function gives the faults of a YAML text. A text with no fault gives an empty list. */
-export function yamlFaults(text: string): YamlFault[] {
-  const faults: YamlFault[] = [];
-  for (const document of parseAllDocuments(text, { prettyErrors: true })) {
-    for (const error of document.errors) {
-      const at = error.linePos?.[0];
-      // The pretty message repeats the lines of the file after its first line
-      faults.push({ line: at?.line ?? 1, column: at?.col ?? 1, message: (error.message.split("\n")[0] ?? error.code).replace(/:$/, "") });
-    }
-  }
-  return faults;
-}
 
 export const workflowParses: Rule = {
   id: "workflow-parses",

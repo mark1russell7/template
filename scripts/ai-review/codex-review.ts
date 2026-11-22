@@ -447,11 +447,20 @@ export function buildPost(
 }
 
 /**
- * This function writes a notice for the log. The escapes keep the text on one line. Outside of
- * GitHub Actions (the tests), it writes plain text, so that the test log of CI makes no notices.
+ * This function escapes the data of a workflow command, as escapeWorkflowData of @mark1russell7/text does. The escapes
+ * keep the text on one line. The script has its own copy because the job `review` holds the API key, and that job does
+ * not load the code of a package (CODEX-REVIEW.md, "Security"). A test holds the two functions equal.
+ */
+export function escapeCommandData(text: string): string {
+  return text.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
+}
+
+/**
+ * This function writes a notice for the log. Outside of GitHub Actions (the tests), it writes plain text, so that the
+ * test log of CI makes no notices.
  */
 function notice(env: Env, title: string, message: unknown): void {
-  const escaped = String(message).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
+  const escaped = escapeCommandData(String(message));
   process.stdout.write(env["GITHUB_ACTIONS"] === "true" ? `::notice title=${title}::${escaped}\n` : `${title}: ${escaped}\n`);
 }
 

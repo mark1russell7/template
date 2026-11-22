@@ -2,7 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import {
   firstNameMatch,
@@ -13,17 +13,23 @@ import {
   isCommonUse,
   lineNameHit,
   lineNameHits,
+  mergePrivateNames,
   nameMatches,
   NO_READ_LINE,
+  noLocalPaths,
+  parsePrePushArgs,
   parsePrivateNames,
+  parseRuleConfig,
   pathNameHit,
   PRE_PUSH_HOOK,
   prePush,
   PrivateNameListError,
   privateNamesFile,
+  privateNamesFiles,
   privatePatterns,
   privateTextBreaks,
   runCli,
+  runPrePushArgs,
   type CliIo,
   type NameRule,
 } from "./index.ts";
@@ -309,6 +315,31 @@ describe("the private text core", () => {
     expect(privateNamesFile({ CONVENTIONS_PRIVATE_NAMES_FILE: " " }, () => undefined)).toBeUndefined();
   });
 
+  it("finds each path of the lists in the environment, else each value of the git configuration", () => {
+    const asked: (readonly string[])[] = [];
+    const fake = (args: readonly string[]): string | undefined => {
+      asked.push(args);
+      return "/names/first.json\n/names/second.json\n";
+    };
+    expect(privateNamesFiles({ CONVENTIONS_PRIVATE_NAMES_FILE: " /a.json ; /b.json;" }, fake, ";")).toEqual(["/a.json", "/b.json"]);
+    expect(privateNamesFiles({ CONVENTIONS_PRIVATE_NAMES_FILE: "/one.json" }, fake, ";")).toEqual(["/one.json"]);
+    expect(asked).toEqual([]);
+    expect(privateNamesFiles({ CONVENTIONS_PRIVATE_NAMES_FILE: " ; " }, fake, ";")).toEqual(["/names/first.json", "/names/second.json"]);
+    expect(asked).toEqual([["config", "--type=path", "--get-all", "conventions.privateNamesFile"]]);
+    expect(privateNamesFiles({}, () => undefined)).toEqual([]);
+  });
+
+  it("merges the lists in order, and refuses an id that two lists have", () => {
+    const other = parsePrivateNames(JSON.stringify({ names: [{ id: "zorbit", project: "The made-up Zorbit tool", seeds: ["zorbit"], patterns: ["\\bzorbit\\b"] }] }));
+    const merged = mergePrivateNames([list, other]);
+    expect(merged.names.map((rule) => rule.id)).toEqual(["acme-app", "probe", "zorbit"]);
+    expect(merged.allow).toEqual(list.allow);
+    expect(lineNameHit(merged, "The zorbit runs.")?.name).toBe(3);
+    expect(mergePrivateNames([])).toEqual({ names: [], allow: [] });
+    expect(() => mergePrivateNames([list, list])).toThrow(PrivateNameListError);
+    expect(() => mergePrivateNames([other, list, other])).toThrow("name 4 of the private name list (list 3): the id is also the id of a name of an earlier list");
+  });
+
   it("reads the added lines of a patch by the counts of the hunks", () => {
     const patch = ["diff --git a/x.md b/x.md", "--- a/x.md", "+++ b/x.md", "@@ -2,1 +2,3 @@", "-old", "+new", "+++ not a header", "+three", "@@ -9 +11 @@", "-a", "+b"].join("\n");
     expect(addedRuns(patch)).toEqual([
@@ -407,6 +438,27 @@ describe("conventions pre-push", () => {
     expect(stderr).toMatch(/^conventions pre-push: 1 commits, \d+ lines read, 0 breaks\.\n$/);
   });
 
+  it("does not read the commits of main again when a branch that the remote has merges main", () => {
+    const { root, base } = repository();
+    git(root, "checkout", "-q", "-b", "feature");
+    const pushed = commit(root, { "feature.md": "1\n" }, "a clean feature");
+    git(root, "checkout", "-q", "main");
+    // Main adds the probe and removes it later. A new commit with the probe stops a push, but these commits are on the remote
+    commit(root, { "old.md": `${PROBE}\n` }, `an old ${PROBE} commit`);
+    const main = commit(root, { "old.md": "1\n" }, "remove the old line");
+    git(root, "update-ref", "refs/remotes/origin/main", main);
+    git(root, "update-ref", "refs/remotes/origin/feature", pushed);
+    git(root, "checkout", "-q", "feature");
+    git(root, "merge", "-q", "--no-edit", "main");
+    const head = commit(root, { "feature.md": "1\n2\n" }, "a clean change after the merge");
+    const { code, stderr } = push(root, `refs/heads/feature ${head} refs/heads/feature ${pushed}\n`);
+    expect(code).toBe(0);
+    expect(stderr).toMatch(/^conventions pre-push: 2 commits, \d+ lines read, 0 breaks\.\n$/);
+    // The remote sha alone still limits the push when the remote branches do not have main
+    git(root, "update-ref", "refs/remotes/origin/main", base);
+    expect(push(root, `refs/heads/feature ${head} refs/heads/feature ${pushed}\n`).code).toBe(1);
+  });
+
   it("skips a deleted ref", () => {
     const { root, base } = repository();
     const { code, stderr } = push(root, `(delete) ${ZEROS} refs/heads/old ${base}\n`);
@@ -437,6 +489,35 @@ describe("conventions pre-push", () => {
     git(root, "config", "conventions.privateNamesFile", listFile());
     const head = commit(root, { "notes.md": `${PROBE}\n` }, "second");
     expect(push(root, `refs/heads/main ${head} refs/heads/main ${base}\n`, {}).code).toBe(1);
+  });
+
+  it("reads each list that the settings name, and stops at a name of the second list", () => {
+    const second = listFile(JSON.stringify({ names: [{ id: "zorbit", project: "The made-up Zorbit tool", seeds: ["zorbit"], patterns: ["\\bzorbit\\b"] }] }));
+    const { root, base } = repository();
+    const head = commit(root, { "notes.md": "The zorbit runs.\n" }, "second");
+    const input = `refs/heads/main ${head} refs/heads/main ${base}\n`;
+    expect(push(root, input, { CONVENTIONS_PRIVATE_NAMES_FILE: listFile() }).code).toBe(0);
+    const both = push(root, input, { CONVENTIONS_PRIVATE_NAMES_FILE: [listFile(), second].join(delimiter) });
+    expect(both.code).toBe(1);
+    expect(both.stderr).toContain(`commit ${head.slice(0, 12)} notes.md:1  ${named(3)}`);
+    expect(both.stderr).not.toContain("zorbit");
+    git(root, "config", "conventions.privateNamesFile", listFile());
+    git(root, "config", "--add", "conventions.privateNamesFile", second);
+    expect(push(root, input, {}).code).toBe(1);
+  });
+
+  it("stops the push when a second list does not exist, or has an id of the first list", () => {
+    const { root, base } = repository();
+    const head = commit(root, { "notes.md": "2\n" }, "second");
+    const input = `refs/heads/main ${head} refs/heads/main ${base}\n`;
+    const missing = push(root, input, { CONVENTIONS_PRIVATE_NAMES_FILE: [listFile(), join(temp, "missing-second.json")].join(delimiter) });
+    expect(missing.code).toBe(1);
+    expect(missing.stderr).toBe("conventions pre-push: Cannot read private name list 2 of the 2 that CONVENTIONS_PRIVATE_NAMES_FILE names: the file does not exist. Correct the setting or the file. The push stops.\n");
+    const twice = push(root, input, { CONVENTIONS_PRIVATE_NAMES_FILE: [listFile(), listFile()].join(delimiter) });
+    expect(twice.code).toBe(1);
+    expect(twice.stderr).toBe(
+      "conventions pre-push: The private name lists that CONVENTIONS_PRIVATE_NAMES_FILE names are not valid together: name 3 of the private name list (list 2): the id is also the id of a name of an earlier list. Give each name its own id. The push stops.\n",
+    );
   });
 
   it("stops the push when the list that the settings name does not exist", () => {
@@ -491,6 +572,18 @@ describe("conventions pre-push", () => {
     expect(stderr).not.toContain("qx-unclosed");
   });
 
+  it("keeps the home folder exceptions of package.json when the entry of another rule has an error", () => {
+    const { root, base } = repository();
+    const home = ["", "home", "alice", "x"].join("/");
+    const conventions = { rules: { "no-local-paths": { ignore: ["fixtures/**"], reason: "test fixtures" }, "a-rule-that-is-not-known": { off: "x" } } };
+    const head = commit(root, { "package.json": `${JSON.stringify({ name: "one", conventions })}\n`, "fixtures/a.txt": `${home}\n` }, "second");
+    expect(push(root, `refs/heads/main ${head} refs/heads/main ${base}\n`).code).toBe(0);
+    // An error in the entry of no-local-paths gives the defaults, so the home folder counts
+    const broken = { rules: { "no-local-paths": { ignore: ["fixtures/**"] } } };
+    const next = commit(root, { "package.json": `${JSON.stringify({ name: "one", conventions: broken })}\n` }, "third");
+    expect(push(root, `refs/heads/main ${next} refs/heads/main ${base}\n`).code).toBe(1);
+  });
+
   it("starts from the bin with the standard input and the URL, and gives exit code 2 without a remote", () => {
     const { root, base } = repository();
     const head = commit(root, { "docs/allowed.md": `${PROBE}\n` }, "second");
@@ -504,6 +597,89 @@ describe("conventions pre-push", () => {
     const listed: CliIo = { ...io, env: { CONVENTIONS_PRIVATE_NAMES_FILE: listFile() } };
     expect(runCli(["pre-push", "origin", HTTPS], listed)).toBe(0);
     expect(runCli(["pre-push", "origin", "https://github.com/acme-labs/other.git"], listed)).toBe(1);
+  });
+});
+
+describe("conventions pre-push --base", () => {
+  /** This function starts prePush on the change `base..head`, and gives the exit code and the text of stderr. */
+  function check(root: string, base: string, env: Record<string, string>, head?: string): { code: number; stderr: string } {
+    let stderr = "";
+    // The standard input of a hook does not count with a base
+    const input = "not a line of the hook\n";
+    const code = prePush({ remote: "origin", base, ...(head === undefined ? {} : { head }), input, env, root, git: gitIn(root) }, { stderr: (text) => (stderr += text) });
+    return { code, stderr };
+  }
+
+  /** This function writes the file of the pull request of a dispatched run, and gives its path. */
+  function pullRequestFile(facts: Record<string, unknown>): string {
+    const file = join(temp, `pull-request-${String(fixtures++)}.json`);
+    writeFileSync(file, JSON.stringify(facts));
+    return file;
+  }
+
+  it("examines each commit of base..head with the rules of the hook, and tells that the check fails", () => {
+    const { root, base } = repository();
+    const first = commit(root, { "notes.md": `1\nthe ${PROBE}\nAcme corp\n` }, "second");
+    const second = commit(root, { "docs/allowed.md": `${PROBE}\n` }, `third\n\nthe acme-app note`);
+    git(root, "remote", "add", "origin", SSH);
+    const { code, stderr } = check(root, base, { CONVENTIONS_PRIVATE_NAMES_FILE: listFile() });
+    expect(code).toBe(1);
+    expect(stderr).toMatch(/^conventions pre-push: 2 commits, \d+ lines read, 2 breaks\. The check fails\.\n/);
+    expect(stderr).toContain(`  commit ${first.slice(0, 12)} notes.md:2  ${named(2)}\n    fix: Remove the text. The check does not show the text, because the name is private.\n`);
+    expect(stderr).toContain(`  commit ${second.slice(0, 12)} message:3  ${named(1)}`);
+    expect(stderr).toMatch(/\nRemove each text from the commits \(git commit --amend, or git rebase\) and from the pull request\. Then push again\.\n$/);
+    expect(stderr).not.toContain("The push stops");
+    // The output has no private text and no id of a name
+    for (const text of [PROBE, "acme-app", "Acme", "probe"]) expect(stderr).not.toContain(text);
+    // The head limits the change
+    expect(check(root, base, { CONVENTIONS_PRIVATE_NAMES_FILE: listFile() }, first).stderr).toMatch(/^conventions pre-push: 1 commits, \d+ lines read, 1 breaks\. The check fails\./);
+    expect(check(root, first, { CONVENTIONS_PRIVATE_NAMES_FILE: listFile() }).stderr).toMatch(/^conventions pre-push: 1 commits, \d+ lines read, 1 breaks\./);
+  });
+
+  it("examines the title and the body of the pull request of the run", () => {
+    const { root, base } = repository();
+    commit(root, { "notes.md": "1\n2\n" }, "a clean change");
+    const clean = pullRequestFile({ number: 7, title: "A clean title", body: "line one\nline two\n", commits: 1 });
+    const pass = check(root, base, { CONVENTIONS_PRIVATE_NAMES_FILE: listFile(), CONVENTIONS_PULL_REQUEST: clean });
+    expect(pass.code).toBe(0);
+    expect(pass.stderr).toMatch(/^conventions pre-push: 1 commits and the text of the pull request, \d+ lines read, 0 breaks\.\n$/);
+    const named2 = pullRequestFile({ number: 7, title: `the ${PROBE}`, body: `line one\nthe acme-app\n`, commits: 1 });
+    const { code, stderr } = check(root, base, { CONVENTIONS_PRIVATE_NAMES_FILE: listFile(), CONVENTIONS_PULL_REQUEST: named2 });
+    expect(code).toBe(1);
+    expect(stderr).toContain(`  pull request title:1  ${named(2)}`);
+    expect(stderr).toContain(`  pull request body:2  ${named(1)}`);
+    for (const text of [PROBE, "acme-app"]) expect(stderr).not.toContain(text);
+    // A push with the hook does not read the pull request of the environment
+    expect(push(root, `refs/heads/main ${git(root, "rev-parse", "HEAD")} refs/heads/main ${base}\n`, { CONVENTIONS_PRIVATE_NAMES_FILE: listFile(), CONVENTIONS_PULL_REQUEST: named2 }).code).toBe(0);
+  });
+
+  it("fails when git cannot list the change, and writes the line of no read with no list", () => {
+    const { root } = repository();
+    const missing = check(root, "f".repeat(40), { CONVENTIONS_PRIVATE_NAMES_FILE: listFile() });
+    expect(missing).toEqual({ code: 1, stderr: `conventions pre-push: git cannot list the commits of ${"f".repeat(40)}..HEAD. The check fails.\n` });
+    expect(check(root, "HEAD", {})).toEqual({ code: 0, stderr: `${NO_READ_LINE}\n` });
+    expect(check(root, "HEAD", { CONVENTIONS_PRIVATE_NAMES_FILE: join(temp, "missing.json") }).stderr).toMatch(/^conventions pre-push: Cannot read the private name list that CONVENTIONS_PRIVATE_NAMES_FILE names: .*\. The check fails\.\n$/);
+  });
+
+  it("starts from the bin with --base and --head, reads no standard input, and refuses a wrong form", () => {
+    const { root, base } = repository();
+    const head = commit(root, { "notes.md": `1\nthe ${PROBE}\n` }, "second");
+    commit(root, { "notes.md": "1\n" }, "third");
+    let stderr = "";
+    let stdout = "";
+    const io: CliIo = { cwd: root, env: { CONVENTIONS_PRIVATE_NAMES_FILE: listFile() }, stdout: (text) => (stdout += text), stderr: (text) => (stderr += text), stdin: "not a line of the hook\n" };
+    expect(runCli(["pre-push", "--base", base], io)).toBe(1);
+    expect(stderr).toMatch(/^conventions pre-push: 2 commits, \d+ lines read, 1 breaks\. The check fails\./);
+    expect(runCli(["pre-push", "--base", head], io)).toBe(0);
+    expect(runCli(["pre-push", "--base", base, "--head", head], io)).toBe(1);
+    expect(runCli(["pre-push", "--head", head, "--base", `${head}^`], io)).toBe(1);
+    for (const args of [["pre-push", "--head", head], ["pre-push", "--base"], ["pre-push", "--base", "--head"], ["pre-push", "origin", "--base", base], ["pre-push", "--base", base, "--nope"], ["pre-push", "origin", HTTPS, "x"]]) {
+      stderr = "";
+      expect(runCli(args, io), args.join(" ")).toBe(2);
+      expect(stderr).toMatch(/^conventions: The command pre-push takes the name of the remote and, after it, its URL\. In CI, it takes --base <ref> and, as an option, --head <ref>\./);
+    }
+    expect(runCli(["--help"], io)).toBe(0);
+    expect(stdout).toContain("conventions pre-push --base <ref> [--head <ref>]");
   });
 });
 
@@ -594,5 +770,38 @@ describe("conventions hook install", () => {
     expect(runCli(["hook", "install"], io)).toBe(0);
     expect(existsSync(join(root, ".git", "hooks", "pre-push"))).toBe(false);
     expect(runCli(["hook"], io)).toBe(2);
+  });
+});
+
+describe("the arguments and the settings of conventions pre-push", () => {
+  it("reads the arguments of the hook and of a check in CI, and refuses other arguments", () => {
+    expect(parsePrePushArgs(["origin"])).toEqual({ remote: "origin" });
+    expect(parsePrePushArgs(["origin", HTTPS])).toEqual({ remote: "origin", url: HTTPS });
+    expect(parsePrePushArgs(["--base", "abc"])).toEqual({ remote: "origin", base: "abc" });
+    expect(parsePrePushArgs(["--head", "def", "--base", "abc"])).toEqual({ remote: "origin", base: "abc", head: "def" });
+    for (const args of [[], ["a", "b", "c"], ["origin", "--head", "def"], ["--base"], ["--base", ""], ["--base", "-x"], ["--base", "abc", "origin"], ["--other"]]) {
+      expect(parsePrePushArgs(args), JSON.stringify(args)).toBeUndefined();
+    }
+  });
+
+  it("starts the check of a change in the git root of the folder, as the bundle of the shared actions does", () => {
+    const { root, base } = repository();
+    commit(root, { "notes.md": `1\nthe ${PROBE}\n` }, "second");
+    mkdirSync(join(root, "deep", "er"), { recursive: true });
+    let stderr = "";
+    const args = parsePrePushArgs(["--base", base]);
+    if (args === undefined) throw new Error("The arguments do not parse");
+    const code = runPrePushArgs(args, { cwd: join(root, "deep", "er"), env: { CONVENTIONS_PRIVATE_NAMES_FILE: listFile() }, stderr: (out) => (stderr += out) });
+    expect(code).toBe(1);
+    expect(stderr).toMatch(/^conventions pre-push: 1 commits, \d+ lines read, 1 breaks\. The check fails\.\n/);
+  });
+
+  it("reads the entry of one rule, and not the other entries", () => {
+    expect(parseRuleConfig(undefined, noLocalPaths)).toEqual({ ignore: [], options: { allow: [], patterns: [] } });
+    expect(parseRuleConfig({ rules: { other: 1 } }, noLocalPaths)).toEqual({ ignore: [], options: { allow: [], patterns: [] } });
+    expect(parseRuleConfig({ unknown: true, rules: { "no-local-paths": { off: "a reason" } } }, noLocalPaths)).toEqual({ off: "a reason", ignore: [], options: { allow: [], patterns: [] } });
+    expect(() => parseRuleConfig([], noLocalPaths)).toThrow("The field conventions of package.json must be an object.");
+    expect(() => parseRuleConfig({ rules: [] }, noLocalPaths)).toThrow("conventions.rules must be an object");
+    expect(() => parseRuleConfig({ rules: { "no-local-paths": { ignore: ["a/**"] } } }, noLocalPaths)).toThrow('conventions.rules["no-local-paths"].ignore needs a reason');
   });
 });

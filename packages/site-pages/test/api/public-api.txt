@@ -23,7 +23,7 @@ type ChangelogSection: build/index.d.ts#ChangelogSection
 type ChangelogSource: build/index.d.ts#ChangelogSource
 type CheckState: build/chunks/freshness.d.ts#CheckState
 type CliIo: build/index.d.ts#CliIo
-type CronLine: build/chunks/freshness.d.ts#CronLine
+type CronLine: build/index.d.ts#CronLine
 DATA_STAMP_SCHEMA: build/chunks/freshness.d.ts#DATA_STAMP_SCHEMA
 DEFAULT_CHANGELOGS: build/index.d.ts#DEFAULT_CHANGELOGS
 type DataLimit: build/chunks/freshness.d.ts#DataLimit
@@ -84,6 +84,8 @@ type ReleaseReading: build/index.d.ts#ReleaseReading
 type ReleaseSources: build/index.d.ts#ReleaseSources
 type ReleaseSummary: build/index.d.ts#ReleaseSummary
 RoadmapParseError: build/index.d.ts#RoadmapParseError
+SITE_ICON_HREF: build/index.d.ts#SITE_ICON_HREF
+SITE_ICON_SVG: build/index.d.ts#SITE_ICON_SVG
 STATUS_CLASSES: build/index.d.ts#STATUS_CLASSES
 STATUS_SCRIPT: build/index.d.ts#STATUS_SCRIPT
 type StatusBoardData: build/chunks/freshness.d.ts#StatusBoardData
@@ -97,7 +99,10 @@ type TimelineLayout: build/index.d.ts#TimelineLayout
 type TimelineMark: build/index.d.ts#TimelineMark
 type TimelineOptions: build/index.d.ts#TimelineOptions
 UsageError: build/index.d.ts#UsageError
+VERSION_GRACE_DAYS: build/chunks/freshness.d.ts#VERSION_GRACE_DAYS
+WORKSPACE_RULE_START: build/chunks/freshness.d.ts#WORKSPACE_RULE_START
 type WorkflowRunEnd: build/index.d.ts#WorkflowRunEnd
+type WorkspaceVersion: build/chunks/freshness.d.ts#WorkspaceVersion
 build: build/index.d.ts#build
 buildStatusBoard: build/index.d.ts#buildStatusBoard
 changelogFaults: build/index.d.ts#changelogFaults
@@ -108,7 +113,7 @@ checkFreshness: build/chunks/freshness.d.ts#checkFreshness
 checkStateOf: build/index.d.ts#checkStateOf
 classCounts: build/index.d.ts#classCounts
 compareVersions: build/index.d.ts#compareVersions
-cronLines: build/chunks/freshness.d.ts#cronLines
+cronLines: build/index.d.ts#cronLines
 dayRange: build/index.d.ts#dayRange
 escapeHtml: build/index.d.ts#escapeHtml
 failingCases: build/chunks/freshness.d.ts#failingCases
@@ -120,9 +125,11 @@ githubReleaseLag: build/index.d.ts#githubReleaseLag
 githubReleases: build/index.d.ts#githubReleases
 globFiles: build/index.d.ts#globFiles
 greenRunOf: build/index.d.ts#greenRunOf
+hasIconLink: build/index.d.ts#hasIconLink
 headCommit: build/index.d.ts#headCommit
 headingAnchor: build/index.d.ts#headingAnchor
 headingDate: build/index.d.ts#headingDate
+iconLink: build/index.d.ts#iconLink
 inlineMarkdown: build/index.d.ts#inlineMarkdown
 isShallow: build/index.d.ts#isShallow
 kindOf: build/index.d.ts#kindOf
@@ -182,7 +189,10 @@ writeKpi: build/chunks/freshness.d.ts#writeKpi
 AttributeValue: build/chrome.d.ts#AttributeValue
 BuildInfo: build/chrome.d.ts#BuildInfo
 Child: build/chrome.d.ts#Child
+Choice: build/chrome.d.ts#Choice
 CopyTextOptions: build/chrome.d.ts#CopyTextOptions
+RovingAxis: build/chrome.d.ts#RovingAxis
+Segmented: build/chrome.d.ts#Segmented
 THEMES: build/chrome.d.ts#THEMES
 Theme: build/chrome.d.ts#Theme
 applyTheme: build/chrome.d.ts#applyTheme
@@ -192,8 +202,19 @@ copyToClipboard: build/chrome.d.ts#copyToClipboard
 currentTheme: build/chrome.d.ts#currentTheme
 h: build/chrome.d.ts#h
 nextTheme: build/chrome.d.ts#nextTheme
+rovingIndex: build/chrome.d.ts#rovingIndex
 setupTheme: build/chrome.d.ts#setupTheme
 showBuild: build/chrome.d.ts#showBuild
+svg: build/chrome.d.ts#svg
+
+## ./demo (build/demo.d.ts): names
+
+Example: build/demo.d.ts#Example
+TextPart: build/demo.d.ts#TextPart
+examples: build/demo.d.ts#examples
+markedText: build/demo.d.ts#markedText
+setField: build/demo.d.ts#setField
+verdict: build/demo.d.ts#verdict
 
 ## ./explorer (build/explorer/index.d.ts): names
 
@@ -233,6 +254,20 @@ setMeasure: build/explorer/index.d.ts#setMeasure
 settle: build/explorer/index.d.ts#settle
 viewOf: build/explorer/index.d.ts#viewOf
 
+## ./config (build/config/site-config.d.ts): names
+
+SITE_CONFIG_KEYS: build/config/site-config.d.ts#SITE_CONFIG_KEYS
+SITE_CONFIG_PATH: build/config/site-config.d.ts#SITE_CONFIG_PATH
+SiteConfig: build/config/site-config.d.ts#SiteConfig
+SiteConfigInput: build/config/site-config.d.ts#SiteConfigInput
+SiteConfigKey: build/config/site-config.d.ts#SiteConfigKey
+SiteConfigKeySpec: build/config/site-config.d.ts#SiteConfigKeySpec
+SiteConfigKind: build/config/site-config.d.ts#SiteConfigKind
+SiteConfigResult: build/config/site-config.d.ts#SiteConfigResult
+fillRepository: build/config/site-config.d.ts#fillRepository
+inputsGiven: build/config/site-config.d.ts#inputsGiven
+resolveSiteConfig: build/config/site-config.d.ts#resolveSiteConfig
+
 ## ./vite (build/vite.d.ts): names
 
 type BuildInfo: build/chrome.d.ts#BuildInfo
@@ -245,6 +280,7 @@ SiteKpiInput: build/vite.d.ts#SiteKpiInput
 SiteKpiPlugin: build/vite.d.ts#SiteKpiPlugin
 SiteShellConfig: build/vite.d.ts#SiteShellConfig
 SiteShellConfigInput: build/vite.d.ts#SiteShellConfigInput
+SiteShellIconTag: build/vite.d.ts#SiteShellIconTag
 SiteShellOptions: build/vite.d.ts#SiteShellOptions
 SiteShellPlugin: build/vite.d.ts#SiteShellPlugin
 SiteShellTag: build/vite.d.ts#SiteShellTag
@@ -272,6 +308,10 @@ file ./shell.css: styles/shell.css
 
 file ./explorer.css: styles/explorer.css
 
+## ./demo.css: no declaration file for ./styles/demo.css
+
+file ./demo.css: styles/demo.css
+
 ## bin: 1 commands
 
 site-pages: ./build/cli.js
@@ -291,11 +331,28 @@ export interface BuildInfo {
 ### build/chrome.d.ts#Child
 export type Child = Node | string | null | undefined | false;
 
+### build/chrome.d.ts#Choice
+export interface Choice<T extends string> {
+  readonly value: T;
+  readonly label: string;
+  readonly title?: string;
+}
+
 ### build/chrome.d.ts#CopyTextOptions
 export interface CopyTextOptions {
   readonly copied?: string;
   readonly failed?: string;
   readonly ms?: number;
+}
+
+### build/chrome.d.ts#RovingAxis
+export type RovingAxis = "horizontal" | "vertical" | "both";
+
+### build/chrome.d.ts#Segmented
+export declare class Segmented<T extends string> {
+  constructor(container: HTMLElement, choices: readonly Choice<T>[], current: T, onChange: (value: T) => void, axis?: RovingAxis);
+  get value(): T;
+  set(value: T): void;
 }
 
 ### build/chrome.d.ts#THEMES
@@ -325,11 +382,17 @@ export declare function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs?:
 ### build/chrome.d.ts#nextTheme
 export declare function nextTheme(storageKey: string): Theme;
 
+### build/chrome.d.ts#rovingIndex
+export declare function rovingIndex(key: string, index: number, count: number, axis?: RovingAxis): number | undefined;
+
 ### build/chrome.d.ts#setupTheme
 export declare function setupTheme(button: HTMLButtonElement, storageKey: string): void;
 
 ### build/chrome.d.ts#showBuild
 export declare function showBuild(element: HTMLElement, build: BuildInfo, repository: string): void;
+
+### build/chrome.d.ts#svg
+export declare function svg<K extends keyof SVGElementTagNameMap>(tag: K, attrs?: Readonly<Record<string, AttributeValue>>, ...children: readonly (Child | readonly Child[])[]): SVGElementTagNameMap[K];
 
 ### build/chunks/freshness.d.ts#BoardIssue
 interface BoardIssue {
@@ -388,12 +451,6 @@ interface ChangelogReading {
 ### build/chunks/freshness.d.ts#CheckState
 type CheckState = "success" | "failure" | "pending" | "none";
 
-### build/chunks/freshness.d.ts#CronLine
-interface CronLine {
-  readonly line: number;
-  readonly cron: string;
-}
-
 ### build/chunks/freshness.d.ts#DATA_STAMP_SCHEMA
 declare const DATA_STAMP_SCHEMA = "data-stamp/1";
 
@@ -442,6 +499,7 @@ interface FailingCase {
 interface FreshnessCheck {
   readonly faults: readonly string[];
   readonly notRun: readonly string[];
+  readonly warnings: readonly string[];
 }
 
 ### build/chunks/freshness.d.ts#FreshnessOptions
@@ -451,6 +509,9 @@ interface FreshnessOptions {
   readonly maxAgeDays?: number;
   readonly maxMinorsBehind?: number;
   readonly schedules?: Readonly<Record<string, number | string>>;
+  readonly workspace?: Readonly<Record<string, readonly WorkspaceVersion[]>>;
+  readonly versionGraceDays?: number;
+  readonly workspaceStartsAt?: string;
 }
 
 ### build/chunks/freshness.d.ts#GitHubOpenWork
@@ -628,11 +689,20 @@ interface StatusBoardData {
 ### build/chunks/freshness.d.ts#StatusClass
 type StatusClass = "waiting" | "blocked" | "progress" | "open" | "later" | "done";
 
+### build/chunks/freshness.d.ts#VERSION_GRACE_DAYS
+declare const VERSION_GRACE_DAYS = 3;
+
+### build/chunks/freshness.d.ts#WORKSPACE_RULE_START
+declare const WORKSPACE_RULE_START = "2026-11-30T00:00:00Z";
+
+### build/chunks/freshness.d.ts#WorkspaceVersion
+interface WorkspaceVersion {
+  version: string;
+  since?: string;
+}
+
 ### build/chunks/freshness.d.ts#checkFreshness
 declare function checkFreshness(stamps: DataStamps, options: FreshnessOptions): FreshnessCheck;
-
-### build/chunks/freshness.d.ts#cronLines
-declare function cronLines(workflow: string): CronLine[];
 
 ### build/chunks/freshness.d.ts#failingCases
 declare function failingCases(stamps: DataStamps, options: FreshnessOptions): readonly FailingCase[];
@@ -660,6 +730,103 @@ declare function readKpi(text: string, now?: number): KpiFile;
 
 ### build/chunks/freshness.d.ts#writeKpi
 declare function writeKpi(out: string, input: KpiInput, now?: number): string;
+
+### build/config/site-config.d.ts#SITE_CONFIG_KEYS
+export declare const SITE_CONFIG_KEYS: { readonly [K in SiteConfigKey]: SiteConfigKeySpec<SiteConfig[K]>; };
+
+### build/config/site-config.d.ts#SITE_CONFIG_PATH
+export declare const SITE_CONFIG_PATH = ".github/site.json";
+
+### build/config/site-config.d.ts#SiteConfig
+export interface SiteConfig {
+  readonly build: string;
+  readonly out: string;
+  readonly env: Readonly<Record<string, string>>;
+  readonly "github-token": boolean;
+  readonly "node-version": string;
+  readonly "node-version-file": string;
+  readonly "site-pages": boolean;
+  readonly "site-pages-version": string;
+  readonly roadmap: string;
+  readonly base: string;
+  readonly packages: string;
+  readonly changesets: string;
+  readonly group: string;
+  readonly css: string;
+  readonly "site-name": string;
+  readonly "data-only": boolean;
+  readonly "data-stamps": string;
+  readonly "site-check": boolean;
+  readonly "site-check-pages": string;
+  readonly "site-check-widths": string;
+  readonly "site-check-probe": string;
+  readonly "site-check-playwright": string;
+  readonly "playwright-browsers": string;
+  readonly "playwright-command": string;
+  readonly "site-bar": boolean;
+  readonly "site-bar-pages": string;
+  readonly "site-bar-npm": string;
+  readonly "scroll-cue": boolean;
+  readonly "indexnow-key": string;
+}
+
+### build/config/site-config.d.ts#SiteConfigInput
+export interface SiteConfigInput {
+  readonly file: string | undefined;
+  readonly path: string;
+  readonly inputs: Readonly<Record<string, unknown>> | undefined;
+  readonly repository: string;
+}
+
+### build/config/site-config.d.ts#SiteConfigKey
+export type SiteConfigKey = keyof SiteConfig;
+
+### build/config/site-config.d.ts#SiteConfigKeySpec
+export interface SiteConfigKeySpec<T> {
+  readonly kind: SiteConfigKind;
+  readonly default: T;
+}
+
+### build/config/site-config.d.ts#SiteConfigKind
+export type SiteConfigKind = "string" | "boolean" | "env";
+
+### build/config/site-config.d.ts#SiteConfigResult
+export type SiteConfigResult = {
+  readonly config: SiteConfig;
+  readonly source: "file" | "inputs";
+} | {
+  readonly error: string;
+};
+
+### build/config/site-config.d.ts#fillRepository
+export declare function fillRepository(value: string, repository: string): string;
+
+### build/config/site-config.d.ts#inputsGiven
+export declare function inputsGiven(inputs: Readonly<Record<string, unknown>>): SiteConfigKey[];
+
+### build/config/site-config.d.ts#resolveSiteConfig
+export declare function resolveSiteConfig(input: SiteConfigInput): SiteConfigResult;
+
+### build/demo.d.ts#Example
+export type Example = readonly [label: string, value: string];
+
+### build/demo.d.ts#TextPart
+export interface TextPart {
+  readonly text: string;
+  readonly hit: boolean;
+}
+
+### build/demo.d.ts#examples
+export declare function examples(row: HTMLElement, items: readonly Example[], pick: (value: string) => void): HTMLButtonElement[];
+
+### build/demo.d.ts#markedText
+export declare function markedText(parts: readonly TextPart[], label: string): HTMLPreElement;
+
+### build/demo.d.ts#setField
+export declare function setField(field: HTMLInputElement | HTMLTextAreaElement, value: string): void;
+
+### build/demo.d.ts#verdict
+export declare function verdict(pass: boolean, title: Child, ...reason: readonly Child[]): HTMLDivElement;
 
 ### build/explorer/index.d.ts#AxisSlot
 type AxisSlot = "x" | "y";
@@ -924,6 +1091,12 @@ interface CliIo {
   now?: string;
 }
 
+### build/index.d.ts#CronLine
+interface CronLine {
+  readonly line: number;
+  readonly cron: string;
+}
+
 ### build/index.d.ts#DEFAULT_CHANGELOGS
 export declare const DEFAULT_CHANGELOGS: readonly string[];
 
@@ -1012,6 +1185,7 @@ interface PageOptions {
   extraCss?: string | undefined;
   generatedAt: string;
   commit: string | null;
+  icon?: string | undefined;
 }
 
 ### build/index.d.ts#PageParts
@@ -1117,6 +1291,12 @@ interface ReleaseSummary {
 
 ### build/index.d.ts#RoadmapParseError
 export declare class RoadmapParseError extends Error {}
+
+### build/index.d.ts#SITE_ICON_HREF
+export declare const SITE_ICON_HREF: string;
+
+### build/index.d.ts#SITE_ICON_SVG
+export declare const SITE_ICON_SVG = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 32 32\"><rect width=\"32\" height=\"32\" rx=\"7\" fill=\"#2346c4\"/><path d=\"M10 7h8l5 5v13H10z\" fill=\"#fff\"/><path d=\"M18 7v5h5z\" fill=\"#e7ecfd\"/></svg>";
 
 ### build/index.d.ts#STATUS_CLASSES
 export declare const STATUS_CLASSES: readonly StatusClass[];
@@ -1233,6 +1413,9 @@ export declare function classCounts(items: readonly BoardItem[]): Record<StatusC
 ### build/index.d.ts#compareVersions
 export declare function compareVersions(a: string, b: string): number;
 
+### build/index.d.ts#cronLines
+export declare function cronLines(workflow: string): CronLine[];
+
 ### build/index.d.ts#dayRange
 export declare function dayRange(start: number, end: number): string;
 
@@ -1265,6 +1448,7 @@ export declare function githubReleaseLag(options: GitHubOptions & {
   endpoint?: string;
   maxPages?: number;
   now?: string;
+  paths?: readonly string[];
 }): Promise<GitHubReleaseLag>;
 
 ### build/index.d.ts#githubReleases
@@ -1282,6 +1466,9 @@ export declare function greenRunOf(runs: readonly WorkflowRunEnd[]): {
   at: string;
 } | null;
 
+### build/index.d.ts#hasIconLink
+export declare function hasIconLink(html: string): boolean;
+
 ### build/index.d.ts#headCommit
 export declare function headCommit(repoDir: string): string | null;
 
@@ -1290,6 +1477,9 @@ export declare function headingAnchor(heading: string): string;
 
 ### build/index.d.ts#headingDate
 export declare function headingDate(repoDir: string, version: string, file: string): string | null;
+
+### build/index.d.ts#iconLink
+export declare function iconLink(href?: string): string;
 
 ### build/index.d.ts#inlineMarkdown
 export declare function inlineMarkdown(markdown: string): string;
@@ -1485,17 +1675,28 @@ export interface SiteShellConfigInput {
   } | null | undefined;
 }
 
+### build/vite.d.ts#SiteShellIconTag
+export interface SiteShellIconTag {
+  readonly tag: "link";
+  readonly attrs: {
+    readonly rel: "icon";
+    readonly href: string;
+  };
+  readonly injectTo: "head";
+}
+
 ### build/vite.d.ts#SiteShellOptions
 export interface SiteShellOptions {
   readonly themeKey: string;
   readonly packageFile?: string | false | undefined;
+  readonly icon?: string | false | undefined;
 }
 
 ### build/vite.d.ts#SiteShellPlugin
 export interface SiteShellPlugin {
   readonly name: string;
   config(config: SiteShellConfigInput): SiteShellConfig;
-  transformIndexHtml(): SiteShellTag[];
+  transformIndexHtml(html?: string): (SiteShellTag | SiteShellIconTag)[];
 }
 
 ### build/vite.d.ts#SiteShellTag

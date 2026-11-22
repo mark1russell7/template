@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { globFolders, globToRegExp, packageFolders, reportFolders, workspaceGlobs } from "./workspace-entry.ts";
+import { globFolders, globToRegExp, isWorkspaceFolder, packageFolders, parseWorkspaceGlobs, reportFolders, workspaceGlobs } from "./workspace-entry.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-workspace-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -83,5 +83,48 @@ describe("the globs", () => {
     const named = fixture({ "package.json": { name: "root" }, "pnpm-workspace.yaml": 'packages:\n  - "."\n  - "site"\n', "site/package.json": { name: "site", private: true } });
     expect(reportFolders(named).filter((folder) => resolve(folder) === resolve(named))).toHaveLength(1);
     expect(reportFolders(named)).toHaveLength(2);
+  });
+});
+
+describe("the text of pnpm-workspace.yaml and the folder rule", () => {
+  it("reads a block list, also at the column of the key, and a flow list on one or more lines", () => {
+    expect(parseWorkspaceGlobs('packages:\n  # the libraries\n  - "packages/*"\n  - \'apps/**\' # the apps\n\ncatalog:\n  vitest: ^4.0.0\n')).toEqual(["packages/*", "apps/**"]);
+    expect(parseWorkspaceGlobs("packages:\n- packages/*\n- '!**/fixtures/**'\nonlyBuiltDependencies: []\n")).toEqual(["packages/*", "!**/fixtures/**"]);
+    expect(parseWorkspaceGlobs("packages: ['packages/*', site] # all\n")).toEqual(["packages/*", "site"]);
+    expect(parseWorkspaceGlobs("packages: [\n  'packages/*', # the libraries\n  site,\n]\n")).toEqual(["packages/*", "site"]);
+  });
+  it("removes a comment after spaces, keeps an empty item, and reads a long line of spaces in linear time", () => {
+    expect(parseWorkspaceGlobs("packages:\n  - a   # one\n  - 'b c' #two\n  - x#y\n  -  \n")).toEqual(["a", "b c", "x#y", ""]);
+    // A regular expression with \s+ before a # or before (.+) takes time n² on a line of n spaces
+    const spaces = " ".repeat(100_000);
+    expect(parseWorkspaceGlobs(`packages: [a, b]${spaces}\n`)).toEqual(["a", "b"]);
+    expect(parseWorkspaceGlobs(`packages:\n  -${spaces}a\n  - b${spaces}\n`)).toEqual(["a", "b"]);
+  });
+
+  it("gives undefined with no key packages, and throws on a form that it does not read", () => {
+    expect(parseWorkspaceGlobs("onlyBuiltDependencies:\n  - esbuild\n")).toBeUndefined();
+    expect(() => parseWorkspaceGlobs("packages: packages/*\n")).toThrow(/not a list/);
+    expect(() => parseWorkspaceGlobs("packages: [\n  a,\n")).toThrow(/no "]"/);
+    expect(() => parseWorkspaceGlobs("packages: [a] b\n")).toThrow(/text after/);
+    expect(() => parseWorkspaceGlobs("packages:\n  key: value\n")).toThrow(/not an item/);
+  });
+  it("takes a folder of a glob and not of a ! glob, the root of a glob '.', and no folder of the default ignore of pnpm", () => {
+    expect(isWorkspaceFolder("packages/a", ["packages/*"])).toBe(true);
+    expect(isWorkspaceFolder("packages/a/b", ["packages/*"])).toBe(false);
+    expect(isWorkspaceFolder("packages/a/b", ["packages/**"])).toBe(true);
+    expect(isWorkspaceFolder("packages/a", ["./packages/*/", "!packages/a"])).toBe(false);
+    expect(isWorkspaceFolder(".", [".", "site"])).toBe(true);
+    for (const folder of ["packages/a/test/fixture", "packages/tests/x", "packages/node_modules/x", "packages/bower_components/x", "packages/.cache"]) {
+      expect(isWorkspaceFolder(folder, ["packages/**"]), folder).toBe(false);
+    }
+  });
+  it("leaves the folders of the default ignore of pnpm out of the package folders", () => {
+    const root = fixture({
+      "package.json": { name: "root", private: true },
+      "pnpm-workspace.yaml": "packages:\n  - packages/**\n",
+      "packages/a/package.json": { name: "a" },
+      "packages/a/test/fixture/package.json": { name: "fixture" },
+    });
+    expect(packageFolders(root).map((folder) => resolve(folder))).toEqual([resolve(root, "packages/a")]);
   });
 });

@@ -46,6 +46,34 @@ export interface DeclarationInfo {
   readonly ambient: Map<string, string[]>;
   /** Each module specifier that the file names: the files that it reaches. */
   readonly references: Set<string>;
+  /** The text of the doc comment of each declaration of `locals`, by name. A declaration without a doc comment has no item. */
+  readonly docs: Map<string, string>;
+}
+
+/** One top-level statement of a declaration file, and the text of the doc comment before it. */
+interface DocumentedStatement {
+  readonly statement: string;
+  readonly doc: string | undefined;
+}
+
+/**
+ * This function gives the text of a doc comment: the lines without the `/**` and `*` marks and the
+ * spaces at their ends. The first line also loses the spaces at its start. The lines without a `*` mark
+ * lose only their common indent. The result keeps the tags, for example `@param`, and the indent after a
+ * `*` mark.
+ */
+function docText(comment: string): string {
+  const inner = comment.replace(/^\/\*\*/, "").replace(/\*\/$/, "").split("\n");
+  const marked = (line: string, index: number): boolean => index > 0 && /^\s*\*/.test(line);
+  const bare = inner.filter((line, index) => index > 0 && !marked(line, index) && line.trim() !== "");
+  const indent = bare.length === 0 ? 0 : Math.min(...bare.map((line) => line.length - line.trimStart().length));
+  const lines = inner.map((line, index) => {
+    if (index === 0) return line.trim();
+    return (marked(line, index) ? line.replace(/^\s*\* ?/, "") : line.slice(indent)).trimEnd();
+  });
+  while (lines.length > 0 && lines[0]?.trim() === "") lines.shift();
+  while (lines.length > 0 && lines.at(-1)?.trim() === "") lines.pop();
+  return lines.join("\n");
 }
 
 /** A mode of the reader of a template literal. */
@@ -77,16 +105,29 @@ const DEFAULT_NAME = unicode`^export default (${NAME});?$`;
 const NAMELESS_DEFAULT = unicode`^export default (?:declare )?(?:abstract )?(?:class|function\*?)(?!${NAME_PART})\s*((?:${NAME})?)`;
 const DECLARATOR = unicode`^\s*(${NAME})`;
 const DECLARATION = unicode`^(export )?(default )?(?:declare )?(?:abstract )?(?:const (?=enum))?(?:function|class|interface|type|enum|namespace|module) (${NAME})`;
+const KIND_KEYWORD = unicode`^(?:export )?(?:default )?(?:declare )?(?:abstract )?(?:const (?=enum))?(function|class|interface|type|enum|namespace|module)(?!${NAME_PART})`;
+const VARIABLE = /^(?:export )?(?:declare )?(?:const|let|var) (?!enum\b)(.*?);?$/;
+const TYPED_DECLARATOR = unicode`^\s*${NAME}\s*\??\s*:\s*([\s\S]*)$`;
 
 /**
  * This function splits the text of a declaration file into its top-level statements. It removes the
  * comments, the blank lines and the spaces at the ends of the lines.
  */
 export function statementsOf(source: string): string[] {
+  return documentedStatementsOf(source).map(({ statement }) => statement);
+}
+
+/**
+ * This function splits the text of a declaration file into its top-level statements, as `statementsOf`
+ * does. Each statement also has the text of the last doc comment before it at the top level.
+ */
+function documentedStatementsOf(source: string): DocumentedStatement[] {
   // The declarations of a bin file keep its `#!` line
   const text = source.replace(/\r\n?/g, "\n").replace(/^#![^\n]*\n?/, "");
-  const statements: string[] = [];
+  const statements: DocumentedStatement[] = [];
   let current = "";
+  // The text of the last doc comment before the start of the current statement
+  let doc: string | undefined;
   let depth = 0;
   // The depth of the type arguments at the top level: `class A<T = {}> {` has a brace in them
   let angle = 0;
@@ -100,7 +141,10 @@ export function statementsOf(source: string): string[] {
       .split("\n")
       .map((line) => line.trimEnd())
       .filter((line) => line.trim() !== "");
-    if (lines.length > 0) statements.push(lines.join("\n"));
+    if (lines.length > 0) {
+      statements.push({ statement: lines.join("\n"), doc });
+      doc = undefined;
+    }
     current = "";
     angle = 0;
     body = false;
@@ -135,7 +179,11 @@ export function statementsOf(source: string): string[] {
     }
     if (char === "/" && next === "*") {
       const end = text.indexOf("*/", index + 2);
-      index = end < 0 ? text.length : end + 2;
+      const stop = end < 0 ? text.length : end + 2;
+      // A doc comment starts with `/**`, and `/**/` is an empty comment. Only a comment before the statement is its doc comment.
+      const isDoc = text.startsWith("/**", index) && text.charAt(index + 3) !== "/";
+      if (isDoc && modes.length === 0 && depth === 0 && current.trim() === "") doc = docText(text.slice(index, stop));
+      index = stop;
       current += " ";
       continue;
     }
@@ -199,6 +247,77 @@ function splitTopLevel(text: string): string[] {
   return parts;
 }
 
+/**
+ * The kind of one statement of a declaration.
+ * - `function`: a function, or a variable with a function type, for example `declare const f: (x: A) => B`.
+ * - `variable`: each other `const`, `let` or `var`.
+ * - `namespace`: a `namespace` or a `module` with a name.
+ * - `alias`: `import A = N.B`.
+ * - `other`: an expression, for example `export default 1` or `export = { a }`.
+ */
+export type DeclarationKind = "function" | "class" | "interface" | "type" | "enum" | "namespace" | "variable" | "alias" | "other";
+
+/**
+ * This function gives the kinds of the statements of the text of one declaration, in their order and with no repeats.
+ * An overload repeats `function`, thus it gives one `function`. A function with a merged namespace gives
+ * `function` and `namespace`. The text is a declaration of a report or of the model, or a statement of a declaration file.
+ */
+export function declarationKinds(text: string): DeclarationKind[] {
+  const kinds: DeclarationKind[] = [];
+  for (const statement of statementsOf(text)) {
+    const kind = statementKind(statement.replace(/\s+/g, " ").trim());
+    if (!kinds.includes(kind)) kinds.push(kind);
+  }
+  return kinds;
+}
+
+/** This function gives the kind of one statement, with its white space as one space. */
+function statementKind(flat: string): DeclarationKind {
+  const keyword = KIND_KEYWORD.exec(flat)?.[1];
+  if (keyword !== undefined) return keyword === "module" ? "namespace" : (keyword as DeclarationKind);
+  const variable = VARIABLE.exec(flat);
+  if (variable) {
+    // A statement with more than one declarator gets the kind of the first one
+    const type = TYPED_DECLARATOR.exec(splitTopLevel(group(variable, 1))[0] ?? "")?.[1];
+    return type !== undefined && isFunctionType(type.trim()) ? "function" : "variable";
+  }
+  if (IMPORT_ALIAS.test(flat)) return "alias";
+  return "other";
+}
+
+/** This function tells if a type is a function type: `(x: A) => B` or `<T>(x: T) => T`, not `(A | B)[]` or `new () => C`. */
+function isFunctionType(type: string): boolean {
+  let index = 0;
+  if (type.startsWith("<")) {
+    index = afterGroup(type, 0);
+    while (type.charAt(index) === " ") index++;
+  }
+  if (index < 0 || type.charAt(index) !== "(") return false;
+  const end = afterGroup(type, index);
+  return end > 0 && type.slice(end).trimStart().startsWith("=>");
+}
+
+/**
+ * This function gives the index after the bracket that closes the bracket at `start`, or -1. It skips strings, and
+ * the `>` of an arrow `=>` closes nothing.
+ */
+function afterGroup(text: string, start: number): number {
+  let depth = 0;
+  for (let index = start; index < text.length; index++) {
+    const char = text.charAt(index);
+    if (char === '"' || char === "'" || char === "`") {
+      let end = index + 1;
+      while (end < text.length && text.charAt(end) !== char) end += text.charAt(end) === "\\" ? 2 : 1;
+      index = end;
+    } else if (char === "(" || char === "[" || char === "{" || char === "<") depth++;
+    else if (char === ")" || char === "]" || char === "}" || (char === ">" && text.charAt(index - 1) !== "=")) {
+      depth--;
+      if (depth === 0) return index + 1;
+    }
+  }
+  return -1;
+}
+
 /** The names of an export or import list: `a, type b, c as d`. */
 function specifiersOf(list: string, typeOnly: boolean): { imported: string; exported: string; typeOnly: boolean }[] {
   return list
@@ -237,14 +356,21 @@ export function parseDeclarations(source: string, file = "<text>"): DeclarationI
     imports: new Map(),
     ambient: new Map(),
     references: new Set(),
+    docs: new Map(),
   };
+  // The doc comment of the statement that the loop reads
+  let doc: string | undefined;
   const addLocal = (name: string, statement: string): void => {
     info.locals.set(name, [...(info.locals.get(name) ?? []), statement]);
+    // The first doc comment of a name wins: an overload or a merged interface can repeat it
+    if (doc !== undefined && doc !== "" && !info.docs.has(name)) info.docs.set(name, doc);
   };
   const addAmbient = (label: string, statement: string): void => {
     info.ambient.set(label, [...(info.ambient.get(label) ?? []), statement]);
   };
-  for (const statement of statementsOf(source)) {
+  for (const documented of documentedStatementsOf(source)) {
+    const { statement } = documented;
+    doc = documented.doc;
     const flat = statement.replace(/\s+/g, " ");
     for (const found of flat.matchAll(/\bimport\(\s*["']([^"']+)["']\s*\)/g)) info.references.add(found[1] ?? "");
     let match: RegExpExecArray | null;

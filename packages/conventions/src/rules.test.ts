@@ -8,10 +8,11 @@ import { afterAll, describe, expect, it } from "vitest";
 import { blockHash, sharedDocsRule, type HomeFetch } from "./rules/shared-docs.ts";
 import { lockedVersions, minorOf, publishedMinorRule, reachOf } from "./rules/published-minor.ts";
 import type { RegistryLookup } from "./rules/unreleased-change.ts";
-import { authorOf, convertGate, declaredName, hasTests, HOMES, mitText, pagesCalls, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, unreleasedChangeRule, type CheckOptions, type RegistryAnswer, type RuleResult } from "./index.ts";
+import { authorOf, convertGate, declaredName, hasTests, HOMES, mitText, modulesOf, moduleUses, pagesCalls, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, reposOf, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, unreleasedChangeRule, type CheckOptions, type Home, type RegistryAnswer, type RuleResult } from "./index.ts";
 import { API_REPORT_RANGE } from "./rules/api-report-script.ts";
 import { minuteField } from "./rules/runner-budget.ts";
-import { runsOnMain, startsOnPush } from "./rules/main-runs-finish.ts";
+import { runsOnMain, runsOnOneCommit, startsOnPush } from "./rules/main-runs-finish.ts";
+import { triggersOf } from "./rules/site-check-in-ci.ts";
 import { localBase, runCli } from "./run.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "conventions-rules-"));
@@ -292,11 +293,26 @@ describe("required-scripts", () => {
 
 describe("no-build-output", () => {
   it("reports each folder of build output that git keeps, and skips a folder that is not git", () => {
-    const files = { "package.json": { name: "one" }, "packages/a/dist/index.js": "", "packages/a/dist/index.d.ts": "", "build/x.js": "", "src/builder/x.ts": "" };
+    const files = {
+      "package.json": { name: "one" },
+      "packages/a/package.json": { name: "a" },
+      "packages/a/dist/index.js": "",
+      "packages/a/dist/index.d.ts": "",
+      "packages/a/coverage/prettify.js": "",
+      "build/x.js": "",
+      "src/builder/x.ts": "",
+      // A source folder named coverage, away from a package.json, is not a report.
+      "src/coverage/x.ts": "",
+      ".github/actions/coverage/action.yml": "",
+    };
     expect(rule(fixture(files), "no-build-output").status).toBe("skipped");
     const root = fixture(files);
     commitAll(root);
-    expect(rule(root, "no-build-output").breaks.map((item) => item.message)).toEqual(["Git keeps 1 file(s) in build/.", "Git keeps 2 file(s) in packages/a/dist/."]);
+    expect(rule(root, "no-build-output").breaks.map((item) => item.message)).toEqual([
+      "Git keeps 1 file(s) in build/.",
+      "Git keeps 1 file(s) in packages/a/coverage/.",
+      "Git keeps 2 file(s) in packages/a/dist/.",
+    ]);
   });
 
   it("is off with a reason in the configuration", () => {
@@ -362,6 +378,45 @@ describe("no-local-paths", () => {
     // With no base and no pull request, the rule reads only the files: the first commit message is not a break
     expect(rule(root, "no-local-paths", { env: { CONVENTIONS_PRIVATE_PATTERNS: "hidden-name" } }).breaks).toEqual([]);
   });
+
+  it("reads the pull request of a dispatched run from the file of CONVENTIONS_PULL_REQUEST, not from the event file", () => {
+    const root = fixture({ "package.json": { name: "one" }, "notes.md": "1\n" });
+    commitAll(root);
+    git(root, "tag", "base");
+    const event = join(root, "..", `event-${String(fixtures++)}.json`);
+    writeFileSync(event, JSON.stringify({ ref: "refs/heads/topic", pull_request: { title: "a hidden-name title in the event file" } }));
+    const file = join(root, "..", `pull-request-${String(fixtures++)}.json`);
+    writeFileSync(file, JSON.stringify({ number: 7, title: "a plain title", body: `line one\nthe hidden-name\n`, commits: 1 }));
+    const env = { CONVENTIONS_PRIVATE_PATTERNS: "hidden-name", GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_EVENT_PATH: event, CONVENTIONS_PULL_REQUEST: file };
+    expect(rule(root, "no-local-paths", { env, base: "base" }).breaks.map((item) => `${item.file}:${String(item.line)}`)).toEqual(["pull request body:2"]);
+    // A file that does not parse has no pull request, and the rule does not read the event file then
+    writeFileSync(file, "{ not json");
+    expect(rule(root, "no-local-paths", { env, base: "base" }).breaks).toEqual([]);
+  });
+
+  it("shows no read in CI with no private pattern, and still finds a home folder", () => {
+    const root = fixture({ "package.json": { name: "one" }, "notes.md": `one ${linux}\ntwo zorbit\n` });
+    commitAll(root);
+    for (const env of [{ CI: "true" }, { CI: "1" }, { GITHUB_ACTIONS: "true" }]) {
+      const result = rule(root, "no-local-paths", { env });
+      expect(result.status, JSON.stringify(env)).toBe("break");
+      expect(result.breaks.map((item) => `${item.file}:${String(item.line)}`)).toEqual(["notes.md:1"]);
+      expect(result.noRead).toBe("CI gives no CONVENTIONS_PRIVATE_PATTERNS, so the rule did not look for private names. It looked only for home folders and the patterns of its options.");
+    }
+    // A local run is the same as before: no note of a read
+    expect(rule(root, "no-local-paths").noRead).toBeUndefined();
+    expect(rule(root, "no-local-paths", { env: { CI: "false" } }).noRead).toBeUndefined();
+    // With a private pattern, CI reads the private text
+    const read = rule(root, "no-local-paths", { env: { CI: "true", CONVENTIONS_PRIVATE_PATTERNS: "zorbit" } });
+    expect(read.noRead).toBeUndefined();
+    expect(read.breaks.map((item) => `${item.file}:${String(item.line)}`)).toEqual(["notes.md:1", "notes.md:2"]);
+    // A pass with no read is not a plain pass in the output
+    writeFileSync(join(root, "notes.md"), "clean\n");
+    git(root, "commit", "-q", "-am", "clean");
+    const pass = rule(root, "no-local-paths", { env: { GITHUB_ACTIONS: "true" } });
+    expect(pass.status).toBe("pass");
+    expect(pass.noRead).toMatch(/^CI gives no CONVENTIONS_PRIVATE_PATTERNS/);
+  });
 });
 
 describe("release-files", () => {
@@ -392,6 +447,15 @@ describe("release-files", () => {
     const event = join(root, "..", `event-${fixtures++}.json`);
     writeFileSync(event, JSON.stringify({ pull_request: { body: "Text\n\nRelease-Edit: the release session asked for it\n" } }));
     expect(rule(root, "release-files", { base: "base", env: { GITHUB_EVENT_PATH: event } }).status).toBe("pass");
+  });
+
+  it("reads the body of the pull request of a dispatched run from the file of CONVENTIONS_PULL_REQUEST", () => {
+    const root = changed("scripts/release/x.mjs", "change");
+    const file = join(root, "..", `pull-request-${fixtures++}.json`);
+    writeFileSync(file, JSON.stringify({ number: 3, title: "a change", body: "Text\n\nRelease-Edit: the owner asked for it\n", commits: 1 }));
+    expect(rule(root, "release-files", { base: "base", env: { GITHUB_EVENT_NAME: "workflow_dispatch", CONVENTIONS_PULL_REQUEST: file } }).status).toBe("pass");
+    writeFileSync(file, JSON.stringify({ number: 3, title: "a change", body: null, commits: 1 }));
+    expect(rule(root, "release-files", { base: "base", env: { GITHUB_EVENT_NAME: "workflow_dispatch", CONVENTIONS_PULL_REQUEST: file } }).breaks.map((item) => item.file)).toEqual(["scripts/release/x.mjs"]);
   });
 
   it("finds the base in the merge commit of a pull request", () => {
@@ -610,6 +674,30 @@ describe("roadmap-parses", () => {
     commitAll(only);
     expect(rule(only, "roadmap-parses").status).not.toBe("skipped");
     expect(rule(only, "roadmap-parses").breaks).toHaveLength(1);
+  });
+
+  it("reads the roadmap of .github/site.json for a call that gives no roadmap", () => {
+    const call = "jobs:\n  pages:\n    uses: o/t/.github/workflows/reusable-pages.yml@0123abc\n";
+    const site = (config: Record<string, unknown>): string => `{\n  "build": "b",\n  "out": "o",\n${Object.entries(config).map(([key, value]) => `  ${JSON.stringify(key)}: ${JSON.stringify(value)}`).join(",\n")}\n}\n`;
+    const good = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": call, ".github/site.json": site({ roadmap: "./docs/ROADMAP.md" }), "docs/ROADMAP.md": roadmap });
+    commitAll(good);
+    expect(rule(good, "roadmap-parses").breaks).toEqual([]);
+    // The rule parses the roadmap of the file, with the line of its key
+    const bad = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": call, ".github/site.json": site({ roadmap: "docs/GONE.md" }) });
+    commitAll(bad);
+    expect(rule(bad, "roadmap-parses").breaks.map((item) => `${item.file}:${String(item.line)}: ${item.message}`)).toEqual([
+      ".github/site.json:4: .github/site.json names the roadmap docs/GONE.md, and the file does not exist.",
+    ]);
+    const none = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": call, ".github/site.json": site({ "site-name": "x" }) });
+    commitAll(none);
+    expect(rule(none, "roadmap-parses").breaks.map((item) => item.message)).toEqual([".github/site.json gives no roadmap, so the Status page shows no roadmap item."]);
+    const noPages = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": call, ".github/site.json": site({ "site-pages": false }) });
+    commitAll(noPages);
+    expect(rule(noPages, "roadmap-parses").status).toBe("skipped");
+    // A file that is not a site config fails on the pull request, before the Pages run reads it
+    const typo = fixture({ "package.json": { name: "one" }, ".github/workflows/pages.yml": call, ".github/site.json": site({ roadmap: "docs/ROADMAP.md", "site-chek": true }), "docs/ROADMAP.md": roadmap });
+    commitAll(typo);
+    expect(rule(typo, "roadmap-parses").breaks.map((item) => item.message)).toEqual([expect.stringMatching(/"site-chek" is not a key of the site config/)]);
   });
 
   it("reads the value of a roadmap key", () => {
@@ -892,8 +980,8 @@ describe("gate-trigger", () => {
 
 describe("home-package", () => {
   /** A repository of `repo` with a first commit, and a second commit that adds `added` to src/a.ts. */
-  function changed(added: string, repo = "mark1russell7/other"): string {
-    const root = fixture({ "package.json": { name: "one" }, "src/a.ts": "export function median(values: number[]): number {\n  return values[0] ?? 0;\n}\n" });
+  function changed(added: string, repo = "mark1russell7/other", manifest: Record<string, unknown> = { name: "one" }): string {
+    const root = fixture({ "package.json": manifest, "src/a.ts": "export function median(values: number[]): number {\n  return values[0] ?? 0;\n}\n" });
     commitAll(root);
     git(root, "remote", "add", "origin", `https://github.com/${repo}.git`);
     git(root, "tag", "base");
@@ -913,6 +1001,18 @@ describe("home-package", () => {
     expect(localBase(root, { CI: "true" })).toBeUndefined();
     expect(code([], { CI: "true" })).toBe(0);
     expect(localBase(fixture({ "package.json": { name: "two" } }), {})).toBeUndefined();
+  });
+
+  it("takes the base of CONVENTIONS_BASE in CI, and --base and --no-base have priority", () => {
+    const root = changed("function medianOf(xs: number[]): number {\n  return xs[0] ?? 0;\n}\n");
+    const base = git(root, "rev-parse", "base").trim();
+    const code = (args: string[], env: Record<string, string>): number =>
+      runCli(["check", "--rule", "home-package", ...args], { cwd: root, env: { CI: "true", ...env }, stdout: () => undefined, stderr: () => undefined });
+    expect(code([], { CONVENTIONS_BASE: base })).toBe(1);
+    expect(code([], { CONVENTIONS_BASE: ` ${base}\n` })).toBe(1);
+    expect(code([], { CONVENTIONS_BASE: "" })).toBe(0);
+    expect(code(["--no-base"], { CONVENTIONS_BASE: base })).toBe(0);
+    expect(code(["--base", "HEAD"], { CONVENTIONS_BASE: base })).toBe(0);
   });
 
   it("knows the forms of a declaration", () => {
@@ -942,6 +1042,27 @@ describe("home-package", () => {
     expect(rule(changed("function medianOf(xs: number[]): number {\n  return xs[0] ?? 0;\n}\n", "mark1russell7/rigor"), "home-package", { base: "base", env: {} }).status).toBe("pass");
   });
 
+  it("passes in a repository of alsoIn, where the code of a home moves", () => {
+    const code = "function medianOf(xs: number[]): number {\n  return xs[0] ?? 0;\n}\nfunction mulberry32(seed: number): number {\n  return seed;\n}\n";
+    expect(rule(changed(code, "mark1russell7/algebra"), "home-package", { base: "base", env: {} }).status).toBe("pass");
+    // The new name of the target repository after its rename.
+    expect(rule(changed(code, "mark1russell7/math"), "home-package", { base: "base", env: {} }).status).toBe("pass");
+    expect(rule(changed(code, "mark1russell7/other"), "home-package", { base: "base", env: {} }).breaks.length).toBe(2);
+  });
+
+  it("passes in the home after a move to the other owner, and breaks in a repository of the same name of a third owner", () => {
+    const code = "function medianOf(xs: number[]): number {\n  return xs[0] ?? 0;\n}\n";
+    // The map names mark1russell7/rigor. The home moves to the organization before the map changes (codeatlas, 2026-11-17)
+    expect(rule(changed(code, "metrograph-labs/rigor"), "home-package", { base: "base", env: {} }).status).toBe("pass");
+    expect(rule(changed(code, "Metrograph-Labs/Rigor"), "home-package", { base: "base", env: {} }).status).toBe("pass");
+    // A fork has the name of the home, but an owner out of OWNERS
+    expect(rule(changed(code, "someone/rigor"), "home-package", { base: "base", env: {} }).breaks.length).toBe(1);
+    const plain = HOMES.find((item) => item.alsoIn === undefined) as Home;
+    const home = (repo: string, alsoIn?: string[]): Home => ({ ...plain, repo, ...(alsoIn === undefined ? {} : { alsoIn }) });
+    expect(reposOf(home("mark1russell7/Rigor"))).toEqual(["mark1russell7/rigor", "metrograph-labs/rigor"]);
+    expect(reposOf(home("metrograph-labs/rigor", ["someone/rigor"]))).toEqual(["mark1russell7/rigor", "metrograph-labs/rigor", "someone/rigor"]);
+  });
+
   it("skips with no change, and examines each line with the option scope all", () => {
     const root = changed("// the end\n");
     expect(rule(root, "home-package", { env: {} }).status).toBe("skipped");
@@ -949,16 +1070,102 @@ describe("home-package", () => {
     expect(rule(root, "home-package", { env: {} }).breaks.map((item) => item.line)).toEqual([1]);
   });
 
+  it("keeps an entry of generated or ignore that matches no break, because the breaks depend on the change", () => {
+    // A change that leaves the generated bundles as they are gives no break in them (template, 2026-11-18)
+    const manifest = { name: "one", conventions: { rules: { "home-package": { generated: ["bundles/*.mjs"], ignore: ["src/old.ts"], reason: "a build writes the bundles" } } } };
+    const result = rule(changed("// the end\n", "mark1russell7/other", manifest), "home-package", { base: "base", env: {} });
+    expect(result.breaks).toEqual([]);
+    expect(result.status).toBe("pass");
+  });
+
   it("has signatures that compile, and no name that two homes claim", () => {
     const signatures = signaturesOf(HOMES);
     expect(signatures.length).toBeGreaterThan(40);
-    const names = ["quantile", "median", "medianOf", "mulberry32", "fnv1a32", "orient2d", "writeFileAtomic", "topoSort", "segmentsIntersect", "exponentialBackoff"];
+    const names = ["quantile", "median", "medianOf", "mulberry32", "fnv1a32", "orient2d", "writeFileAtomic", "topoSort", "segmentsIntersect", "exponentialBackoff", "graphemes", "classifySegments", "canonicalJson"];
     for (const name of names) expect(new Set(signatures.filter((item) => item.pattern.test(name)).map((item) => item.home.area)).size, name).toBe(1);
     for (const name of ["record", "run", "parse", "mean", "seconds", "connect", "measure"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(false);
     // A word of another area after a statistics prefix: bootstrapRepo is the npm bootstrap of the release scripts (codeatlas, 2026-11-02)
     for (const name of ["bootstrapRepo", "bootstrapApp", "wilsonInterval", "bootstrapMedian", "bootstrap"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(!name.endsWith("Repo") && !name.endsWith("App"));
     // A planned home has no package to import yet, so its signatures do not break
-    for (const name of ["graphemes", "parseArgs"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(false);
+    expect(signatures.some((item) => item.pattern.test("parseArgs")), "parseArgs").toBe(false);
+    // geography is on npm since @mark1russell7/geo 0.1.0, so its signatures break, in one home only
+    expect(signatures.filter((item) => item.pattern.test("greatCircleKm")).map((item) => item.home.area)).toEqual(["geography"]);
+  });
+});
+
+describe("home-module", () => {
+  // The module comes from a variable, so the lines of this file are not imports of it
+  const M = ["node", "sqlite"].join(":");
+  const TODAY = "2026-12-01";
+
+  /** A repository of `repo` with a first commit, and a second commit that adds `added` to src/a.ts. */
+  function changed(added: string, repo = "mark1russell7/other", manifest: Record<string, unknown> = { name: "one" }): string {
+    const root = fixture({ "package.json": manifest, "src/a.ts": `import { DatabaseSync } from "${M}";\n` });
+    commitAll(root);
+    git(root, "remote", "add", "origin", `https://github.com/${repo}.git`);
+    git(root, "tag", "base");
+    writeFileSync(join(root, "src/a.ts"), `import { DatabaseSync } from "${M}";\n${added}`);
+    git(root, "commit", "-q", "-am", "change");
+    return root;
+  }
+
+  it("finds each form of a use at run time, and not a type", () => {
+    const text = [
+      `import { DatabaseSync } from "${M}";`,
+      `import type { StatementSync } from "${M}";`,
+      "import {",
+      "  type SQLInputValue,",
+      `} from '${M}';`,
+      `export type { DatabaseSync as Db } from "${M}";`,
+      `export * from "${M}";`,
+      `import "${M}";`,
+      `const lazy = await import("${M}");`,
+      `const required = require("${M}");`,
+      `const builtin = process.getBuiltinModule("${M}");`,
+      `type Module = typeof import("${M}");`,
+      `let db: import("${M}").DatabaseSync;`,
+      `void import("${M}").then((module) => module);`,
+      `// const old = require("${M}");`,
+      ` * const doc = require("${M}");`,
+      `export const name = "${M}";`,
+      "export enum Mode {",
+      "  A,",
+      "}",
+      `import type { DatabaseSync as Other } from "${M}";`,
+      `import type Sqlite = require("${M}");`,
+      `import Lib = require("${M}");`,
+    ].join("\n");
+    expect(moduleUses(text)).toEqual([1, 5, 7, 8, 9, 10, 11, 14, 23].map((line) => ({ specifier: M, line })));
+  });
+
+  it("breaks on an added value import out of the home, and not on the import that exists or on import type", () => {
+    const result = rule(changed(`import type { StatementSync } from "${M}";\nconst lazy = await import("${M}");\n`), "home-module", { base: "base", env: {}, today: TODAY });
+    expect(result.status).toBe("break");
+    expect(result.breaks).toHaveLength(1);
+    expect(result.breaks[0]).toMatchObject({ file: "src/a.ts", line: 3 });
+    expect(result.breaks[0]?.message).toContain("Use `@mark1russell7/sqlite` in place of the module");
+  });
+
+  it("warns before its day, and passes in the home", () => {
+    const code = `const required = require("${M}");\n`;
+    expect(rule(changed(code), "home-module", { base: "base", env: {}, today: "2026-11-16" }).status).toBe("warn");
+    expect(rule(changed(code, "mark1russell7/sqlite"), "home-module", { base: "base", env: {}, today: TODAY }).status).toBe("pass");
+  });
+
+  it("passes a file of ignore with a reason, and examines each line with the option scope all", () => {
+    const code = `const required = require("${M}");\n`;
+    const ignored = { name: "one", conventions: { rules: { "home-module": { ignore: ["src/a.ts"], reason: "the backup reads a file of a phone" } } } };
+    expect(rule(changed(code, "mark1russell7/other", ignored), "home-module", { base: "base", env: {}, today: TODAY }).status).toBe("pass");
+    const root = changed("// the end\n");
+    expect(rule(root, "home-module", { env: {}, today: TODAY }).status).toBe("skipped");
+    writeFileSync(join(root, "package.json"), JSON.stringify({ name: "one", conventions: { rules: { "home-module": { scope: "all", reason: "a sweep of the imports" } } } }));
+    expect(rule(root, "home-module", { env: {}, today: TODAY }).breaks.map((item) => item.line)).toEqual([1]);
+  });
+
+  it("knows the modules of the homes on npm", () => {
+    expect(modulesOf(HOMES).map((item) => `${item.specifier} ${item.home.area}`)).toContain(`${M} local-database`);
+    const planned = HOMES.map((home) => ({ ...home, state: "planned" as const, modules: ["x"] }));
+    expect(modulesOf(planned)).toEqual([]);
   });
 });
 
@@ -978,6 +1185,15 @@ describe("api-report-script", () => {
     expect(result.breaks[0]?.message).toContain('no script "check:api"');
     expect(result.breaks[0]?.message).toContain("public package: a.");
     expect(rule(fixture({ "package.json": { name: "one" } }), "api-report-script").status).toBe("break");
+  });
+
+  it("asks a public root with a private workspace for the script", () => {
+    // The form of cue on 2026-11-08: the root is the public package, and the workspace names only a private site
+    const site = { "packages/site/package.json": { name: "site", private: true } };
+    const result = rule(workspace({ name: "@scope/root", private: false, scripts: SCRIPTS }, site), "api-report-script");
+    expect(result.status).toBe("break");
+    expect(result.breaks[0]?.message).toContain("public package: @scope/root.");
+    expect(rule(workspace({ name: "@scope/root", private: false, scripts: { "check:api": "api-report check" } }, site), "api-report-script").status).toBe("pass");
   });
 
   it("adds the script and the dependency, with the form of the file", () => {
@@ -1099,6 +1315,59 @@ describe("pages-site", () => {
     const none = fixture({ "package.json": { name: "one" } });
     commitAll(none);
     expect(rule(none, "pages-site", { env: event({ private: false }) }).breaks.map((item) => item.message)).toEqual(["The repository is public, and no workflow deploys its site with the Pages workflow of the template."]);
+  });
+});
+
+describe("site-check-in-ci", () => {
+  const deploy = `on:\n  push:\n    branches: [main]\npermissions:\n  pages: write\njobs:\n  pages:\n    uses: mark1russell7/template/.github/workflows/reusable-pages.yml@${SHA} # main\n`;
+  const ci = `on:\n  pull_request:\n  push:\njobs:\n  ci:\n    uses: mark1russell7/template/.github/workflows/reusable-ci.yml@${SHA} # main\n  site:\n    uses: mark1russell7/template/.github/workflows/reusable-pages-check.yml@${SHA} # main\n    permissions:\n      contents: read\n  ok:\n    name: CI OK\n    needs:\n      - ci\n      - site\n    runs-on: ubuntu-latest\n`;
+  const site = { build: "pnpm build", out: "site/dist" };
+  /** This function gives the breaks of the rule on the files `files`, each as `file:line: message`. */
+  const breaksOf = (files: Record<string, unknown>): string[] => {
+    const root = fixture({ "package.json": { name: "one" }, ...files });
+    commitAll(root);
+    return rule(root, "site-check-in-ci").breaks.map((item) => `${item.file}${item.line === undefined ? "" : `:${item.line}`}: ${item.message}`);
+  };
+
+  it("reads the events of on in each form", () => {
+    expect(triggersOf("on: push\n")).toEqual(["push"]);
+    expect(triggersOf("on: [push, pull_request]\n")).toEqual(["push", "pull_request"]);
+    expect(triggersOf('"on":\n  - push\n  - pull_request_target\n')).toEqual(["push", "pull_request_target"]);
+    expect(triggersOf("on:\n  push:\n    branches: [main]\n  # pull_request:\n  workflow_dispatch:\n")).toEqual(["push", "workflow_dispatch"]);
+    expect(triggersOf("jobs: {}\n")).toEqual([]);
+  });
+
+  it("passes a site with its config and a check that CI OK needs, and skips a repository with no deploy", () => {
+    const root = fixture({ "package.json": { name: "one" }, ".github/site.json": site, ".github/workflows/pages.yml": deploy, ".github/workflows/ci.yml": ci });
+    commitAll(root);
+    expect(rule(root, "site-check-in-ci").status).toBe("pass");
+    const test = fixture({ "package.json": { name: "one" }, ".github/workflows/actions-test.yml": "on: pull_request\njobs:\n  pages:\n    uses: ./.github/workflows/reusable-pages.yml\n    with:\n      out: test-site\n      deploy: false\n" });
+    commitAll(test);
+    expect(rule(test, "site-check-in-ci").status).toBe("skipped");
+  });
+
+  it("breaks on the old form: site values in the call, a deploy on a pull request, and no check", () => {
+    const old = `on: [push, pull_request]\njobs:\n  pages:\n    uses: mark1russell7/template/.github/workflows/reusable-pages.yml@${SHA} # main\n    with:\n      build: pnpm build\n      out: dist\n      deploy: \${{ github.event_name != 'pull_request' }}\n`;
+    expect(breaksOf({ ".github/workflows/pages.yml": old })).toEqual([
+      ".github/site.json: The repository deploys a site, and it has no .github/site.json. The check of a pull request reads the site values there.",
+      ".github/workflows/pages.yml:6: .github/workflows/pages.yml gives the site value build to the Pages workflow. Give it only in .github/site.json.",
+      ".github/workflows/pages.yml:7: .github/workflows/pages.yml gives the site value out to the Pages workflow. Give it only in .github/site.json.",
+      ".github/workflows/pages.yml: .github/workflows/pages.yml deploys the site and starts on pull_request, so a job of a pull request gets the permission pages: write.",
+      ".github/workflows/ci.yml: No job checks the site on a pull request. Add a job that uses reusable-pages-check.yml, and add it to the needs of CI OK.",
+    ]);
+  });
+
+  it("breaks on a call of the deploy from a pull request, and on a check that the gate does not need", () => {
+    const called = deploy.replace("on:\n", "on:\n  workflow_call:\n");
+    const caller = 'on:\n  pull_request:\njobs:\n  site:\n    uses: ./.github/workflows/reusable-pages-check.yml\n  preview:\n    uses: ./.github/workflows/pages.yml\n  ok:\n    name: "CI OK"\n    needs: site-x\n';
+    expect(breaksOf({ ".github/site.json": site, ".github/workflows/pages.yml": called, ".github/workflows/ci.yml": caller })).toEqual([
+      ".github/workflows/ci.yml:7: .github/workflows/ci.yml starts on pull_request and calls .github/workflows/pages.yml, which deploys the site. A job of a pull request gets the permission pages: write.",
+      ".github/workflows/ci.yml:5: The job CI OK of .github/workflows/ci.yml does not need the job site, so a failed check of the site does not stop a merge.",
+    ]);
+    const noGate = "on: pull_request\njobs:\n  site:\n    uses: ./.github/workflows/reusable-pages-check.yml\n";
+    expect(breaksOf({ ".github/site.json": site, ".github/workflows/pages.yml": deploy, ".github/workflows/ci.yml": noGate })).toEqual([
+      ".github/workflows/ci.yml:4: .github/workflows/ci.yml checks the site in the job site, and the file has no job CI OK, so a failed check does not stop a merge.",
+    ]);
   });
 });
 
@@ -1225,6 +1494,24 @@ describe("unreleased-change", () => {
       const built = repo("1.0.0", { "packages/a/tools/gen.ts": "1\n" }, { files: ["build"] });
       change(built, { "packages/a/tools/gen.ts": "2\n" });
       expect(check(built, { "@x/a": ["1.0.0"] }).breaks.map((item) => item.file)).toEqual(["packages/a/package.json"]);
+    });
+
+    it("counts only the inputs of a build output as shipped, and each tracked entry of the field files", () => {
+      const other = { "packages/a/go/go.mod": "module a\n", "packages/a/vm/Dockerfile": "FROM x\n", "packages/a/schema/a.json": "{}\n", "packages/a/src/a.css": "a {}\n" };
+      const built = repo("1.0.0", other, { files: ["build", "schema"] });
+      // A file that no entry names and no build reads does not ship
+      change(built, { "packages/a/go/go.mod": "module b\n", "packages/a/vm/Dockerfile": "FROM y\n" });
+      expect(check(built, { "@x/a": ["1.0.0"] }).status).toBe("pass");
+      // Each file of src/ is an input of the build, and a tracked entry ships its own files
+      for (const [file, text] of [["packages/a/src/a.css", "b {}\n"], ["packages/a/schema/a.json", "[]\n"]] as const) {
+        const root = repo("1.0.0", other, { files: ["build", "schema"] });
+        change(root, { [file]: text });
+        expect(check(root, { "@x/a": ["1.0.0"] }).breaks.map((item) => item.message)).toEqual([expect.stringContaining(`The change ships ${file}.`)]);
+      }
+      // npm packs the files of main and bin for each value of files
+      const packed = repo("1.0.0", { "packages/a/cli/run.sh": "1\n" }, { files: ["schema"], bin: { run: "./cli/run.sh" } });
+      change(packed, { "packages/a/cli/run.sh": "2\n" });
+      expect(check(packed, { "@x/a": ["1.0.0"] }).breaks.map((item) => item.message)).toEqual([expect.stringContaining("The change ships packages/a/cli/run.sh.")]);
     });
 
     it("skips a Changesets repository, a placeholder version, a registry error and a run with no change", () => {
@@ -1473,6 +1760,41 @@ describe("main-runs-finish", () => {
     expect(runsOnMain(["on:", "  workflow_call:", "    inputs:"])).toBe(true);
     expect(runsOnMain(["on: [workflow_call]"])).toBe(true);
     expect(runsOnMain(["on: workflow_dispatch"])).toBe(false);
+    expect(runsOnMain(["on:", "  workflow_run:", "    workflows: [CI]", "    types: [completed]"])).toBe(true);
+    expect(runsOnMain(["on: [workflow_run]"])).toBe(true);
+    expect(runsOnOneCommit(["on: [push, pull_request]"])).toBe(true);
+    expect(runsOnOneCommit(["on:", "  workflow_call:"])).toBe(true);
+    expect(runsOnOneCommit(["on:", "  workflow_run:", "    workflows: [CI]"])).toBe(false);
+    expect(runsOnOneCommit(["on:", "  push:", "  workflow_run:", "    workflows: [CI]"])).toBe(true);
+  });
+
+  // A run of workflow_run is a run of the default branch. render pages.yml (2026-11-17) deployed after CI with
+  // cancel-in-progress true, so a queue of merges cancelled each deployment, and the rule did not read it.
+  // GitHub gives a run of workflow_run the last commit of the default branch, so a newer run that takes the place of a
+  // waiting run tests the same commit or a newer one. layout-contract memory-probe.yml (2026-11-17) has a group that
+  // ends with the ref and cancel-in-progress false, and it is not a break. A file that also starts on push gets both checks.
+  it("reports a workflow_run workflow that cancels a run in progress, and does not examine its group", () => {
+    const after = ["on:", "  workflow_run:", "    workflows: [CI]", "    types: [completed]", "  schedule:", '    - cron: "17 */3 * * *"'];
+    const shared = "${{ github.ref }}";
+    const root = fixture({
+      "package.json": { name: "one" },
+      ".github/workflows/pages.yml": flow(after, "true", "pages"),
+      ".github/workflows/good.yml": flow(after, PR, "pages"),
+      ".github/workflows/probe.yml": flow(after, "false", "${{ github.event_name }}-${{ github.ref }}"),
+      ".github/workflows/mixed.yml": flow(["on:", "  push:", "  workflow_run:", "    workflows: [CI]"], PR, shared),
+    });
+    commitAll(root);
+    const breaks = rule(root, "main-runs-finish").breaks;
+    expect(breaks.map((item) => `${item.file}:${String(item.line)}`)).toEqual([".github/workflows/mixed.yml:6", ".github/workflows/pages.yml:9"]);
+    expect(breaks.map((item) => item.message)).toEqual([
+      expect.stringContaining("mixed.yml starts on push and workflow_run, and its concurrency group ends with the ref."),
+      expect.stringContaining("pages.yml starts on workflow_run and has `cancel-in-progress: true`. The next run of the default branch cancels the run in progress"),
+    ]);
+    runFix({ root, only: ["main-runs-finish"] });
+    expect(readFileSync(join(root, ".github/workflows/pages.yml"), "utf8")).toContain(`  cancel-in-progress: ${PR}\n`);
+    expect(readFileSync(join(root, ".github/workflows/mixed.yml"), "utf8")).toContain(`  group: ci-${OWN}\n`);
+    expect(readFileSync(join(root, ".github/workflows/probe.yml"), "utf8")).toContain("  group: ci-${{ github.event_name }}-${{ github.ref }}\n");
+    expect(rule(root, "main-runs-finish").breaks).toEqual([]);
   });
 
   it("reports a push workflow that cancels a run in progress, and the fix cancels only a pull request run", () => {
@@ -1513,10 +1835,10 @@ describe("main-runs-finish", () => {
     expect(rule(root, "main-runs-finish").breaks).toEqual([]);
   });
 
-  it("skips a repository with no push or called workflow", () => {
+  it("skips a repository with no push, called or workflow_run workflow", () => {
     const root = fixture({ "package.json": { name: "one" }, ".github/workflows/pr.yml": flow(["on: pull_request"], "true") });
     commitAll(root);
-    expect(rule(root, "main-runs-finish")).toMatchObject({ status: "skipped", note: "no workflow starts on push or on workflow_call" });
+    expect(rule(root, "main-runs-finish")).toMatchObject({ status: "skipped", note: "no workflow starts on push, workflow_call or workflow_run" });
   });
 });
 

@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
@@ -83,6 +83,28 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           xvfb-run --auto-servernum pnpm --filter "@template/$PACKAGE" smoke
 
+  # The validator of Renovate reads each preset of renovate/ (renovate/README.md). Each repository of the account
+  # extends these presets, so a fault in one of them stops Renovate in each repository.
+  # Only the template has the presets, so a repository from new-repo.ps1 skips this job.
+  renovate-presets:
+    if: github.repository == 'mark1russell7/template'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      # A custom manager of renovate/base updates this version.
+      RENOVATE_VERSION: 44.225.0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - name: Validate the presets
+        run: npx --yes --package "renovate@${RENOVATE_VERSION}" -- renovate-config-validator --strict renovate/*.json
+
   # A new repository passes its install, conventions check, typecheck, tests, Pages build and site check with no hand edit.
   # Only the template has the stamp (scripts/stamp), so a repository from the stamp skips this job.
   stamp:
@@ -97,13 +119,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: node scripts/stamp/main.ts stamp-demo --description "A repository of the stamp test." --ref HEAD --out "$DEMO"
+      # --link: the packages of the template come from this commit, not from npm. A change of a rule and of
+      # the files that the stamp writes thus passes in one pull request, before the release of the rule.
+      - run: node scripts/stamp/main.ts stamp-demo --description "A repository of the stamp test." --ref HEAD --out "$DEMO" --link
       - name: The new repository installs
         run: |
           cd "$DEMO"
@@ -136,13 +160,109 @@ jobs:
       - name: The site passes the site check
         run: node packages/site-pages/src/check/main.ts --out "$DEMO/packages/site/dist" --repo mark1russell7/stamp-demo --pages /,/releases/,/status/ --shots "$RUNNER_TEMP/site-check"
 
+  # The site of .github/site.json: the build, the site check and the probe, with no deploy (CI.md, "The site config").
+  # pages.yml deploys the same site from main. The template calls the check workflow of its own commit.
+  site:
+    uses: ./.github/workflows/reusable-pages-check.yml
+    permissions:
+      contents: read
+
+  # The rules of conventions of a pull request, over each public repository that uses them (CI.md, "The compare of the
+  # conventions rules"). The job fails on a failure of a rule that only the pull request gives. Only the template has the
+  # source of the rules, so a repository from the stamp skips this job.
+  rules:
+    if: github.repository == 'mark1russell7/template' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # release.yml calls this file with "contents: read" only. A job that asks for more stops each run of release.yml at
+    # its start, also when its if skips the job (scripts/workflows/call-permissions.test.ts). In a public repository,
+    # the token reads the files of the pull request with no "pull-requests: read".
+    permissions:
+      contents: read
+    steps:
+      # The merge commit of the pull request: its rules, and the script of the compare
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: next
+          persist-credentials: false
+      - id: changes
+        uses: ./next/.github/actions/changes
+        with:
+          paths: |
+            .github/workflows/ci.yml
+            scripts/workflows/rule-compare.ts
+            scripts/lib/gh.ts
+            packages/conventions/src/**
+            !packages/conventions/src/**/*.test.ts
+      # The same compare of the import boundaries (CI.md, "The compare of the import boundaries")
+      - id: boundary-changes
+        uses: ./next/.github/actions/changes
+        with:
+          paths: |
+            .github/workflows/ci.yml
+            scripts/workflows/rule-compare.ts
+            scripts/lib/gh.ts
+            packages/boundaries/src/**
+            !packages/boundaries/src/**/*.test.ts
+      # The base of the pull request: the rules that each repository gets when its pin moves to the base
+      - if: steps.changes.outputs.match == 'true' || steps.boundary-changes.outputs.match == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: base
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - if: steps.changes.outputs.match == 'true' || steps.boundary-changes.outputs.match == 'true'
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: next/package.json
+      - if: steps.changes.outputs.match == 'true' || steps.boundary-changes.outputs.match == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: pnpm
+          cache-dependency-path: next/pnpm-lock.yaml
+      # Only the package of the rules and its dependencies. The script imports the escapes of Markdown and of workflow
+      # commands, and the read of the repositories of scripts/lib/gh.ts imports the retry of @mark1russell7/service. Both
+      # come at the version that pnpm-lock.yaml gives (CI.md, "The packages of the workflow scripts"), into next/scripts,
+      # so that scripts/workflows and scripts/lib both find them.
+      - name: Install the rules of the base and of the pull request
+        if: steps.changes.outputs.match == 'true' || steps.boundary-changes.outputs.match == 'true'
+        run: |
+          (cd next && pnpm install --frozen-lockfile --filter "@mark1russell7/conventions...")
+          (cd base && pnpm install --frozen-lockfile --filter "@mark1russell7/conventions...")
+          text="$(node next/.github/actions/pull-of-run/locked-version.ts next/pnpm-lock.yaml @mark1russell7/text)"
+          service="$(node next/.github/actions/pull-of-run/locked-version.ts next/pnpm-lock.yaml @mark1russell7/service)"
+          npm install --no-save --no-package-lock --ignore-scripts --prefix next/scripts "@mark1russell7/text@${text}" "@mark1russell7/service@${service}"
+      # The script reads the public repositories of each owner of packages/conventions/src/owners.ts that are not
+      # archived. It puts out of scope each one with no dependency on the rules.
+      - name: The compare of the rules
+        if: steps.changes.outputs.match == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node next/scripts/workflows/rule-compare.ts --tool conventions --base base --next next --out "$RUNNER_TEMP/rule-compare/conventions" --work "$RUNNER_TEMP/rule-clones" --jobs 4
+      # Each repository with a dependency on the boundaries and the script check:boundaries. The script installs each
+      # clone with no scripts of the packages, and links the package of the base and then of the pull request into it.
+      # The step starts also after a failure of the compare of the rules, so the summary has both compares.
+      - name: The compare of the import boundaries
+        if: ${{ !cancelled() && steps.boundary-changes.outputs.match == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node next/scripts/workflows/rule-compare.ts --tool boundaries --base base --next next --out "$RUNNER_TEMP/rule-compare/boundaries" --work "$RUNNER_TEMP/boundary-clones" --jobs 4
+      - name: The reports of the compare
+        if: ${{ !cancelled() && (steps.changes.outputs.match == 'true' || steps.boundary-changes.outputs.match == 'true') }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rule-compare
+          path: ${{ runner.temp }}/rule-compare
+          if-no-files-found: warn
+
   # The one check of the ruleset of main (CI.md, "The check of the ruleset"). It passes only when
   # each job of needs passed, or was skipped by its own if and ALLOW_SKIP names it. A new job of this
   # file goes in needs, so the ruleset never has to change, and gh pr merge --auto waits for the whole gate.
   ci-ok:
     name: CI OK
     if: ${{ !cancelled() }}
-    needs: [ci, presets, stamp]
+    needs: [ci, presets, renovate-presets, stamp, site, rules]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}
@@ -151,7 +271,7 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
           # The jobs that their own if may skip, separated by spaces. Each other job must pass.
-          ALLOW_SKIP: "presets stamp"
+          ALLOW_SKIP: "presets renovate-presets stamp rules"
         run: |
           echo "$NEEDS" | jq -r 'to_entries[] | "\(.key) \(.value.result)"' > results
           cat results

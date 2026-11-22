@@ -60,6 +60,7 @@ export {
 } from "./data/status.ts";
 export { KPI_FILE, KPI_FORMAT, KpiError, kpiFile, kpiProblems, kpiText, readKpi, writeKpi, type KpiInput } from "./data/kpi.ts";
 export { escapeHtml, inlineMarkdown, safeUrl } from "./render/html.ts";
+export { hasIconLink, iconLink, SITE_ICON_HREF, SITE_ICON_SVG } from "./render/icon.ts";
 export { dayRange, longDate, shortDate, utcDay } from "./render/dates.ts";
 export { BASE_CSS, pageShell, type PageOptions, type PageParts } from "./render/theme.ts";
 export {
@@ -77,9 +78,9 @@ export {
 export { releasesLead, renderReleasesPage, RELEASES_SCRIPT } from "./render/releases.ts";
 export { classCounts, openGroups, renderStatusPage, sectionsOf, slugOf, statusLead, STATUS_SCRIPT, type BoardSection, type ItemGroup } from "./render/status.ts";
 export { probeScript, TYPESCRIPT_PROBE } from "./check/probe.ts";
+export { cronLines, type CronLine } from "./check/schedule.ts";
 export {
   checkFreshness,
-  cronLines,
   DATA_STAMP_SCHEMA,
   failingCases,
   latestAt,
@@ -90,7 +91,8 @@ export {
   MAX_STUDY_LIMIT_DAYS,
   minorsBehind,
   parseDataStamps,
-  type CronLine,
+  VERSION_GRACE_DAYS,
+  WORKSPACE_RULE_START,
   type DataLimit,
   type DataRun,
   type DataStamps,

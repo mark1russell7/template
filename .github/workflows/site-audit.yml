@@ -1,19 +1,27 @@
-# The audit of the live sites: `site-pages check --url` on the home of each public site of the account.
+# The audit of the live sites: `site-pages check --url` on the home of each public site of the owners.
 # The check opens each home at the widths, in light and dark, and finds overflow, errors and empty pages.
 # The artifact site-audit has the screenshots, report.json of each site and audit.json for all sites.
 # The job nav starts `site-pages nav --url` on each site: it follows the links from home, and finds the
 # pages that are hidden or far from home, the pages with no way back and the links that open a new tab.
 # Its artifact site-nav has the screenshots and report.json of each site, and nav.json for all sites.
 # A failed site does not fail the run: the audit is a report. A run that cannot check a site fails.
+# One problem is a gate, not a report: a code block or a table that goes out of view on a phone with no scroll cue.
+# After the shared Pages step gave each block the cue, the audit read 0 such blocks, so a new one fails the run.
 # Each pull request starts the workflow, so its check "Site audit OK" is always there. The job changes skips
 # the other jobs when the pull request changes no file of the crawl. Such a pull request starts only the job nav.
+# A run that workflow_dispatch starts on the branch of an open pull request (for example a run by hand)
+# also skips them when that pull request changes no file of the crawl. A schedule, and a run on a branch with no
+# open pull request, for example main, examine the sites.
+# The job compare starts on a pull request that changes the site check. It starts the check of the base and the check
+# of the pull request on the pages of the site check of each site, and fails on each problem that only the new check
+# finds (CI.md, "The compare of the site check").
 name: Site audit
 
 on:
   workflow_dispatch:
     inputs:
       sites:
-        description: "The repositories to examine, with commas. Empty: each public repository of the account that has a Pages site."
+        description: "The repositories to examine, with commas. Empty: each public repository of the owners that has a Pages site."
         type: string
         default: ""
       widths:
@@ -35,9 +43,10 @@ on:
 
 permissions: {}
 
+# A run of main finishes: a newer run of main waits for it. A newer run of another ref cancels the run of that ref.
 concurrency:
   group: site-audit-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   changes:
@@ -48,49 +57,75 @@ jobs:
       pull-requests: read
     outputs:
       match: ${{ steps.changes.outputs.match }}
+      check: ${{ steps.check.outputs.match }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: .github/actions
           persist-credentials: false
+      # A run that workflow_dispatch starts on the branch of a pull request, for example a run by hand, reads the
+      # files of that pull request (CI.md, "A dispatched run of a gate"). pull-of-run is TypeScript, so it needs Node 22.18
+      # or later. A lookup that fails does not stop the job: with no number, the gate runs.
+      - if: github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/') && github.ref != format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+      - id: pull
+        if: github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/') && github.ref != format('refs/heads/{0}', github.event.repository.default_branch)
+        continue-on-error: true
+        uses: ./.github/actions/pull-of-run
       - id: changes
         uses: ./.github/actions/changes
         with:
+          pull-request: ${{ steps.pull.outputs.found == 'true' && steps.pull.outputs.number || '' }}
           paths: |
             .github/workflows/site-audit.yml
             packages/site-pages/src/bar/bar.ts
             packages/site-pages/src/check/nav.ts
+      # The files of the site check: main.ts imports nav.ts, nav.ts imports bar.ts, and bar.ts imports render/html.ts
+      - id: check
+        uses: ./.github/actions/changes
+        with:
+          pull-request: ${{ steps.pull.outputs.found == 'true' && steps.pull.outputs.number || '' }}
+          paths: |
+            .github/workflows/site-audit.yml
+            scripts/workflows/site-compare.ts
+            packages/site-pages/src/check/**
+            packages/site-pages/src/bar/**
+            packages/site-pages/src/render/html.ts
+            !packages/site-pages/src/**/*.test.ts
 
   sites:
     needs: changes
-    if: needs.changes.outputs.match == 'true'
+    if: needs.changes.outputs.match == 'true' || needs.changes.outputs.check == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
     outputs:
       list: ${{ steps.sites.outputs.list }}
+      owners: ${{ steps.sites.outputs.owners }}
+      shards: ${{ steps.sites.outputs.shards }}
     steps:
+      # The script reads the list of the owners from its home, the package conventions.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/workflows
+            packages/conventions/src
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      # The output list has the names of the sites, the output owners has the owner of each name, and the output shards
+      # has the shards of the job nav (at most 8 sites in each).
       - name: The sites
         id: sites
-        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          OWNER: ${{ github.repository_owner }}
           SITES: ${{ inputs.sites }}
           SKIP: ${{ github.event_name == 'workflow_dispatch' && inputs.skip || 'typeset' }}
-        run: |
-          set -euo pipefail
-          if [ -n "$SITES" ]; then
-            tr ',' '\n' <<< "$SITES" | sed 's/^ *//;s/ *$//' | grep -v '^$' > "$RUNNER_TEMP/sites.txt"
-          else
-            gh api --paginate "users/$OWNER/repos?per_page=100" \
-              --jq '.[] | select(.has_pages and (.private | not) and (.archived | not)) | .name' | sort > "$RUNNER_TEMP/sites.txt"
-          fi
-          tr ',' '\n' <<< "$SKIP" | sed 's/^ *//;s/ *$//' | grep -v '^$' > "$RUNNER_TEMP/skip.txt" || true
-          grep -vxF -f "$RUNNER_TEMP/skip.txt" "$RUNNER_TEMP/sites.txt" > "$RUNNER_TEMP/audit-sites.txt" || true
-          echo "$(wc -l < "$RUNNER_TEMP/audit-sites.txt") sites: $(tr '\n' ' ' < "$RUNNER_TEMP/audit-sites.txt")"
-          echo "list=$(jq -Rnc '[inputs | select(length > 0)]' < "$RUNNER_TEMP/audit-sites.txt")" >> "$GITHUB_OUTPUT"
+        run: node scripts/workflows/site-list.ts
 
   audit:
     needs: [changes, sites]
@@ -126,16 +161,16 @@ jobs:
       - name: Site audit
         shell: bash
         env:
-          OWNER: ${{ github.repository_owner }}
+          OWNERS: ${{ needs.sites.outputs.owners }}
           WIDTHS: ${{ inputs.widths || '360,1280' }}
         run: |
           set -uo pipefail
           out="$RUNNER_TEMP/site-audit"
           mkdir -p "$out"
-          owner="${OWNER,,}"
           broken=0
           while read -r repo; do
             [ -n "$repo" ] || continue
+            owner="$(jq -r --arg repo "$repo" '.[$repo] | ascii_downcase' <<< "$OWNERS")"
             if [ "${repo,,}" = "$owner.github.io" ]; then url="https://$owner.github.io/"; else url="https://$owner.github.io/$repo/"; fi
             # The shell of the step has -e: a failed site must not end the loop.
             code=0
@@ -145,29 +180,43 @@ jobs:
             # Exit code 2 is a wrong command line: the audit itself is wrong, not the site.
             [ "$code" -ne 2 ] || broken=1
           done < "$RUNNER_TEMP/audit-sites.txt"
-          node - "$out" <<'EOF'
-          const { readFileSync, existsSync, writeFileSync, appendFileSync } = require("node:fs");
-          const { join } = require("node:path");
-          const out = process.argv[2];
+          node --input-type=module - "$out" "$PWD/packages/site-pages/src/check/check.ts" <<'EOF'
+          import { readFileSync, existsSync, writeFileSync, appendFileSync } from "node:fs";
+          import { join } from "node:path";
+          import { pathToFileURL } from "node:url";
+          const [out, check] = process.argv.slice(2);
+          const { scrollGaps } = await import(pathToFileURL(check).href);
           const rows = readFileSync(join(out, "codes.txt"), "utf8").trim().split("\n").filter(Boolean).map((line) => {
             const [repo, code, url] = line.split(" ");
             const file = join(out, repo, "report.json");
             const report = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : null;
             const views = report?.views ?? [];
             const problems = [...new Set(views.flatMap((view) => view.problems))];
-            return { repo, url, code: Number(code), ok: report?.ok ?? false, views: views.length, failed: views.filter((view) => !view.ok).length, problems };
+            const gaps = report === null ? [] : scrollGaps(report);
+            return { repo, url, code: Number(code), ok: report?.ok ?? false, views: views.length, failed: views.filter((view) => !view.ok).length, problems, gaps };
           });
           rows.sort((a, b) => b.failed - a.failed || b.problems.length - a.problems.length || a.repo.localeCompare(b.repo));
           writeFileSync(join(out, "audit.json"), JSON.stringify({ date: new Date().toISOString(), sites: rows }, null, 2) + "\n");
           const cell = (text) => String(text).replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\r?\n/g, " ");
+          const gaps = rows.flatMap((row) => row.gaps.map((gap) => ({ repo: row.repo, ...gap })));
           const lines = [
             `## Site audit: ${rows.filter((row) => row.ok).length} of ${rows.length} sites pass`, "",
-            "| Site | Views that fail | Problems |", "| --- | --- | --- |",
-            ...rows.map((row) => `| [${row.repo}](${row.url}) | ${row.failed} of ${row.views} | ${row.problems.slice(0, 4).map(cell).join("<br>") || "none"} |`),
+            `Code blocks and tables with no scroll cue on a phone: ${gaps.length}.`, "",
+            "| Site | Views that fail | Blocks with no cue | Problems |", "| --- | --- | --- | --- |",
+            ...rows.map((row) => `| [${row.repo}](${row.url}) | ${row.failed} of ${row.views} | ${row.gaps.length} | ${row.problems.slice(0, 4).map(cell).join("<br>") || "none"} |`),
           ];
           if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
           console.log(lines.join("\n"));
+          for (const gap of gaps) {
+            const why = gap.deadCue ? "has the class scroll-cue, but the served CSS shows no cue" : "has no scroll cue";
+            console.log(`::error title=Scroll cue::${gap.repo}${gap.page}: ${gap.element} in ${gap.box} goes out of view at ${gap.width} px and ${why}.`);
+          }
+          if (gaps.length > 0) writeFileSync(join(out, "scroll-gaps.txt"), `${gaps.length}\n`);
           EOF
+          # A failed summary script is a failed audit
+          [ "$?" -eq 0 ] || broken=1
+          # The gate: a block with no scroll cue on a phone fails the run (scroll-cue-gate, 2026-11-08)
+          [ ! -f "$out/scroll-gaps.txt" ] || broken=1
           exit "$broken"
       - name: Screenshots and reports of the audit
         if: always()
@@ -177,18 +226,23 @@ jobs:
           path: ${{ runner.temp }}/site-audit
           if-no-files-found: warn
 
+  # One job for each shard of at most 8 sites (site-list.ts), not one job for each site. Each job waits for a runner of
+  # the account and sets up the browser once. On 2026-11-18, one job for each site gave 55 jobs, two at one time, so each
+  # waited in the queue after the last: the job nav took 3 h 23 min. A shard takes approximately 15 minutes.
   nav:
     needs: [changes, sites]
     if: needs.changes.outputs.match == 'true' && needs.sites.outputs.list != '[]'
+    name: nav (${{ matrix.shard.name }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     permissions:
       contents: read
     strategy:
       fail-fast: false
-      max-parallel: 3
+      # Two jobs at one time, so that the run has a peak of 3 jobs with the job audit on the shared runners of the account.
+      max-parallel: 2
       matrix:
-        repo: ${{ fromJSON(needs.sites.outputs.list) }}
+        shard: ${{ fromJSON(needs.sites.outputs.shards) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -208,46 +262,64 @@ jobs:
         with:
           command: ${{ runner.temp }}/site-check-playwright/node_modules/.bin/playwright-core
           browsers: chromium
-      - name: The navigation of ${{ matrix.repo }}
+      # The crawl of each site of the shard. On a pull request, or with the input preview-bar, the same crawl follows with
+      # the bar that the Pages workflow writes into each page: the screenshots show the bar on the live site, and the crawl
+      # tells which problems the bar solves. A failed site does not stop the loop. After the last site, the step names each
+      # failed site in the summary and fails (site-list.test.ts starts this step with a fake crawl).
+      - name: The navigation of the sites of shard ${{ matrix.shard.name }}
         shell: bash
         env:
-          OWNER: ${{ github.repository_owner }}
-          REPO: ${{ matrix.repo }}
+          SHARD: ${{ matrix.shard.name }}
+          SITES: ${{ join(matrix.shard.sites, ' ') }}
+          URLS: ${{ join(matrix.shard.urls, ' ') }}
+          BAR: ${{ github.event_name == 'pull_request' || inputs.preview-bar }}
         run: |
           set -uo pipefail
-          out="$RUNNER_TEMP/site-nav/$REPO"
-          mkdir -p "$out"
-          owner="${OWNER,,}"
-          if [ "${REPO,,}" = "$owner.github.io" ]; then url="https://$owner.github.io/"; else url="https://$owner.github.io/$REPO/"; fi
-          code=0
-          node packages/site-pages/src/check/main.ts nav --url "$url" --shots "$out" --timeout 45000 > "$out/nav.log" 2>&1 || code=$?
-          cat "$out/nav.log"
-          echo "$code $url" > "$out/code.txt"
-          # Exit code 1 is a site with problems, and the audit is a report. Exit code 2 or no report is a failed audit.
-          if [ "$code" -eq 2 ] || [ ! -f "$out/report.json" ]; then exit 1; fi
-      # The same crawl, with the bar that the Pages workflow writes into each page: the screenshots show the bar on the
-      # live site, and the crawl tells which problems the bar solves.
-      - name: The navigation of ${{ matrix.repo }} with the site bar
-        if: github.event_name == 'pull_request' || inputs.preview-bar
-        shell: bash
-        env:
-          OWNER: ${{ github.repository_owner }}
-          REPO: ${{ matrix.repo }}
-        run: |
-          set -uo pipefail
-          out="$RUNNER_TEMP/site-nav/$REPO/bar"
-          mkdir -p "$out"
-          owner="${OWNER,,}"
-          if [ "${REPO,,}" = "$owner.github.io" ]; then url="https://$owner.github.io/"; else url="https://$owner.github.io/$REPO/"; fi
-          code=0
-          node packages/site-pages/src/check/main.ts nav --url "$url" --preview-bar --require-bar --shots "$out" --timeout 45000 > "$out/nav.log" 2>&1 || code=$?
-          cat "$out/nav.log"
-          if [ "$code" -eq 2 ] || [ ! -f "$out/report.json" ]; then exit 1; fi
-      - name: The report of ${{ matrix.repo }}
+          # A name of a repository and an address of a site have no space.
+          read -ra sites <<< "$SITES"
+          read -ra urls <<< "$URLS"
+          if [ "${#sites[@]}" -eq 0 ] || [ "${#sites[@]}" -ne "${#urls[@]}" ]; then
+            echo "::error title=Site navigation%3A shard $SHARD::the shard has ${#sites[@]} sites and ${#urls[@]} addresses."
+            exit 1
+          fi
+          failed=()
+          # One crawl: the folder of its report, its name in a message, and the other options of the command. Exit code 1
+          # is a site with problems, and the audit is a report. Exit code 2, a crawl longer than 10 minutes (exit code
+          # 124) or no report is a failed audit.
+          crawl() {
+            local out="$1" what="$2" code=0
+            shift 2
+            mkdir -p "$out"
+            timeout 10m node packages/site-pages/src/check/main.ts nav --url "$url" --shots "$out" --timeout 45000 "$@" < /dev/null > "$out/nav.log" 2>&1 || code=$?
+            cat "$out/nav.log"
+            echo "$code $url" > "$out/code.txt"
+            if [ "$code" -eq 2 ] || [ "$code" -eq 124 ] || [ ! -f "$out/report.json" ]; then
+              echo "::error title=Site navigation%3A no report::$repo: $what gave exit code $code and no report."
+              return 1
+            fi
+            return 0
+          }
+          for at in "${!sites[@]}"; do
+            repo="${sites[$at]}"
+            url="${urls[$at]}"
+            echo "::group::$repo"
+            if ! crawl "$RUNNER_TEMP/site-nav/$repo" "the crawl"; then
+              failed+=("$repo")
+            elif [ "$BAR" = "true" ] && ! crawl "$RUNNER_TEMP/site-nav/$repo/bar" "the crawl with the site bar" --preview-bar --require-bar; then
+              failed+=("$repo")
+            fi
+            echo "::endgroup::"
+          done
+          if [ "${#failed[@]}" -gt 0 ]; then
+            echo "Shard $SHARD: ${#failed[@]} of ${#sites[@]} sites gave no report: ${failed[*]}" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "Shard $SHARD: each of the ${#sites[@]} sites gave a report." | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: The reports of shard ${{ matrix.shard.name }}
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: site-nav-${{ matrix.repo }}
+          name: site-nav-shard-${{ matrix.shard.index }}
           path: ${{ runner.temp }}/site-nav
           if-no-files-found: warn
 
@@ -305,10 +377,83 @@ jobs:
           path: ${{ runner.temp }}/site-nav
           if-no-files-found: warn
 
+  # The check of the base and the check of the pull request on the live pages of each site, in 4 shards. The job starts
+  # after the job nav, and two shards run at one time, so the run has a peak of 3 jobs with nav-report. One check of
+  # all sites is approximately 1000 views of 4 s.
+  compare:
+    needs: [changes, sites, nav]
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.outputs.check == 'true' && needs.sites.result == 'success' && needs.sites.outputs.list != '[]' }}
+    name: Site check compare (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      # The merge commit of the pull request: its check, and the script of the compare
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: next
+          sparse-checkout: |
+            .github/actions
+            scripts/workflows
+            packages/conventions/src
+            packages/site-pages/src/bar
+            packages/site-pages/src/check
+            packages/site-pages/src/config
+            packages/site-pages/src/render
+          persist-credentials: false
+      # The base of the pull request: the check that the sites use when the pin moves to it
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: base
+          ref: ${{ github.event.pull_request.base.sha }}
+          sparse-checkout: |
+            packages/site-pages/src/bar
+            packages/site-pages/src/check
+            packages/site-pages/src/render
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      # The script imports the escapes of Markdown and of workflow commands, as queue.ts does, at the version that
+      # pnpm-lock.yaml gives (CI.md, "The packages of the workflow scripts"). No install script starts.
+      - name: Install the package of the script
+        shell: bash
+        run: |
+          version="$(node next/.github/actions/pull-of-run/locked-version.ts next/pnpm-lock.yaml @mark1russell7/text)"
+          npm install --no-save --no-package-lock --ignore-scripts --prefix next/scripts/workflows "@mark1russell7/text@${version}"
+      - name: Playwright for the site check
+        shell: bash
+        run: npm install --prefix "$RUNNER_TEMP/site-check-playwright" --no-save --no-package-lock --no-audit --no-fund "playwright-core@1.64.1"
+      - uses: ./next/.github/actions/setup-playwright
+        with:
+          command: ${{ runner.temp }}/site-check-playwright/node_modules/.bin/playwright-core
+          browsers: chromium
+      - name: The compare of shard ${{ matrix.shard }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNERS: ${{ needs.sites.outputs.owners }}
+          LIST: ${{ needs.sites.outputs.list }}
+          SHARD: ${{ matrix.shard }}
+        run: node next/scripts/workflows/site-compare.ts --sites "$LIST" --shard "$SHARD" --shards 4 --base base --next next --out "$RUNNER_TEMP/site-compare"
+      - name: The reports of the compare
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: site-compare-${{ matrix.shard }}
+          path: ${{ runner.temp }}/site-compare
+          if-no-files-found: warn
+
   site-audit-ok:
     name: Site audit OK
     if: ${{ !cancelled() }}
-    needs: [changes, sites, audit, nav, nav-report]
+    needs: [changes, sites, audit, nav, nav-report, compare]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}
@@ -320,4 +465,4 @@ jobs:
       - uses: ./.github/actions/gate-summary
         with:
           needs: ${{ toJSON(needs) }}
-          allow-skip: audit
+          allow-skip: audit compare

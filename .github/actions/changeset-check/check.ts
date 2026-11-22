@@ -28,6 +28,10 @@ export interface EvaluateInput {
   readonly packages: readonly PackageEntry[];
   readonly changedFiles: readonly string[];
   readonly packageJsonChanges?: Readonly<Record<string, boolean>>;
+  /** For the changed package.json files: true when the change is only a release (packageJsonReleaseOnly). */
+  readonly releaseOnly?: Readonly<Record<string, boolean>>;
+  /** The changeset files that the pull request deletes: a version pull request consumes them. */
+  readonly consumedChangesets?: readonly string[];
   readonly changesets: readonly ChangesetEntry[];
   readonly headRef?: string;
   readonly labels?: readonly string[];
@@ -63,6 +67,9 @@ export const DEFAULT_IGNORE: readonly string[] = [
 
 // package.json fields that do not go into the published package's behavior.
 const DEV_ONLY_FIELDS = ["devDependencies", "scripts", "packageManager", "devEngines", "pnpm"];
+
+// package.json fields with the version ranges that "changeset version" changes for the packages of the repository.
+const RANGE_FIELDS = ["dependencies", "peerDependencies", "optionalDependencies"];
 
 const BUMPS: readonly Bump[] = ["patch", "minor", "major"];
 
@@ -119,10 +126,37 @@ export function packageJsonChanged(before: Readonly<Record<string, unknown>> | u
 }
 
 /**
+ * True when the change of a package.json is only what "changeset version" writes: the field version, and the
+ * ranges of the packages of the repository (internal). A new or a deleted package.json is more than a release.
+ */
+export function packageJsonReleaseOnly(
+  before: Readonly<Record<string, unknown>> | undefined,
+  after: Readonly<Record<string, unknown>> | undefined,
+  internal: ReadonlySet<string>,
+): boolean {
+  if (before === undefined || after === undefined) return false;
+  const strip = (pkg: Readonly<Record<string, unknown>>): string => {
+    const copy: Record<string, unknown> = { ...pkg };
+    delete copy["version"];
+    for (const field of DEV_ONLY_FIELDS) delete copy[field];
+    for (const field of RANGE_FIELDS) {
+      const ranges = copy[field];
+      if (ranges !== null && typeof ranges === "object") {
+        copy[field] = Object.fromEntries(Object.entries(ranges as Record<string, unknown>).filter(([name]) => !internal.has(name)));
+      }
+    }
+    return JSON.stringify(copy);
+  };
+  return strip(before) === strip(after);
+}
+
+/**
  * The rules. Input:
  * - packages: [{ name, dir, version, private }] (dir "." is the root)
  * - changedFiles: [path] (paths from the root, with "/")
  * - packageJsonChanges: { path: boolean } for the changed package.json files (packageJsonChanged)
+ * - releaseOnly: { path: boolean } for the changed package.json files (packageJsonReleaseOnly)
+ * - consumedChangesets: [path] of the changeset files that the pull request deletes
  * - changesets: [{ file, releases }] or [{ file, error }] for the changeset files that the pull request adds or changes
  * - headRef, labels, ignore, fixed (the "fixed" groups of .changeset/config.json)
  * Output: { skipped?, errors: [string], rows: [{ name, changed, bump }], notes: [string] }
@@ -131,6 +165,8 @@ export function evaluate({
   packages,
   changedFiles,
   packageJsonChanges = {},
+  releaseOnly = {},
+  consumedChangesets = [],
   changesets,
   headRef = "",
   labels = [],
@@ -155,6 +191,11 @@ export function evaluate({
     return best && !best.private ? best : undefined;
   };
 
+  // A version pull request consumes changesets and adds none, on any branch. Its change of a package.json that is
+  // only a release (the version and the internal ranges) is the release of those changesets, not a change. Each other
+  // change of a package in it needs a changeset, as in each pull request.
+  const versionPullRequest = consumedChangesets.length > 0 && changesets.length === 0;
+  const released = new Set<string>();
   const changed = new Set<string>();
   for (const file of changedFiles) {
     if (file.startsWith(".changeset/")) continue;
@@ -162,8 +203,21 @@ export function evaluate({
     if (!pkg) continue;
     const local = pkg.dir === "." ? file : file.slice(pkg.dir.length + 1);
     if (ignored.some((re) => re.test(file) || re.test(local))) continue;
-    if (posix.basename(file) === "package.json" && local === "package.json" && packageJsonChanges[file] === false) continue;
+    if (posix.basename(file) === "package.json" && local === "package.json") {
+      if (packageJsonChanges[file] === false) continue;
+      if (versionPullRequest && releaseOnly[file] === true) {
+        released.add(pkg.name);
+        continue;
+      }
+    }
     changed.add(pkg.name);
+  }
+
+  if (released.size > 0) {
+    notes.push(
+      `The pull request consumes ${consumedChangesets.length} changesets and adds none: it is a version pull request. ` +
+        `It releases ${released.size} packages, and their version changes need no changeset.`,
+    );
   }
 
   const bumps = new Map<string, Bump>();
@@ -244,7 +298,7 @@ function readJsonAt(ref: string, path: string): Record<string, unknown> | undefi
 export function main(env: Readonly<Record<string, string | undefined>> = process.env): number {
   const base = env["BASE_SHA"];
   const head = env["HEAD_SHA"];
-  if (!base || !head) throw new Error("BASE_SHA and HEAD_SHA are needed (the check runs on pull requests).");
+  if (!base || !head) throw new Error("BASE_SHA and HEAD_SHA are needed (the check runs on a pull request, or on the pull request of a dispatched run).");
   const dir = env["CHANGESET_DIR"] || ".changeset";
   // Everything is read at the head commit of the pull request, not from the working tree.
   const config = readJsonAt(head, `${dir}/config.json`);
@@ -269,9 +323,17 @@ export function main(env: Readonly<Record<string, string | undefined>> = process
       return [{ name, version, private: pkg["private"] === true, dir: dirname(file).replace(/\\/g, "/") }];
     });
 
+  const consumedChangesets = git("diff", "--name-only", "--no-renames", "--diff-filter=D", range, "--", `${dir}/*.md`)
+    .split("\n")
+    .filter((f) => f && posix.basename(f).toLowerCase() !== "readme.md");
+  const internal = new Set(packages.map((p) => p.name));
   const packageJsonChanges: Record<string, boolean> = {};
+  const releaseOnly: Record<string, boolean> = {};
   for (const file of changedFiles.filter((f) => posix.basename(f) === "package.json")) {
-    packageJsonChanges[file] = packageJsonChanged(readJsonAt(base, file), readJsonAt(head, file));
+    const before = readJsonAt(base, file);
+    const after = readJsonAt(head, file);
+    packageJsonChanges[file] = packageJsonChanged(before, after);
+    releaseOnly[file] = packageJsonReleaseOnly(before, after, internal);
   }
   const changesets = csFiles.map((file): ChangesetEntry => {
     try {
@@ -285,6 +347,8 @@ export function main(env: Readonly<Record<string, string | undefined>> = process
     packages,
     changedFiles,
     packageJsonChanges,
+    releaseOnly,
+    consumedChangesets,
     changesets,
     headRef: env["HEAD_REF"] ?? "",
     labels: JSON.parse(env["LABELS"] || "[]") as string[],

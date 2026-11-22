@@ -82,12 +82,12 @@ export function addSummaryJob(text: string, file: string, commit: string = ACTIO
 
 export const summaryJobRule: Rule = {
   id: "summary-job",
-  failsFrom: "2026-11-23",
+  failsFrom: "2026-12-06",
   title: "Each gate workflow (ci.yml, security.yml) has one summary job <Name> OK that needs each of its jobs.",
   reason:
     'The ruleset of main requires only the summary checks "CI OK" and "Security OK" (CI.md, "The check of the ruleset"). A gate with no summary job forces the ruleset to name each job: a new job is then not required, gh pr merge --auto merges before it ends, and a rename of a job blocks each pull request. On 2026-11-09, 21 of 43 public repositories of the account had a gate with no summary job.',
   fix: 'Add a job "<Name> OK" with "if: ${{ !cancelled() }}", "needs" with each job, and the action gate-summary (CI.md, "The check of the ruleset"). Then start ruleset-ci-ok.ts with --only-summary.',
-  sources: [{ repo: "private", rule: "summary-job", doc: "docs/STRATEGY.md (2026-11-09, the audit of the summary checks of 43 public repositories)" }],
+  sources: [{ repo: "private", rule: "summary-job", doc: "a decision of 2026-11-09 (the audit of the summary checks of 43 public repositories)" }],
   options: {
     gates: { type: "strings", default: [...SUMMARY_GATES], description: "The file names of the gate workflows that must have a summary job." },
   },

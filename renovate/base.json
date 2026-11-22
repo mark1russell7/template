@@ -3,11 +3,16 @@
   "description": "The shared Renovate settings of mark1russell7, with no automerge. Extend renovate/default for the automerge rules too.",
   "extends": ["config:recommended", "helpers:pinGitHubActionDigestsToSemver"],
   "timezone": "America/New_York",
-  "schedule": ["before 6am on monday"],
+  "schedule": ["before 6am"],
   "prConcurrentLimit": 5,
   "rebaseWhen": "conflicted",
+  "gitIgnoredAuthors": ["347877827+mark1russell7-release-train[bot]@users.noreply.github.com"],
   "rangeStrategy": "update-lockfile",
   "minimumReleaseAge": "3 days",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 6am on monday"]
+  },
   "labels": ["dependencies"],
   "vulnerabilityAlerts": {
     "schedule": ["at any time"],
@@ -15,14 +20,14 @@
   },
   "packageRules": [
     {
-      "description": "One weekly PR for the patch updates of npm packages.",
+      "description": "One PR for the patch updates of npm packages.",
       "matchManagers": ["npm"],
       "matchUpdateTypes": ["patch"],
       "groupName": "npm patch updates",
       "groupSlug": "npm-patch"
     },
     {
-      "description": "One weekly PR for the minor updates of the runtime dependencies. A person reviews it.",
+      "description": "One PR for the minor updates of the runtime dependencies.",
       "matchManagers": ["npm"],
       "matchDepTypes": ["dependencies", "optionalDependencies"],
       "matchUpdateTypes": ["minor"],
@@ -30,9 +35,17 @@
       "groupSlug": "npm-minor"
     },
     {
-      "description": "One weekly PR for the minor updates of the development dependencies.",
+      "description": "One PR for the minor updates of the development dependencies and of pnpm (also in the field packageManager of package.json).",
       "matchManagers": ["npm"],
       "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["minor"],
+      "groupName": "npm dev dependencies (minor)",
+      "groupSlug": "npm-dev-minor"
+    },
+    {
+      "description": "pnpm is a tool of development. Its minor updates go in the group of the development dependencies, also an update of the field packageManager.",
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["pnpm"],
       "matchUpdateTypes": ["minor"],
       "groupName": "npm dev dependencies (minor)",
       "groupSlug": "npm-dev-minor"
@@ -58,16 +71,24 @@
       "enabled": false
     },
     {
-      "description": "One weekly PR for the minor, patch and digest updates of the GitHub Actions.",
+      "description": "One PR for the minor, patch and digest updates of the GitHub Actions.",
       "matchManagers": ["github-actions"],
       "matchUpdateTypes": ["minor", "patch", "digest", "pinDigest"],
       "groupName": "GitHub Actions",
       "groupSlug": "github-actions"
     },
     {
-      "description": "The shared workflows and actions of the template follow main (@<commit> # main): one weekly PR for all the pins of a repository. The manager github-actions reads '# main' as a branch (Renovate 43.84.0 or later). A commit of main has no release date, so the pin moves with no wait. The schedule stays the quiet Monday window also when a repository changes its own schedule: a workflow change during a release makes the tag job fail (HTTP 403, RELEASING.md).",
+      "description": "Renovate does not move the pins of the shared workflows and actions of the template (@<commit> # main). The template sync of the release train moves them (the rule pins of mark1russell7/release-train): it moves the pins only when the files of a pin changed, it keeps the pins of release.yml while a version is in flight, and it does not move a pin to a file that main does not have. One owner gives one pull request for each change (renovate/README.md).",
       "matchManagers": ["github-actions"],
       "matchPackageNames": ["mark1russell7/template"],
+      "enabled": false
+    },
+    {
+      "description": "The release train does not sync the template repository, so Renovate moves the pins of the template in that repository only: one weekly PR for all its pins. The manager github-actions reads '# main' as a branch (Renovate 43.84.0 or later). A commit of main has no release date, so the pin moves with no wait. The schedule is the quiet Monday window: a workflow change during a release makes the tag job fail (HTTP 403, RELEASING.md).",
+      "matchRepositories": ["mark1russell7/template"],
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["mark1russell7/template"],
+      "enabled": true,
       "minimumReleaseAge": null,
       "schedule": ["before 6am on monday"],
       "groupName": "template workflows and actions",
@@ -101,6 +122,15 @@
       "managerFilePatterns": ["/(^|/)\\.github/workflows/[^/]+\\.ya?ml$/"],
       "matchStrings": ["CLAUDE_CODE_VERSION:\\s*[\"']?(?<currentValue>\\d+\\.\\d+\\.\\d+)[\"']?"],
       "depNameTemplate": "@anthropic-ai/claude-code",
+      "datasourceTemplate": "npm",
+      "versioningTemplate": "npm"
+    },
+    {
+      "customType": "regex",
+      "description": "The version of Renovate that a workflow runs from npm, for the validator of the presets: 'RENOVATE_VERSION: <x.y.z>' (ci.yml of the template).",
+      "managerFilePatterns": ["/(^|/)\\.github/workflows/[^/]+\\.ya?ml$/"],
+      "matchStrings": ["RENOVATE_VERSION:\\s*[\"']?(?<currentValue>\\d+\\.\\d+\\.\\d+)[\"']?"],
+      "depNameTemplate": "renovate",
       "datasourceTemplate": "npm",
       "versioningTemplate": "npm"
     }

@@ -1,0 +1,52 @@
+# The ruleset and the settings of each public repository: scripts/workflows/ruleset-ci-ok.ts --check reads, for each
+# public repository that is not archived, the summary checks ("CI OK", "Security OK") that passed on its last merged
+# pull requests, and fails when no ruleset of its default branch names one of them. It also reads the settings that
+# anyone can read: a ruleset when the repository has ci.yml, the dependency graph, and a Pages source when it has
+# pages.yml. A fault of a setting fails the run also for a new repository with no merged pull request, so the window
+# between the first push and the first merge stays held. The red run goes to the owner of the template, who starts the
+# command in the summary (scripts/stamp/settings.ts sets the settings). A repository with no "CI OK" that passed and
+# no fault is a no read in the summary, never a pass. The run changes nothing, so its token only reads: the script
+# reads public data. It needs no install: the script imports only node: modules and the list of the owners, which
+# has no import.
+name: Rulesets
+
+on:
+  workflow_dispatch:
+  # Each day, so a new repository waits a day at most for its ruleset and its settings
+  schedule:
+    - cron: "32 7 * * *"
+  push:
+    branches: [main]
+    paths:
+      - scripts/workflows/ruleset-ci-ok.ts
+      - packages/conventions/src/owners.ts
+      - .github/workflows/rulesets.yml
+
+permissions: {}
+
+concurrency:
+  group: rulesets
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: The ruleset and the settings of each public repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The script reads the list of the owners from its home, the package conventions.
+          sparse-checkout: |
+            scripts/workflows
+            packages/conventions/src
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Check the rulesets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/workflows/ruleset-ci-ok.ts --check

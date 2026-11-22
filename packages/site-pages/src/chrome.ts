@@ -1,9 +1,9 @@
 /// <reference lib="dom" />
 /**
- * The small helpers of a page in the browser: the element helper, the element lookup, the theme
- * button, the copy button and the build stamp. This module imports no Node.js module, so a site can
- * bundle it. Import it from `@mark1russell7/site-pages/chrome`, because the package root also has
- * Node.js code.
+ * The small helpers of a page in the browser: the element helpers, the element lookup, the theme
+ * button, the copy button and the build stamp. It also has a radio group with one focus stop.
+ * This module imports no Node.js module, so a site can bundle it. Import it from
+ * `@mark1russell7/site-pages/chrome`, because the package root also has Node.js code.
  */
 
 /** A child of `h`: a node or a text. The values `null`, `undefined` and `false` give no child. */
@@ -22,9 +22,40 @@ export function h<K extends keyof HTMLElementTagNameMap>(
   ...children: readonly (Child | readonly Child[])[]
 ): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag);
+  return fill(el, attrs, children, (value) => {
+    el.className = value;
+  });
+}
+
+/** The namespace of the SVG elements. */
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/**
+ * This function makes an SVG element with attributes and children, with the rules of `h`. The
+ * attribute `class` sets the attribute `class`, because the class name of an SVG element is
+ * read-only.
+ */
+export function svg<K extends keyof SVGElementTagNameMap>(
+  tag: K,
+  attrs: Readonly<Record<string, AttributeValue>> = {},
+  ...children: readonly (Child | readonly Child[])[]
+): SVGElementTagNameMap[K] {
+  const el = document.createElementNS(SVG_NS, tag);
+  return fill(el, attrs, children, (value) => {
+    el.setAttribute("class", value);
+  });
+}
+
+/** This function sets the attributes and adds the children of an element of `h` or `svg`. */
+function fill<E extends Element>(
+  el: E,
+  attrs: Readonly<Record<string, AttributeValue>>,
+  children: readonly (Child | readonly Child[])[],
+  setClass: (value: string) => void,
+): E {
   for (const [name, value] of Object.entries(attrs)) {
     if (value === false || value === null || value === undefined) continue;
-    if (name === "class") el.className = String(value);
+    if (name === "class") setClass(String(value));
     else el.setAttribute(name, value === true ? "" : String(value));
   }
   for (const child of children.flat()) {
@@ -172,4 +203,103 @@ export async function copyText(button: HTMLButtonElement, text: string, options:
     button.textContent = label;
   }, options.ms ?? 1600);
   return ok;
+}
+
+/** The arrow keys of a group: `horizontal` (Left and Right), `vertical` (Up and Down) or `both`. */
+/** The arrow keys of a group: left and right, up and down, or the four arrows. */
+export type RovingAxis = "horizontal" | "vertical" | "both";
+
+const ROVING_STEPS: Readonly<Record<RovingAxis, Readonly<Record<string, number>>>> = {
+  horizontal: { ArrowRight: 1, ArrowLeft: -1 },
+  vertical: { ArrowDown: 1, ArrowUp: -1 },
+  both: { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 },
+};
+
+/**
+ * This function gives the index of the next item after an arrow key, in a group of `count` items. The index
+ * wraps at each end. A key that is not an arrow of the axis gives `undefined`, and so does an empty group. An
+ * index outside the group goes to the first item on a step forward, and to the last item on a step back.
+ */
+export function rovingIndex(key: string, index: number, count: number, axis: RovingAxis = "both"): number | undefined {
+  const step = ROVING_STEPS[axis][key];
+  if (step === undefined || count <= 0) return undefined;
+  if (!Number.isInteger(index) || index < 0 || index >= count) return step > 0 ? 0 : count - 1;
+  return (index + step + count) % count;
+}
+
+/** A choice of a `Segmented` control. */
+export interface Choice<T extends string> {
+  /** The value of the choice. */
+  readonly value: T;
+  /** The text of the button. */
+  readonly label: string;
+  /** The tooltip and the accessible name of the button. Without it, the button has neither. */
+  readonly title?: string;
+}
+
+/**
+ * A group of radio buttons with one focus stop. The selected button has `tabIndex` 0, and the others have -1.
+ * The arrow keys select the next button, with a wrap at each end, and move the focus to it. The container keeps
+ * its own role and label, for example `role="radiogroup"` in the HTML.
+ */
+export class Segmented<T extends string> {
+  private readonly buttons: readonly HTMLButtonElement[];
+  private readonly choices: readonly Choice<T>[];
+  private readonly onChange: (value: T) => void;
+  private current: T;
+
+  /**
+   * This constructor puts one button for each choice into the container, in place of its children. The listener
+   * gets each change by a click or a key, and no event for the choice that is already selected.
+   */
+  constructor(container: HTMLElement, choices: readonly Choice<T>[], current: T, onChange: (value: T) => void, axis: RovingAxis = "both") {
+    this.choices = choices;
+    this.current = current;
+    this.onChange = onChange;
+    this.buttons = choices.map((choice) => {
+      const button = h(
+        "button",
+        { type: "button", role: "radio", "data-value": choice.value, title: choice.title, "aria-label": choice.title },
+        choice.label,
+      );
+      button.addEventListener("click", () => this.choose(choice.value, false));
+      return button;
+    });
+    container.replaceChildren(...this.buttons);
+    container.addEventListener("keydown", (event) => {
+      const index = this.choices.findIndex((c) => c.value === this.current);
+      const next = rovingIndex(event.key, index, this.choices.length, axis);
+      if (next === undefined) return;
+      event.preventDefault();
+      this.choose(this.choices[next]!.value, true);
+    });
+    this.show();
+  }
+
+  /** The value of the control. */
+  get value(): T {
+    return this.current;
+  }
+
+  /** This function sets the value. The listener gets no event. */
+  set(value: T): void {
+    this.current = value;
+    this.show();
+  }
+
+  private choose(value: T, focus: boolean): void {
+    const changed = value !== this.current;
+    this.set(value);
+    if (focus) this.buttons[this.choices.findIndex((c) => c.value === value)]?.focus();
+    if (changed) this.onChange(value);
+  }
+
+  private show(): void {
+    this.choices.forEach((choice, i) => {
+      const button = this.buttons[i]!;
+      const on = choice.value === this.current;
+      button.setAttribute("aria-checked", String(on));
+      button.tabIndex = on ? 0 : -1;
+    });
+  }
 }

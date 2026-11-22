@@ -7,11 +7,12 @@
  * The module also has the core of the command `conventions pre-push`. The core has the setting of the private name list,
  * the private patterns and the breaks of one text.
  */
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { extname, join } from "node:path";
+import { readFileSync, statSync } from "node:fs";
+import { delimiter, extname, join } from "node:path";
 import { rangeOf } from "../change.ts";
 import { lineNameHit, pathNameHit, PRIVATE_NAME_LIST, type PrivateNameList } from "../private-names.ts";
-import type { Break, Rule, RuleContext } from "../rule.ts";
+import { pullRequestOfRun } from "../pull-request.ts";
+import { isCi, type Break, type Rule, type RuleContext } from "../rule.ts";
 
 /** The extensions of files that are not text. The rule does not read them. */
 const BINARY = new Set(
@@ -199,6 +200,20 @@ export function privateNamesFile(env: Readonly<Record<string, string | undefined
   return fromGit === "" ? undefined : fromGit;
 }
 
+/**
+ * This function gives the paths of the private name lists, in order. The environment variable
+ * `CONVENTIONS_PRIVATE_NAMES_FILE` has priority. It has one path, or more paths with `separator` between them. The
+ * default `separator` is the `delimiter` of `node:path`: `;` on Windows, `:` on other systems. Else, each value of the git
+ * configuration `conventions.privateNamesFile` is a path. The function gives an empty array when neither has a value.
+ */
+export function privateNamesFiles(env: Readonly<Record<string, string | undefined>>, git: (args: readonly string[]) => string | undefined, separator: string = delimiter): string[] {
+  const fromEnv = (env[PRIVATE_NAMES_FILE_VARIABLE] ?? "").split(separator).map((path) => path.trim()).filter((path) => path !== "");
+  if (fromEnv.length > 0) return fromEnv;
+  // The type `path` expands `~` at the start of each value
+  const fromGit = git(["config", "--type=path", "--get-all", PRIVATE_NAMES_FILE_CONFIG]) ?? "";
+  return fromGit.split(/\r?\n/).map((path) => path.trim()).filter((path) => path !== "");
+}
+
 /** This function gives a break for each private pattern that is not a valid regular expression. A break does not show the pattern. */
 export function invalidPatternBreaks(patterns: readonly PrivatePattern[]): Break[] {
   return patterns
@@ -230,7 +245,8 @@ export interface ChangeText {
 
 /**
  * This function gives the texts of the change that are not files. They are each commit message of a pull request (or of the
- * range of `--base`). They are also the title and the body of the pull request, from the event file of GitHub Actions.
+ * range of `--base`). They are also the title and the body of the pull request, from the event file of GitHub Actions or
+ * from the file of CONVENTIONS_PULL_REQUEST.
  */
 export function changeTexts(context: RuleContext): ChangeText[] {
   const texts: ChangeText[] = [];
@@ -242,18 +258,11 @@ export function changeTexts(context: RuleContext): ChangeText[] {
       if (sha !== undefined && sha !== "" && message !== undefined) texts.push({ name: `commit ${sha.slice(0, 12)}`, text: message });
     }
   }
-  const file = context.env["GITHUB_EVENT_PATH"];
-  if (file !== undefined && file !== "" && existsSync(file)) {
-    try {
-      const event = JSON.parse(readFileSync(file, "utf8")) as { pull_request?: { title?: unknown; body?: unknown } };
-      const title = event.pull_request?.title;
-      const body = event.pull_request?.body;
-      if (typeof title === "string") texts.push({ name: "pull request title", text: title });
-      if (typeof body === "string") texts.push({ name: "pull request body", text: body });
-    } catch {
-      // An event file that does not parse has no pull request to examine
-    }
-  }
+  // The pull request of the run: the event file, or the file of CONVENTIONS_PULL_REQUEST on a dispatched run. A file
+  // that does not parse has no pull request to examine.
+  const pullRequest = pullRequestOfRun(context.env);
+  if (pullRequest?.title !== undefined) texts.push({ name: "pull request title", text: pullRequest.title });
+  if (pullRequest?.body !== undefined) texts.push({ name: "pull request body", text: pullRequest.body });
   return texts;
 }
 
@@ -310,5 +319,11 @@ export const noLocalPaths: Rule = {
     // A commit message and the text of a pull request are public too, and a merged commit message stays in the history
     for (const change of changeTexts(context)) add(textBreaks(change.name, change.text, matchers, {}));
     return breaks;
+  },
+  noRead(context) {
+    // The rule reads no private name list, so only the private patterns are its private source. A local run without
+    // them is the normal case. A CI run without them read no private text, and the result must tell it
+    if (!isCi(context.env) || privatePatterns(context.env).length > 0) return undefined;
+    return `CI gives no ${PRIVATE_PATTERNS_VARIABLE}, so the rule did not look for private names. It looked only for home folders and the patterns of its options.`;
   },
 };

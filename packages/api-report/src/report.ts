@@ -10,7 +10,8 @@
  *
  * A bundler gives a shared chunk a hash in its name, and the hash changes with the bundler and with
  * private code. The report gives each such file a label without the hash, so an update of a tool does
- * not change the report. A changed declaration in a chunk still changes the report.
+ * not change the report. A changed declaration in a chunk still changes the report. With the option
+ * `entriesOnly`, a declaration in a chunk is an error.
  *
  * The heading of an entry does not give a count of names. Two pull requests that each add a name
  * change different lines, so they do not conflict on a count.
@@ -32,6 +33,30 @@ export interface ReportOptions {
   readonly manifest?: Manifest;
   /** The command that the header names, for example `api-report` or `node scripts/api-report.mjs`. */
   readonly tool?: string;
+  /**
+   * When true, each declaration of the report is in the declaration file of an entry. A declaration in a
+   * different file, for example a chunk of a bundler, is an error. The default is false.
+   */
+  readonly entriesOnly?: boolean;
+}
+
+/** The most names of one file in the error of the option `entriesOnly`. */
+const SHOWN_NAMES = 3;
+
+/**
+ * This function gives the error of the option `entriesOnly`. `outside` has the names of each file that
+ * is not the declaration file of an entry, by the label of the file.
+ */
+function entriesOnlyError(packageName: string, outside: ReadonlyMap<string, ReadonlySet<string>>): Error {
+  const files = [...outside].sort(([a], [b]) => byCode(a, b)).map(([file, names]) => {
+    const sorted = [...names].sort(byCode);
+    const more = sorted.length - SHOWN_NAMES;
+    return `${file} (${sorted.slice(0, SHOWN_NAMES).join(", ")}${more > 0 ? ` and ${more} more` : ""})`;
+  });
+  return new Error(
+    `The report of ${packageName} has declarations in files that are not the declaration file of an entry (the option entriesOnly): ${files.join(", ")}. ` +
+      "Export each name from an entry of the exports field, or change the config of the bundler.",
+  );
 }
 
 /**
@@ -237,11 +262,39 @@ export const HEADER_LINES = 5;
  * entry, the bins of the manifest, and then the declaration of each name.
  */
 export function apiReport(packageName: string, root: string, entries: readonly Entry[], options: ReportOptions = {}): string {
+  return documentedReport(packageName, root, entries, options).text;
+}
+
+/** The report of a package, and the doc comments that the report does not have. */
+export interface DocumentedReport {
+  /** The name of the package. */
+  readonly packageName: string;
+  /** The text of the report, as `apiReport` gives it. */
+  readonly text: string;
+  /** The text of the doc comment of each declaration of the report, by its key. A declaration without a doc comment has no item. */
+  readonly docs: ReadonlyMap<string, string>;
+}
+
+/**
+ * This function gives the report of `apiReport`, and the doc comment of each declaration of the report.
+ *
+ * @throws Error when the option `entriesOnly` is true, and a declaration is not in the declaration file of an entry
+ */
+export function documentedReport(packageName: string, root: string, entries: readonly Entry[], options: ReportOptions = {}): DocumentedReport {
   const manifest = options.manifest ?? {};
   const reader = new Reader(root, manifest);
   const entryFiles = entries.flatMap((entry) => (entry.types === undefined ? [] : [resolve(root, entry.types)])).filter((file) => existsSync(file));
-  const labels = chunkLabels([...new Set(entryFiles.flatMap((file) => reader.reached(file)))], new Set(entryFiles));
+  const entrySet = new Set(entryFiles);
+  const labels = chunkLabels([...new Set(entryFiles.flatMap((file) => reader.reached(file)))], entrySet);
   const path = (file: string): string => relativePath(root, labels.get(file) ?? file);
+  /** The names of the report in each file that is not the declaration file of an entry, by the label of the file. */
+  const outside = new Map<string, Set<string>>();
+  /** This function keeps a name of the report in `file` for the option `entriesOnly`. */
+  const noteOutside = (file: string, name: string): void => {
+    if (options.entriesOnly !== true || entrySet.has(file)) return;
+    const shown = path(file);
+    outside.set(shown, (outside.get(shown) ?? new Set()).add(name));
+  };
   /** This function replaces the name of each chunk in a text with its label: a declaration can name a chunk in `import("./x")`. */
   const plain = (text: string): string => {
     let result = text;
@@ -251,6 +304,7 @@ export function apiReport(packageName: string, root: string, entries: readonly E
   const keyOf = (binding: Binding): string =>
     binding.kind === "declaration" ? `${path(binding.file)}#${binding.local}` : binding.kind === "namespace" ? `${path(binding.file)}#*` : `${binding.module}#${binding.name}`;
   const declarations = new Map<string, string>();
+  const docs = new Map<string, string>();
   const lines = header(packageName, options.tool ?? DEFAULT_TOOL);
   if (entries.every((entry) => entry.types === undefined)) {
     lines.push("", "This package has no type declarations: no entry of its package.json gives a .d.ts file.");
@@ -262,8 +316,13 @@ export function apiReport(packageName: string, root: string, entries: readonly E
       const key = keyOf(binding);
       const isType = typeOnly || binding.typeOnly;
       lines.push(`${isType ? "type " : ""}${prefix}${name}: ${key}${binding.kind === "declaration" ? "" : ` (${binding.kind})`}`);
+      if (binding.kind === "declaration") noteOutside(binding.file, binding.local);
+      else if (binding.kind === "namespace") noteOutside(binding.file, `* as ${prefix}${name}`);
       if (binding.kind === "declaration" && !declarations.has(key)) {
-        declarations.set(key, plain((reader.info(binding.file).locals.get(binding.local) ?? []).join("\n")));
+        const info = reader.info(binding.file);
+        declarations.set(key, plain((info.locals.get(binding.local) ?? []).join("\n")));
+        const doc = info.docs.get(binding.local);
+        if (doc !== undefined) docs.set(key, doc);
       }
       // The names of a namespace are part of the API: `ns.name`
       if (binding.kind === "namespace" && !parents.has(binding.file)) {
@@ -290,6 +349,7 @@ export function apiReport(packageName: string, root: string, entries: readonly E
     for (const reached of reader.reached(file)) {
       for (const [label, statements] of reader.info(reached).ambient) {
         const key = plain(`${path(reached)}#${label}`);
+        noteOutside(reached, label);
         ambient.push(key);
         if (!declarations.has(key)) declarations.set(key, plain(statements.join("\n")));
       }
@@ -305,7 +365,8 @@ export function apiReport(packageName: string, root: string, entries: readonly E
     lines.push("", "## Declarations");
     for (const key of [...declarations.keys()].sort(byCode)) lines.push("", `### ${key}`, declarations.get(key) ?? "");
   }
-  return `${lines.join("\n")}\n`;
+  if (outside.size > 0) throw entriesOnlyError(packageName, outside);
+  return { packageName, text: `${lines.join("\n")}\n`, docs };
 }
 
 /** The options of the report of a package folder. */
@@ -314,12 +375,23 @@ export interface PackageReportOptions {
   readonly tool?: string;
   /** When true (the default), the fields of `publishConfig` replace the fields of the source, as pnpm publishes them. */
   readonly publishConfig?: boolean;
+  /** When true, each declaration of the report is in the declaration file of an entry. Refer to `ReportOptions`. The default is false. */
+  readonly entriesOnly?: boolean;
 }
 
 /** This function gives the report of the package in the folder `dir`. */
 export function packageReport(dir: string, options: PackageReportOptions = {}): string {
+  return documentedPackageReport(dir, options).text;
+}
+
+/** This function gives the report of the package in the folder `dir`, and the doc comment of each declaration of the report. */
+export function documentedPackageReport(dir: string, options: PackageReportOptions = {}): DocumentedReport {
   const source = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as Manifest;
   const manifest = options.publishConfig === false ? source : publishedManifest(source);
   const name = typeof manifest.name === "string" ? manifest.name : basename(dir);
-  return apiReport(name, dir, entriesOf(manifest, dir), { manifest, ...(options.tool === undefined ? {} : { tool: options.tool }) });
+  return documentedReport(name, dir, entriesOf(manifest, dir), {
+    manifest,
+    ...(options.tool === undefined ? {} : { tool: options.tool }),
+    ...(options.entriesOnly === undefined ? {} : { entriesOnly: options.entriesOnly }),
+  });
 }

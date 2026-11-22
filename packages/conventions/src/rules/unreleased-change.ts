@@ -5,7 +5,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { rangeOf } from "../change.ts";
-import { cleanPath, codePackages, hasFile, lineOf, matchesAny, type Break, type Manifest, type PackageInfo, type Rule, type RuleContext } from "../rule.ts";
+import { cleanPath, hasFile, lineOf, matchesAny, showFiles, versionedPackages, type Break, type Manifest, type PackageInfo, type Rule, type RuleContext } from "../rule.ts";
 
 /**
  * The answer of the registry for one package, or an error. The answer has each version that npm has or had (none for a
@@ -36,6 +36,12 @@ export const UNSHIPPED_FILES: readonly string[] = [
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
 ];
+
+/**
+ * The globs of the inputs of a build output, relative to the folder of the package. They are each file of `src/`, and
+ * each script, module and JSON file. The rule counts no other file as an input, for example `go.mod` or a `Dockerfile`.
+ */
+export const BUILD_INPUTS: readonly string[] = ["src/**", "**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,json}"];
 
 /** The fields of `package.json` that change what the package gives to a user. A change of the dependencies is not here. */
 export const SHIPPED_FIELDS: readonly string[] = ["main", "module", "types", "typings", "exports", "imports", "bin", "files", "type", "publishConfig", "sideEffects", "browser"];
@@ -92,6 +98,13 @@ const entryGlobs = (entry: string): readonly string[] => {
   return [glob, `${glob}/**`];
 };
 
+/** This function gives the files that npm packs for each value of the field `files`: the file of `main` and each file of `bin`. */
+const alwaysPacked = (manifest: Manifest): string[] => {
+  const bin = manifest["bin"];
+  const values = typeof bin === "string" ? [bin] : bin !== null && typeof bin === "object" ? Object.values(bin) : [];
+  return [manifest["main"], ...values].filter((path): path is string => typeof path === "string").map(cleanPath);
+};
+
 /** This function reads the manifest of the text of a `package.json` file, or gives undefined. */
 function parseManifest(text: string | undefined): Manifest | undefined {
   if (text === undefined) return undefined;
@@ -105,14 +118,6 @@ function parseManifest(text: string | undefined): Manifest | undefined {
 
 /** This function tells if a version is a placeholder before the first release: `0.0.0` or `0.0.0-<stage>`. */
 const isPlaceholder = (version: string): boolean => /^0\.0\.0(?:[-+].*)?$/.test(version);
-
-/** The published packages of the repository: the root package and the code packages that are not private and have a name and a version. */
-function publishedOf(context: RuleContext): readonly PackageInfo[] {
-  const all = [context.rootPackage, ...codePackages(context)];
-  return all
-    .filter((pkg, index) => all.findIndex((other) => other.file === pkg.file) === index)
-    .filter((pkg) => pkg.manifest["private"] !== true && typeof pkg.manifest["name"] === "string" && typeof pkg.manifest["version"] === "string");
-}
 
 /** A published package of the change: its versions, and the shipped files that the change changes. */
 interface Candidate {
@@ -148,14 +153,16 @@ function shippedFiles(pkg: PackageInfo, changed: readonly string[], before: Mani
   // The root package does not have the files of the packages of the workspace
   const own = (path: string): boolean => inside(pkg.folder, path) && (pkg.folder !== "" || !folders.some((folder) => inside(folder, path)));
   const relative = (path: string): string => (pkg.folder === "" ? path : path.slice(pkg.folder.length + 1));
-  // An entry of `files` that git does not track is build output, which comes from each source file
+  // A tracked entry of `files` ships its own files. An entry that git does not track is build output: its inputs ship
   const entries = stringsOf(pkg.manifest, "files");
   const positive = entries.filter((entry) => !entry.startsWith("!"));
   const negative = entries.filter((entry) => entry.startsWith("!")).flatMap((entry) => entryGlobs(entry.slice(1)));
   const ownTracked = (context.gitFiles() ?? []).filter(own).map(relative);
-  const whitelist = positive.length > 0 && positive.every((entry) => ownTracked.some((path) => matchesAny(path, entryGlobs(entry))));
-  const ships = (path: string): boolean =>
-    path !== "package.json" && !matchesAny(path, unshipped) && (!whitelist || (positive.some((entry) => matchesAny(path, entryGlobs(entry))) && !matchesAny(path, negative)));
+  const tracked = positive.filter((entry) => ownTracked.some((path) => matchesAny(path, entryGlobs(entry))));
+  const whitelist = [...tracked.flatMap(entryGlobs), ...(tracked.length < positive.length ? BUILD_INPUTS : [])];
+  const packed = alwaysPacked(pkg.manifest);
+  const listed = (path: string): boolean => packed.includes(path) || (matchesAny(path, whitelist) && !matchesAny(path, negative));
+  const ships = (path: string): boolean => path !== "package.json" && !matchesAny(path, unshipped) && (positive.length === 0 || listed(path));
   const files = changed.filter(own).map(relative).filter(ships);
   if (changed.includes(pkg.file) && before !== undefined && fields.some((field) => JSON.stringify(before[field]) !== JSON.stringify(pkg.manifest[field]))) files.push("package.json");
   return files;
@@ -195,7 +202,7 @@ export function unreleasedChangeRule(lookup: RegistryLookup = npmLookup): Rule {
     },
     check(context, options) {
       if (hasFile(context.root, ".changeset/config.json")) return { skipped: "the repository uses Changesets: the changesets raise the versions, and the changeset check examines them" };
-      const published = publishedOf(context).filter((pkg) => !isPlaceholder(String(pkg.manifest["version"])));
+      const published = versionedPackages(context).filter((pkg) => !isPlaceholder(String(pkg.manifest["version"])));
       if (published.length === 0) return { skipped: "the repository has no published package with a release version" };
       const range = rangeOf(context, { push: true });
       if ("skipped" in range) return range;
@@ -212,7 +219,12 @@ export function unreleasedChangeRule(lookup: RegistryLookup = npmLookup): Rule {
       const fork = push ? range.ends[0] : context.git(["merge-base", ...range.ends])?.trim();
       const notes: string[] = [];
       if (fork === undefined) notes.push(`the checkout does not have the merge base of ${range.ends.join(" and ")}, so the rule cannot tell if the change sets a version`);
-      const manifestAt = (ref: string, pkg: PackageInfo): Manifest | undefined => (ref === "HEAD" ? pkg.manifest : parseManifest(context.git(["show", `${ref}:${pkg.file}`])));
+      // One start of git reads the manifest of each package at each commit of the range and at the merge base.
+      const refs = [...new Set([range.ends[0], range.ends[1], ...(fork === undefined ? [] : [fork])])].filter((ref) => ref !== "HEAD");
+      const specs = published.flatMap((pkg) => refs.map((ref) => `${ref}:${pkg.file}`));
+      const shown = showFiles(context, specs);
+      const texts = new Map(specs.map((spec, index) => [spec, shown[index]] as const));
+      const manifestAt = (ref: string, pkg: PackageInfo): Manifest | undefined => (ref === "HEAD" ? pkg.manifest : parseManifest(texts.has(`${ref}:${pkg.file}`) ? texts.get(`${ref}:${pkg.file}`) : context.git(["show", `${ref}:${pkg.file}`])));
       const versionOf = (manifest: Manifest | undefined): string | undefined => (typeof manifest?.["version"] === "string" ? manifest["version"] : undefined);
 
       const candidates: Candidate[] = [];

@@ -33,13 +33,74 @@ export interface ConventionsConfig {
 /** The fields of the configuration of a rule that are not options. */
 const RULE_FIELDS = ["off", "ignore", "generated", "reason"];
 
-const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+/**
+ * This function tells if a value is a record: an object that is not a list. The parser reader of `workflow.ts` uses it
+ * too. The home of this check is the planned entry `/read` of `@mark1russell7/optional`.
+ */
+export const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isStrings = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === "string");
 
 /** This function gives the options of a rule with their defaults. */
 export function defaultOptions(rule: Rule): Options {
   return Object.fromEntries(Object.entries(rule.options).map(([name, spec]) => [name, spec.default]));
+}
+
+/**
+ * This function reads the configuration of one rule from the field `conventions` of the root `package.json` (`value`).
+ * It does not examine the other rules, so it needs no list of the rules. The command `pre-push` uses it: an error in the
+ * entry of another rule does not change the settings of `no-local-paths`.
+ *
+ * @throws Error when the field `conventions`, its field `rules` or the entry of the rule has a wrong shape
+ */
+export function parseRuleConfig(value: unknown, rule: Rule): RuleConfig {
+  if (value === undefined) return { ignore: [], options: defaultOptions(rule) };
+  if (!isObject(value)) throw new Error("The field conventions of package.json must be an object.");
+  const rulesValue = value["rules"] ?? {};
+  if (!isObject(rulesValue)) throw new Error("conventions.rules must be an object, with a rule id for each key.");
+  const entry = rulesValue[rule.id];
+  return entry === undefined ? { ignore: [], options: defaultOptions(rule) } : parseRuleEntry(rule, entry);
+}
+
+/** This function examines the entry of one rule in `conventions.rules`, and gives its configuration. */
+function parseRuleEntry(rule: Rule, entry: unknown): RuleConfig {
+  const where = `conventions.rules["${rule.id}"]`;
+  if (!isObject(entry)) throw new Error(`${where} must be an object, for example { "off": "<reason>" }.`);
+  const off = entry["off"];
+  if (off !== undefined && (typeof off !== "string" || off.trim() === "")) throw new Error(`${where}.off must be the reason why the rule is off, as text.`);
+  const ignore = entry["ignore"] ?? [];
+  if (!isStrings(ignore)) throw new Error(`${where}.ignore must be an array of globs.`);
+  const reason = entry["reason"];
+  if (reason !== undefined && (typeof reason !== "string" || reason.trim() === "")) throw new Error(`${where}.reason must be text.`);
+  if (ignore.length > 0 && reason === undefined) throw new Error(`${where}.ignore needs a reason: add "reason": "<why these files are an exception>".`);
+  const generated = entry["generated"] ?? [];
+  if (!isStrings(generated)) throw new Error(`${where}.generated must be an array of globs.`);
+  if (generated.length > 0 && reason === undefined) throw new Error(`${where}.generated needs a reason: add "reason": "<which build makes these files>".`);
+  const options: Record<string, OptionValue> = { ...defaultOptions(rule) };
+  const changed: string[] = [];
+  for (const [name, option] of Object.entries(entry)) {
+    if (RULE_FIELDS.includes(name)) continue;
+    const spec = rule.options[name];
+    if (spec === undefined) {
+      const known = [...RULE_FIELDS, ...Object.keys(rule.options)].join(", ");
+      throw new Error(`${where} has an unknown field: ${name}. The fields are: ${known}.`);
+    }
+    const good = spec.type === "strings" ? isStrings(option) : typeof option === spec.type;
+    if (!good) throw new Error(`${where}.${name} must be ${spec.type === "strings" ? "an array of strings" : `a ${spec.type}`}.`);
+    options[name] = option as OptionValue;
+    changed.push(name);
+  }
+  // A changed option can make a rule weaker, so it needs a reason, as `ignore` does
+  if (changed.length > 0 && reason === undefined && off === undefined) {
+    throw new Error(`${where} changes the option${changed.length > 1 ? "s" : ""} ${changed.join(", ")}, and needs a reason: add "reason": "<why this repository changes the default>".`);
+  }
+  return {
+    ...(off === undefined ? {} : { off }),
+    ignore,
+    ...(generated.length === 0 ? {} : { generated }),
+    ...(reason === undefined ? {} : { reason }),
+    options,
+  };
 }
 
 /**
@@ -63,43 +124,7 @@ export function parseConfig(value: unknown, rules: readonly Rule[]): Conventions
   for (const [id, entry] of Object.entries(rulesValue)) {
     const rule = byId.get(id);
     if (rule === undefined) throw new Error(`conventions.rules has an unknown rule: ${id}. The rules are: ${[...byId.keys()].join(", ")}.`);
-    const where = `conventions.rules["${id}"]`;
-    if (!isObject(entry)) throw new Error(`${where} must be an object, for example { "off": "<reason>" }.`);
-    const off = entry["off"];
-    if (off !== undefined && (typeof off !== "string" || off.trim() === "")) throw new Error(`${where}.off must be the reason why the rule is off, as text.`);
-    const ignore = entry["ignore"] ?? [];
-    if (!isStrings(ignore)) throw new Error(`${where}.ignore must be an array of globs.`);
-    const reason = entry["reason"];
-    if (reason !== undefined && (typeof reason !== "string" || reason.trim() === "")) throw new Error(`${where}.reason must be text.`);
-    if (ignore.length > 0 && reason === undefined) throw new Error(`${where}.ignore needs a reason: add "reason": "<why these files are an exception>".`);
-    const generated = entry["generated"] ?? [];
-    if (!isStrings(generated)) throw new Error(`${where}.generated must be an array of globs.`);
-    if (generated.length > 0 && reason === undefined) throw new Error(`${where}.generated needs a reason: add "reason": "<which build makes these files>".`);
-    const options: Record<string, OptionValue> = { ...defaultOptions(rule) };
-    const changed: string[] = [];
-    for (const [name, option] of Object.entries(entry)) {
-      if (RULE_FIELDS.includes(name)) continue;
-      const spec = rule.options[name];
-      if (spec === undefined) {
-        const known = [...RULE_FIELDS, ...Object.keys(rule.options)].join(", ");
-        throw new Error(`${where} has an unknown field: ${name}. The fields are: ${known}.`);
-      }
-      const good = spec.type === "strings" ? isStrings(option) : typeof option === spec.type;
-      if (!good) throw new Error(`${where}.${name} must be ${spec.type === "strings" ? "an array of strings" : `a ${spec.type}`}.`);
-      options[name] = option as OptionValue;
-      changed.push(name);
-    }
-    // A changed option can make a rule weaker, so it needs a reason, as `ignore` does
-    if (changed.length > 0 && reason === undefined && off === undefined) {
-      throw new Error(`${where} changes the option${changed.length > 1 ? "s" : ""} ${changed.join(", ")}, and needs a reason: add "reason": "<why this repository changes the default>".`);
-    }
-    result[id] = {
-      ...(off === undefined ? {} : { off }),
-      ignore,
-      ...(generated.length === 0 ? {} : { generated }),
-      ...(reason === undefined ? {} : { reason }),
-      options,
-    };
+    result[id] = parseRuleEntry(rule, entry);
   }
   return { ...(packages === undefined ? {} : { packages }), rules: result };
 }

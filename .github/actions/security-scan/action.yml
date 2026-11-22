@@ -73,7 +73,7 @@ runs:
     - name: Dependency review
       id: dependency-review_scan
       if: ${{ !cancelled() && steps.choice.outputs.dependency-review == 'true' && github.event_name == 'pull_request' }}
-      uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+      uses: actions/dependency-review-action@bbc44d14a204704ccc493733616cd1e93a0321ec # v5.0.1
       with:
         fail-on-severity: ${{ inputs.fail-on-severity }}
         fail-on-scopes: ${{ inputs.dependency-review-scopes }}
@@ -116,7 +116,7 @@ runs:
       if: ${{ !cancelled() && steps.osv-scanner_base-checkout.outcome == 'success' }}
       # osv-scanner fails when it finds a vulnerability. The step "Compare" reads the results.
       continue-on-error: true
-      uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
+      uses: google/osv-scanner-action/osv-scanner-action@32d3cd482bdadfb38b186c0ad1b031902d55d932 # v2.7.1
       with:
         scan-args: |-
           --format=json
@@ -134,7 +134,7 @@ runs:
       id: osv-scanner_head
       if: ${{ !cancelled() && steps.osv-scanner_base-checkout.outcome == 'success' && steps.osv-scanner_head-checkout.outcome == 'success' }}
       continue-on-error: true
-      uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
+      uses: google/osv-scanner-action/osv-scanner-action@32d3cd482bdadfb38b186c0ad1b031902d55d932 # v2.7.1
       with:
         scan-args: |-
           --format=json
@@ -240,7 +240,7 @@ runs:
       if: ${{ !cancelled() && github.event_name != 'pull_request' && steps.osv-scanner_args.outcome == 'success' }}
       # osv-scanner fails when it finds a vulnerability. These findings go to the Security tab.
       continue-on-error: true
-      uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
+      uses: google/osv-scanner-action/osv-scanner-action@32d3cd482bdadfb38b186c0ad1b031902d55d932 # v2.7.1
       with:
         scan-args: |-
           --format=sarif
@@ -276,7 +276,7 @@ runs:
     - name: Upload the results to code scanning
       id: osv-scanner_upload
       if: ${{ !cancelled() && steps.osv-scanner_check.outcome == 'success' && steps.choice.outputs.osv-upload == 'true' }}
-      uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+      uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
       with:
         sarif_file: osv.sarif
         category: osv-scanner
@@ -303,6 +303,7 @@ runs:
       shell: bash
       env:
         LANGUAGES: ${{ inputs.codeql-languages }}
+        CODEQL_CONFIG: ${{ github.action_path }}/codeql-config.ts
       run: |
         # CodeQL analyzes the commit of the run. A failed step of osv-scanner can leave the base in the checkout.
         if [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
@@ -337,6 +338,8 @@ runs:
         joined=$(IFS=,; echo "${keep[*]}")
         echo "CodeQL languages: ${joined:-none}" >> "$GITHUB_STEP_SUMMARY"
         echo "languages=$joined" >> "$GITHUB_OUTPUT"
+        # The output config adds the query of the suppression comments of each language (codeql-config.ts)
+        KEPT="$joined" node "$CODEQL_CONFIG"
         # The category of the job codeql of reusable-security.yml ("<workflow file>:codeql"), so the alerts of the
         # Security tab stay with the same analysis
         workflow=${GITHUB_WORKFLOW_REF#"$GITHUB_REPOSITORY/"}
@@ -353,10 +356,11 @@ runs:
       id: codeql_init
       if: ${{ !cancelled() && steps.codeql_languages.outcome == 'success' && steps.codeql_languages.outputs.languages != '' }}
       continue-on-error: true
-      uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+      uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
       with:
         languages: ${{ steps.codeql_languages.outputs.languages }}
         build-mode: ${{ inputs.codeql-build-mode }}
+        config: ${{ steps.codeql_languages.outputs.config }}
 
     - name: Wait before the second CodeQL start
       if: ${{ !cancelled() && steps.codeql_init.outcome == 'failure' }}
@@ -366,10 +370,11 @@ runs:
     - name: Initialize CodeQL, second start
       id: codeql_init-retry
       if: ${{ !cancelled() && steps.codeql_init.outcome == 'failure' }}
-      uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+      uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
       with:
         languages: ${{ steps.codeql_languages.outputs.languages }}
         build-mode: ${{ inputs.codeql-build-mode }}
+        config: ${{ steps.codeql_languages.outputs.config }}
 
     - name: Name the CodeQL bundle
       if: ${{ !cancelled() && (steps.codeql_init.outcome == 'success' || steps.codeql_init-retry.outcome == 'success') }}
@@ -383,7 +388,7 @@ runs:
     - name: Analyze
       id: codeql_analyze
       if: ${{ !cancelled() && (steps.codeql_init.outcome == 'success' || steps.codeql_init-retry.outcome == 'success') }}
-      uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+      uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
       with:
         # A pull request uploads nothing. The step "Fail on new alerts" examines its results.
         upload: ${{ github.event_name == 'pull_request' && 'never' || 'always' }}
