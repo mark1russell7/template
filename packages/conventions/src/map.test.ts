@@ -117,7 +117,7 @@ describe("the command map", () => {
     expect(stdout).toMatch(/^Before you write a helper, find its home in this map\./);
     expect(stdout).toContain("| Statistics | `@mark1russell7/rigor-statistics` |");
     expect(stdout).toContain("| Benchmarks and speed gates | `@mark1russell7/rigor-bench` |");
-    expect(stdout).toContain("`@mark1russell7/rational`, `@mark1russell7/expression` (not on npm) |");
+    expect(stdout).toContain("`@mark1russell7/rational`, `@mark1russell7/expression` (not on npm), `@mark1russell7/linear` (not on npm) |");
   });
 
   it("finds the areas of words, and reads an overlay", () => {
