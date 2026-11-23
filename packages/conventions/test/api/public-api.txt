@@ -574,6 +574,8 @@ interface PagesCall {
 ### build/index.d.ts#ParsedJob
 interface ParsedJob {
   readonly id: string;
+  readonly name: string;
+  readonly maxParallel: number | null;
   readonly if: string;
   readonly needs: readonly string[];
   readonly uses: string;
