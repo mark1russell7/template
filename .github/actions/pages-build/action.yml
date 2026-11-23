@@ -19,6 +19,11 @@ runs:
   steps:
     # The pnpm version comes from "packageManager" in package.json
     - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      # A stalled fetch of the pnpm install ends after 60 s, with retries of at most 2 min, and not at the job limit.
+      # One run waited 16 minutes in this step.
+      env:
+        npm_config_fetch_timeout: "60000"
+        npm_config_fetch_retry_maxtimeout: "120000"
     - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version: ${{ fromJSON(inputs.config)['node-version-file'] == '' && fromJSON(inputs.config)['node-version'] || '' }}
