@@ -405,6 +405,10 @@ export interface ParsedStep {
 /** A job of a workflow, as the YAML parser reads it. */
 export interface ParsedJob {
   readonly id: string;
+  /** The value of `name`, or the id. The Actions API names each run of a matrix job by this text and its matrix values. */
+  readonly name: string;
+  /** The `strategy.max-parallel` of the job: a number, or null when the job has none or an expression gives it. GitHub then runs the jobs of the matrix with no limit of the file. */
+  readonly maxParallel: number | null;
   /** The condition of the job (`if`), or an empty text. */
   readonly if: string;
   readonly needs: readonly string[];
@@ -517,8 +521,12 @@ function parsedJob(id: string, value: unknown): ParsedJob {
   const job = isObject(value) ? value : {};
   const secrets = secretsOf(job);
   if (job["secrets"] === "inherit") secrets.add("inherit");
+  const strategy = isObject(job["strategy"]) ? job["strategy"] : {};
+  const limit = strategy["max-parallel"];
   return {
     id,
+    name: optionalText(job["name"]) || id,
+    maxParallel: typeof limit === "number" && Number.isInteger(limit) && limit > 0 ? limit : null,
     if: optionalText(job["if"]),
     needs: listValues(job["needs"]),
     uses: actionOf(optionalText(job["uses"])),

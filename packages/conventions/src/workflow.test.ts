@@ -141,6 +141,37 @@ describe("parseWorkflow", () => {
     expect(parsed(lines("on: push", "jobs: {}")).name).toBe("demo.yml");
   });
 
+  it("reads the name and the max-parallel of each job, and gives null for no limit or an expression", () => {
+    const workflow = parsed(
+      lines(
+        "on: push",
+        "jobs:",
+        "  cells:",
+        "    name: Harness",
+        "    strategy:",
+        "      max-parallel: 2",
+        "      matrix: { cell: [1, 2, 3] }",
+        "    steps: []",
+        "  wide:",
+        "    strategy: { matrix: { os: [a, b] } }",
+        "    steps: []",
+        "  given:",
+        "    strategy:",
+        "      max-parallel: ${{ inputs.width }}",
+        "    steps: []",
+        "  zero:",
+        "    strategy: { max-parallel: 0 }",
+        "    steps: []",
+      ),
+    );
+    expect(workflow.jobs.map((job) => [job.id, job.name, job.maxParallel])).toEqual([
+      ["cells", "Harness", 2],
+      ["wide", "wide", null],
+      ["given", "given", null],
+      ["zero", "zero", null],
+    ]);
+  });
+
   it("gives faults and no job for a file that does not parse, two documents or YAML 1.1", () => {
     const broken = parseWorkflow("demo.yml", lines("on: push", "jobs:", "  a:", "    steps:", "      - run: |", "echo at column one", "  b: {"));
     expect(broken.faults.length).toBeGreaterThan(0);
