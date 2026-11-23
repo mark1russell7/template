@@ -161,12 +161,12 @@ export const HOMES: readonly Home[] = [
   {
     area: "files",
     title: "Paths and files on Node.js",
-    covers: "paths, home folder expansion, a path inside a folder, finding a file up the folders, glob matching, file walks with excludes: plain functions on node: modules only, for each general package. @procedures/fs builds on them",
+    covers: "paths, home folder expansion, a path inside a folder, finding a file up the folders, glob matching, file walks with excludes, archives (entry /archive: ZIP reading with inflateRaw, CRC and size limits; tar and gzip planned): plain functions on node: modules only, for each general package. @procedures/fs builds on them",
     packages: ["@mark1russell7/files"],
     repo: "mark1russell7/files",
     state: "published",
-    words: ["path", "home folder", "expand home", "find up", "glob", "walk", "inside folder", "posix path"],
-    signatures: ["expandHome", "findUp", "isInside", "globToRegExp", "matchesGlob"],
+    words: ["path", "home folder", "expand home", "find up", "glob", "walk", "inside folder", "posix path", "zip", "archive", "unzip", "inflate", "tar", "gzip"],
+    signatures: ["expandHome", "findUp", "isInside", "globToRegExp", "matchesGlob", "readZipEntries"],
   },
   {
     area: "system-io",
