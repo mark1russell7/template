@@ -5,6 +5,9 @@
  * The bar has the portfolio of the owner and the name of the site. It also has a link to each page of the site, to
  * GitHub and to npm. The link of the current page has `aria-current="page"`. The bar works at 360 px: its rows wrap.
  * Its CSS has its own class names and variables, so the CSS of a site does not change it.
+ *
+ * The bar ends with a slot for the controls of the site, for example a theme button. Each element of a page with the
+ * attribute `data-site-bar-tool` moves into the slot. Thus a site keeps its controls and has no header of its own.
  */
 
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -40,7 +43,10 @@ export interface BarOptions {
 /** The marker attribute of the bar. The navigation crawl looks for it. */
 export const BAR_ATTRIBUTE = "data-site-bar";
 
-/** The CSS of the bar. Each rule starts with `.spb`, so it changes only the bar. */
+/**
+ * The CSS of the bar. Each rule starts with `.spb`, so it changes only the bar. The reset of the bar has the weight of
+ * one class: `:where()` adds no weight. Thus each later rule of the bar wins over the reset.
+ */
 export const BAR_CSS = `
 .spb{--spb-bg:#ffffff;--spb-fg:#151c2e;--spb-muted:#5f6880;--spb-rule:#d6dbe5;--spb-accent:#2346c4;--spb-wash:#e7ecfd;
 color-scheme:light;position:relative;z-index:2147483000;display:block;margin:0;padding:0;background:var(--spb-bg);color:var(--spb-fg);
@@ -49,7 +55,9 @@ text-align:left;letter-spacing:normal;text-transform:none}
 @media (prefers-color-scheme:dark){.spb{--spb-bg:#151a2b;--spb-fg:#e6e9f3;--spb-muted:#a3abc2;--spb-rule:#2b3350;--spb-accent:#93abff;--spb-wash:#1f2a4f;color-scheme:dark}}
 :root[data-theme="dark"] .spb,:root.dark .spb{--spb-bg:#151a2b;--spb-fg:#e6e9f3;--spb-muted:#a3abc2;--spb-rule:#2b3350;--spb-accent:#93abff;--spb-wash:#1f2a4f;color-scheme:dark}
 :root[data-theme="light"] .spb,:root.light .spb{--spb-bg:#ffffff;--spb-fg:#151c2e;--spb-muted:#5f6880;--spb-rule:#d6dbe5;--spb-accent:#2346c4;--spb-wash:#e7ecfd;color-scheme:light}
-.spb *{box-sizing:border-box;margin:0;padding:0;font:inherit;letter-spacing:inherit}
+.spb :where(*:not(.spb-tools *)){box-sizing:border-box;margin:0;padding:0;font:inherit;letter-spacing:inherit}
+.spb-tools{display:flex;align-items:center;gap:8px}
+.spb-tools:empty{display:none}
 .spb-in{max-width:80rem;margin:0 auto;padding:6px 12px;display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px}
 .spb-id{display:flex;align-items:center;gap:6px;min-width:0;margin-right:auto}
 .spb-id a{color:var(--spb-fg);text-decoration:none;border-radius:4px;overflow-wrap:anywhere}
@@ -112,10 +120,32 @@ export function barHtml(options: BarOptions, path: string): string {
   });
   links.push(`<li><a class="spb-out" href="https://github.com/${escapeHtml(options.repository)}">GitHub</a></li>`);
   if (options.npm) links.push(`<li><a class="spb-out" href="https://www.npmjs.com/package/${escapeHtml(options.npm)}">npm</a></li>`);
-  return `<nav class="spb" ${BAR_ATTRIBUTE} aria-label="Site"><div class="spb-in"><div class="spb-id">${id}</div><ul class="spb-links">${links.join("")}</ul></div></nav>`;
+  return `<nav class="spb" ${BAR_ATTRIBUTE} aria-label="Site"><div class="spb-in"><div class="spb-id">${id}</div><ul class="spb-links">${links.join("")}</ul>${TOOLS_SLOT}</div></nav>${BAR_END}`;
 }
 
-const BAR_PATTERN = /\n?<nav class="spb" data-site-bar[\s\S]*?<\/ul><\/div><\/nav>/;
+/** The marker attribute of a control of the site that moves into the bar, for example a theme button. */
+export const BAR_TOOL_ATTRIBUTE = "data-site-bar-tool";
+const TOOLS_SLOT = '<div class="spb-tools" data-site-bar-tools></div>';
+const BAR_END = "<!--/site-bar-->";
+const BAR_PATTERN = /\n?<nav class="spb" data-site-bar[\s\S]*?<\/nav><!--\/site-bar-->/;
+// The controls in the slot of a bar from an earlier start
+const BAR_TOOLS_PATTERN = /<div class="spb-tools" data-site-bar-tools>([\s\S]*?)<\/div><\/div><\/nav><!--\/site-bar-->$/;
+// An element with the attribute data-site-bar-tool, up to its end tag. The attribute data-site-bar-tools does not match.
+const TOOL_PATTERN = /<([a-z][a-z0-9-]*)\b(?=[^>]*\sdata-site-bar-tool(?=[\s=>/]))[^>]*>([\s\S]*?)<\/\1\s*>/gi;
+
+/**
+ * This function takes each control of the site (`data-site-bar-tool`) out of the HTML, and gives the HTML and the
+ * controls in order. An element that holds an element with the same tag stays, because a pattern cannot find its end.
+ */
+export function takeTools(html: string): { html: string; tools: string[] } {
+  const tools: string[] = [];
+  const out = html.replace(TOOL_PATTERN, (element: string, tag: string, inner: string) => {
+    if (new RegExp(`<${tag}[\\s>/]`, "i").test(inner)) return element;
+    tools.push(element);
+    return "";
+  });
+  return { html: out, tools };
+}
 const STYLE_ID = "site-bar-css";
 const STYLE_PATTERN = /<style id="site-bar-css">[\s\S]*?<\/style>/;
 // The header of the Releases page and the Status page of site-pages. The bar takes its place.
@@ -124,15 +154,21 @@ const SP_HEADER_PATTERN = /<header class="sp-header">[\s\S]*?<\/header>\n?/;
 /**
  * This function writes the bar into the HTML of one page. The bar comes first in `<body>`, and its CSS comes last in
  * `<head>`. A bar from an earlier start goes away, so the function can start two times on one page. The header of a
- * page of site-pages also goes away. The function gives the HTML with no change when the page has no `<body>`.
+ * page of site-pages also goes away. Each control of the site moves into the slot of the bar, and the controls of an
+ * earlier bar stay in it. The function gives the HTML with no change when the page has no `<body>`.
  */
 export function injectBar(html: string, bar: string): string {
   const body = /<body\b[^>]*>/i.exec(html);
   if (body === null) return html;
-  let out = html.replace(STYLE_PATTERN, "").replace(BAR_PATTERN, "").replace(SP_HEADER_PATTERN, "");
+  const old = BAR_PATTERN.exec(html)?.[0] ?? "";
+  const kept = BAR_TOOLS_PATTERN.exec(old)?.[1] ?? "";
+  const taken = takeTools(html.replace(STYLE_PATTERN, "").replace(BAR_PATTERN, "").replace(SP_HEADER_PATTERN, ""));
+  let out = taken.html;
+  const slot = `<div class="spb-tools" data-site-bar-tools>${kept}${taken.tools.join("")}</div>`;
+  const filled = bar.replace(TOOLS_SLOT, () => slot);
   const style = `<style id="${STYLE_ID}">${BAR_CSS}</style>`;
-  out = /<\/head>/i.test(out) ? out.replace(/<\/head>/i, `${style}</head>`) : out.replace(/<body\b[^>]*>/i, (tag) => `${style}${tag}`);
-  return out.replace(/<body\b[^>]*>/i, (tag) => `${tag}\n${bar}`);
+  out = /<\/head>/i.test(out) ? out.replace(/<\/head>/i, () => `${style}</head>`) : out.replace(/<body\b[^>]*>/i, (tag) => `${style}${tag}`);
+  return out.replace(/<body\b[^>]*>/i, (tag) => `${tag}\n${filled}`);
 }
 
 /** This function gives the HTML files of a folder, as paths from the folder, in a stable order. */

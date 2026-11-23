@@ -157,6 +157,8 @@ site-pages bar --out dist --repo owner/name --pages "Demo=demo/,Docs=docs/" --si
 - It has a link to the home, to each page of `--pages`, and to Releases and Status with `--site-pages`. The link of the current page has `aria-current="page"`.
 - It also links to the repository on GitHub, and to npm with `--npm`.
 - The bar takes the place of the header of the Releases page and the Status page.
+- The bar ends with a slot for the controls of the site. The command moves each element with the attribute `data-site-bar-tool` into the slot, in the order of the page. Thus a theme button stays, and the site needs no header of its own.
+- A single-page application makes its controls in the browser. It can put them into the slot `[data-site-bar-tools]` at run time.
 - Its CSS has its own class names, so the CSS of the site does not change the bar. It follows the light and the dark scheme. Its rows wrap at 360 px.
 - The command can start two times on one folder. The second start gives the same pages.
 

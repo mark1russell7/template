@@ -1,10 +1,11 @@
 {
-  "$comment": "The site config of the template (CI.md, \"The site config\"). pages.yml deploys this site from main, and the job site of ci.yml checks it on each pull request. The build starts the CLI for each preset and reads the shared workflows (packages/site/vite.config.ts). The probe drives the package preview and the workflow explorer. The freshness gate reads the stamp of the one fixed study of the home (packages/site/src/data-stamps.ts).",
+  "$comment": "The site config of the template (CI.md, \"The site config\"). pages.yml deploys this site from main, and the job site of ci.yml checks it on each pull request. The build starts the CLI for each preset and reads the shared workflows (packages/site/vite.config.ts). The probe drives the package preview and the workflow explorer. The freshness gate reads the stamp of the one fixed study of the home (packages/site/src/data-stamps.ts). The shared site bar is the one row of links of each page, and it holds the theme button of the home.",
   "build": "pnpm --filter @template/site run build",
   "out": "packages/site/dist",
   "env": { "SITE_BASE": "/{repo}" },
   "packages": "@mark1russell7/conventions,@mark1russell7/site-pages,@mark1russell7/api-report,@mark1russell7/boundaries,@mark1russell7/template-cli",
   "site-name": "Template",
+  "site-bar": true,
   "roadmap": "docs/ROADMAP.md",
   "site-check": true,
   "site-check-pages": "/,/releases/,/status/",

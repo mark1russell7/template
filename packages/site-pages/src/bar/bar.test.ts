@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { applyBar, barHtml, barPages, currentLink, htmlFiles, injectBar, pagePath, parsePages, runBarCli, type BarOptions } from "./bar.ts";
+import { applyBar, BAR_CSS, barHtml, barPages, currentLink, htmlFiles, injectBar, pagePath, parsePages, runBarCli, takeTools, type BarOptions } from "./bar.ts";
 
 const options: BarOptions = {
   repository: "owner/packing",
@@ -79,8 +79,69 @@ describe("barHtml", () => {
   });
 });
 
+type Weight = [ids: number, classes: number, types: number];
+
+/** This function adds two weights of CSS selectors. */
+const addWeight = (a: Weight, b: Weight): Weight => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+
+/** This function compares two weights. A negative result means that `a` weighs less than `b`. */
+const compareWeight = (a: Weight, b: Weight): number => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+
+/**
+ * This function gives the weight (the specificity) of one CSS selector of the bar. `:where()` adds no weight, and
+ * `:not()` adds the weight of its argument. It knows the selector forms of the bar, not all of CSS.
+ */
+function weight(selector: string): Weight {
+  const group = String.raw`\(((?:[^()]|\([^()]*\))*)\)`;
+  let total: Weight = [0, 0, 0];
+  let rest = selector.replace(new RegExp(`:where${group}`, "g"), "");
+  rest = rest.replace(new RegExp(`:not${group}`, "g"), (_, inner: string) => {
+    total = addWeight(total, weight(inner));
+    return "";
+  });
+  const take = (re: RegExp): number => {
+    const count = (rest.match(re) ?? []).length;
+    rest = rest.replace(re, " ");
+    return count;
+  };
+  const attributes = take(/\[[^\]]*\]/g);
+  const ids = take(/#[\w-]+/g);
+  const classes = take(/\.[\w-]+/g);
+  const elements = take(/::[\w-]+/g);
+  const pseudoClasses = take(/:[\w-]+/g);
+  const types = take(/[a-zA-Z][\w-]*/g);
+  return addWeight(total, [ids, classes + attributes + pseudoClasses, types + elements]);
+}
+
+describe("the CSS of the bar", () => {
+  const rules = [...BAR_CSS.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, selectors = "", body = ""]) => ({ selectors: selectors.trim().split(","), body }));
+  const reset = rules.findIndex((rule) => rule.body.includes("box-sizing:border-box"));
+
+  it("gives the weight of each selector form of the bar", () => {
+    expect(weight(".spb *")).toEqual([0, 1, 0]);
+    expect(weight(".spb *:not(.spb-tools *)")).toEqual([0, 2, 0]);
+    expect(weight(".spb :where(*:not(.spb-tools *))")).toEqual([0, 1, 0]);
+    expect(weight(".spb-links a")).toEqual([0, 1, 1]);
+    expect(weight('.spb-links a[aria-current="page"]')).toEqual([0, 2, 1]);
+    expect(weight('#x :root[data-theme="dark"] .spb')).toEqual([1, 3, 0]);
+    expect(weight(".spb a:focus-visible")).toEqual([0, 2, 1]);
+  });
+
+  it("has a reset with the weight of one class", () => {
+    expect(reset).toBeGreaterThan(-1);
+    expect(rules[reset]?.selectors.map(weight)).toEqual([[0, 1, 0]]);
+  });
+
+  it("lets each later rule win over the reset, so a link keeps its padding", () => {
+    const floor = weight(rules[reset]?.selectors[0] ?? "");
+    const lighter = rules.slice(reset + 1).flatMap((rule) => rule.selectors.filter((selector) => compareWeight(weight(selector), floor) < 0));
+    expect(lighter).toEqual([]);
+    expect(rules.slice(reset + 1).some((rule) => rule.selectors.includes(".spb-links a") && rule.body.includes("padding:4px 8px"))).toBe(true);
+  });
+});
+
 describe("injectBar", () => {
-  const page = '<!doctype html><html><head><title>t</title></head><body class="x"><div id="root"></div></body></html>';
+  const page ='<!doctype html><html><head><title>t</title></head><body class="x"><div id="root"></div></body></html>';
 
   it("puts the bar first in the body and its CSS last in the head", () => {
     const html = injectBar(page, barHtml(options, ""));
@@ -103,6 +164,38 @@ describe("injectBar", () => {
 
   it("changes no page with no body", () => {
     expect(injectBar("<svg></svg>", barHtml(options, ""))).toBe("<svg></svg>");
+  });
+
+  it("has an empty slot for the controls of the site, and ends with its marker", () => {
+    const html = injectBar(page, barHtml(options, ""));
+    expect(html).toContain('</ul><div class="spb-tools" data-site-bar-tools></div></div></nav><!--/site-bar-->');
+  });
+
+  it("moves each control of the site into the slot, in order, and keeps them when it starts two times", () => {
+    const theme = '<button id="theme" class="theme" type="button" data-site-bar-tool aria-label="Change the theme"><span aria-hidden="true">◐</span></button>';
+    const lang = '<a href="./fr/" data-site-bar-tool="">FR $& $1</a>';
+    const own = `<html><head></head><body>\n<header class="top">${theme}</header>\n<main>${lang}<p>x</p></main></body></html>`;
+    const once = injectBar(own, barHtml(options, ""));
+    expect(once).toContain(`<div class="spb-tools" data-site-bar-tools>${theme}${lang}</div></div></nav><!--/site-bar-->`);
+    expect(once).toContain('<header class="top"></header>\n<main><p>x</p></main>');
+    expect(once.match(/data-site-bar-tool\b(?!s)/g)).toHaveLength(2);
+    expect(injectBar(once, barHtml(options, ""))).toBe(once);
+    expect(injectBar(once, barHtml(options, "releases/"))).toContain(`${theme}${lang}</div>`);
+  });
+});
+
+describe("takeTools", () => {
+  it("leaves an element that holds an element with the same tag, and an element with only a similar attribute", () => {
+    const nested = '<div data-site-bar-tool><div>a</div></div>';
+    const similar = '<div data-site-bar-tools></div><span data-site-bar-toolbox>b</span>';
+    expect(takeTools(`${nested}${similar}`)).toEqual({ html: `${nested}${similar}`, tools: [] });
+  });
+
+  it("takes an element with the attribute in any place of its start tag, also with a value", () => {
+    expect(takeTools('<p>a</p><select name="t" data-site-bar-tool="theme"><option>x</option></select>')).toEqual({
+      html: "<p>a</p>",
+      tools: ['<select name="t" data-site-bar-tool="theme"><option>x</option></select>'],
+    });
   });
 });
 

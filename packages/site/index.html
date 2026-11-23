@@ -13,15 +13,8 @@
 <link rel="stylesheet" href="./src/style.css">
 </head>
 <body>
-<header class="top">
-  <a class="brand" href="./"><span class="mark" aria-hidden="true">{ }</span> template</a>
-  <nav aria-label="Site">
-    <a href="./releases/">Releases</a>
-    <a href="./status/">Status</a>
-    <a href="https://github.com/mark1russell7/template">GitHub</a>
-    <button id="theme" class="theme" type="button" aria-label="Change the theme"><span aria-hidden="true">◐</span></button>
-  </nav>
-</header>
+<!-- The shared site bar of site-pages (site-bar in .github/site.json) has the links of the site. The build moves the theme button into the bar. -->
+<header class="top"><button id="theme" class="theme" type="button" aria-label="Change the theme" data-site-bar-tool><span aria-hidden="true">◐</span></button></header>
 
 <main>
   <section class="hero">
