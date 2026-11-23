@@ -48,6 +48,8 @@ describe("the search", () => {
     expect(findHomes("line break")[0]?.area).toBe("text");
     expect(findHomes("atomic write")[0]?.area).toBe("system-io");
     expect(findHomes("expand home")[0]?.area).toBe("files");
+    expect(findHomes("zip archive")[0]?.area).toBe("files");
+    expect(findHomes("unzip")[0]?.area).toBe("files");
     expect(findHomes("html escape")[0]?.area).toBe("plain-text");
     expect(findHomes("camel case")[0]?.area).toBe("plain-text");
     expect(findHomes("event emitter")[0]?.area).toBe("data-structures");
