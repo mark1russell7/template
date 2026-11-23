@@ -101,8 +101,12 @@ runs:
         sudo rm -f /etc/apt/apt.conf.d/docker-clean
     # The restore and the save are two steps, so that a run with missing system packages saves no cache. A cache with
     # the browsers and no .deb files would stay under its key, and each later run would download the packages again.
+    # A stalled download of the cache ends after 3 minutes (the default is 10). Then the step installs the browsers.
+    # One run stalled at 41.3 % and held the job until its time limit.
     - id: cache
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      env:
+        SEGMENT_DOWNLOAD_TIMEOUT_MINS: "3"
       with:
         path: |
           ~/.cache/ms-playwright
