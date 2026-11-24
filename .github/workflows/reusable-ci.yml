@@ -254,12 +254,16 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "26"
-      # On a pull request, the job pull does not start, so its outputs are empty and the event gives the values
+      # On a pull request, the job pull does not start, so its outputs are empty. The base and the head are then the
+      # parents of the merge commit: the field base.sha of the event is old when main moved (actions/merge-parents).
+      - id: merge
+        if: github.event_name == 'pull_request'
+        uses: ./.shared-actions/.github/actions/merge-parents
       - uses: ./.shared-actions/.github/actions/changeset-check
         with:
           ignore: ${{ inputs.changeset-ignore }}
-          base-sha: ${{ needs.pull.outputs.base-sha || github.event.pull_request.base.sha }}
-          head-sha: ${{ needs.pull.outputs.head-sha || github.event.pull_request.head.sha }}
+          base-sha: ${{ needs.pull.outputs.base-sha || steps.merge.outputs.base }}
+          head-sha: ${{ needs.pull.outputs.head-sha || steps.merge.outputs.head }}
           head-ref: ${{ needs.pull.outputs.head-ref || github.event.pull_request.head.ref }}
           labels: ${{ needs.pull.outputs.labels || toJSON(github.event.pull_request.labels.*.name) }}
 

@@ -44,12 +44,18 @@ jobs:
         with:
           persist-credentials: false
           sparse-checkout: |
+            .github/actions/merge-parents
             packages/conventions/src
             scripts/homes
+      # The base: the first parent of the merge commit, not the field base.sha of the event, which GitHub does not
+      # update when main moves (actions/merge-parents)
+      - id: merge
+        if: github.event_name == 'pull_request'
+        uses: ./.github/actions/merge-parents
       - name: The map of the base commit
         if: github.event_name == 'pull_request'
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_SHA: ${{ steps.merge.outputs.base }}
         run: |
           git fetch --depth=1 --no-tags origin "$BASE_SHA"
           git show "$BASE_SHA:packages/conventions/src/map.ts" > "$RUNNER_TEMP/base-map.ts"

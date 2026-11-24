@@ -204,12 +204,19 @@ jobs:
             scripts/lib/gh.ts
             packages/boundaries/src/**
             !packages/boundaries/src/**/*.test.ts
-      # The base of the pull request: the rules that each repository gets when its pin moves to the base
+      # The base of the pull request: the first parent of the merge commit, not the field base.sha of the event, which
+      # GitHub does not update when main moves (actions/merge-parents)
+      - id: merge
+        if: steps.changes.outputs.match == 'true' || steps.boundary-changes.outputs.match == 'true'
+        uses: ./next/.github/actions/merge-parents
+        with:
+          path: next
+      # The rules that each repository gets when its pin moves to the base
       - if: steps.changes.outputs.match == 'true' || steps.boundary-changes.outputs.match == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: base
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ steps.merge.outputs.base }}
           persist-credentials: false
       - if: steps.changes.outputs.match == 'true' || steps.boundary-changes.outputs.match == 'true'
         uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
