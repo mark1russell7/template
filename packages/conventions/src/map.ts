@@ -310,11 +310,11 @@ export const HOMES: readonly Home[] = [
   {
     area: "market",
     title: "Products, offers and price history",
-    covers: "a live catalog of products with the offers of many sellers, the price of each offer over time, trends, one adapter for each seller (the official API first)",
+    covers: "a live catalog of products with the offers of many sellers, the price of each offer over time, trends, one adapter for each seller (the official API first); the supply resources of a buy list (water.*, food.*, fuel.*) and the cited facts of each product (calories, the cook water and time of a dry food, the fuel rate of a stove, the energy of a fuel)",
     packages: ["@mark1russell7/market", "@mark1russell7/market-sources"],
     repo: "mark1russell7/market",
     state: "published",
-    words: ["price", "prices", "offer", "seller", "catalog", "product", "parts", "price history", "trend", "deal", "listing", "sku"],
+    words: ["price", "prices", "offer", "seller", "catalog", "product", "parts", "price history", "trend", "deal", "listing", "sku", "cooking fuel", "stove", "propane", "cook time"],
     note: "Fetches go through polite-crawler, live loops through @mark1russell7/service, trend statistics through rigor-statistics.",
   },
   {
@@ -355,7 +355,7 @@ export const HOMES: readonly Home[] = [
     repo: "mark1russell7/system-stack",
     state: "published",
     words: ["endurance", "runtime", "shortfall", "hazard", "outage duration", "cut", "survival curve", "stores and draws", "battery runtime", "system stack", "redundancy", "single point of failure", "spof", "failure domain", "shared cause", "reliability", "spend cap", "monthly cap", "opentofu", "terraform", "infrastructure as code", "iac", "placement", "host setup", "provisioning", "inventory feed", "need rates", "daily calories", "water need", "dietary guidelines", "buy list"],
-    note: "Market gives only the calories of each line of a buy list. The live records of a stack are input data: the repository holds the schema, the queries and sample data only. The hazard cases are reference data with sources, as the FoodKeeper defaults of stock: they name no person and no place, a regional law covers each region of its source, and the region of a user is input data. The fits of the duration laws come from rigor-statistics. The path queries (minimum hitting set, two-terminal reliability) come from @mark1russell7/collections. One catalog of layers in the core, shared with netdiag, is in work. The entry /availability of @mark1russell7/algebra gives its delay curves to stack-risk and is then deprecated.",
+    note: "Market gives only the cited facts of each line of a buy list (calories, cook water and time, fuel rate, fuel energy). The cooking converter (dry food + water + fuel to food energy) is in stack-needs. The live records of a stack are input data: the repository holds the schema, the queries and sample data only. The hazard cases are reference data with sources, as the FoodKeeper defaults of stock: they name no person and no place, a regional law covers each region of its source, and the region of a user is input data. The fits of the duration laws come from rigor-statistics. The path queries (minimum hitting set, two-terminal reliability) come from @mark1russell7/collections. One catalog of layers in the core, shared with netdiag, is in work. The entry /availability of @mark1russell7/algebra gives its delay curves to stack-risk and is then deprecated.",
   },
   {
     area: "3d-stages",
