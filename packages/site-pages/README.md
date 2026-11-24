@@ -721,6 +721,24 @@ The worker answers a request of a kept file from its cache. The path of a folder
 
 The name of the cache has the base of the site and a SHA-256 hash of the kept files. A new build with a changed file gives a new name. The new worker then removes the old cache of the same base, and only that cache.
 
+The register script also tells the state of the offline copy to the page. It sets the attribute `data-offline` of the root element, and it sends the event `site-offline` on `window` at each change. Show the state to the visitor. A phone that closes the page before the end of the copy keeps no copy.
+
+| State | Meaning |
+| --- | --- |
+| `none` | The browser has no service worker. The site has no offline copy. |
+| `outside` | The page is outside the scope of the worker, for example the home address with no slash at its end. |
+| `saving` | The worker keeps the files. The copy is not complete. |
+| `ready` | An active worker kept each file. The site opens with no network. |
+| `failed` | The browser refused the worker, or the worker did not keep each file. |
+
+`watchOffline(listener)` of `@mark1russell7/site-pages/chrome` calls the listener with the current state and with each change. It gives the function that stops the calls.
+
+```ts
+import { watchOffline } from "@mark1russell7/site-pages/chrome";
+
+watchOffline((state) => (byId("offline").textContent = state === "ready" ? "This page opens with no network." : ""));
+```
+
 The worker keeps only the built files. It keeps no data of the site. Data that the site reads or writes goes offline through its own store.
 
 The base of the site must be a path from the root of the origin, for example `/` or `/name/`. A relative base, for example `./`, stops the build.
@@ -732,7 +750,8 @@ The base of the site must be a path from the root of the origin, for example `/`
 | `offlineCacheName(base, files)` | Gives the name of the cache from the URLs and the contents of the kept files. |
 | `serviceWorkerSource({ base, cache, urls })` | Gives the source of the service worker. |
 | `webManifest(options, base)` | Gives the web manifest. |
-| `registerScript(base)` | Gives the script that registers the worker, for a page without the plugin. |
+| `registerScript(base)` | Gives the script that registers the worker and tells the state of the copy, for a page without the plugin. |
+| `OFFLINE_STATES`, `OFFLINE_EVENT`, `OFFLINE_ATTRIBUTE` | Give the states of the copy, the name of the event and the name of the attribute. |
 
 The command `site-pages check --out <dir> --offline` is the gate of the offline shell. After the usual views, it opens the home page in a new browser and waits until a service worker controls the page. Then it stops its server, cuts the network of the page, and opens each page again, at the first width and in the first scheme. An offline view fails for each of these problems:
 

@@ -1,5 +1,6 @@
 import { Script, createContext } from "node:vm";
 import { describe, expect, it } from "vitest";
+import { OFFLINE_ATTRIBUTE, OFFLINE_EVENT } from "../chrome.ts";
 import {
   cachePrefix,
   FALLBACK_HEADER,
@@ -256,5 +257,65 @@ describe("registerScript", () => {
     run(registerScript("/"), { serviceWorker: { register: () => Promise.reject(new Error("refused")) } }, { warn: (...args: unknown[]) => warned.push(...args) });
     await new Promise((done) => setTimeout(done, 0));
     expect(String(warned[0])).toContain("not ready");
+  });
+
+  /** This function runs the script in a page at `path`, and records each state that the page gets. */
+  function page(path: string, serviceWorker: object | undefined) {
+    const attributes = new Map<string, string>();
+    const events: unknown[] = [];
+    const navigator = serviceWorker === undefined ? {} : { serviceWorker };
+    const context = {
+      navigator,
+      console: { warn: () => {} },
+      location: { pathname: path },
+      document: { documentElement: { setAttribute: (name: string, value: string) => attributes.set(name, value) } },
+      CustomEvent,
+      dispatchEvent: (event: CustomEvent) => events.push([event.type, event.detail]),
+    };
+    new Script(registerScript("/site/")).runInContext(createContext(context));
+    const states = () => events.filter((event) => (event as unknown[])[0] === OFFLINE_EVENT).map((event) => (event as unknown[])[1]);
+    return { attribute: () => attributes.get(OFFLINE_ATTRIBUTE), states };
+  }
+  const settle = () => new Promise((done) => setTimeout(done, 0));
+
+  it("tells the state none in a browser with no service worker", () => {
+    expect(page("/site/", undefined).attribute()).toBe("none");
+  });
+
+  it("tells saving, then ready when the worker is active", async () => {
+    let activate: (value: unknown) => void = () => {};
+    const ready = new Promise((done) => (activate = done));
+    const one = page("/site/", { register: async () => ({}), ready });
+    await settle();
+    expect(one.attribute()).toBe("saving");
+    activate({});
+    await settle();
+    expect(one.states()).toEqual(["saving", "ready"]);
+    expect(one.attribute()).toBe("ready");
+  });
+
+  it("tells ready at once when a worker controls the page or is active", async () => {
+    expect(page("/site/", { controller: {}, register: async () => ({ active: {} }) }).attribute()).toBe("ready");
+    const active = page("/site/?tab=one", { register: async () => ({ active: {} }), ready: new Promise(() => {}) });
+    await settle();
+    expect(active.attribute()).toBe("ready");
+  });
+
+  it("tells outside for a page out of the scope of the worker, for example the home with no slash", async () => {
+    const outside = page("/site", { register: async () => ({ active: {} }) });
+    await settle();
+    expect(outside.states()).toEqual(["outside"]);
+  });
+
+  it("tells failed when the browser refuses the worker, or the worker does not keep each file", async () => {
+    const refused = page("/site/", { register: () => Promise.reject(new Error("refused")) });
+    await settle();
+    expect(refused.attribute()).toBe("failed");
+    const worker = new EventTarget() as EventTarget & { state: string };
+    const broken = page("/site/", { register: async () => ({ installing: worker }), ready: new Promise(() => {}) });
+    await settle();
+    worker.state = "redundant";
+    worker.dispatchEvent(new Event("statechange"));
+    expect(broken.states()).toEqual(["saving", "failed"]);
   });
 });

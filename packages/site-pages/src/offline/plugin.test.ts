@@ -22,7 +22,7 @@ beforeEach(() => {
   writeFileSync(join(site, "notes", "index.html"), page("Notes"));
   writeFileSync(join(site, "main.js"), 'document.body.dataset.ready = "yes";\n');
   writeFileSync(join(site, "public", "icon.svg"), '<svg xmlns="http://www.w3.org/2000/svg"/>');
-  writeFileSync(join(site, "public", "big.bin"), "x".repeat(2048));
+  writeFileSync(join(site, "public", "big.bin"), "x".repeat(8192));
 });
 
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
@@ -42,7 +42,7 @@ const out = (file: string) => readFileSync(join(dir, "out", file), "utf8");
 describe("siteOffline", () => {
   it("writes the manifest and a worker that keeps each built file, and adds the link and the script to each page", async () => {
     const lists: (PrecacheList & { cache: string })[] = [];
-    const plugin = asViteOffline({ manifest: { name: "Field notes", icons: [{ src: "icon.svg", sizes: "any", type: "image/svg+xml" }] }, maxFileBytes: 1024, onList: (list) => lists.push(list) });
+    const plugin = asViteOffline({ manifest: { name: "Field notes", icons: [{ src: "icon.svg", sizes: "any", type: "image/svg+xml" }] }, maxFileBytes: 4096, onList: (list) => lists.push(list) });
     await viteBuild(config(plugin));
 
     const manifest = JSON.parse(out(MANIFEST_FILE)) as { start_url: string; scope: string; icons: { src: string }[] };
@@ -57,7 +57,7 @@ describe("siteOffline", () => {
     expect(list?.urls.some((url) => /^\/site\/assets\/.+\.js$/.test(url))).toBe(true);
     expect(list!.urls).toEqual(expect.arrayContaining(["/site/index.html", "/site/notes/index.html", `/site/${MANIFEST_FILE}`, "/site/icon.svg"]));
     expect(list!.urls.some((url) => url.endsWith(".map"))).toBe(false);
-    expect(list!.skipped).toEqual(expect.arrayContaining([{ path: "big.bin", reason: "larger than 1024 bytes" }]));
+    expect(list!.skipped).toEqual(expect.arrayContaining([{ path: "big.bin", reason: "larger than 4096 bytes" }]));
     expect(list!.skipped.some((file) => file.path.endsWith(".map"))).toBe(true);
     expect(list!.cache.startsWith(cachePrefix("/site/"))).toBe(true);
 

@@ -1,10 +1,30 @@
 /// <reference lib="dom" />
 /**
  * The small helpers of a page in the browser: the element helpers, the element lookup, the theme
- * button, the copy button and the build stamp. It also has a radio group with one focus stop.
+ * button, the copy button and the build stamp. It also has a radio group with one focus stop,
+ * and the state of the offline copy of the site.
  * This module imports no Node.js module, so a site can bundle it. Import it from
  * `@mark1russell7/site-pages/chrome`, because the package root also has Node.js code.
  */
+
+/**
+ * The states of the offline copy:
+ * - `none`: the browser has no service worker, so the site has no offline copy.
+ * - `outside`: the page is outside the scope of the worker, for example the address of the home with no slash at its end.
+ * - `saving`: the worker keeps the files. The copy is not complete.
+ * - `ready`: an active worker kept each file. The site opens with no network.
+ * - `failed`: the browser refused the worker, or the worker did not keep each file.
+ */
+export const OFFLINE_STATES: readonly ["none", "outside", "saving", "ready", "failed"] = ["none", "outside", "saving", "ready", "failed"];
+
+/** A state of the offline copy. */
+export type OfflineState = (typeof OFFLINE_STATES)[number];
+
+/** The event on `window` at each change of the state. Its `detail` is the state. */
+export const OFFLINE_EVENT = "site-offline";
+
+/** The attribute of the root element with the current state, so a style can show it. */
+export const OFFLINE_ATTRIBUTE = "data-offline";
 
 /** A child of `h`: a node or a text. The values `null`, `undefined` and `false` give no child. */
 export type Child = Node | string | null | undefined | false;
@@ -302,4 +322,25 @@ export class Segmented<T extends string> {
       button.tabIndex = on ? 0 : -1;
     });
   }
+}
+
+/** This function gives a value as a state of the offline copy, or `undefined` when it is not a state. */
+function offlineStateOf(value: unknown): OfflineState | undefined {
+  return OFFLINE_STATES.find((state) => state === value);
+}
+
+/**
+ * This function calls `listener` with the state of the offline copy of the site, and again at each change.
+ * The register script of `siteOffline` tells the state. A page with no register script gets no call.
+ * It gives the function that stops the calls.
+ */
+export function watchOffline(listener: (state: OfflineState) => void): () => void {
+  const now = offlineStateOf(document.documentElement.getAttribute(OFFLINE_ATTRIBUTE));
+  if (now !== undefined) listener(now);
+  const changed = (event: Event): void => {
+    const state = offlineStateOf((event as CustomEvent<unknown>).detail);
+    if (state !== undefined) listener(state);
+  };
+  addEventListener(OFFLINE_EVENT, changed);
+  return () => removeEventListener(OFFLINE_EVENT, changed);
 }
