@@ -194,11 +194,11 @@ export const HOMES: readonly Home[] = [
     area: "ocr",
     title: "Text of scanned pages and images (OCR)",
     covers: "the text of a page: the text layer of a PDF page first (pdftotext), and OCR only for a page with no text layer; OCR of an image or a PDF page with a local engine as an adapter (tesseract first, with argv and no shell), a PDF page to an image (pdftoppm or a headless browser run); each line and word with its text, a confidence from 0 to 1 and its box; the pure parser of the engine output with no process; finding the engine on the host",
-    packages: ["@procedures/ocr"],
+    packages: [],
     repo: "mark1russell7/client",
     state: "planned",
     words: ["ocr", "scan", "scanned", "scanned pdf", "tesseract", "pdftotext", "pdftoppm", "text layer", "image text", "text recognition", "confidence"],
-    note: "@procedures/ocr is planned in mark1russell7/client. Commands go through @procedures/shell, boxes come from geometry (layout-contract), the page images from browser runs. The core names no kind of document.",
+    note: "The package @procedures/ocr is planned in mark1russell7/client. Commands go through @procedures/shell, boxes come from geometry (layout-contract), the page images from browser runs. The core names no kind of document.",
   },
   {
     area: "notifications",
