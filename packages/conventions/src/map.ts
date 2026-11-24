@@ -112,7 +112,7 @@ export const HOMES: readonly Home[] = [
     title: "Expressions and exact arithmetic",
     covers: "expression documents, exact rationals, floats with error bounds, intervals, robust geometric predicates (orientation, in-circle, segment intersection), exact linear algebra over rationals (solve, rank, null space) and linear programs (an exact simplex, lexicographic objectives, a certificate with each result: a dual, a Farkas ray or an unbounded direction)",
     packages: ["@mark1russell7/predicates", "@mark1russell7/rational", "@mark1russell7/expression", "@mark1russell7/linear"],
-    pending: ["@mark1russell7/expression", "@mark1russell7/linear"],
+    pending: ["@mark1russell7/expression"],
     repo: "mark1russell7/algebra",
     state: "published",
     words: ["math", "arithmetic", "rational", "bigint", "interval", "error bound", "predicate", "orientation", "segment intersection", "symbolic", "exact", "linear program", "linear programming", "simplex", "lexicographic", "matrix", "linear algebra", "gaussian elimination", "farkas"],
