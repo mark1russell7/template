@@ -1,0 +1,38 @@
+name: merge-parents
+description: >-
+  Gives the two parents of the merge commit that actions/checkout checks out on a pull_request run: the base (the tip of
+  the base branch when GitHub made the merge commit) and the head of the pull request. Use the base in place of the
+  field base.sha of the event. GitHub does not update that field when the base branch moves, so a compare from it counts
+  the newer commits of the base branch as changes of the pull request. The step reads the parents from the commit object,
+  so a checkout of depth 1 is enough. It fails closed: a commit that does not have two parents stops the job.
+inputs:
+  path:
+    description: The folder of the checkout of the merge commit, relative to the workspace.
+    default: .
+outputs:
+  base:
+    description: The first parent of the merge commit, the tip of the base branch that the pull request merges into.
+    value: ${{ steps.parents.outputs.base }}
+  head:
+    description: The second parent of the merge commit, the head of the pull request.
+    value: ${{ steps.parents.outputs.head }}
+runs:
+  using: composite
+  steps:
+    - id: parents
+      name: The parents of the merge commit
+      shell: bash
+      env:
+        CHECKOUT: ${{ inputs.path }}
+      # git cat-file gives the parent lines of the commit object also in a shallow checkout, where git rev-parse HEAD^1
+      # fails because the parent is not in the clone.
+      run: |
+        object=$(git -C "$CHECKOUT" cat-file commit HEAD) || exit 1
+        mapfile -t parents < <(sed -n '/^$/q; s/^parent //p' <<< "$object")
+        if [ "${#parents[@]}" -ne 2 ]; then
+          echo "::error::The checkout in $CHECKOUT is not the merge commit of a pull request: it has ${#parents[@]} parents, not 2."
+          exit 1
+        fi
+        echo "base=${parents[0]}" >> "$GITHUB_OUTPUT"
+        echo "head=${parents[1]}" >> "$GITHUB_OUTPUT"
+        echo "The merge commit $(git -C "$CHECKOUT" rev-parse HEAD) merges ${parents[1]} into ${parents[0]}."

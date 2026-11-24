@@ -464,8 +464,10 @@ describe("the action and its job in reusable-ci.yml", () => {
     const job = jobText("changesets");
     assert.match(job, /\n {4}needs: pull\n/u);
     assert.equal(condition(job, 4), "${{ !cancelled() && inputs.changesets && (github.event_name == 'pull_request' || needs.pull.outputs.found == 'true') }}");
-    assert.match(job, /\n {10}base-sha: \$\{\{ needs\.pull\.outputs\.base-sha \|\| github\.event\.pull_request\.base\.sha \}\}\n/u);
-    assert.match(job, /\n {10}head-sha: \$\{\{ needs\.pull\.outputs\.head-sha \|\| github\.event\.pull_request\.head\.sha \}\}\n/u);
+    // On a pull request, the base and the head are the parents of the merge commit, not the old field base.sha
+    assert.match(job, /\n {6}- id: merge\n {8}if: github\.event_name == 'pull_request'\n {8}uses: \.\/\.shared-actions\/\.github\/actions\/merge-parents\n/u);
+    assert.match(job, /\n {10}base-sha: \$\{\{ needs\.pull\.outputs\.base-sha \|\| steps\.merge\.outputs\.base \}\}\n/u);
+    assert.match(job, /\n {10}head-sha: \$\{\{ needs\.pull\.outputs\.head-sha \|\| steps\.merge\.outputs\.head \}\}\n/u);
     assert.match(job, /\n {10}head-ref: \$\{\{ needs\.pull\.outputs\.head-ref \|\| github\.event\.pull_request\.head\.ref \}\}\n/u);
     assert.match(job, /\n {10}labels: \$\{\{ needs\.pull\.outputs\.labels \|\| toJSON\(github\.event\.pull_request\.labels\.\*\.name\) \}\}\n/u);
     // The action takes the values of the event by default, so a caller of the action with no inputs keeps working

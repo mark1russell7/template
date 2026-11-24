@@ -407,11 +407,17 @@ jobs:
             packages/site-pages/src/config
             packages/site-pages/src/render
           persist-credentials: false
-      # The base of the pull request: the check that the sites use when the pin moves to it
+      # The base of the pull request: the first parent of the merge commit, not the field base.sha of the event, which
+      # GitHub does not update when main moves (actions/merge-parents)
+      - id: merge
+        uses: ./next/.github/actions/merge-parents
+        with:
+          path: next
+      # The check that the sites use when the pin moves to the base
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: base
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ steps.merge.outputs.base }}
           sparse-checkout: |
             packages/site-pages/src/bar
             packages/site-pages/src/check
