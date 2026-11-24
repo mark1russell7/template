@@ -7,6 +7,7 @@
 
 import { createHash } from "node:crypto";
 import { FALLBACK_HEADER } from "../check/offline-header.ts";
+import { OFFLINE_ATTRIBUTE, OFFLINE_EVENT } from "../chrome.ts";
 
 export { FALLBACK_HEADER };
 
@@ -249,8 +250,37 @@ export function webManifest(options: WebManifestOptions, base: string): WebManif
 /**
  * This function gives the script that registers the service worker, for a `<script type="module">` of a page. A failure
  * goes to `console.warn`, because a browser with no service worker shows the page as usual.
+ *
+ * The script also tells the state of the offline copy (`OfflineState`) to the page. It sets the attribute `data-offline`
+ * of the root element, and it sends the event `site-offline` on `window` at each change. So a page can show the visitor
+ * when the site opens with no network. `watchOffline` of `@mark1russell7/site-pages/chrome` reads the state.
  */
 export function registerScript(base: string): string {
   const home = offlineBase(base);
-  return `if ("serviceWorker" in navigator) navigator.serviceWorker.register(${JSON.stringify(home + SERVICE_WORKER_FILE)}, { scope: ${JSON.stringify(home)} }).catch((error) => console.warn("The offline copy of the site is not ready:", error));`;
+  return [
+    `{`,
+    `const home = ${JSON.stringify(home)};`,
+    `const root = globalThis.document?.documentElement;`,
+    `const tell = (state) => {`,
+    `  if (root) root.setAttribute(${JSON.stringify(OFFLINE_ATTRIBUTE)}, state);`,
+    `  if (typeof CustomEvent === "function") globalThis.dispatchEvent?.(new CustomEvent(${JSON.stringify(OFFLINE_EVENT)}, { detail: state }));`,
+    `};`,
+    `if (!("serviceWorker" in navigator)) tell("none");`,
+    `else {`,
+    `  const outside = !(globalThis.location?.pathname ?? home).startsWith(home);`,
+    `  tell(outside ? "outside" : navigator.serviceWorker.controller ? "ready" : "saving");`,
+    `  navigator.serviceWorker.register(${JSON.stringify(home + SERVICE_WORKER_FILE)}, { scope: home }).then((registration) => {`,
+    `    if (outside || !registration) return;`,
+    `    const watch = (worker) => worker?.addEventListener?.("statechange", () => { if (worker.state === "redundant" && !registration.active) tell("failed"); });`,
+    `    watch(registration.installing);`,
+    `    registration.addEventListener?.("updatefound", () => watch(registration.installing));`,
+    `    if (registration.active) tell("ready");`,
+    `    else navigator.serviceWorker.ready?.then(() => tell("ready"));`,
+    `  }).catch((error) => {`,
+    `    if (!outside) tell("failed");`,
+    `    console.warn("The offline copy of the site is not ready:", error);`,
+    `  });`,
+    `}`,
+    `}`,
+  ].join(String.fromCharCode(10));
 }

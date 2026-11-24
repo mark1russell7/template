@@ -191,6 +191,10 @@ BuildInfo: build/chrome.d.ts#BuildInfo
 Child: build/chrome.d.ts#Child
 Choice: build/chrome.d.ts#Choice
 CopyTextOptions: build/chrome.d.ts#CopyTextOptions
+OFFLINE_ATTRIBUTE: build/chrome.d.ts#OFFLINE_ATTRIBUTE
+OFFLINE_EVENT: build/chrome.d.ts#OFFLINE_EVENT
+OFFLINE_STATES: build/chrome.d.ts#OFFLINE_STATES
+OfflineState: build/chrome.d.ts#OfflineState
 RovingAxis: build/chrome.d.ts#RovingAxis
 Segmented: build/chrome.d.ts#Segmented
 THEMES: build/chrome.d.ts#THEMES
@@ -206,6 +210,7 @@ rovingIndex: build/chrome.d.ts#rovingIndex
 setupTheme: build/chrome.d.ts#setupTheme
 showBuild: build/chrome.d.ts#showBuild
 svg: build/chrome.d.ts#svg
+watchOffline: build/chrome.d.ts#watchOffline
 
 ## ./demo (build/demo.d.ts): names
 
@@ -301,8 +306,12 @@ themeScript: build/vite.d.ts#themeScript
 FALLBACK_HEADER: build/offline/index.d.ts#FALLBACK_HEADER
 MANIFEST_FILE: build/offline/index.d.ts#MANIFEST_FILE
 MAX_FILE_BYTES: build/offline/index.d.ts#MAX_FILE_BYTES
+OFFLINE_ATTRIBUTE: build/chrome.d.ts#OFFLINE_ATTRIBUTE
+OFFLINE_EVENT: build/chrome.d.ts#OFFLINE_EVENT
+OFFLINE_STATES: build/chrome.d.ts#OFFLINE_STATES
 type OfflineFile: build/offline/index.d.ts#OfflineFile
 type OfflineIcon: build/offline/index.d.ts#OfflineIcon
+type OfflineState: build/chrome.d.ts#OfflineState
 type PrecacheList: build/offline/index.d.ts#PrecacheList
 type PrecacheOptions: build/offline/index.d.ts#PrecacheOptions
 SERVICE_WORKER_FILE: build/offline/index.d.ts#SERVICE_WORKER_FILE
@@ -372,6 +381,18 @@ export interface CopyTextOptions {
   readonly ms?: number;
 }
 
+### build/chrome.d.ts#OFFLINE_ATTRIBUTE
+export declare const OFFLINE_ATTRIBUTE = "data-offline";
+
+### build/chrome.d.ts#OFFLINE_EVENT
+export declare const OFFLINE_EVENT = "site-offline";
+
+### build/chrome.d.ts#OFFLINE_STATES
+export declare const OFFLINE_STATES: readonly ["none", "outside", "saving", "ready", "failed"];
+
+### build/chrome.d.ts#OfflineState
+export type OfflineState = (typeof OFFLINE_STATES)[number];
+
 ### build/chrome.d.ts#RovingAxis
 export type RovingAxis = "horizontal" | "vertical" | "both";
 
@@ -420,6 +441,9 @@ export declare function showBuild(element: HTMLElement, build: BuildInfo, reposi
 
 ### build/chrome.d.ts#svg
 export declare function svg<K extends keyof SVGElementTagNameMap>(tag: K, attrs?: Readonly<Record<string, AttributeValue>>, ...children: readonly (Child | readonly Child[])[]): SVGElementTagNameMap[K];
+
+### build/chrome.d.ts#watchOffline
+export declare function watchOffline(listener: (state: OfflineState) => void): () => void;
 
 ### build/chunks/freshness.d.ts#BoardIssue
 interface BoardIssue {

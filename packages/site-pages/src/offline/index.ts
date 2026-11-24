@@ -31,3 +31,4 @@ export {
   type WebManifest,
   type WebManifestOptions,
 } from "./shell.ts";
+export { OFFLINE_ATTRIBUTE, OFFLINE_EVENT, OFFLINE_STATES, type OfflineState } from "../chrome.ts";

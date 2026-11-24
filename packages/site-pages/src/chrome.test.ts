@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyTheme, byId, copyText, copyToClipboard, currentTheme, h, nextTheme, setupTheme, showBuild, svg, THEMES } from "./chrome.ts";
+import { applyTheme, byId, copyText, copyToClipboard, currentTheme, h, nextTheme, setupTheme, showBuild, svg, THEMES, watchOffline } from "./chrome.ts";
 
 // The package has no DOM for its tests. These fakes have only the members that the helpers use.
 
@@ -299,5 +299,21 @@ describe("the chrome entry", () => {
     const source = readFileSync(new URL("src/chrome.ts", root), "utf8");
     expect(source).not.toMatch(/^\s*import\s/m);
     expect(source).not.toMatch(/\bfrom\s+["']/);
+  });
+});
+
+describe("watchOffline", () => {
+  it("gives the state of the root, then each state of the event, until the stop", () => {
+    const target = new EventTarget();
+    vi.stubGlobal("document", { documentElement: { getAttribute: (name: string) => (name === "data-offline" ? "saving" : null) } });
+    vi.stubGlobal("addEventListener", target.addEventListener.bind(target));
+    vi.stubGlobal("removeEventListener", target.removeEventListener.bind(target));
+    const states: string[] = [];
+    const stop = watchOffline((state) => states.push(state));
+    target.dispatchEvent(new CustomEvent("site-offline", { detail: "no such state" }));
+    target.dispatchEvent(new CustomEvent("site-offline", { detail: "ready" }));
+    stop();
+    target.dispatchEvent(new CustomEvent("site-offline", { detail: "failed" }));
+    expect(states).toEqual(["saving", "ready"]);
   });
 });
