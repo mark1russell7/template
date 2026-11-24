@@ -476,11 +476,11 @@ export const HOMES: readonly Home[] = [
   {
     area: "browser-monitoring",
     title: "Observability and context",
-    covers: "OpenTelemetry for browsers and Node services, and the one context of logs, metrics and traces: trace and baggage in process and across calls (otel-ts, its /context and /node entries); main-thread lag, long tasks, Web Vitals, the page lifecycle, async context in browsers",
+    covers: "OpenTelemetry for browsers and Node services, and the one context of logs, metrics and traces: trace and baggage in process and across calls (otel-ts, its /context and /node entries); metric readings on demand: a pull reader with no timer and no export, and each series of a collection as a reading with its time and value (entry /pull of otel-ts); main-thread lag, long tasks, Web Vitals, the page lifecycle, async context in browsers",
     packages: ["@mark1russell7/otel-ts", "async-browser-context", "@mark1russell7/lag", "@mark1russell7/lag-hud", "page-lifecycle-tracker"],
     repo: "mark1russell7/otel-ts",
     state: "published",
-    words: ["telemetry", "web vitals", "inp", "long task", "visibility", "opentelemetry", "async context", "observability", "baggage", "traceparent", "tracing", "span", "asynclocalstorage", "context manager"],
+    words: ["telemetry", "web vitals", "inp", "long task", "visibility", "opentelemetry", "async context", "observability", "baggage", "traceparent", "tracing", "span", "asynclocalstorage", "context manager", "metric reader", "pull reader", "metric readings", "collect metrics"],
   },
   {
     area: "repo-structure",
