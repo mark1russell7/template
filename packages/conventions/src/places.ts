@@ -19,6 +19,8 @@ export interface NamedRepo {
   readonly text: string;
   /** The repository, `owner/name` in lower case. */
   readonly repo: string;
+  /** The form of the text: `repo` for `owner/name`, `pages` for a GitHub Pages address `owner.github.io/name`. */
+  readonly form: "repo" | "pages";
 }
 
 /** A kind of place: the files it reads, and the function that finds each name of a repository in one file. */
@@ -64,7 +66,7 @@ function bareName(name: string): string {
 }
 
 /** This function gives each match of `pattern` in the lines of `text`, as a name of a repository. The pattern has the flag d, and the place starts at its group 1 (the owner). */
-function matches(text: string, pattern: RegExp, form: (owner: string, name: string) => string, skip: (line: string) => boolean = () => false): NamedRepo[] {
+function matches(text: string, pattern: RegExp, form: NamedRepo["form"], skip: (line: string) => boolean = () => false): NamedRepo[] {
   const found: NamedRepo[] = [];
   text.split(/\r?\n/).forEach((line, index) => {
     if (skip(line)) return;
@@ -72,9 +74,9 @@ function matches(text: string, pattern: RegExp, form: (owner: string, name: stri
       const owner = match[1] ?? "";
       const name = bareName(match[2] ?? "");
       if (name === "" || NOT_OWNERS.has(owner.toLowerCase())) continue;
-      const written = form(owner, name);
+      const written = form === "pages" ? `${owner}.github.io/${name}` : `${owner}/${name}`;
       const column = match.indices?.[1]?.[0] ?? 0;
-      found.push({ line: index + 1, column, text: written, repo: `${owner}/${name}`.toLowerCase() });
+      found.push({ line: index + 1, column, text: written, repo: `${owner}/${name}`.toLowerCase(), form });
     }
   });
   return found;
@@ -82,7 +84,7 @@ function matches(text: string, pattern: RegExp, form: (owner: string, name: stri
 
 /** This function gives each GitHub address and each Pages address in a text. */
 function links(text: string, skip?: (line: string) => boolean): NamedRepo[] {
-  return [...matches(text, HOSTED, (owner, name) => `${owner}/${name}`, skip), ...matches(text, PAGES, (owner, name) => `${owner}.github.io/${name}`, skip)].sort(
+  return [...matches(text, HOSTED, "repo", skip), ...matches(text, PAGES, "pages", skip)].sort(
     (a, b) => a.line - b.line || a.column - b.column,
   );
 }
@@ -90,7 +92,7 @@ function links(text: string, skip?: (line: string) => boolean): NamedRepo[] {
 /** This function gives each value `"owner/name"` of a key in a JSON text, for a key that names a repository with no host. */
 function bareValues(text: string, keys: readonly string[]): NamedRepo[] {
   const pattern = new RegExp(`"(?:${keys.join("|")})"\\s*:\\s*"(${PART})/(${PART})"`, "gd");
-  return matches(text, pattern, (owner, name) => `${owner}/${name}`);
+  return matches(text, pattern, "repo");
 }
 
 /** The file of a package. */
@@ -130,7 +132,7 @@ export const PLACE_KINDS: readonly PlaceKind[] = [
         const match = value === undefined ? null : new RegExp(`^(${PART})/(${PART})$`).exec(value);
         if (match === null) return;
         const written = `${match[1] ?? ""}/${match[2] ?? ""}`;
-        keys.push({ line: index + 1, column: line.indexOf(written), text: written, repo: written.toLowerCase() });
+        keys.push({ line: index + 1, column: line.indexOf(written), text: written, repo: written.toLowerCase(), form: "repo" });
       });
       return [...links(text, skip), ...keys].sort((a, b) => a.line - b.line || a.column - b.column);
     },
@@ -155,7 +157,7 @@ export function stalePlaces(file: string, text: string, moves: readonly RepoMove
       const to = movedTo(named.repo, moves);
       if (to === undefined) continue;
       const [owner = "", name = ""] = to.split("/");
-      const replacement = named.text.includes(".github.io/") ? `${owner}.github.io/${name}` : to;
+      const replacement = named.form === "pages" ? `${owner}.github.io/${name}` : to;
       found.push({ ...named, kind: kind.id, file, to, replacement });
     }
   }
