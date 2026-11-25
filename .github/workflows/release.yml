@@ -4,15 +4,20 @@
 #             its pull request (scripts/workflows/verified-tree.ts, CI.md "A tree that passed CI").
 #   verify    The gates of ci.yml. They start when tree gives no yes: a no, a no read or a failure
 #             of the job tree. With a yes, the same tree passed the same gates in its pull request.
-#   build     reusable-release-build.yml: stops when the commit is not on main, builds and packs
-#             each published package (scripts/release/pack.ts), and writes the plan of the git tags
-#             and the GitHub releases (scripts/release/tags.ts).
+#   build     reusable-release-build.yml: stops when the commit is not on main, and gives the mode of
+#             the run (scripts/release/mode.ts). In the mode "publish", it builds and packs each
+#             published package (scripts/release/pack.ts), and writes the plan of the git tags and the
+#             GitHub releases (scripts/release/tags.ts). In the mode "version", it packs nothing.
+#   version   reusable-release-version.yml, only in the mode "version": changesets wait (RELEASING.md,
+#             "Changesets"). The Changesets action opens or updates the pull request "Version the
+#             packages". This job runs code of the repository (the install and `changeset version`),
+#             so it gets no OIDC token. Only this job holds "pull-requests: write".
 #   publish   The npm-publish action of the template: publishes each tarball whose version npm does
 #             not have. Only this job holds "id-token: write", and it runs no code of the
 #             repository: no checkout, no install.
 #   tag       reusable-release-tag.yml: makes a git tag and a GitHub release for each version that
-#             publish published. Only this job holds "contents: write", and it also runs no code of
-#             the repository: gh creates each tag on GitHub, from the data of the plan.
+#             publish published. It holds "contents: write", and it runs no code of the repository:
+#             gh creates each tag on GitHub, from the data of the plan.
 #
 # The publish job stays in this file. Only its steps are shared (the npm-publish action). npm
 # trusted publishing matches the OIDC token of the run to the trusted publisher of each package:
@@ -21,7 +26,8 @@
 # jobs need no OIDC token, so they are shared workflows of the template. Renovate does not change
 # this file: the release session moves its pins (RELEASING.md).
 #
-# A release: change the version in a package.json and merge it to main. The workflow also starts
+# A release: change the version in a package.json and merge it to main. In a repository with
+# Changesets, merge the pull request "Version the packages" (RELEASING.md). The workflow also starts
 # by hand (workflow_dispatch), for example to publish again after a failure. It skips each
 # version that is already on npm. A release publishes only a commit on main: the first step of the
 # build job stops a run on a commit that main does not have (RELEASING.md).
@@ -51,7 +57,8 @@ name: Release
 on:
   push:
     branches: [main]
-    paths: ["package.json", "packages/*/package.json"]
+    # .changeset/*.md: the merge of a changeset opens or updates the version pull request
+    paths: ["package.json", "packages/*/package.json", ".changeset/*.md"]
   workflow_dispatch:
 
 permissions: {}
@@ -96,12 +103,25 @@ jobs:
     permissions:
       contents: read
 
+  # Changesets wait: open or update the pull request "Version the packages", and publish nothing. The
+  # merge of that pull request removes the changesets, so the run of the merge publishes.
+  version:
+    name: Version pull request
+    needs: build
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.build.outputs.mode == 'version' }}
+    uses: ./.github/workflows/reusable-release-version.yml
+    permissions:
+      # The branch changeset-release/main and the pull request
+      contents: write
+      pull-requests: write
+
   publish:
     name: Publish to npm
     needs: build
     # A skipped verify is an ancestor of this job, and the default condition success() skips a job
     # after a skipped ancestor. Thus the condition names the result of build.
-    if: ${{ !cancelled() && needs.build.result == 'success' }}
+    # The mode "version" packs nothing, so it publishes nothing.
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.build.outputs.mode != 'version' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # One publish at a time, over all runs of this workflow
@@ -130,7 +150,7 @@ jobs:
     name: Git tag and GitHub release
     needs: [build, publish]
     # Also after a failed publish: each version that it published before the failure gets its tag.
-    if: ${{ !cancelled() && needs.build.result == 'success' }}
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.build.outputs.mode != 'version' }}
     uses: ./.github/workflows/reusable-release-tag.yml
     permissions:
       contents: write

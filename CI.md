@@ -8,6 +8,7 @@ The template holds the CI, the release and the Pages workflows of the repositori
 | `.github/workflows/reusable-release-build.yml` | Workflow | Builds and packs the published packages, and writes the plan of the tags. |
 | `.github/actions/npm-publish` | Action | Publishes the tarballs to npm with trusted publishing (OIDC) and provenance. |
 | `.github/workflows/reusable-release-tag.yml` | Workflow | Makes a git tag and a GitHub release for each published version. |
+| `.github/workflows/reusable-release-version.yml` | Workflow | Opens or updates the Changesets pull request "Version the packages" when changesets wait (`RELEASING.md`, "Changesets"). |
 | `.github/workflows/reusable-mutation.yml` | Workflow | Starts the mutation tests of each package with Stryker, with a gate for each package. |
 | `.github/workflows/reusable-pages.yml` | Workflow | Builds a site, adds the Releases page and the Status page, and deploys it to GitHub Pages. |
 | `.github/workflows/reusable-pages-check.yml` | Workflow | Builds and checks the site of a pull request in the job `site` of CI, with no deploy. |
@@ -603,6 +604,8 @@ The `release.yml` of a repository keeps four jobs:
 2. `build` uses `reusable-release-build.yml`.
 3. `publish` is a job of `release.yml`. Its one step is the action `npm-publish`.
 4. `tag` uses `reusable-release-tag.yml`.
+
+A repository with Changesets has a fifth job, `version`. It uses `reusable-release-version.yml` (`RELEASING.md`, "Changesets").
 
 ```yaml
   publish:

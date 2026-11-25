@@ -15,6 +15,13 @@
 # (workflow_dispatch) on the branch of a pull request. Then the publish job and the tag job do not
 # start. A temporary branch release/<version> at a version commit of main passes the check.
 #
+# The mode of the run comes first (scripts/release/mode.ts, RELEASING.md "Changesets"). In a repository with
+# .changeset/config.json and one or more pending changesets, the mode is "version": the job stops before the install,
+# packs nothing and uploads nothing. Then the job "version" of release.yml (reusable-release-version.yml) opens or updates
+# the pull request "Version the packages", and the jobs publish and tag do not start. Else the mode is "publish", and the job does the same steps
+# as before the mode. Thus a repository with no .changeset/config.json gets the same release
+# (scripts/release/release-mode.test.ts).
+#
 # The input after-pack is a command of the repository after the pack and the plan, for example a
 # test of the tarballs. It runs in this job, with "contents: read" only. Its outputs go to the
 # output after-pack, for a later job of release.yml, for example a publish to a second registry.
@@ -47,6 +54,9 @@ on:
       after-pack:
         description: Each name=value that the after-pack command wrote to GITHUB_OUTPUT, as a JSON object. Without the command, "{}".
         value: ${{ jobs.pack.outputs.after-pack }}
+      mode:
+        description: '"publish" when the job packed the versions for the publish job. "version" when changesets wait: the job packed nothing, and reusable-release-version.yml opens the version pull request.'
+        value: ${{ jobs.pack.outputs.mode }}
 
 jobs:
   pack:
@@ -57,6 +67,7 @@ jobs:
       contents: read
     outputs:
       after-pack: ${{ toJSON(steps.after-pack.outputs) }}
+      mode: ${{ steps.mode.outputs.mode }}
     steps:
       # The first step, before the checkout: a release publishes only a commit on main. The GitHub
       # compare API (main...<commit>) gives "identical" for the head of main and "behind" for an
@@ -79,19 +90,48 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # The release scripts of the same template commit as this file, not a copy in the repository. They come before
+      # the install, because the mode decides if the install starts.
+      - name: Get the release scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .release-template
+          sparse-checkout: scripts/release
+          persist-credentials: false
+      # checkout writes only into the workspace. The scripts go out of it before the pack, because a package at the
+      # root with no "files" field and no .npmignore packs each file that .gitignore does not name.
+      - name: Move the release scripts out of the workspace
+        run: mv .release-template "$RUNNER_TEMP/release-template"
+      # Node for mode.ts, before the Node of the build
+      - name: Node for the release mode
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+      # "publish" or "version" (scripts/release/mode.ts). Each later step starts only in the mode "publish".
+      - name: Release mode
+        id: mode
+        env:
+          RELEASE_REPO: ${{ github.workspace }}
+        run: node "$RUNNER_TEMP/release-template/scripts/release/mode.ts"
       # The pnpm version comes from "packageManager" in package.json
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - if: steps.mode.outputs.mode == 'publish'
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       # No dependency cache: a release installs from the registry and the lockfile only.
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - if: steps.mode.outputs.mode == 'publish'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ inputs.node-version-file == '' && inputs.node-version || '' }}
           node-version-file: ${{ inputs.node-version-file }}
           package-manager-cache: false
-      - run: pnpm install --frozen-lockfile
+      - if: steps.mode.outputs.mode == 'publish'
+        run: pnpm install --frozen-lockfile
       # The build input, or the build script of the root package.json, or else the build script of each published
       # package and its dependencies. A private package that a published package does not need stays out: a site can
       # need a browser that this job does not have, and the release does not publish it.
       - name: Build
+        if: steps.mode.outputs.mode == 'publish'
         shell: bash
         env:
           COMMAND: ${{ inputs.build }}
@@ -106,30 +146,20 @@ jobs:
             # shellcheck disable=SC2086
             pnpm -r $filters --if-present run build
           fi
-      # The release scripts of the same template commit as this file, not a copy in the repository
-      - name: Get the release scripts
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
-          path: .release-template
-          sparse-checkout: scripts/release
-          persist-credentials: false
-      # checkout writes only into the workspace. The scripts go out of it before the pack, because a package at the
-      # root with no "files" field and no .npmignore packs each file that .gitignore does not name.
-      - name: Move the release scripts out of the workspace
-        run: mv .release-template "$RUNNER_TEMP/release-template"
       # The scripts are TypeScript: Node runs them with its type stripping, also when the build of the
       # repository used an older Node (node-version, node-version-file)
       - name: Node for the release scripts
+        if: steps.mode.outputs.mode == 'publish'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "26"
-      - run: node "$RUNNER_TEMP/release-template/scripts/release/pack.ts" "$RUNNER_TEMP/release"
+      - if: steps.mode.outputs.mode == 'publish'
+        run: node "$RUNNER_TEMP/release-template/scripts/release/pack.ts" "$RUNNER_TEMP/release"
         env:
           RELEASE_REPO: ${{ github.workspace }}
       # The tag, the prerelease flag and the release text of each published package, for the tag job
-      - run: node "$RUNNER_TEMP/release-template/scripts/release/tags.ts" "$RUNNER_TEMP/tags.json"
+      - if: steps.mode.outputs.mode == 'publish'
+        run: node "$RUNNER_TEMP/release-template/scripts/release/tags.ts" "$RUNNER_TEMP/tags.json"
         env:
           RELEASE_REPO: ${{ github.workspace }}
       # The input after-pack. It can test the tarballs, add files to the artifact "release", and
@@ -137,20 +167,22 @@ jobs:
       # name=value that it writes to GITHUB_OUTPUT goes to the output after-pack of this workflow.
       - name: After the pack
         id: after-pack
-        if: inputs.after-pack != ''
+        if: steps.mode.outputs.mode == 'publish' && inputs.after-pack != ''
         shell: bash
         env:
           COMMAND: ${{ inputs.after-pack }}
           RELEASE_DIR: ${{ runner.temp }}/release
           TAGS_FILE: ${{ runner.temp }}/tags.json
         run: eval "$COMMAND"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - if: steps.mode.outputs.mode == 'publish'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release
           path: ${{ runner.temp }}/release/
           if-no-files-found: error
           retention-days: 30
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - if: steps.mode.outputs.mode == 'publish'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: tags
           path: ${{ runner.temp }}/tags.json

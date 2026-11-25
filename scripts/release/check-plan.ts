@@ -16,10 +16,11 @@
 // The script writes "run", "pending" and "notice" to GITHUB_OUTPUT, and the notice to the log. A changeset that
 // Changesets cannot read stops the check with an error: the version step fails on it too.
 
-import { appendFileSync, existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { globToRegExp, parseChangeset } from "../../.github/actions/changeset-check/check.ts";
+import { pendingChangesetFiles } from "./mode.ts";
 import { publishedPackages, root } from "./workspace.ts";
 
 /** The changesets that wait in a repository, and the packages whose version they raise. */
@@ -58,8 +59,9 @@ export function raisedPackages(
 }
 
 /**
- * This function reads the changesets that wait in a repository: each `.changeset/*.md` file other than `README.md`.
- * It gives undefined when the repository has no `.changeset/config.json`.
+ * This function reads the changesets that wait in a repository: each `.changeset/*.md` file other than `README.md`,
+ * except a changeset that the pre mode consumed (mode.ts). It gives undefined when the repository has no
+ * `.changeset/config.json`.
  */
 export function pendingChangesets(repo: string, names: readonly string[]): PendingChangesets | undefined {
   const dir = join(repo, ".changeset");
@@ -69,17 +71,15 @@ export function pendingChangesets(repo: string, names: readonly string[]): Pendi
   const fixed = Array.isArray(config.fixed)
     ? config.fixed.filter(Array.isArray).map((group: unknown[]) => group.filter((entry): entry is string => typeof entry === "string"))
     : [];
-  const files = readdirSync(dir)
-    .filter((file) => file.endsWith(".md") && file.toLowerCase() !== "readme.md")
-    .sort();
+  const files = pendingChangesetFiles(repo) ?? [];
   const releases = files.map((file) => {
     try {
-      return parseChangeset(readFileSync(join(dir, file), "utf8"));
+      return parseChangeset(readFileSync(join(repo, file), "utf8"));
     } catch (error) {
-      throw new Error(`.changeset/${file}: ${error instanceof Error ? error.message : String(error)}. Changesets cannot read it.`);
+      throw new Error(`${file}: ${error instanceof Error ? error.message : String(error)}. Changesets cannot read it.`);
     }
   });
-  return { files: files.map((file) => `.changeset/${file}`), raised: raisedPackages(releases, fixed, names) };
+  return { files, raised: raisedPackages(releases, fixed, names) };
 }
 
 /** This function gives a list of names for a notice: at most 10 names, then a count. */

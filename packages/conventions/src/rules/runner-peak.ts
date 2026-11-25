@@ -169,6 +169,7 @@ export const TEMPLATE_CALLED: readonly string[] = [
   "reusable-release-build.yml=1",
   "reusable-release-tag.yml=1",
   "reusable-release-tree.yml=1",
+  "reusable-release-version.yml=1",
   "reusable-security.yml=3",
 ];
 

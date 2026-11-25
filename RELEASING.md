@@ -10,9 +10,10 @@ The workflow `.github/workflows/release.yml` publishes the packages of this repo
 |---|---|
 | `tree` | `reusable-release-tree.yml` of the template, with `scripts/workflows/verified-tree.ts` of the same template commit. |
 | `verify` | The `ci.yml` of the repository. It starts only when `tree` gives no yes. |
-| `build` | `reusable-release-build.yml` of the template, with `scripts/release/pack.ts` and `scripts/release/tags.ts` of the same template commit. |
-| `publish` | A job of `release.yml`. Its step is the action `npm-publish` of the template. |
-| `tag` | `reusable-release-tag.yml` of the template. |
+| `build` | `reusable-release-build.yml` of the template, with `scripts/release/mode.ts`, `scripts/release/pack.ts` and `scripts/release/tags.ts` of the same template commit. |
+| `version` | `reusable-release-version.yml` of the template, with `scripts/release/version-pr.ts` of the same template commit. It starts only in the mode `version` ("Changesets"). |
+| `publish` | A job of `release.yml`. Its step is the action `npm-publish` of the template. It does not start in the mode `version`. |
+| `tag` | `reusable-release-tag.yml` of the template. It does not start in the mode `version`. |
 
 The job `tree` tells if the tree of the release commit already passed CI in its pull request (`CI.md`, "A tree that passed CI"). With a yes, `verify` does not start, and `build` starts at once. A no, a no read and a failure of `tree` start `verify`, as before. Each file that changed after the CI run of the pull request gives a no.
 
@@ -89,6 +90,8 @@ The owner (Mark) and one Claude session that the owner names are responsible for
 4. Change `version` in the `package.json` of the package. In the pull request, give the SemVer reason.
 5. Merge the change to `main`.
 
+In a repository with Changesets, add a changeset and do not change `version` by hand ("Changesets").
+
 The push to `main` starts `release.yml`. The workflow starts the CI gates, builds and packs each published package, and publishes each version that is not on npm. Then it makes a git tag and a GitHub release for each new version.
 
 A version with a hyphen, for example `1.2.0-rc.1`, gets the dist-tag `next`. A version above the `latest` of npm gets `latest`. A lower version gets `latest-<major>.<minor>`, and `latest` stays. Thus two releases in either sequence do not move `latest` back. The summary of the run lists each version that did not get `latest`.
@@ -114,6 +117,58 @@ Two runs of `release.yml` do not wait for each other before the publish. Each co
 - The newer run publishes the versions of the older run too, because its tree has them. Its job `tag` tags each version of its plan that has no tag.
 - When the newer merge raised the same package again, npm can get only the newer version. For example, npm gets 0.4.2 and no 0.4.1.
 - The builds of two runs can end in either sequence, so a lower version can come to npm after a higher one. It gets `latest-<major>.<minor>`, not `latest`.
+
+## Changesets
+
+A repository with `.changeset/config.json` uses Changesets. The first steps of the build job give the mode of the run (`scripts/release/mode.ts`):
+
+| Mode | When | What the run does |
+|---|---|---|
+| `version` | One or more changesets wait: a file `.changeset/*.md` other than `README.md`. | The job `version` opens or updates the pull request "Version the packages". The run does not install, publish or tag. |
+| `publish` | No changeset waits, or the repository has no `.changeset/config.json`. | The build, the publish and the tags, as before the mode. |
+
+In the pre mode of Changesets (`.changeset/pre.json`), a changeset that `pre.json` names does not wait. After `changeset pre exit`, each changeset waits again.
+
+A repository with no `.changeset/config.json` always gets the mode `publish`. Its release starts the same steps as before the mode (`scripts/release/release-mode.test.ts`).
+
+### A release with Changesets
+
+1. Each pull request that changes a shipped file adds a changeset (`pnpm changeset`). Then the release check of the pull request passes.
+2. The merge starts `release.yml`, because `.changeset/*.md` is in its `paths`. The mode is `version`, and the job `version` opens or updates the version pull request. Its branch is `changeset-release/main`.
+3. GitHub starts no checks for a pull request that the workflow token opens or updates. To start the checks, close the version pull request and open it again.
+4. When the checks pass, merge the version pull request with your own account. A merge with the workflow token starts no workflow.
+5. The merge removes the changesets and sets the new versions. Thus the mode of its run is `publish`, and the run publishes the new versions.
+
+The job `version` writes steps 3 and 4 at the top of the text of the version pull request. The Changesets action writes the text again at each update, and the job then adds the steps again.
+
+### The job version
+
+The job `version` of `release.yml` uses `reusable-release-version.yml` of the template. Its steps are in that file.
+
+- It holds `contents: write` and `pull-requests: write`, and no other job of `release.yml` holds `pull-requests: write`. It starts code of the repository, so it gets no OIDC token.
+- It installs with `--ignore-scripts`. `changeset version` needs only the installed CLI.
+- Only the run of the head of `main` changes the pull request (`scripts/release/version-pr.ts`). The run of an older commit gives a notice, because the run of the newer commit makes the update. When no newer run starts, start `release.yml` by hand on `main`.
+- One job `version` operates at a time, in the concurrency group `release-version`.
+- The Changesets action needs the setting "Allow GitHub Actions to create and approve pull requests" of the repository. For a repository of an organization, the same setting of the organization must also be on.
+
+A version commit can stay unpublished, for example after a failed run, while a newer changeset waits on `main`. A run on `main` then has the mode `version`. To publish that version, make a branch `release/<version>` at the version commit, and start `gh workflow run release.yml --ref release/<version>` ("Only a commit on main").
+
+### A repository that starts to use the mode
+
+The mode needs three parts of the `release.yml` of the template. They are the caller job `version`, the entry `.changeset/*.md` in `paths`, and the mode conditions of `publish` and `tag`. `bump-pins.ts` moves only the pins. Thus in a repository with `.changeset/config.json`, copy the three parts with the pins of the mode. The caller job has approximately 10 lines:
+
+```yaml
+  version:
+    name: Version pull request
+    needs: build
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.build.outputs.mode == 'version' }}
+    uses: mark1russell7/template/.github/workflows/reusable-release-version.yml@<commit> # main
+    permissions:
+      contents: write
+      pull-requests: write
+```
+
+Without the job `version`, a run in the mode `version` opens no pull request. Without the conditions, its job `publish` fails, because the build uploads no tarballs.
 
 ## Only a commit on main
 
