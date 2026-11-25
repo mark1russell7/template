@@ -19,8 +19,8 @@ export const BARE_ERROR_MODES: readonly BareErrorMode[] = ["fail", "report"];
 export const MAX_BARE_ERRORS: number = 20;
 
 /**
- * The shape of the text of a thrown value: `Error: x`, `TypeError: x`, `DOMException: x`, and the messages of the browser that a
- * page shows when it puts `error.message` on the screen.
+ * The shape of the text of a thrown value, for example `Error: x`, `TypeError: x` or `DOMException: x`. It also matches the
+ * messages of the browser that a page shows when it puts `error.message` on the screen.
  */
 export const BARE_ERROR_SHAPE: string = String.raw`(?:^|[\s("'\[:])[A-Z]?[A-Za-z]*(?:Error|Exception): \S|Failed to fetch|NetworkError when attempting to fetch|Cannot read propert(?:y|ies) of (?:undefined|null)|is not a function|\[object Object\]|Unexpected token .{1,20} in JSON`;
 
