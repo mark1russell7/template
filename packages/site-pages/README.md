@@ -139,7 +139,11 @@ The check runs the probe on the first page, in the first scheme, at each width.
 
 To probe other pages, give `--page-probe <page>=<file>` one time for each page, for example `--page-probe /structures/=structures-probe.ts`. A page with no probe has none. The first page takes `--probe` or `--page-probe`, not both. In `checkSite`, the option `probes` is the same map, from a page to the code of its probe.
 
-The folder of `--shots` gets a screenshot of each view, `report.json` and `summary.md`. The exit code is 0 when each view passes, 1 when a view fails, and 2 for an incorrect command line.
+To hold the size of the built files, give `--budget <glob>=<size>` one time for each budget, for example `--budget assets/index-*.js=280kB`. The glob starts at the folder of `--out`. Each file of the glob fails the check when its gzip size is larger than the size. A glob with no file also fails, so a new file name does not escape its budget.
+
+The unit of a size is `B`, `kB` or `MB`, and a number with no unit is in kB. The option needs `--out`. The log, `report.json` and `summary.md` give the size of each budget.
+
+The folder of `--shots` gets a screenshot of each view, `report.json` and `summary.md`. The exit code is 0 when each view and each budget passes. It is 1 when a view or a budget fails, and 2 for an incorrect command line.
 
 The check finds a browser in this order: `--browser`, `$SITE_CHECK_BROWSER`, the newest Chromium of Playwright, and then Chrome or Edge. The folder `src/check` imports only Node.js. Thus Node.js 22.18 or later can start `src/check/main.ts` with no install. The workflow `reusable-pages.yml` of the template uses it this way.
 
