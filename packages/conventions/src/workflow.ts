@@ -418,8 +418,8 @@ export interface ParsedJob {
   /** The `strategy.max-parallel` of the job: a number, or null when the job has none or an expression gives it. GitHub then runs the jobs of the matrix with no limit of the file. */
   readonly maxParallel: number | null;
   /**
-   * The count of the jobs of `strategy.matrix`, as GitHub expands it: the product of the lists, less the combinations of
-   * `exclude`, plus each entry of `include` that adds to no combination. A job with no matrix gives 1. The value is null
+   * The count of the jobs of `strategy.matrix`, as GitHub expands it. It is the product of the lists, less the
+   * combinations of `exclude`. Each entry of `include` that adds to no combination adds one job. A job with no matrix gives 1. The value is null
    * when an expression gives the matrix or a part of it, or the product is above {@link MATRIX_EXPAND_MAX}.
    */
   readonly matrixJobs: number | null;
@@ -546,7 +546,7 @@ function concurrencyOf(owner: Readonly<Record<string, unknown>>): ParsedConcurre
 /** The largest product of the lists of a matrix that the reader expands. GitHub refuses a matrix of more than 256 jobs. */
 export const MATRIX_EXPAND_MAX: number = 65_536;
 
-/** This function tells if a value of the parser is an expression or holds one at its top: GitHub then gives the value at run time. */
+/** This function tells if a value of the parser is an expression or holds one at its top. GitHub then gives the value at run time. */
 const isExpression = (value: unknown): boolean => typeof value === "string" && value.includes("${{");
 
 /** This function tells if two values of the parser are the same: the same scalar, or lists and maps with the same items. */
@@ -565,7 +565,7 @@ const agrees = (entry: Readonly<Record<string, unknown>>, combination: Readonly<
 /**
  * This function gives the count of the jobs of a matrix, as GitHub expands it. First the product of the lists, then
  * `exclude` takes away each combination that agrees with an entry on each key of the entry. Then each entry of `include`
- * adds to each combination that it agrees with on the keys of the lists: it changes no value of a list. An entry that adds
+ * adds to each combination that it agrees with on the keys of the lists. It changes no value of a list. An entry that adds
  * to no combination is a new job. A job that `include` made is no target of a later entry, so a matrix of only `include`
  * gives one job for each entry.
  */
