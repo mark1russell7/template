@@ -139,7 +139,7 @@ export const noConsole: Rule = {
   fix: "Write the output of a CLI with createPrinter({ out: process.stdout, err: process.stderr }) of @mark1russell7/text/print. Emit each diagnostic of a library or a service with the logger of @mark1russell7/otel-ts. After each fix, set the option baseline to the new count.",
   sources: [{ repo: "private", rule: "no-console", doc: "a decision of 2026-11-25: no raw console, one printer for output and one logger for diagnostics" }],
   options: {
-    fail: { type: "boolean", default: false, description: "Each call fails the check now, before the day failFrom." },
+    fail: { type: "boolean", default: false, description: "Each call fails the check also before the day failFrom." },
     failFrom: { type: "string", default: CONSOLE_LAST_DAY, description: "The day from which each call fails. A repository can set an earlier day, but not a day after CONSOLE_LAST_DAY." },
     baseline: { type: "number", default: -1, description: "The count of the calls in the sources. The check fails when the count is not the baseline. -1 is no baseline." },
     skip: { type: "strings", default: NOT_SOURCE, description: "The globs of the files that are not sources: tests, fixtures, scripts, benches and examples." },

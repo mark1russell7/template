@@ -147,7 +147,7 @@ An unknown rule, an unknown option, or an exception or a changed option without 
 | `no-build-output.reports` | `["coverage"]` | The names of the folders of reports. Such a folder breaks the rule only next to a `package.json`. |
 | `no-local-paths.allow` | `[]` | More user names that are not a break. |
 | `no-local-paths.patterns` | `[]` | More regular expressions of text that no file has. The environment variable `CONVENTIONS_PRIVATE_PATTERNS` adds one on each line, so a private name stays out of `package.json`. The shared CI gives the variable from the secret of the same name. |
-| `no-console.fail` | `false` | Each call fails the check now, before the day `failFrom`. |
+| `no-console.fail` | `false` | Each call fails the check also before the day `failFrom`. |
 | `no-console.failFrom` | `2027-01-20` | The day from which each call fails. A day after 2027-01-20 fails the check. |
 | `no-console.baseline` | `-1` (no baseline) | The count of the calls in the sources. The check fails when the count is not the baseline. |
 | `no-console.skip` | the globs of tests, fixtures, scripts, benches and examples | The files that are not sources. |
