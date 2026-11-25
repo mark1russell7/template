@@ -1,0 +1,89 @@
+name: stamp-gate
+description: >-
+  Tells if the bench of a pull request runs. It compares the stamp of the timed code at the head and at the merge base,
+  with the bin rigor-stamp of @mark1russell7/rigor-bench. Two commits with the same stamp time the same code, so the bench
+  does not run. Each fault of a step gives match=true, so a fault can skip no bench.
+inputs:
+  config:
+    description: The stamp config of the bench (stamp-config/1), from the root of the repository.
+    required: true
+  package:
+    description: >-
+      The package folder that has @mark1russell7/rigor-bench 0.3.10 or later in its dependencies, from the root of the
+      repository. The step starts rigor-stamp in this folder.
+    required: true
+  always:
+    description: >-
+      The git pathspecs whose change always starts the bench, one on each line. Give the bench folder, the stamp config
+      and the bench workflow, because the stamp of the merge base uses the config and the bench of the head.
+    default: ""
+  changes:
+    description: The output match of the job changes. With false, the bench does not run and the step reads nothing.
+    default: "true"
+  install:
+    description: The outcome of the install of the head (steps.<id>.outcome). Another value than success starts the bench.
+    default: success
+  base:
+    description: The base commit of the pull request. The step uses the merge base of this commit and the head.
+    default: ${{ github.event.pull_request.base.sha }}
+  head:
+    description: The head commit of the pull request. The checkout must be this commit, with the history of the base (fetch-depth 0).
+    default: ${{ github.event.pull_request.head.sha }}
+  stamps:
+    description: The folder of the two stamp records and the log of the install of the merge base. The default is $RUNNER_TEMP/stamps.
+    default: ""
+outputs:
+  match:
+    description: true when the bench runs, false when the timed code is the same or the job changes found no file of the gate.
+    value: ${{ steps.decide.outputs.match }}
+runs:
+  using: composite
+  steps:
+    - id: decide
+      name: Compare the stamps of the head and the merge base
+      shell: bash
+      env:
+        EVENT: ${{ github.event_name }}
+        CONFIG: ${{ inputs.config }}
+        PACKAGE: ${{ inputs.package }}
+        ALWAYS: ${{ inputs.always }}
+        CHANGES: ${{ inputs.changes }}
+        INSTALL: ${{ inputs.install }}
+        BASE: ${{ inputs.base }}
+        HEAD: ${{ inputs.head }}
+        STAMPS: ${{ inputs.stamps }}
+      run: |
+        times() {
+          echo "$1 So the bench runs."
+          echo "match=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        }
+        if [ "$CHANGES" = false ]; then
+          echo "The job changes found no file of the gate. So the bench does not run."
+          echo "match=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        [ "$EVENT" = pull_request ] || times "The event is $EVENT, not a pull request."
+        [ "$INSTALL" = success ] || times "The install of the head gave $INSTALL."
+        { [ -n "$BASE" ] && [ -n "$HEAD" ]; } || times "The base or the head of the pull request is not known."
+        root=$(git rev-parse --show-toplevel) || times "The folder is not a git checkout."
+        cd "$root" || times "The root $root of the checkout is not a folder."
+        base=$(git merge-base "$BASE" "$HEAD") || times "The merge base of $BASE and $HEAD is not known."
+        paths=()
+        while IFS= read -r line; do
+          line="${line#"${line%%[![:space:]]*}"}"
+          line="${line%"${line##*[![:space:]]}"}"
+          [ -n "$line" ] && paths+=("$line")
+        done <<< "$ALWAYS"
+        if [ "${#paths[@]}" -gt 0 ]; then
+          git diff --quiet "$base" "$HEAD" -- "${paths[@]}" || times "The pull request changes a path of the input always."
+        fi
+        stamps="${STAMPS:-$RUNNER_TEMP/stamps}"
+        mkdir -p "$stamps" || times "The folder $stamps of the stamps is not made."
+        checkout="$RUNNER_TEMP/stamp-gate-base"
+        git worktree add --detach "$checkout" "$base" > /dev/null 2>&1 || times "The checkout of the merge base $base failed."
+        (cd "$checkout" && pnpm install --frozen-lockfile) > "$stamps/base-install.log" 2>&1 || times "The install of the merge base failed."
+        cd "$root/$PACKAGE" || times "The package folder $PACKAGE is not in the checkout."
+        pnpm exec rigor-stamp stamp --config "$root/$CONFIG" --root "$root" --out "$stamps/head.json" > /dev/null || times "The stamp of the head failed."
+        pnpm exec rigor-stamp stamp --config "$root/$CONFIG" --root "$checkout" --out "$stamps/base.json" > /dev/null || times "The stamp of the merge base failed."
+        pnpm exec rigor-stamp changed --base "$stamps/base.json" --head "$stamps/head.json" || times "The comparison of the stamps failed."
