@@ -194,6 +194,8 @@ An unknown rule, an unknown option, or an exception or a changed option without 
 | `pre-push <remote> [<url>]` | Examine the new commits of a push with the private name list. The git hook `pre-push` starts it. |
 | `pre-push --base <ref> [--head <ref>]` | Examine the commits of `<base>..<head>` (the default head is `HEAD`) and the text of the pull request of the run, with the same rules. The shared CI starts a bundle of this command before the install. |
 | `hook install` | Write the git hook `pre-push`. In CI, or outside a git repository, the command does nothing. |
+| `move plan <owner/name=owner/name>...` | Show each place of the repository that names a moved repository by its old name, and the steps of the move that no file holds. `--known` adds the moves that the package knows. `--json` writes the plan as JSON. No file changes. |
+| `move apply <owner/name=owner/name>...` | Write the new name in each place of the plan, and show the plan that stays. |
 
 A run that `workflow_dispatch` starts has no pull request in its event file. A person can start the gates of a pull request in this way. For such a run, the shared CI finds the pull request of the branch, and gives two environment variables to the check:
 
@@ -203,6 +205,20 @@ A run that `workflow_dispatch` starts has no pull request in its event file. A p
 | `CONVENTIONS_PULL_REQUEST` | The path of a JSON file with the pull request of the run: `title`, `body` and `commits`. When the variable is not empty, the rules read the pull request from this file, and not from the event file. A file that is missing or that does not parse gives no pull request. |
 
 With the two variables, the rules `release-files`, `unreleased-change`, `home-package`, `home-module`, `version-title` and `no-local-paths` examine the change of the pull request, as on a `pull_request` run.
+
+## A move of a repository
+
+Before or after a repository moves to a new owner, `conventions move plan` shows the work of the move in one list:
+
+```sh
+conventions move plan mark1russell7/vex=metrograph-labs/vex
+conventions move apply mark1russell7/vex=metrograph-labs/vex
+```
+
+The plan has two parts:
+
+- **The places.** Each line of a file that names the old name. The kinds are the fields of `package.json`, the links of Markdown (not a change log), the keys of workflows and the Changesets config. The `uses:` lines of workflows and actions are places too. These are the places of the rules `moved-repo-names` and `moved-repo-calls`, so the plan and the gate agree. `move apply` writes each one.
+- **The steps that no file holds.** A trusted publisher on npm for the new repository, when a `package.json` names the old name. The new GitHub Pages address, when a file names the old address. The `uses:` lines of the repositories that call this one, and the remote of each clone. Each step is data in `MOVE_STEPS`.
 
 ## The private name list and the hook `pre-push`
 
