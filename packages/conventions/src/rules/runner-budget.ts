@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { cronLines } from "@mark1russell7/site-pages";
 import { byCode } from "../workspace.ts";
 import { repositoryOfRemote, replaceLine, type Break, type Edit, type Rule } from "../rule.ts";
-import { WORKFLOW, blockEnd, childIndent, indentOf, keyValue, workflowLines } from "../workflow.ts";
+import { WORKFLOW, indentOf, parseWorkflow, type ParsedJob, type ParsedWorkflow } from "../workflow.ts";
 
 /**
  * This function gives the minute (1 to 59) of the schedules of a workflow: the FNV-1a hash of the repository and the
@@ -24,56 +24,28 @@ export function scheduleMinute(repository: string, file: string): number {
 }
 
 /** This function tells if a workflow is a shared workflow (`on: workflow_call`). Its caller gives the concurrency group. */
-function isShared(lines: readonly string[]): boolean {
-  return lines.some((line) => {
-    const text = line.trimStart();
-    return text.startsWith("workflow_call:") || text === "workflow_call" || text === "- workflow_call" || (text.startsWith("on:") && text.includes("workflow_call"));
-  });
-}
+const isShared = (workflow: ParsedWorkflow): boolean => workflow.triggers.includes("workflow_call");
 
-/** A job of a workflow: its name, its line (from 1), its keys with their values, and its concurrency group. */
-interface Job {
-  readonly name: string;
-  readonly line: number;
-  readonly grouped: boolean;
-  /** The file name of the shared workflow that the job calls (`uses: .../.github/workflows/<name>`), if any. */
-  readonly calls?: string;
+/** This function gives the file name of the shared workflow that a job calls (`uses: .../.github/workflows/<name>`), if any. */
+function callOf(job: ParsedJob): string | undefined {
+  const marker = ".github/workflows/";
+  const at = job.uses.indexOf(marker);
+  return at < 0 ? undefined : job.uses.slice(at + marker.length);
 }
-
-/** This function gives the jobs of a workflow. */
-function jobsOf(lines: readonly string[]): Job[] {
-  const jobs = lines.findIndex((line) => indentOf(line) === 0 && line.startsWith("jobs:"));
-  if (jobs < 0) return [];
-  const jobIndent = childIndent(lines, jobs);
-  const end = blockEnd(lines, jobs);
-  const found: Job[] = [];
-  for (let i = jobs + 1; i < end; i++) {
-    const line = lines[i] ?? "";
-    if (line.trim() === "" || indentOf(line) !== jobIndent) continue;
-    const keyIndent = childIndent(lines, i);
-    const keys = lines.slice(i + 1, blockEnd(lines, i)).filter((text) => indentOf(text) === keyIndent);
-    const uses = keys.map((text) => keyValue(text, "uses")).find((value) => value !== undefined);
-    const marker = ".github/workflows/";
-    const at = uses === undefined ? -1 : uses.indexOf(marker);
-    const calls = uses === undefined || at < 0 ? undefined : (uses.slice(at + marker.length).split("@")[0] ?? "");
-    found.push({ name: line.trim().replace(/:$/, ""), line: i + 1, grouped: keys.some((text) => keyValue(text, "concurrency") !== undefined), ...(calls === undefined ? {} : { calls }) });
-  }
-  return found;
-}
-
-const hasTopGroup = (lines: readonly string[]): boolean => lines.some((line) => indentOf(line) === 0 && line.startsWith("concurrency:"));
 
 /**
  * This function gives the edit that adds a concurrency group at the top of a workflow, before `jobs:`. A new run of a pull
  * request stops the old run. A run of another event has the group of its commit, so that no release or scheduled run stops.
  */
-function groupEdits(file: string, text: string, lines: readonly string[]): Edit[] {
-  const jobs = lines.findIndex((line) => indentOf(line) === 0 && line.startsWith("jobs:"));
-  if (jobs < 0) return [];
-  const pad = " ".repeat(childIndent(lines, jobs) ?? 2);
-  const original = text.split(/\r?\n/)[jobs] ?? "jobs:";
+function groupEdits(file: string, text: string, workflow: ParsedWorkflow): Edit[] {
+  const jobs = workflow.lines["jobs"];
+  if (jobs === undefined) return [];
+  const originals = text.split(/\r?\n/);
+  const first = workflow.jobs[0];
+  const pad = " ".repeat(first === undefined ? 2 : indentOf(originals[first.line - 1] ?? "  ") || 2);
+  const original = originals[jobs - 1] ?? "jobs:";
   const group = ["concurrency:", pad + "group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}", pad + "cancel-in-progress: ${{ github.event_name == 'pull_request' }}", "", original];
-  return [{ file, before: text, after: replaceLine(text, jobs + 1, group) }];
+  return [{ file, before: text, after: replaceLine(text, jobs, group) }];
 }
 
 /**
@@ -81,42 +53,42 @@ function groupEdits(file: string, text: string, lines: readonly string[]): Edit[
  * A job that calls a shared workflow of `grouped` gets its group from the jobs of that workflow. A shared workflow gets
  * its group from its caller, but a shared workflow of `grouped` has a group in each job.
  */
-function concurrencyBreaks(file: string, text: string, lines: readonly string[], grouped: readonly string[]): Break[] {
+function concurrencyBreaks(file: string, text: string, workflow: ParsedWorkflow, grouped: readonly string[]): Break[] {
   const name = file.slice(file.lastIndexOf("/") + 1);
-  const jobs = jobsOf(lines);
-  if (isShared(lines)) {
+  if (isShared(workflow)) {
     if (!grouped.includes(name)) return [];
-    return jobs.filter((job) => !job.grouped).map((job) => ({ file, line: job.line, message: `${file}: the job ${job.name} has no concurrency group, and its callers rely on it (the option grouped).` }));
+    return workflow.jobs.filter((job) => job.concurrency === null).map((job) => ({ file, line: job.line, message: `${file}: the job ${job.id} has no concurrency group, and its callers rely on it (the option grouped).` }));
   }
-  if (hasTopGroup(lines)) return [];
-  const missing = jobs.filter((job) => !job.grouped && !(job.calls !== undefined && grouped.includes(job.calls)));
-  const edits = missing.length === 0 ? [] : groupEdits(file, text, lines);
-  return missing.map((job) => ({ file, line: job.line, message: `${file}: the job ${job.name} has no concurrency group, and the workflow has none.`, edits }));
+  if (workflow.concurrency !== null) return [];
+  const missing = workflow.jobs.filter((job) => {
+    const calls = callOf(job);
+    return job.concurrency === null && !(calls !== undefined && grouped.includes(calls));
+  });
+  const edits = missing.length === 0 ? [] : groupEdits(file, text, workflow);
+  return missing.map((job) => ({ file, line: job.line, message: `${file}: the job ${job.id} has no concurrency group, and the workflow has none.`, edits }));
 }
 
 /** This function gives the breaks of the matrices: each `strategy` with a `matrix` has a `max-parallel` of `limit` or less. */
-function matrixBreaks(file: string, text: string, lines: readonly string[], limit: number): Break[] {
+function matrixBreaks(file: string, text: string, workflow: ParsedWorkflow, limit: number): Break[] {
   const breaks: Break[] = [];
   const originals = text.split(/\r?\n/);
-  lines.forEach((line, index) => {
-    if (keyValue(line, "strategy") === undefined) return;
-    const keyIndent = childIndent(lines, index);
-    if (keyIndent === undefined) return;
-    const keys: number[] = [];
-    for (let i = index + 1; i < blockEnd(lines, index); i++) if ((lines[i] ?? "").trim() !== "" && indentOf(lines[i] ?? "") === keyIndent) keys.push(i);
-    if (!keys.some((i) => keyValue(lines[i] ?? "", "matrix") !== undefined)) return;
-    const at = keys.find((i) => keyValue(lines[i] ?? "", "max-parallel") !== undefined);
-    const raw = at === undefined ? undefined : keyValue(lines[at] ?? "", "max-parallel");
-    const value = raw === undefined ? Number.NaN : Number(raw);
-    const wanted = `${" ".repeat(keyIndent)}max-parallel: ${String(limit)}`;
-    if (at === undefined || raw === undefined) {
-      const after = replaceLine(text, index + 1, [originals[index] ?? line, wanted]);
-      breaks.push({ file, line: index + 1, message: `${file}: a matrix has no max-parallel.`, edits: [{ file, before: text, after }] });
-    } else if (!Number.isInteger(value) || value < 1 || value > limit) {
-      const after = replaceLine(text, at + 1, [wanted]);
-      breaks.push({ file, line: index + 1, message: `${file}: a matrix has max-parallel ${raw}, and the most is ${String(limit)}.`, edits: [{ file, before: text, after }] });
+  for (const job of workflow.jobs) {
+    const strategy = job.lines["strategy"];
+    const matrix = job.lines["strategy.matrix"];
+    if (strategy === undefined || matrix === undefined) continue;
+    const at = job.lines["strategy.max-parallel"];
+    // An edit changes only a strategy in the block form, where each key has its own line.
+    const block = (line: number, key: string): boolean => (originals[line - 1] ?? "").trimStart().startsWith(`${key}:`);
+    const wanted = (line: number): string => `${" ".repeat(indentOf(originals[line - 1] ?? ""))}max-parallel: ${String(limit)}`;
+    if (at === undefined) {
+      const edits = block(matrix, "matrix") ? [{ file, before: text, after: replaceLine(text, strategy, [originals[strategy - 1] ?? "", wanted(matrix)]) }] : [];
+      breaks.push({ file, line: strategy, message: `${file}: a matrix has no max-parallel.`, edits });
+    } else if (job.maxParallel === null || job.maxParallel > limit) {
+      const edits = block(at, "max-parallel") ? [{ file, before: text, after: replaceLine(text, at, [wanted(at)]) }] : [];
+      const value = job.maxParallel === null ? "a max-parallel that is not a whole number of 1 or more" : `max-parallel ${String(job.maxParallel)}`;
+      breaks.push({ file, line: strategy, message: `${file}: a matrix has ${value}, and the most is ${String(limit)}.`, edits });
     }
-  });
+  }
   return breaks;
 }
 
@@ -191,8 +163,8 @@ export const runnerBudget: Rule = {
       } catch {
         continue;
       }
-      const lines = workflowLines(text);
-      breaks.push(...matrixBreaks(file, text, lines, limit), ...concurrencyBreaks(file, text, lines, grouped));
+      const workflow = parseWorkflow(file.slice(file.lastIndexOf("/") + 1), text);
+      breaks.push(...matrixBreaks(file, text, workflow, limit), ...concurrencyBreaks(file, text, workflow, grouped));
       if (options["minute"] !== false) {
         const schedules = cronLines(text).length > 0;
         if (schedules && repository === undefined) breaks.push({ file, message: `${file} has a schedule, and the rule cannot find the repository (GITHUB_REPOSITORY, or a GitHub URL of the remote origin).` });

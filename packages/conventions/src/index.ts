@@ -71,6 +71,7 @@ export {
   roadmapParses,
   RULES,
   runnerBudget,
+  runnerPeak,
   securityGate,
   securityOneJob,
   serviceRunMain,
@@ -138,6 +139,20 @@ export {
 export { hasImportMetaMain, REAL_COMPARE } from "./rules/main-check.ts";
 export { roadmapOfLine } from "./rules/roadmap-parses.ts";
 export { scheduleMinute } from "./rules/runner-budget.ts";
+export {
+  calledJobs,
+  eventClass,
+  matrixPeak,
+  runsAtOnce,
+  TEMPLATE_CALLED,
+  UNKNOWN_MATRIX_JOBS,
+  workflowPeaks,
+  type EventClass,
+  type JobPeak,
+  type PeakOptions,
+  type WorkflowPeak,
+} from "./rules/runner-peak.ts";
+export { evaluateExpression, groupParts, mayRun, type ExpressionValue, type RunPart } from "./workflow-expression.ts";
 export { declaredName, messageOf, repoOf, reposOf, signaturesOf } from "./rules/home-package.ts";
 export { moduleMessage, modulesOf, moduleUses, type HomeModule, type ModuleUse } from "./rules/home-module.ts";
 export { HOME_EXPORTS } from "./home-exports.ts";
@@ -163,6 +178,7 @@ export { hiddenFailures, parseAdvisory, startsTests, swallowsTests, type Advisor
 export {
   MATRIX_EXPAND_MAX,
   parseWorkflow,
+  type KeyLines,
   readAction,
   readWorkflow,
   type ParsedConcurrency,
