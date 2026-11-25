@@ -24,7 +24,7 @@ import { compareWithMain, errorText, type Gh } from "./dispatch.ts";
 export const NOTE_MARK = "<!-- release-version-note -->";
 
 /** The steps for a person, at the top of the text of the version pull request. */
-export const NOTE = [
+export const NOTE: string = [
   NOTE_MARK,
   "> [!IMPORTANT]",
   "> The workflow token opened or updated this pull request, so GitHub started no checks for it. Before the merge, do these steps:",
