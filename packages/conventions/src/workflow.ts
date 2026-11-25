@@ -402,6 +402,14 @@ export interface ParsedStep {
   readonly secrets: readonly string[];
 }
 
+/** The `concurrency` of a workflow or of a job. GitHub runs at most one run of a group, and one more run of it waits. */
+export interface ParsedConcurrency {
+  /** The group, as text. An expression stays as it is, so two runs share the group when it gives the same text for both. */
+  readonly group: string;
+  /** The value of `cancel-in-progress`: true, false, or the text of an expression. No key is false, as GitHub reads it. */
+  readonly cancelInProgress: boolean | string;
+}
+
 /** A job of a workflow, as the YAML parser reads it. */
 export interface ParsedJob {
   readonly id: string;
@@ -409,6 +417,14 @@ export interface ParsedJob {
   readonly name: string;
   /** The `strategy.max-parallel` of the job: a number, or null when the job has none or an expression gives it. GitHub then runs the jobs of the matrix with no limit of the file. */
   readonly maxParallel: number | null;
+  /**
+   * The count of the jobs of `strategy.matrix`, as GitHub expands it. It is the product of the lists, less the
+   * combinations of `exclude`. Each entry of `include` that adds to no combination adds one job. A job with no matrix gives 1. The value is null
+   * when an expression gives the matrix or a part of it, or the product is above {@link MATRIX_EXPAND_MAX}.
+   */
+  readonly matrixJobs: number | null;
+  /** The `concurrency` of the job, or null when the job has none. */
+  readonly concurrency: ParsedConcurrency | null;
   /** The condition of the job (`if`), or an empty text. */
   readonly if: string;
   readonly needs: readonly string[];
@@ -429,6 +445,8 @@ export interface ParsedWorkflow {
   /** The events of `on`, in the order of the file. */
   readonly triggers: readonly string[];
   readonly permissions: WorkflowPermissions;
+  /** The `concurrency` at the top of the file, or null when the file has none. */
+  readonly concurrency: ParsedConcurrency | null;
   /** The secrets that each part of the file reads, with each job. */
   readonly secrets: readonly string[];
   readonly jobs: readonly ParsedJob[];
@@ -516,6 +534,66 @@ function parsedStep(value: unknown): ParsedStep {
   return { label, if: optionalText(step["if"]), uses, secrets: [...secretsOf(step)] };
 }
 
+/** This function gives the `concurrency` of a workflow or of a job: a group as one text, or a map with `group`. */
+function concurrencyOf(owner: Readonly<Record<string, unknown>>): ParsedConcurrency | null {
+  const value = owner["concurrency"];
+  if (value === undefined || value === null) return null;
+  if (!isObject(value)) return { group: textOf(value).trim(), cancelInProgress: false };
+  const cancel = value["cancel-in-progress"];
+  return { group: optionalText(value["group"]), cancelInProgress: typeof cancel === "boolean" ? cancel : cancel === undefined || cancel === null ? false : textOf(cancel).trim() };
+}
+
+/** The largest product of the lists of a matrix that the reader expands. GitHub refuses a matrix of more than 256 jobs. */
+export const MATRIX_EXPAND_MAX: number = 65_536;
+
+/** This function tells if a value of the parser is an expression or holds one at its top. GitHub then gives the value at run time. */
+const isExpression = (value: unknown): boolean => typeof value === "string" && value.includes("${{");
+
+/** This function tells if two values of the parser are the same: the same scalar, or lists and maps with the same items. */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item, i) => sameValue(item, b[i]));
+  if (!isObject(a) || !isObject(b)) return false;
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((key) => Object.hasOwn(b, key) && sameValue(a[key], b[key]));
+}
+
+/** This function tells if an entry of `exclude` or `include` agrees with a combination on each key of `keys` that the entry has. */
+const agrees = (entry: Readonly<Record<string, unknown>>, combination: Readonly<Record<string, unknown>>, keys: ReadonlySet<string>): boolean =>
+  Object.keys(entry).every((key) => !keys.has(key) || sameValue(entry[key], combination[key]));
+
+/**
+ * This function gives the count of the jobs of a matrix, as GitHub expands it. First the product of the lists, then
+ * `exclude` takes away each combination that agrees with an entry on each key of the entry. Then each entry of `include`
+ * adds to each combination that it agrees with on the keys of the lists. It changes no value of a list. An entry that adds
+ * to no combination is a new job. A job that `include` made is no target of a later entry, so a matrix of only `include`
+ * gives one job for each entry.
+ */
+function matrixJobsOf(strategy: Readonly<Record<string, unknown>>): number | null {
+  const matrix = strategy["matrix"];
+  if (matrix === undefined || matrix === null) return 1;
+  if (!isObject(matrix)) return null;
+  const { include, exclude, ...lists } = matrix;
+  const entries = (value: unknown): Readonly<Record<string, unknown>>[] | null =>
+    value === undefined || value === null ? [] : Array.isArray(value) && value.every(isObject) ? value : null;
+  const included = entries(include);
+  const excluded = entries(exclude);
+  if (included === null || excluded === null) return null;
+  const dimensions = Object.entries(lists);
+  if (dimensions.some(([, values]) => !Array.isArray(values))) return null;
+  const keys = new Set(dimensions.map(([key]) => key));
+  let combinations: Readonly<Record<string, unknown>>[] = [];
+  if (dimensions.length > 0) {
+    const product = dimensions.reduce((size, [, values]) => size * (values as unknown[]).length, 1);
+    if (product > MATRIX_EXPAND_MAX) return null;
+    combinations = [{}];
+    for (const [key, values] of dimensions) combinations = combinations.flatMap((combination) => (values as unknown[]).map((value) => ({ ...combination, [key]: value })));
+    combinations = combinations.filter((combination) => !excluded.some((entry) => agrees(entry, combination, new Set(Object.keys(entry)))));
+  }
+  const added = included.filter((entry) => !combinations.some((combination) => agrees(entry, combination, keys))).length;
+  return combinations.length + added;
+}
+
 /** This function reads a job. */
 function parsedJob(id: string, value: unknown): ParsedJob {
   const job = isObject(value) ? value : {};
@@ -527,6 +605,8 @@ function parsedJob(id: string, value: unknown): ParsedJob {
     id,
     name: optionalText(job["name"]) || id,
     maxParallel: typeof limit === "number" && Number.isInteger(limit) && limit > 0 ? limit : null,
+    matrixJobs: isExpression(job["strategy"]) || isExpression(strategy["matrix"]) ? null : matrixJobsOf(strategy),
+    concurrency: concurrencyOf(job),
     if: optionalText(job["if"]),
     needs: listValues(job["needs"]),
     uses: actionOf(optionalText(job["uses"])),
@@ -550,7 +630,7 @@ export function parseWorkflow(file: string, text: string): ParsedWorkflow {
   if (second !== undefined) faults.push({ line: lineAt(text, second.range[0]), column: 1, message: `The file has ${documents.length} YAML documents, and a workflow is one document` });
   const version = first?.directives?.yaml.version ?? "1.2";
   if (version !== "1.2") faults.push({ line: 1, column: 1, message: `The file asks for YAML ${version}, and the reader takes only YAML 1.2` });
-  const none: ParsedWorkflow = { file, name: file, triggers: [], permissions: null, secrets: [], jobs: [], faults };
+  const none: ParsedWorkflow = { file, name: file, triggers: [], permissions: null, concurrency: null, secrets: [], jobs: [], faults };
   if (first === undefined || faults.length > 0) return none;
   try {
     const top: unknown = first.toJS();
@@ -558,7 +638,7 @@ export function parseWorkflow(file: string, text: string): ParsedWorkflow {
     const jobs = isObject(top["jobs"]) ? Object.entries(top["jobs"]).map(([id, job]) => parsedJob(id, job)) : [];
     const secrets = secretsOf(top);
     if (jobs.some((job) => job.secrets.includes("inherit"))) secrets.add("inherit");
-    return { file, name: optionalText(top["name"]) || file, triggers: triggersOf(top["on"]), permissions: permissionsOf(top), secrets: [...secrets], jobs, faults };
+    return { file, name: optionalText(top["name"]) || file, triggers: triggersOf(top["on"]), permissions: permissionsOf(top), concurrency: concurrencyOf(top), secrets: [...secrets], jobs, faults };
   } catch (error) {
     // The parser throws for too many aliases, and a deep value can stop the stack
     return { ...none, faults: [{ line: 1, column: 1, message: errorMessage(error) }] };

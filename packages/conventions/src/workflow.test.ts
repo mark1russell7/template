@@ -3,7 +3,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseWorkflow, readWorkflow, type ParsedWorkflow } from "./index.ts";
+import { MATRIX_EXPAND_MAX, parseWorkflow, readWorkflow, type ParsedWorkflow } from "./index.ts";
 
 const lines = (...text: string[]): string => `${text.join("\n")}\n`;
 
@@ -172,6 +172,107 @@ describe("parseWorkflow", () => {
     ]);
   });
 
+  it("counts the jobs of each matrix as GitHub expands it, with exclude and include", () => {
+    const job = (...strategy: string[]): string[] => ["    strategy:", ...strategy.map((line) => "      " + line), "    steps: []"];
+    const big = `[${Array.from({ length: 41 }, (_, i) => i).join(", ")}]`;
+    const workflow = parsed(
+      lines(
+        "on: push",
+        "jobs:",
+        "  plain:",
+        "    steps: []",
+        "  limit:",
+        ...job("max-parallel: 2"),
+        "  grid:",
+        ...job("matrix: { os: [a, b], node: [20, 22] }"),
+        "  excluded:",
+        ...job("matrix:", "  os: [a, b]", "  node: [20, 22]", "  exclude: [{ os: a, node: 20 }]"),
+        "  partial:",
+        ...job("matrix:", "  os: [a, b]", "  node: [20, 22]", "  exclude: [{ os: a }]"),
+        "  extended:",
+        ...job("matrix:", "  os: [a, b]", "  node: [20, 22]", "  include: [{ os: a, extra: x }]"),
+        "  added:",
+        ...job("matrix:", "  os: [a, b]", "  node: [20, 22]", "  include: [{ os: c }]"),
+        // The example of the GitHub docs ("Expanding or adding matrix configurations") gives 6 jobs
+        "  docs:",
+        ...job(
+          "matrix:",
+          "  fruit: [apple, pear]",
+          "  animal: [cat, dog]",
+          "  include:",
+          "    - color: green",
+          "    - { color: pink, animal: cat }",
+          "    - { fruit: apple, shape: circle }",
+          "    - fruit: banana",
+          "    - { fruit: banana, animal: cat }",
+        ),
+        "  only:",
+        ...job("matrix: { include: [{ a: 1 }, { a: 2 }, { a: 3 }] }"),
+        "  objects:",
+        ...job("matrix:", "  cfg: [{ os: a, v: 1 }, { os: b, v: 2 }]", "  exclude: [{ cfg: { v: 1, os: a } }]"),
+        "  empty:",
+        ...job("matrix: { os: [] }"),
+        "  planned:",
+        ...job("matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}"),
+        "  given:",
+        ...job("matrix:", "  cell: ${{ fromJSON(inputs.cells) }}"),
+        "  givenInclude:",
+        ...job("matrix:", "  os: [a]", "  include: ${{ fromJSON(inputs.extra) }}"),
+        "  huge:",
+        ...job(`matrix: { a: ${big}, b: ${big}, c: ${big} }`),
+      ),
+    );
+    expect(workflow.faults).toEqual([]);
+    expect(Object.fromEntries(workflow.jobs.map((j) => [j.id, j.matrixJobs]))).toEqual({
+      plain: 1,
+      limit: 1,
+      grid: 4,
+      excluded: 3,
+      partial: 2,
+      extended: 4,
+      added: 5,
+      docs: 6,
+      only: 3,
+      objects: 1,
+      empty: 0,
+      planned: null,
+      given: null,
+      givenInclude: null,
+      huge: null,
+    });
+    expect(41 ** 3).toBeGreaterThan(MATRIX_EXPAND_MAX);
+  });
+
+  it("reads the concurrency of the file and of each job, as one text or as a map", () => {
+    const workflow = parsed(
+      lines(
+        "on: push",
+        "concurrency: ci-${{ github.ref }}",
+        "jobs:",
+        "  none:",
+        "    steps: []",
+        "  map:",
+        "    concurrency:",
+        "      group: deploy",
+        "      cancel-in-progress: true",
+        "  given:",
+        "    concurrency:",
+        "      group: ${{ github.workflow }}-${{ github.sha }}",
+        "      cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+        "  bare:",
+        "    concurrency: { group: pages }",
+      ),
+    );
+    expect(workflow.concurrency).toEqual({ group: "ci-${{ github.ref }}", cancelInProgress: false });
+    expect(workflow.jobs.map((j) => [j.id, j.concurrency])).toEqual([
+      ["none", null],
+      ["map", { group: "deploy", cancelInProgress: true }],
+      ["given", { group: "${{ github.workflow }}-${{ github.sha }}", cancelInProgress: "${{ github.event_name == 'pull_request' }}" }],
+      ["bare", { group: "pages", cancelInProgress: false }],
+    ]);
+    expect(parsed(lines("on: push", "jobs: {}")).concurrency).toBeNull();
+  });
+
   it("gives faults and no job for a file that does not parse, two documents or YAML 1.1", () => {
     const broken = parseWorkflow("demo.yml", lines("on: push", "jobs:", "  a:", "    steps:", "      - run: |", "echo at column one", "  b: {"));
     expect(broken.faults.length).toBeGreaterThan(0);
@@ -192,7 +293,7 @@ describe("parseWorkflow", () => {
   });
 
   it("gives no fact and no fault for an empty file or a file that is not a map", () => {
-    expect(parseWorkflow("demo.yml", "")).toEqual({ file: "demo.yml", name: "demo.yml", triggers: [], permissions: null, secrets: [], jobs: [], faults: [] });
+    expect(parseWorkflow("demo.yml", "")).toEqual({ file: "demo.yml", name: "demo.yml", triggers: [], permissions: null, concurrency: null, secrets: [], jobs: [], faults: [] });
     expect(parseWorkflow("demo.yml", "- push\n")).toMatchObject({ triggers: [], jobs: [], faults: [] });
   });
 
