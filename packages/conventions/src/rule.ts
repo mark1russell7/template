@@ -142,8 +142,8 @@ export interface Rule {
   readonly failsFrom?: string;
   check(context: RuleContext, options: Options): RuleOutcome;
   /**
-   * This function gives a reason when the breaks of the rule are only warnings with these options, for example until a
-   * repository turns the failure on with an option. It gives undefined when a break fails the check. With no function, a
+   * This function gives a reason when the breaks of the rule are only warnings with these options. An example is a
+   * rule that warns until a repository sets an option. It gives undefined when a break fails the check. With no function, a
    * break fails the check after the day `failsFrom`.
    */
   warnOnly?(options: Options): string | undefined;
