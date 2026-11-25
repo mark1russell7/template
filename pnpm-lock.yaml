@@ -191,11 +191,11 @@ importers:
         specifier: ^0.9.3
         version: 0.9.3(zod@4.6.7)
       '@mark1russell7/ste-lint':
-        specifier: ^0.4.0
-        version: 0.4.0
+        specifier: ^0.6.0
+        version: 0.6.0
       '@mark1russell7/text':
-        specifier: ^0.0.17
-        version: 0.0.17
+        specifier: ^0.0.18
+        version: 0.0.18
       '@swc/core':
         specifier: ^1.15.0
         version: 1.16.22
@@ -301,8 +301,8 @@ importers:
   packages/conventions:
     dependencies:
       '@mark1russell7/text':
-        specifier: ^0.0.17
-        version: 0.0.17
+        specifier: ^0.0.18
+        version: 0.0.18
       yaml:
         specifier: ^2.9.1
         version: 2.9.1
@@ -314,8 +314,8 @@ importers:
         specifier: ^2.0.0
         version: 2.1.4
       '@mark1russell7/files':
-        specifier: ^0.0.4
-        version: 0.0.4
+        specifier: ^0.0.6
+        version: 0.0.6
       '@mark1russell7/rigor-testkit':
         specifier: ^0.2.0
         version: 0.2.0(@mark1russell7/rigor-generators@0.2.0)
@@ -655,8 +655,8 @@ packages:
     resolution: {integrity: sha512-FiiKK/sAbp39ypGv+2XzYRc+s911pdCtu97UQ4LiKmQKHjqPiyocGO48r2YObucxUkQhnm9mCdkiQxW6rFjiAg==}
     engines: {node: '>=22'}
 
-  '@mark1russell7/files@0.0.4':
-    resolution: {integrity: sha512-Pb978ZnvlAxzcdWtRtqTGb7mZFCvlNrdKnpZqhxQ7gafzeNGf1JqYFuB4RWiLbJzRuFUWjEoAVG5f2TndCIlSg==}
+  '@mark1russell7/files@0.0.6':
+    resolution: {integrity: sha512-VLsy9pwIP1LuDEOkzVpUKU/SOTw+/d3F/IYjSp0Fj+Cqfl440Qs/ad5islvClQEKPNmiDp5Zs+VraNO2QQ/MkQ==}
     engines: {node: '>=22'}
 
   '@mark1russell7/layout-contract@0.3.7':
@@ -796,13 +796,13 @@ packages:
       zod:
         optional: true
 
-  '@mark1russell7/ste-lint@0.4.0':
-    resolution: {integrity: sha512-V58Mtpt7WOW2wRBreSuuIO4am0WOdrJq8603+NNtqyI5EY0/LpPiQFxEDx+yNOgkN5ddnpPTkjalRTmBF+9GXQ==}
+  '@mark1russell7/ste-lint@0.6.0':
+    resolution: {integrity: sha512-4jt/c/n4hKa3Y32/iqbCrNk4MShb9ECxedm5WG28RYpYm0eCCxkn10wn00hzRKxvFtFe9qKDS0b5XGhfSuvTWQ==}
     engines: {node: '>=22'}
     hasBin: true
 
-  '@mark1russell7/text@0.0.17':
-    resolution: {integrity: sha512-jFqqVfCTQ0N65qvMP/gANAbnqB7ewpA3IeNxPeQTuF3IoSZkTgTl92PE47F5IOOfgz0Q0dF723crrYB8T6pR3g==}
+  '@mark1russell7/text@0.0.18':
+    resolution: {integrity: sha512-sIOsTkBOhWLSDyE4qKyiokUT84NPJgPuhLPDyh2Y+mjGnNbGhF9Q6dt9NnSBtSW8C1D0rZfx8fPJ53g0gQGWfQ==}
     engines: {node: '>=22.12'}
 
   '@mark1russell7/text@0.0.6':
@@ -2132,7 +2132,7 @@ snapshots:
 
   '@mark1russell7/files@0.0.3': {}
 
-  '@mark1russell7/files@0.0.4': {}
+  '@mark1russell7/files@0.0.6': {}
 
   '@mark1russell7/layout-contract@0.3.7':
     dependencies:
@@ -2191,12 +2191,12 @@ snapshots:
     optionalDependencies:
       zod: 4.6.7
 
-  '@mark1russell7/ste-lint@0.4.0':
+  '@mark1russell7/ste-lint@0.6.0':
     dependencies:
-      '@mark1russell7/files': 0.0.4
+      '@mark1russell7/files': 0.0.6
       typescript: 6.0.3
 
-  '@mark1russell7/text@0.0.17': {}
+  '@mark1russell7/text@0.0.18': {}
 
   '@mark1russell7/text@0.0.6': {}
 
