@@ -18,6 +18,7 @@ import { probeScript, TYPESCRIPT_PROBE } from "./probe.ts";
 import { FALLBACK_HEADER } from "./offline-header.ts";
 import { budgetLine, checkBudgets, kilobytes, parseBudget, type Budget, type BudgetResult } from "./budget.ts";
 import { serve } from "./serve.ts";
+import { BARE_ERROR_MODES, BARE_ERROR_WATCH, BARE_ERRORS, bareErrorProblem, readBareErrorMode, type BareErrorMode } from "./bare-errors.ts";
 
 /** A view narrower than this width in CSS pixels is a phone. */
 export const PHONE_WIDTH = 768;
@@ -66,6 +67,11 @@ export interface CheckOptions {
   offline?: boolean | undefined;
   /** The size budgets of the files of `out` (`checkBudgets`). A file over its limit, or a budget with no file, fails the check. It needs `out`. */
   budgets?: readonly Budget[] | undefined;
+  /**
+   * What a text with the shape of an error outside an error view does (`bare-errors.ts`). `fail` fails the view. `report`, the
+   * default, gives the text in `bareErrors` of the view, and the view does not fail.
+   */
+  bareErrors?: BareErrorMode | undefined;
   log?: ((line: string) => void) | undefined;
 }
 
@@ -127,6 +133,8 @@ export interface ViewResult {
   retried?: string[] | undefined;
   /** True for a view with the network off (the option `offline`). */
   offline?: boolean | undefined;
+  /** Each text with the shape of an error that the view showed outside an error view, with its element. */
+  bareErrors?: string[] | undefined;
 }
 
 /** The result of `checkSite`. */
@@ -241,6 +249,7 @@ export async function checkSite(options: CheckOptions): Promise<CheckResult> {
       const events = watch(page, origin);
       await Promise.all([page.send("Page.enable"), page.send("Runtime.enable"), page.send("Network.enable")]);
       await page.send("Page.addScriptToEvaluateOnNewDocument", { source: LOAD_WATCH });
+      await page.send("Page.addScriptToEvaluateOnNewDocument", { source: BARE_ERROR_WATCH });
       return { page, events };
     };
     let { page, events } = await start();
@@ -317,7 +326,14 @@ function viewLine(view: ViewResult): string {
   const measure = view.measure ? ` scrollWidth=${view.measure.scrollWidth} innerWidth=${view.measure.innerWidth}` : "";
   const probe = view.probe ? ` probe ${view.probe.filter((c) => c.ok).length}/${view.probe.length}` : "";
   const problems = view.problems.length > 0 ? `\n  - ${view.problems.join("\n  - ")}` : "";
-  return `${view.ok ? "PASS" : "FAIL"}${view.retried ? " (retried)" : ""} ${view.page} ${view.width} ${view.scheme}${view.offline ? " offline" : ""}${measure}${probe}${problems}`;
+  // In the mode report, the texts are not problems. The log gives them as notes.
+  const notes = reportedOnly(view).map((entry) => `\n  ~ report only: ${bareErrorProblem(entry)}`).join("");
+  return `${view.ok ? "PASS" : "FAIL"}${view.retried ? " (retried)" : ""} ${view.page} ${view.width} ${view.scheme}${view.offline ? " offline" : ""}${measure}${probe}${problems}${notes}`;
+}
+
+/** The bare error texts of a view that are not problems of the view: the mode is report. */
+function reportedOnly(view: ViewResult): string[] {
+  return (view.bareErrors ?? []).filter((entry) => !view.problems.includes(bareErrorProblem(entry)));
 }
 
 /**
@@ -491,6 +507,12 @@ async function checkView(page: Page, events: Events, input: ViewInput): Promise<
       if (checks.length === 0) view.problems.push("the probe made no check");
       for (const check of checks.filter((entry) => !entry.ok)) view.problems.push(`probe: ${check.name}${check.detail ? ` (${check.detail})` : ""}`);
     }
+    // After the probe, so a text that an action of the probe shows counts too
+    const bare = await page.evaluate<string[]>(BARE_ERRORS);
+    if (bare.length > 0) {
+      view.bareErrors = bare;
+      if (options.bareErrors === "fail") view.problems.push(...bare.map(bareErrorProblem));
+    }
   } catch (error) {
     hung = error instanceof NoReplyError;
     view.problems.push(error instanceof Error ? error.message : String(error));
@@ -532,6 +554,15 @@ export function summary(result: CheckResult): string {
     ),
     "",
   ];
+  const reported = result.views.filter((view) => reportedOnly(view).length > 0);
+  if (reported.length > 0) {
+    lines.push(
+      `${reported.length} of ${result.views.length} views show an error text with no error view. The check does not fail, because package.json has no field sitePages.bareErrors with the value fail.`,
+      "",
+      ...new Set(reported.flatMap((view) => reportedOnly(view).map((entry) => `- \`${view.page}\`: ${cell(entry)}`))),
+      "",
+    );
+  }
   if (result.budgets !== undefined && result.budgets.length > 0) {
     lines.push(
       "| Size budget | Largest file | Gzip | Limit | Result |",
@@ -563,7 +594,8 @@ the dark scheme, and fails when a page is wider than the screen, an element goes
 edge, a text area hides its text, a box cuts text, a table goes out of view on a phone, a page
 shows no text, or on a console error, an exception, a failed request of the site, a script that
 does not load or a failed check of the probe. Add data-overflow-ok to a box that is meant to
-scroll or to clip.
+scroll or to clip. It reports each text with the shape of an error, for example "TypeError: Failed
+to fetch", that a page shows outside an error view (<otel-error> or [data-error-view]).
 
 Options:
   --out <dir>          The built site folder. The check serves it at --base.
@@ -595,6 +627,9 @@ Options:
                        file of the glob fails the check when its gzip size is over the size. A
                        glob with no file fails too. The unit is B, kB or MB (default kB). Give
                        the option one time for each budget. It needs --out.
+  --bare-errors <mode> fail: an error text outside an error view fails the view. report: the
+                       check reports it only. Default: the field sitePages.bareErrors of the
+                       package.json in the working folder, else report.
   --help               Shows this text
 
 With $GITHUB_STEP_SUMMARY, the check adds its table to the job summary.
@@ -623,6 +658,7 @@ export async function runCheckCli(argv: readonly string[], io: CheckIo): Promise
         timeout: { type: "string" },
         offline: { type: "boolean" },
         budget: { type: "string", multiple: true },
+        "bare-errors": { type: "string" },
         help: { type: "boolean" },
       },
     }));
@@ -709,6 +745,9 @@ export async function runCheckCli(argv: readonly string[], io: CheckIo): Promise
   } catch (error) {
     return usage(error instanceof Error ? error.message : String(error));
   }
+  const bareErrors = text("bare-errors") ?? readBareErrorMode(io.cwd);
+  if (bareErrors instanceof Error) return usage(bareErrors.message);
+  if (!BARE_ERROR_MODES.includes(bareErrors as BareErrorMode)) return usage(`--bare-errors must be fail or report, not "${bareErrors}"`);
   const shots = text("shots");
   const result = await checkSite({
     out: out === undefined ? undefined : at(out),
@@ -725,6 +764,7 @@ export async function runCheckCli(argv: readonly string[], io: CheckIo): Promise
     timeoutMs,
     offline: values["offline"] === true,
     budgets,
+    bareErrors: bareErrors as BareErrorMode,
     log: (line) => io.stdout(`${line}\n`),
   });
   const failed = result.views.filter((view) => !view.ok).length;

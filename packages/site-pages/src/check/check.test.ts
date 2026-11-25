@@ -91,6 +91,23 @@ beforeAll(() => {
     ),
   );
   write("404.html", page(`<h1>Not found</h1>`));
+  // Error texts: in the HTML, put on the page by a script, and shown for a short time only
+  write(
+    "bare-error/index.html",
+    page(
+      `<h1>Save</h1><p id="static">TypeError: Failed to fetch</p><p id="later" class="status"></p><p id="flash"></p>` +
+        `<script>setTimeout(() => { document.getElementById("later").textContent = String(new RangeError("too far")); const flash = document.getElementById("flash"); flash.textContent = "Cannot read properties of undefined (reading 'id')"; setTimeout(() => { flash.textContent = ""; }, 10); }, 20)</script>`,
+    ),
+  );
+  // The same texts in an error view, in code, and in hidden elements: no bare error text
+  write(
+    "error-texts-ok/index.html",
+    page(
+      `<h1>Errors</h1><otel-error><p>TypeError: Failed to fetch</p></otel-error><div data-error-view><span>Error: in a view of the page</span></div>` +
+        `<p>The log gives <code>TypeError: Failed to fetch</code> for a refused request.</p><pre>Error: boom\n    at main.js:1</pre>` +
+        `<p hidden>Error: hidden</p><p>No error: the save worked.</p><p>The job failed, and the view shows why.</p>`,
+    ),
+  );
   // The islands of Astro: an island with client:visible starts when one of its children comes into view, and then removes the
   // attribute ssr. The island of coeval /learn/replay/ is below the first screen, and its content is wider than a phone.
   const island = (client: string, child: string, extra = "") =>
@@ -260,6 +277,21 @@ describe("runCheckCli", () => {
       expect(run.err.join("")).toContain("site-pages check:");
     }
   });
+  it("refuses a wrong --bare-errors, and a wrong field sitePages.bareErrors, with code 2", async () => {
+    const run = io();
+    expect(await runCheckCli(["--url", "http://x/", "--bare-errors", "warn"], run.io)).toBe(2);
+    expect(run.err.join("")).toContain(`--bare-errors must be fail or report, not "warn"`);
+    const folder = mkdtempSync(join(tmpdir(), "site-check-mode-"));
+    try {
+      writeFileSync(join(folder, "package.json"), JSON.stringify({ sitePages: { bareErrors: true } }));
+      const field = io();
+      expect(await runCheckCli(["--url", "http://x/"], { ...field.io, cwd: folder })).toBe(2);
+      expect(field.err.join("")).toContain("the field sitePages.bareErrors of package.json must be fail or report, not true");
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
+  });
+
   it("refuses a wrong --page-probe with code 2 and tells why", async () => {
     writeFileSync(join(root, "page-probe.js"), `check("ok", true)`);
     const cases: [string[], string][] = [
@@ -377,6 +409,28 @@ describe.skipIf(browser === undefined)("checkSite in a browser", () => {
     } finally {
       rmSync(shots, { recursive: true, force: true });
     }
+  }, 120_000);
+
+  it("finds each error text outside an error view, also one that shows for a short time, and fails it only in the mode fail", async () => {
+    const pages = ["/bare-error/", "/error-texts-ok/"];
+    const failing = await checkSite(options(pages, { widths: [360], schemes: ["light"], bareErrors: "fail" }));
+    const [bare, fine] = failing.views;
+    expect(bare?.bareErrors).toEqual([
+      `p#static: "TypeError: Failed to fetch"`,
+      `p#later: "RangeError: too far"`,
+      `p#flash: "Cannot read properties of undefined (reading 'id')"`,
+    ]);
+    expect(bare?.problems).toContain(`an error text with no error view: p#static: "TypeError: Failed to fetch"`);
+    expect(bare?.ok).toBe(false);
+    expect(fine).toMatchObject({ ok: true, problems: [] });
+    expect(fine?.bareErrors).toBeUndefined();
+
+    const reporting = await checkSite(options(pages, { widths: [360], schemes: ["light"] }));
+    expect(reporting.ok).toBe(true);
+    expect(reporting.views[0]?.bareErrors).toHaveLength(3);
+    expect(summary(reporting)).toContain("1 of 2 views show an error text with no error view. The check does not fail");
+    expect(summary(reporting)).toContain(`- \`/bare-error/\`: p#static: "TypeError: Failed to fetch"`);
+    expect(summary(failing)).not.toContain("views show an error text");
   }, 120_000);
 
   it("fails each kind of problem", async () => {
