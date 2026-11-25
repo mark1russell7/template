@@ -15,12 +15,18 @@
 // repository with Changesets, it sets RELEASE_PENDING to the packages whose version a pending
 // changeset raises later (check-plan.ts). For these packages, a difference is a note, not a stop.
 // A release run does not set the variable, so it stops for each difference.
+//
+// npm shows a publish some minutes after it. A version that has its release tag and that npm does
+// not show is not new: the script reads npm again, up to RELEASE_NPM_WAIT_SECONDS (300), and stops
+// at the limit (released.ts).
 
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
+import { awaitReleased, readRemoteTags } from "./released.ts";
+import { tagName } from "./tags.ts";
 import { differenceText, pendingPackages, shippedDifferences, tarballFiles } from "./unchanged.ts";
-import { publishedPackages, unpublishableDependencies, versionProblem, type Packument } from "./workspace.ts";
+import { publishedPackages, root, unpublishableDependencies, versionProblem, type Packument } from "./workspace.ts";
 
 const out = process.argv[2];
 if (out === undefined) {
@@ -40,13 +46,52 @@ if (blocked.length > 0) {
   process.exit(1);
 }
 
-const problems: string[] = [];
+/** This function reads the packument of a package from npm, or gives undefined for a package that npm does not have. */
+async function readPackument(name: string): Promise<Packument | undefined> {
+  const response = await fetch(`https://registry.npmjs.org/${name.replaceAll("/", "%2f")}`);
+  if (!response.ok && response.status !== 404) throw new Error(`The registry gave HTTP ${response.status} for ${name}.`);
+  return response.status === 404 ? undefined : ((await response.json()) as Packument);
+}
+
 const packuments = new Map<string, Packument>();
 for (const { manifest } of packages) {
-  const response = await fetch(`https://registry.npmjs.org/${manifest.name.replaceAll("/", "%2f")}`);
-  if (!response.ok && response.status !== 404) throw new Error(`The registry gave HTTP ${response.status} for ${manifest.name}.`);
-  const packument = response.status === 404 ? undefined : ((await response.json()) as Packument);
+  const packument = await readPackument(manifest.name);
   if (packument) packuments.set(manifest.name, packument);
+}
+
+// A version that has its release tag and that npm does not show: npm shows a publish some minutes
+// after it (released.ts). Read npm again before the comparison.
+const unseen = packages
+  .filter(({ manifest }) => !packuments.get(manifest.name)?.versions?.[manifest.version ?? ""] && !packuments.get(manifest.name)?.time?.[manifest.version ?? ""])
+  .map(({ manifest }) => ({ name: manifest.name, version: manifest.version ?? "", tag: tagName(manifest.name, manifest.version ?? "", packages.length) }));
+if (unseen.length > 0) {
+  const tags = readRemoteTags(root);
+  if (tags === undefined) {
+    process.stdout.write("git cannot read the tags of origin, so a version that npm does not show is read as new.\n");
+  } else {
+    const limitSeconds = Number(process.env["RELEASE_NPM_WAIT_SECONDS"] ?? "300");
+    const result = await awaitReleased(unseen, tags, readPackument, {
+      sleep: (ms) => new Promise((done) => setTimeout(done, ms)),
+      now: () => Date.now(),
+      limitMs: limitSeconds * 1000,
+      waitMs: 15_000,
+    });
+    for (const [name, packument] of result.found) packuments.set(name, packument);
+    if (result.found.size > 0) {
+      process.stdout.write(`npm shows these released versions after ${Math.round(result.waitedMs / 1000)} s: ${[...result.found.keys()].join(", ")}\n`);
+    }
+    if (result.missing.length > 0) {
+      process.stderr.write(
+        `A release made the tag of these versions, but npm does not show them after ${limitSeconds} s. The check cannot compare the shipped files. Run it again later:\n  ${result.missing.join("\n  ")}\n`,
+      );
+      process.exit(1);
+    }
+  }
+}
+
+const problems: string[] = [];
+for (const { manifest } of packages) {
+  const packument = packuments.get(manifest.name);
   const problem = versionProblem(manifest.version ?? "", packument);
   if (problem) problems.push(`${manifest.name}: ${problem}`);
 }
