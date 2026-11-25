@@ -6,7 +6,7 @@
  * also fails when a text area hides its text, a box cuts text (`cutProblems`) or the page shows no text. A console error, an
  * exception and a failed request of the site also fail it. A script that does not load and a failed check of the probe
  * fail it too. The command
- * writes a screenshot of each view.
+ * writes a screenshot of each view. A size budget of the built files (`budget.ts`) fails the check when a file is too large.
  */
 
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -16,6 +16,7 @@ import { findBrowser, launch, NoReplyError, type Browser, type Page } from "./br
 import { MEASURE, probeExpression, type Cut, type Measure, type ProbeCheck } from "./measure.ts";
 import { probeScript, TYPESCRIPT_PROBE } from "./probe.ts";
 import { FALLBACK_HEADER } from "./offline-header.ts";
+import { budgetLine, checkBudgets, kilobytes, parseBudget, type Budget, type BudgetResult } from "./budget.ts";
 import { serve } from "./serve.ts";
 
 /** A view narrower than this width in CSS pixels is a phone. */
@@ -63,6 +64,8 @@ export interface CheckOptions {
    * server and cuts the network of the page. A view fails when the worker does not answer the page, or gives the home page in its place.
    */
   offline?: boolean | undefined;
+  /** The size budgets of the files of `out` (`checkBudgets`). A file over its limit, or a budget with no file, fails the check. It needs `out`. */
+  budgets?: readonly Budget[] | undefined;
   log?: ((line: string) => void) | undefined;
 }
 
@@ -132,6 +135,8 @@ export interface CheckResult {
   url: string;
   browser: string;
   views: ViewResult[];
+  /** The result of each size budget, when the options give budgets. */
+  budgets?: BudgetResult[] | undefined;
 }
 
 /**
@@ -217,6 +222,10 @@ export async function checkSite(options: CheckOptions): Promise<CheckResult> {
   const probes = pageProbes(options);
   if (options.out === undefined && options.url === undefined) throw new Error("give out or url");
   if (options.offline === true && options.out === undefined) throw new Error("the offline check needs out: it stops the server of the folder to cut the network");
+  const budgetList = options.budgets ?? [];
+  if (budgetList.length > 0 && options.out === undefined) throw new Error("a size budget needs out: it reads the files of the folder");
+  const budgets = options.out === undefined || budgetList.length === 0 ? undefined : checkBudgets(options.out, budgetList);
+  for (const budget of budgets ?? []) log(budgetLine(budget));
   const server = options.out !== undefined ? await serve(options.out, options.base ?? "/") : undefined;
   const views: ViewResult[] = [];
   let homeUrl: URL;
@@ -289,7 +298,13 @@ export async function checkSite(options: CheckOptions): Promise<CheckResult> {
     await browser?.close();
     await server?.close();
   }
-  const result: CheckResult = { ok: views.length > 0 && views.every((view) => view.ok), url: homeUrl.href, browser: executable, views };
+  const result: CheckResult = {
+    ok: views.length > 0 && views.every((view) => view.ok) && (budgets ?? []).every((budget) => budget.ok),
+    url: homeUrl.href,
+    browser: executable,
+    views,
+    ...(budgets === undefined ? {} : { budgets }),
+  };
   if (options.shots) {
     writeFileSync(join(options.shots, "report.json"), `${JSON.stringify(result, null, 2)}\n`);
     writeFileSync(join(options.shots, "summary.md"), summary(result));
@@ -517,6 +532,19 @@ export function summary(result: CheckResult): string {
     ),
     "",
   ];
+  if (result.budgets !== undefined && result.budgets.length > 0) {
+    lines.push(
+      "| Size budget | Largest file | Gzip | Limit | Result |",
+      "| --- | --- | ---: | ---: | --- |",
+      ...result.budgets.map((budget) => {
+        const largest = budget.files[0];
+        const file = largest === undefined ? "none" : `\`${cell(largest.file)}\``;
+        const problems = budget.problems.length > 0 ? `<br>${budget.problems.map(cell).join("<br>")}` : "";
+        return `| \`${cell(budget.pattern)}\` | ${file} | ${largest === undefined ? "" : kilobytes(largest.gzip)} | ${kilobytes(budget.limit)} | ${budget.ok ? "pass" : "**fail**"}${problems} |`;
+      }),
+      "",
+    );
+  }
   return lines.join("\n");
 }
 
@@ -562,6 +590,11 @@ Options:
                        A new browser opens the home page and waits for the service worker of the
                        site. Then the check stops the server. A page fails when the worker does not
                        answer it. It needs --out.
+  --budget <glob>=<size>
+                       A size budget of the files of --out, for example assets/*.js=280kB. A
+                       file of the glob fails the check when its gzip size is over the size. A
+                       glob with no file fails too. The unit is B, kB or MB (default kB). Give
+                       the option one time for each budget. It needs --out.
   --help               Shows this text
 
 With $GITHUB_STEP_SUMMARY, the check adds its table to the job summary.
@@ -589,6 +622,7 @@ export async function runCheckCli(argv: readonly string[], io: CheckIo): Promise
         settle: { type: "string" },
         timeout: { type: "string" },
         offline: { type: "boolean" },
+        budget: { type: "string", multiple: true },
         help: { type: "boolean" },
       },
     }));
@@ -610,6 +644,13 @@ export async function runCheckCli(argv: readonly string[], io: CheckIo): Promise
   const url = text("url");
   if ((out === undefined) === (url === undefined)) return usage("give --out or --url, not both");
   if (values["offline"] === true && out === undefined) return usage("--offline needs --out: the check stops the server of the folder to cut the network");
+  const budgets: Budget[] = [];
+  for (const entry of (values["budget"] as string[] | undefined) ?? []) {
+    const budget = parseBudget(entry);
+    if (budget instanceof Error) return usage(budget.message);
+    budgets.push(budget);
+  }
+  if (budgets.length > 0 && out === undefined) return usage("--budget needs --out: the check reads the files of the folder");
   const widths = list("widths", "360,400,1280").map(Number);
   if (widths.length === 0 || widths.some((width) => !Number.isInteger(width) || width < 200 || width > 4000)) return usage("--widths must be whole numbers from 200 to 4000");
   const schemes = list("schemes", "light,dark");
@@ -683,10 +724,13 @@ export async function runCheckCli(argv: readonly string[], io: CheckIo): Promise
     settleMs,
     timeoutMs,
     offline: values["offline"] === true,
+    budgets,
     log: (line) => io.stdout(`${line}\n`),
   });
   const failed = result.views.filter((view) => !view.ok).length;
-  io.stdout(`site-pages check: ${result.views.length - failed} of ${result.views.length} views passed (${result.browser}).\n`);
+  const overBudget = (result.budgets ?? []).filter((budget) => !budget.ok).length;
+  const budgetText = overBudget > 0 ? ` ${overBudget} size budget(s) failed.` : "";
+  io.stdout(`site-pages check: ${result.views.length - failed} of ${result.views.length} views passed (${result.browser}).${budgetText}\n`);
   const step = io.env["GITHUB_STEP_SUMMARY"];
   if (step) appendFileSync(step, summary(result));
   return result.ok ? 0 : 1;
