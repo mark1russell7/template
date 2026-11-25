@@ -62,6 +62,12 @@ describe("the site config and reusable-pages.yml", () => {
     for (const key of Object.keys(SITE_CONFIG_KEYS)) assert.doesNotMatch(jobs, new RegExp(`inputs\\.${key}\\b(?!-)`), `a job reads inputs.${key}`);
     assert.ok(job.includes("          inputs: ${{ toJSON(inputs) }}\n"), "site-config gets the inputs of the workflow");
   });
+
+  it("gives each key site-check-<name> of the site config to the action site-check", () => {
+    const keys = Object.keys(SITE_CONFIG_KEYS).filter((key) => key.startsWith("site-check-"));
+    assert.ok(keys.includes("site-check-bare-errors"), "the key site-check-bare-errors exists");
+    for (const key of keys) assert.ok(build.includes(`        ${key}: \${{ fromJSON(inputs.config)['${key}'] }}\n`), `pages-build gives ${key} to the site check`);
+  });
 });
 
 describe("the action pages-build", () => {

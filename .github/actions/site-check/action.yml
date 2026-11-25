@@ -21,6 +21,10 @@ inputs:
       commas. A file with no page is the probe of the first page. A pair <page>=<file> is the probe of that page, for
       example /structures/=src/structures-probe.ts. A page with no probe has none. The first page takes one probe only.
     default: ""
+  site-check-bare-errors:
+    description: >-
+      What a text with the shape of an error outside an error view does. fail: it fails the view. report: the check reports it only. Empty reads the field sitePages.bareErrors of package.json, and no field gives report.
+    default: ""
   site-check-playwright:
     description: The version of playwright-core whose Chromium the check uses.
     default: "1.64.1"
@@ -63,8 +67,10 @@ runs:
         PAGES: ${{ inputs.site-check-pages }}
         WIDTHS: ${{ inputs.site-check-widths }}
         PROBE: ${{ inputs.site-check-probe }}
+        BARE: ${{ inputs.site-check-bare-errors }}
       run: |
         args=(--out "$OUT" --repo "$GITHUB_REPOSITORY" --shots "$RUNNER_TEMP/site-check")
+        [ -z "$BARE" ] || args+=(--bare-errors "$BARE")
         [ -z "$BASE" ] || args+=(--base "$BASE")
         [ -z "$PAGES" ] || args+=(--pages "$PAGES")
         [ -z "$WIDTHS" ] || args+=(--widths "$WIDTHS")

@@ -157,7 +157,7 @@ By default, the check only reports each text, and the view does not fail. The lo
 { "sitePages": { "bareErrors": "fail" } }
 ```
 
-The option `--bare-errors fail` or `--bare-errors report` overrides the field. Turn the failure on when the report of the site gives no text.
+The option `--bare-errors fail` or `--bare-errors report` overrides the field. In `reusable-pages.yml`, the key `site-check-bare-errors` of `.github/site.json` gives the option. A repository with one package uses the key: the field changes the `package.json` of its npm release. Turn the failure on when the report of the site gives no text.
 
 The folder of `--shots` gets a screenshot of each view, `report.json` and `summary.md`. The exit code is 0 when each view and each budget passes. It is 1 when a view or a budget fails, and 2 for an incorrect command line.
 

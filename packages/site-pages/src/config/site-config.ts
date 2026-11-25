@@ -62,6 +62,8 @@ export interface SiteConfig {
   readonly "site-check-widths": string;
   /** A probe script of the site check. */
   readonly "site-check-probe": string;
+  /** What a text with the shape of an error outside an error view does: `fail` or `report`. Empty reads `sitePages.bareErrors` of package.json. */
+  readonly "site-check-bare-errors": string;
   /** The Playwright version of the site check. */
   readonly "site-check-playwright": string;
   /** The Playwright browsers of the build, with spaces between them. The action `setup-playwright` installs them before the build. */
@@ -112,6 +114,7 @@ export const SITE_CONFIG_KEYS: { readonly [K in SiteConfigKey]: SiteConfigKeySpe
   "site-check-pages": { kind: "string", default: "" },
   "site-check-widths": { kind: "string", default: "" },
   "site-check-probe": { kind: "string", default: "" },
+  "site-check-bare-errors": { kind: "string", default: "" },
   "site-check-playwright": { kind: "string", default: "1.64.1" },
   "playwright-browsers": { kind: "string", default: "" },
   "playwright-command": { kind: "string", default: "npx --no-install playwright" },

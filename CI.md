@@ -826,6 +826,8 @@ The job `site` of `ci.yml` checks the site of each pull request, and "CI OK" nee
 - A page that links to other sites of its origin names their paths in the meta tag `site-check-other-paths`. The `README.md` of `site-pages` tells the rule.
 - `site-check-probe` is a JavaScript or TypeScript file that tests the interactive core of the home. Its checks run at each width. The check removes the types of a `.ts` file, so the site needs no build step for its probe. `site-pages check --help` tells its functions.
 - `site-check-probe` also takes a probe for other pages, as `<page>=<file>` pairs separated by commas, for example `test-probe.js, /structures/=src/structures-probe.ts`. A file with no page is the probe of the first page. A page with no probe has none.
+- `site-check-bare-errors` is `fail` or `report`. With `fail`, a text with the shape of an error outside an error view fails its view. Empty reads the field `sitePages.bareErrors` of `package.json`.
+- A repository with one package sets `site-check-bare-errors`, not the field. The field changes the `package.json` of its npm release.
 - The check uses the Chromium of `playwright-core` at `site-check-playwright`, from the action `setup-playwright`. The artifact `site-check` has the screenshots and `report.json`.
 - `playwright-browsers` names the Playwright browsers that the build needs, for example `chromium`. The action `setup-playwright` installs them before the build.
 - `playwright-command` is the Playwright CLI of the repository, for example `pnpm --filter @vex/site exec playwright`. Its version is the version of the build.
