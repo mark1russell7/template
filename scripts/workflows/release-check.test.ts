@@ -46,6 +46,14 @@ describe("the release check", () => {
     assert.doesNotMatch(build, /RELEASE_PENDING/u);
   });
 
+  it("waits for an open release run after the build and before pack.ts, and the fixture cases do not wait", () => {
+    const wait = action.indexOf("    - name: Wait for an open release\n");
+    assert.ok(wait > action.indexOf("    - name: Build\n"), "The wait is after the build.");
+    assert.ok(wait < action.indexOf("    - name: Pack and compare with npm\n"), "The wait is before pack.ts.");
+    assert.match(action, /run: node "\$ACTION_PATH\/release-runs\.ts"\n/u);
+    assert.match(jobText(read(".github/workflows/actions-test.yml"), "release-check"), /\n {10}wait-minutes: "0"\n/u);
+  });
+
   it("runs in reusable-ci.yml only on a pull request or on the pull request of a dispatched run, and in a private repository only with release-check-private", () => {
     const job = jobText(ci, "release-check");
     // The guard is on one line, or in a folded block of more lines
