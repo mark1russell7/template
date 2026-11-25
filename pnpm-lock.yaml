@@ -194,8 +194,8 @@ importers:
         specifier: ^0.6.0
         version: 0.6.0
       '@mark1russell7/text':
-        specifier: ^0.0.18
-        version: 0.0.18
+        specifier: ^0.0.19
+        version: 0.0.19
       '@swc/core':
         specifier: ^1.15.0
         version: 1.16.22
@@ -301,8 +301,8 @@ importers:
   packages/conventions:
     dependencies:
       '@mark1russell7/text':
-        specifier: ^0.0.18
-        version: 0.0.18
+        specifier: ^0.0.19
+        version: 0.0.19
       yaml:
         specifier: ^2.9.1
         version: 2.9.1
@@ -801,8 +801,8 @@ packages:
     engines: {node: '>=22'}
     hasBin: true
 
-  '@mark1russell7/text@0.0.18':
-    resolution: {integrity: sha512-sIOsTkBOhWLSDyE4qKyiokUT84NPJgPuhLPDyh2Y+mjGnNbGhF9Q6dt9NnSBtSW8C1D0rZfx8fPJ53g0gQGWfQ==}
+  '@mark1russell7/text@0.0.19':
+    resolution: {integrity: sha512-pPJV318wzfEcsnnzlqVu+OBp/o9VLKWsAo1Wkf4rNaerOjgINDo+vErhmtPVQw6BzcVmGn4brXmMLcosCT9sAw==}
     engines: {node: '>=22.12'}
 
   '@mark1russell7/text@0.0.6':
@@ -2196,7 +2196,7 @@ snapshots:
       '@mark1russell7/files': 0.0.6
       typescript: 6.0.3
 
-  '@mark1russell7/text@0.0.18': {}
+  '@mark1russell7/text@0.0.19': {}
 
   '@mark1russell7/text@0.0.6': {}
 
