@@ -142,6 +142,12 @@ export interface Rule {
   readonly failsFrom?: string;
   check(context: RuleContext, options: Options): RuleOutcome;
   /**
+   * This function gives a reason when the breaks of the rule are only warnings with these options, for example until a
+   * repository turns the failure on with an option. It gives undefined when a break fails the check. With no function, a
+   * break fails the check after the day `failsFrom`.
+   */
+  warnOnly?(options: Options): string | undefined;
+  /**
    * This function gives the reason when the rule cannot read a part of its cases, for example a private source that CI
    * does not give. It gives undefined when the rule reads each part. The check then shows "no read" and the reason with
    * the result, so a part with no read does not show as a pass. The status of the rule does not change.
