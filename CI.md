@@ -170,6 +170,8 @@ On a pull request, the job `release-check` starts the release build on the commi
 
 - The job uses the merge commit of the pull request, not its head. That commit is the `main` of the release after the merge.
 - On a dispatched run of a pull request, the job uses the commit of the run, that is the head of the pull request.
+- Before the comparison with npm, the job waits while a run of `release.yml` of the repository is queued or running (input `wait-minutes` of the action, default 10). Such a run can publish a version after the comparison. On 2026-11-24, a check read a version as new while the release of the pull request before it published that version. The check passed, and the release after the merge refused the version.
+- A release run that is still open at the limit fails the check: start the check again after the release ends. A token of a private repository cannot read the runs. There the job gives a notice and compares with npm as it is at that time. The release itself still refuses a version that npm has.
 - The job does not compare with the base branch. When `main` already has such a change, each pull request fails until a pull request raises the version.
 - A repository with no published package passes at once, with a notice. The job does no install.
 - In a private repository, the job starts only with `release-check-private: true`. A private repository pays for each job start, also for a job with no published package.

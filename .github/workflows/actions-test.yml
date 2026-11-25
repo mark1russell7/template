@@ -822,6 +822,8 @@ jobs:
         uses: ./template/.github/actions/release-check
         with:
           working-directory: fixture
+          # The test repository has no release runs. A release run of the template must not hold the case.
+          wait-minutes: "0"
       - name: The outcome, the message and the outputs
         env:
           CASE: ${{ matrix.case }}

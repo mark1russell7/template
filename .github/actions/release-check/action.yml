@@ -4,6 +4,7 @@ description: >-
   scripts/release/tags.ts, as the build job of reusable-release-build.yml. It fails when the release build fails on the same commit.
   For example, a shipped file changes and the version of its package is already on npm. A repository with no published
   package passes at once. In a repository with Changesets, a package whose version a pending changeset raises passes.
+  Before the comparison with npm, it waits while a release run of the repository is open, because that run can publish a version.
 inputs:
   working-directory:
     description: The folder of the package.json of the repository, relative to the workspace.
@@ -16,6 +17,17 @@ inputs:
   node-version:
     description: The Node.js version of the install and the build, as the input node-version of reusable-release-build.yml.
     default: "26"
+  release-workflow:
+    description: The file name of the release workflow of the repository. The step "Wait for an open release" reads its runs.
+    default: release.yml
+  wait-minutes:
+    description: >-
+      The most minutes that the check waits while a run of the release workflow is queued or running, before it compares
+      with npm (release-runs.ts). A run that is still open at the limit fails the check. 0 does not read the runs.
+    default: "10"
+  token:
+    description: The token that reads the runs of the release workflow. A public repository needs no permission for this read.
+    default: ${{ github.token }}
 outputs:
   run:
     description: false when the repository has no published package. Then the check starts no install.
@@ -93,6 +105,17 @@ runs:
       with:
         node-version: "26"
         package-manager-cache: false
+    # An open release run can publish a version after the comparison with npm (release-runs.ts). The build is before
+    # this step, so the build time is also wait time.
+    - name: Wait for an open release
+      if: steps.plan.outputs.run == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        RELEASE_WORKFLOW: ${{ inputs.release-workflow }}
+        WAIT_MINUTES: ${{ inputs.wait-minutes }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: node "$ACTION_PATH/release-runs.ts"
     # pack.ts of the release. Its error text goes to the log, to an annotation, to the summary and to the output message.
     - name: Pack and compare with npm
       id: pack
