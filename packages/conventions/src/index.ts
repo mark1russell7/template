@@ -55,6 +55,7 @@ export {
   licenseFile,
   mainCheck,
   noBuildOutput,
+  noConsole,
   noLocalPaths,
   packNoBuildinfo,
   pagesAfterRelease,
@@ -137,6 +138,7 @@ export {
   type PrePushOptions,
 } from "./pre-push.ts";
 export { hasImportMetaMain, REAL_COMPARE } from "./rules/main-check.ts";
+export { consoleBreaks, consoleKind, isCliFile, NOT_SOURCE, type ConsoleKind } from "./rules/no-console.ts";
 export { roadmapOfLine } from "./rules/roadmap-parses.ts";
 export { scheduleMinute } from "./rules/runner-budget.ts";
 export {
