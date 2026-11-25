@@ -6,6 +6,8 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { addedFiles } from "./change.ts";
+import { applyMoves, movePlan, movePlanText, type PlanFile } from "./move-plan.ts";
+import { MOVES, parseMove, type RepoMove } from "./moves.ts";
 import { findHomes, HOMES, mapMarkdown, mapText, mergeHomes, readOverlay, type Home } from "./map.ts";
 import { parseConfig, type ConventionsConfig } from "./config.ts";
 import { installHook, parsePrePushArgs, runPrePushArgs } from "./pre-push.ts";
@@ -341,6 +343,7 @@ export const USAGE: string = `Usage: conventions check [options]
        conventions pre-push <remote> [<url>]
        conventions pre-push --base <ref> [--head <ref>]
        conventions hook install
+       conventions move plan|apply <owner/name=owner/name>... [--known] [--root <folder>] [--json]
 
   check                 Start each rule. Exit code 1 when a rule has a break.
   fix                   Write the fixes of the breaks that have one, and check again. Exit code 1 when a break stays.
@@ -357,6 +360,11 @@ export const USAGE: string = `Usage: conventions check [options]
                         request of the run. It reads no standard input.
   hook install         Write the hook pre-push into the hooks folder of git. It keeps a hook that it did not write.
                         In CI, or outside a git repository, it does nothing.
+  move plan             Show each place of the repository that names a moved repository by its old name (package
+                        fields, Markdown links, workflow keys and uses: lines, config values), and the steps of the
+                        move that no file holds (npm trust, the Pages address, the callers, the remotes). --known adds
+                        the moves that the package knows.
+  move apply            Write the new name in each place of the plan, and show the plan that stays.
 
   --root <folder>       The root of the repository. The default is the current folder.
   --rule <id>           Only this rule. Use it again for more rules.
@@ -410,6 +418,7 @@ export function runCli(args: readonly string[], io: CliIo): number {
   if (args[0] === "map") return runMap(args.slice(1), io);
   if (args[0] === "pre-push") return runPrePush(args.slice(1), io);
   if (args[0] === "hook") return runHook(args.slice(1), io);
+  if (args[0] === "move") return runMove(args.slice(1), io);
   let check = false;
   let fix = false;
   let list = false;
@@ -485,6 +494,68 @@ export function runCli(args: readonly string[], io: CliIo): number {
 }
 
 /** The command `map`: the home of each area, or of the areas that match the words. */
+/** This function starts `conventions move plan` or `conventions move apply`. */
+function runMove(args: readonly string[], io: CliIo): number {
+  const [action, ...rest] = args;
+  const moves: RepoMove[] = [];
+  let root = io.cwd;
+  let json = false;
+  let known = false;
+  const usage = (message: string): number => {
+    io.stderr(`conventions: ${message}
+
+${USAGE}`);
+    return 2;
+  };
+  if (action !== "plan" && action !== "apply") return usage("Give the command move plan or move apply.");
+  for (let index = 0; index < rest.length; index++) {
+    const arg = rest[index] ?? "";
+    if (arg === "--json") json = true;
+    else if (arg === "--known") known = true;
+    else if (arg === "--root") {
+      const next = rest[++index];
+      if (next === undefined || next.startsWith("-")) return usage("The option --root needs a value.");
+      root = resolve(io.cwd, next);
+    } else if (arg.startsWith("-")) return usage(`An unknown argument: ${arg}`);
+    else {
+      const move = parseMove(arg);
+      if (move === undefined) return usage(`The move "${arg}" is not in the form owner/name=owner/name.`);
+      moves.push(move);
+    }
+  }
+  if (known) moves.push(...MOVES);
+  if (moves.length === 0) return usage("Give one move or more, or --known.");
+  const listed = runGit(root, ["ls-files", "-z", "--cached"]);
+  if (listed === undefined) {
+    io.stderr(`conventions: ${root} is not in a git repository.
+`);
+    return 1;
+  }
+  const read = (): PlanFile[] =>
+    listed
+      .split(" ")
+      .filter((path) => path !== "")
+      .flatMap((path) => {
+        try {
+          return [{ path, text: readFileSync(join(root, path), "utf8") }];
+        } catch {
+          return [];
+        }
+      });
+  if (action === "apply") {
+    const changed = applyMoves(read(), moves);
+    for (const file of changed) writeFileSync(join(root, file.path), file.text);
+    if (!json) io.stdout(`Wrote ${changed.length} files.
+
+`);
+  }
+  const plan = movePlan(read(), moves);
+  if (json) io.stdout(`${JSON.stringify({ moves: plan.moves, places: plan.places, steps: plan.steps.map(({ id, title }) => ({ id, title })) }, null, 2)}
+`);
+  else io.stdout(movePlanText(plan));
+  return 0;
+}
+
 function runMap(args: readonly string[], io: CliIo): number {
   let format: "text" | "markdown" | "json" = "text";
   let homes: readonly Home[] = HOMES;
