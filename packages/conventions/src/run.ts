@@ -168,8 +168,10 @@ export function runChecks(options: CheckOptions): CheckResult {
     }
     // A new rule warns until its day `failsFrom`. The owners fix the breaks in that time, and the update pull requests merge.
     // A rule with `warnOnly` warns until the repository turns its failure on, for example with an option.
-    const beforeDay = rule.failsFrom !== undefined && today < rule.failsFrom;
-    const optIn = breaks.length > 0 ? rule.warnOnly?.(ruleConfig.options) : undefined;
+    // A rule with `decide` decides alone, for example a ratchet that compares the count of the breaks with a baseline.
+    const decides = rule.decide !== undefined;
+    const beforeDay = !decides && rule.failsFrom !== undefined && today < rule.failsFrom;
+    const optIn = breaks.length === 0 ? undefined : decides ? rule.decide?.(ruleConfig.options, { breaks, today }) : rule.warnOnly?.(ruleConfig.options);
     const warns = breaks.length > 0 && (beforeDay || optIn !== undefined);
     const reason = warns ? [ruleConfig.reason, beforeDay ? `The rule fails from ${rule.failsFrom ?? ""}.` : undefined, optIn].filter((text) => text !== undefined).join(" ") : ruleConfig.reason;
     const note = reason === undefined ? {} : { note: reason };
