@@ -1,14 +1,14 @@
 /**
  * A small reader of the expressions of GitHub Actions (`${{ ... }}`) for one event. It answers two questions of the runner
- * budget: which parts of a run a concurrency group depends on (one group for each branch, each commit or each run), and
- * whether a job can run on an event (its `if`). It knows the literals, the contexts, `!`, `==`, `!=`, `<`, `<=`, `>`, `>=`,
- * `&&`, `||`, the brackets and the calls of functions. The value of a context is not known, except `github.event_name`
- * and whether `github.head_ref` is empty.
+ * budget. The first question: which parts of a run does a concurrency group depend on (the branch, the commit or the run)?
+ * The second question: can a job run on an event (its `if`)? The reader knows the literals, the contexts, the operators
+ * (`!`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `&&`, `||`), the brackets and the calls of functions. It does not know the value of
+ * a context, except `github.event_name`, and if `github.head_ref` is empty.
  */
 
 /**
- * A part of a run that a value depends on: `ref` is the branch or the pull request, `commit` the commit, `run` the run
- * (`github.run_id`), `input` an input of the run, and `other` another context.
+ * A part of a run that a value depends on. `ref` is the branch or the pull request, and `commit` is the commit. `run` is
+ * the run (`github.run_id`), `input` is an input of the run, and `other` is another context.
  */
 export type RunPart = "ref" | "commit" | "run" | "input" | "other";
 
@@ -163,7 +163,16 @@ export function evaluateExpression(body: string, event: string): ExpressionValue
 
 /** This function gives the bodies of the expressions of a text (the parts between `${{` and `}}`). */
 function bodiesOf(text: string): string[] {
-  return [...text.matchAll(/\$\{\{([\s\S]*?)\}\}/g)].map((match) => match[1] ?? "");
+  // A scan with indexOf takes linear time. A lazy regular expression can take polynomial time on a text such as "${{${{${{".
+  const bodies: string[] = [];
+  let at = text.indexOf("${{");
+  while (at >= 0) {
+    const end = text.indexOf("}}", at + 3);
+    if (end < 0) break;
+    bodies.push(text.slice(at + 3, end));
+    at = text.indexOf("${{", end + 2);
+  }
+  return bodies;
 }
 
 /**

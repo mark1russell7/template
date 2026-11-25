@@ -30,7 +30,7 @@ function repository(files: Record<string, string>): string {
 
 /** This function starts the rule on `root` with the options in the root `package.json`. */
 const check = (root: string, options: Record<string, number | readonly string[]>): RuleResult => {
-  writeFileSync(join(root, "package.json"), JSON.stringify({ name: "one", conventions: { rules: { "runner-peak": options } } }));
+  writeFileSync(join(root, "package.json"), JSON.stringify({ name: "one", conventions: { rules: { "runner-peak": { ...options, ...(Object.keys(options).length > 0 ? { reason: "the share of the test" } : {}) } } } }));
   const result = runChecks({ root, only: ["runner-peak"] }).rules[0];
   if (result === undefined) throw new Error("no result");
   return result;
@@ -61,6 +61,9 @@ describe("the reader of expressions", () => {
     expect([...groupParts("laws-${{ inputs.runs }}", "workflow_dispatch")]).toEqual(["input"]);
     // An expression that does not parse gives a group for each run.
     expect([...groupParts("x-${{ github.sha ]] }}", "push")]).toEqual(["run"]);
+    // A long text with no end of an expression takes linear time (the scan uses no lazy regular expression).
+    expect([...groupParts("${{".repeat(50_000), "push")]).toEqual([]);
+    expect([...groupParts(`${"${{".repeat(50_000)} github.sha }}`, "push")]).toEqual(["run"]);
   });
 
   it("tells if a job can run on an event", () => {

@@ -1,7 +1,8 @@
 /**
  * The rule `runner-peak`: the workflows of a repository hold at most its share of the runners in a busy minute. The peak
- * of a workflow is the sum over its jobs of the jobs of each run (a matrix, capped by its `max-parallel`), times the runs
- * that its concurrency groups let run at one time: each merge in a burst on `push`, each pull request in a burst.
+ * of a job is the jobs of one run (a matrix, capped by its `max-parallel`) times the runs that its concurrency group lets
+ * run at one time. A burst of merges on `push` and a burst of pull requests give these runs. The peak of a workflow is
+ * the sum over its jobs.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -73,7 +74,7 @@ function callOf(job: ParsedJob): { readonly name: string; readonly local: boolea
   return { name: job.uses.slice(at + marker.length), local: job.uses.startsWith("./") };
 }
 
-/** This function gives the jobs of one run of a job that runs no other workflow: one, or the jobs of its matrix that run at one time. */
+/** This function gives the jobs of one run of a job that calls no workflow: 1, or the jobs of its matrix that run together. */
 export function matrixPeak(job: ParsedJob): number {
   if (job.lines["strategy.matrix"] === undefined) return 1;
   const limit = job.maxParallel;
@@ -178,6 +179,7 @@ export const runnerPeak: Rule = {
     "The repositories of an account or an organization share its runners. The rule runner-budget caps each matrix and each workflow, but not the sum: a run of main has the group of its commit (the rule main-runs-finish), so a burst of merges starts a full run for each merge. On 2026-11-24, five push runs of one repository waited with 58 of the 60 jobs of its organization, and a bench of that repository waited 15.9 minutes for a runner.",
   fix: "Lower the `max-parallel` of the largest matrices, run heavy jobs only on `workflow_dispatch` or a schedule, or give a job that a run of `push` does not need an `if` that is false on `push`. Else the organization gives the repository a larger share (the option share).",
   sources: [{ repo: "private", rule: "runner-slots", doc: "a decision of 2026-10-30: the runner slots: a cap of 40, heavy work at most 28" }],
+  failsFrom: "2026-12-09",
   options: {
     share: {
       type: "number",
