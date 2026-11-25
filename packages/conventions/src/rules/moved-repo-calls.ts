@@ -1,6 +1,6 @@
 /**
  * The rule `moved-repo-calls`: no workflow or composite action calls a reusable workflow or an action by the old name
- * of a repository that moved to another owner. GitHub does not follow the redirect of a moved repository for `uses:`.
+ * of a moved repository. GitHub does not follow the redirect of a moved repository for `uses:`.
  * Each run of the workflow then fails before it starts ("workflow file issue"), and no job shows why.
  */
 import { readFileSync } from "node:fs";

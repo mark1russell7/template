@@ -1,6 +1,6 @@
 /**
  * The repositories that moved to another owner. GitHub sends a web or API request for the old name to the new
- * name, but a call of a reusable workflow or an action (`uses: owner/repo/...@ref`) does not follow that redirect.
+ * name. A call of a reusable workflow or an action (`uses: owner/repo/...@ref`) does not follow that redirect.
  * The run then fails before it starts, with "workflow file issue". The rule `moved-repo-calls` reads this table.
  *
  * The move procedure adds a row for each move. The rows come from the GitHub API: `gh api repos/<from>` gives the
@@ -13,7 +13,7 @@ export interface RepoMove {
   readonly to: string;
 }
 
-/** Each known move. Read on 2026-11-25 from `gh api repos/mark1russell7/<name>` for each repository of metrograph-labs. */
+/** Each known move. The rows come from `gh api repos/mark1russell7/<name>` for each repository of metrograph-labs, on 2026-11-25. */
 export const MOVES: readonly RepoMove[] = [
   { from: "mark1russell7/alerts", to: "metrograph-labs/alerts" },
   { from: "mark1russell7/capacity", to: "metrograph-labs/capacity" },
@@ -29,8 +29,8 @@ export const MOVES: readonly RepoMove[] = [
 ];
 
 /**
- * This function reads a move in the form `owner/name=owner/name`, as the option `moves` of the rule gives it, or gives
- * undefined when the text has another form.
+ * This function reads a move in the form `owner/name=owner/name`, as the option `moves` gives it. It gives undefined
+ * for a text of another form.
  */
 export function parseMove(text: string): RepoMove | undefined {
   const match = /^\s*([\w.-]+\/[\w.-]+)\s*=\s*([\w.-]+\/[\w.-]+)\s*$/.exec(text);

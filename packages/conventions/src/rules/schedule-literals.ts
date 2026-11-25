@@ -1,7 +1,7 @@
 /**
- * The rule `schedule-literals`: in a workflow that compares `github.event.schedule` with a cron in quotes, each such
- * cron is a cron of the `on.schedule` of the same file. A scheduled run gives the cron that started it. A copy that
- * does not match (for example after the minute of the schedule changed) matches no run, and that branch never runs.
+ * The rule `schedule-literals`: a workflow can compare `github.event.schedule` with a cron in quotes. Each such cron
+ * is a cron of the `on.schedule` of the same file. A scheduled run gives the cron that started it. A copy that does
+ * not match matches no run, for example after a change of the minute of the schedule. That branch then does not run.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
