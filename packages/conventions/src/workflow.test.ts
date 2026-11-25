@@ -293,7 +293,7 @@ describe("parseWorkflow", () => {
   });
 
   it("gives no fact and no fault for an empty file or a file that is not a map", () => {
-    expect(parseWorkflow("demo.yml", "")).toEqual({ file: "demo.yml", name: "demo.yml", triggers: [], permissions: null, concurrency: null, secrets: [], jobs: [], faults: [] });
+    expect(parseWorkflow("demo.yml", "")).toEqual({ file: "demo.yml", name: "demo.yml", triggers: [], permissions: null, concurrency: null, secrets: [], jobs: [], faults: [], lines: {} });
     expect(parseWorkflow("demo.yml", "- push\n")).toMatchObject({ triggers: [], jobs: [], faults: [] });
   });
 

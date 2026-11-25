@@ -38,6 +38,7 @@ import { releaseFiles } from "./release-files.ts";
 import { requiredScripts } from "./required-scripts.ts";
 import { roadmapParses } from "./roadmap-parses.ts";
 import { runnerBudget } from "./runner-budget.ts";
+import { runnerPeak } from "./runner-peak.ts";
 import { scheduleLiterals } from "./schedule-literals.ts";
 import { sharedDocs } from "./shared-docs.ts";
 import { sourceMain } from "./source-main.ts";
@@ -78,6 +79,7 @@ export const RULES: readonly Rule[] = [
   roadmapParses,
   workflowParses,
   runnerBudget,
+  runnerPeak,
   mainRunsFinish,
   pushMainOnly,
   pipeFails,
@@ -106,4 +108,4 @@ export const RULES: readonly Rule[] = [
 ];
 
 export { publishedMinor };
-export { apiReportScript, changelogVersion, coverageProvider, cuePreset, exportsRequire, gateAfterCancel, gateTrigger, securityGate, securityOneJob, securityOverrides, serviceRunMain, setupCue, sharedCi, summaryJobRule, homeModule, homePackage, jobFails, licenseFile, mainCheck, mainRunsFinish, movedRepoCalls, noBuildOutput, noLocalPaths, packNoBuildinfo, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, playwrightInstall, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, scheduleLiterals, sharedDocs, siteCheckInCi, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, versionTitle, workflowParses, workspaceProtocol, publishTextSafe };
+export { apiReportScript, changelogVersion, coverageProvider, cuePreset, exportsRequire, gateAfterCancel, gateTrigger, securityGate, securityOneJob, securityOverrides, serviceRunMain, setupCue, sharedCi, summaryJobRule, homeModule, homePackage, jobFails, licenseFile, mainCheck, mainRunsFinish, movedRepoCalls, noBuildOutput, noLocalPaths, packNoBuildinfo, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, playwrightInstall, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, runnerPeak, scheduleLiterals, sharedDocs, siteCheckInCi, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, versionTitle, workflowParses, workspaceProtocol, publishTextSafe };

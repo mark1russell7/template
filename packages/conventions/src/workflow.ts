@@ -7,7 +7,7 @@
  * - `parseWorkflow` reads with the YAML parser of the package `yaml`. It gives the facts that a security gate needs: the
  *   triggers, the permissions, the secrets that each job reads, and the steps. A gate uses this reader, not the line reader.
  */
-import { parseAllDocuments, type Document } from "yaml";
+import { isMap, isScalar, LineCounter, parseAllDocuments, type Document } from "yaml";
 import { errorMessage } from "@mark1russell7/text";
 import { isObject } from "./config.ts";
 
@@ -410,9 +410,19 @@ export interface ParsedConcurrency {
   readonly cancelInProgress: boolean | string;
 }
 
+/**
+ * The line (from 1) of each key of a map, by its path of keys: `strategy` and `strategy.max-parallel`. The path goes two
+ * keys deep. A rule gives the line of a break, and the line that an edit changes, from it.
+ */
+export type KeyLines = Readonly<Record<string, number>>;
+
 /** A job of a workflow, as the YAML parser reads it. */
 export interface ParsedJob {
   readonly id: string;
+  /** The line (from 1) of the id of the job. */
+  readonly line: number;
+  /** The line of each key of the job, two keys deep. */
+  readonly lines: KeyLines;
   /** The value of `name`, or the id. The Actions API names each run of a matrix job by this text and its matrix values. */
   readonly name: string;
   /** The `strategy.max-parallel` of the job: a number, or null when the job has none or an expression gives it. GitHub then runs the jobs of the matrix with no limit of the file. */
@@ -450,6 +460,8 @@ export interface ParsedWorkflow {
   /** The secrets that each part of the file reads, with each job. */
   readonly secrets: readonly string[];
   readonly jobs: readonly ParsedJob[];
+  /** The line of each key at the top of the file, two keys deep: `jobs`, `on.push`. A file with a fault gives none. */
+  readonly lines: KeyLines;
   /**
    * The faults of the file. GitHub starts no job of a file that does not parse, so a file with a fault gives no trigger
    * and no job. A gate fails on each fault. The reader also refuses two documents in one file. It refuses a version of
@@ -595,7 +607,7 @@ function matrixJobsOf(strategy: Readonly<Record<string, unknown>>): number | nul
 }
 
 /** This function reads a job. */
-function parsedJob(id: string, value: unknown): ParsedJob {
+function parsedJob(id: string, value: unknown, line: number, lines: KeyLines): ParsedJob {
   const job = isObject(value) ? value : {};
   const secrets = secretsOf(job);
   if (job["secrets"] === "inherit") secrets.add("inherit");
@@ -603,6 +615,8 @@ function parsedJob(id: string, value: unknown): ParsedJob {
   const limit = strategy["max-parallel"];
   return {
     id,
+    line,
+    lines,
     name: optionalText(job["name"]) || id,
     maxParallel: typeof limit === "number" && Number.isInteger(limit) && limit > 0 ? limit : null,
     matrixJobs: isExpression(job["strategy"]) || isExpression(strategy["matrix"]) ? null : matrixJobsOf(strategy),
@@ -616,6 +630,18 @@ function parsedJob(id: string, value: unknown): ParsedJob {
   };
 }
 
+/** This function gives the line of each key of a map node of the parser, two keys deep. A key that is not a scalar has no line. */
+function keyLinesOf(node: unknown, lineOf: (offset: number) => number, prefix = "", depth = 2, into: Record<string, number> = {}): Record<string, number> {
+  if (!isMap(node)) return into;
+  for (const pair of node.items) {
+    if (!isScalar(pair.key) || pair.key.range === undefined || pair.key.range === null) continue;
+    const path = prefix + String(pair.key.value);
+    into[path] ??= lineOf(pair.key.range[0]);
+    if (depth > 1) keyLinesOf(pair.value, lineOf, `${path}.`, depth - 1, into);
+  }
+  return into;
+}
+
 /** This function gives the line (from 1) of the offset `at` of a text. */
 const lineAt = (text: string, at: number): number => text.slice(0, at).split("\n").length;
 
@@ -624,21 +650,32 @@ const lineAt = (text: string, at: number): number => text.slice(0, at).split("\n
  * problem is a fault of the result. A file with a fault gives no trigger and no job.
  */
 export function parseWorkflow(file: string, text: string): ParsedWorkflow {
-  const documents = parseAllDocuments(text, PARSE);
+  const lineCounter = new LineCounter();
+  const documents = parseAllDocuments(text, { ...PARSE, lineCounter });
   const faults = faultsOf(documents);
   const [first, second] = documents;
   if (second !== undefined) faults.push({ line: lineAt(text, second.range[0]), column: 1, message: `The file has ${documents.length} YAML documents, and a workflow is one document` });
   const version = first?.directives?.yaml.version ?? "1.2";
   if (version !== "1.2") faults.push({ line: 1, column: 1, message: `The file asks for YAML ${version}, and the reader takes only YAML 1.2` });
-  const none: ParsedWorkflow = { file, name: file, triggers: [], permissions: null, concurrency: null, secrets: [], jobs: [], faults };
+  const none: ParsedWorkflow = { file, name: file, triggers: [], permissions: null, concurrency: null, secrets: [], jobs: [], lines: {}, faults };
   if (first === undefined || faults.length > 0) return none;
   try {
     const top: unknown = first.toJS();
     if (!isObject(top)) return none;
-    const jobs = isObject(top["jobs"]) ? Object.entries(top["jobs"]).map(([id, job]) => parsedJob(id, job)) : [];
+    const lineOf = (offset: number): number => lineCounter.linePos(offset).line;
+    const jobNodes = new Map<string, { line: number; lines: KeyLines }>();
+    const jobsNode = first.get("jobs");
+    if (isMap(jobsNode)) {
+      for (const pair of jobsNode.items) {
+        const at = isScalar(pair.key) ? pair.key.range?.[0] : undefined;
+        if (at !== undefined) jobNodes.set(String((pair.key as { value: unknown }).value), { line: lineOf(at), lines: keyLinesOf(pair.value, lineOf) });
+      }
+    }
+    const jobs = isObject(top["jobs"]) ? Object.entries(top["jobs"]).map(([id, job]) => parsedJob(id, job, jobNodes.get(id)?.line ?? 1, jobNodes.get(id)?.lines ?? {})) : [];
     const secrets = secretsOf(top);
     if (jobs.some((job) => job.secrets.includes("inherit"))) secrets.add("inherit");
-    return { file, name: optionalText(top["name"]) || file, triggers: triggersOf(top["on"]), permissions: permissionsOf(top), concurrency: concurrencyOf(top), secrets: [...secrets], jobs, faults };
+    const lines = keyLinesOf(first.contents, lineOf);
+    return { file, name: optionalText(top["name"]) || file, triggers: triggersOf(top["on"]), permissions: permissionsOf(top), concurrency: concurrencyOf(top), secrets: [...secrets], jobs, lines, faults };
   } catch (error) {
     // The parser throws for too many aliases, and a deep value can stop the stack
     return { ...none, faults: [{ line: 1, column: 1, message: errorMessage(error) }] };

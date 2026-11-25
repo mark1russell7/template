@@ -18,6 +18,8 @@ type ConventionsConfig: build/index.d.ts#ConventionsConfig
 DEFAULT_ALLOWED: build/index.d.ts#DEFAULT_ALLOWED
 DEPENDENCY_FIELDS: build/index.d.ts#DEPENDENCY_FIELDS
 type Edit: build/index.d.ts#Edit
+type EventClass: build/index.d.ts#EventClass
+type ExpressionValue: build/index.d.ts#ExpressionValue
 type FixResult: build/index.d.ts#FixResult
 GITHUB_YAML: build/index.d.ts#GITHUB_YAML
 HOMES: build/index.d.ts#HOMES
@@ -33,6 +35,8 @@ type HomeModule: build/index.d.ts#HomeModule
 type HomeState: build/index.d.ts#HomeState
 type HookOptions: build/index.d.ts#HookOptions
 IGNORE_AFTER: build/index.d.ts#IGNORE_AFTER
+type JobPeak: build/index.d.ts#JobPeak
+type KeyLines: build/index.d.ts#KeyLines
 LICENSE_TEXTS: build/index.d.ts#LICENSE_TEXTS
 type LinePlace: build/index.d.ts#LinePlace
 MAP_RULE: build/index.d.ts#MAP_RULE
@@ -66,6 +70,7 @@ type ParsedJob: build/index.d.ts#ParsedJob
 type ParsedStep: build/index.d.ts#ParsedStep
 type ParsedWorkflow: build/index.d.ts#ParsedWorkflow
 type PathFilter: build/index.d.ts#PathFilter
+type PeakOptions: build/index.d.ts#PeakOptions
 type PrePushArgs: build/index.d.ts#PrePushArgs
 type PrePushOptions: build/index.d.ts#PrePushOptions
 type PrivateNameList: build/index.d.ts#PrivateNameList
@@ -83,6 +88,7 @@ type RuleConfig: build/index.d.ts#RuleConfig
 type RuleContext: build/index.d.ts#RuleContext
 type RuleOutcome: build/index.d.ts#RuleOutcome
 type RuleResult: build/index.d.ts#RuleResult
+type RunPart: build/index.d.ts#RunPart
 SECURITY_FILE: build/index.d.ts#SECURITY_FILE
 SECURITY_SCAN_COMMIT: build/index.d.ts#SECURITY_SCAN_COMMIT
 SECURITY_SCAN_INPUTS: build/index.d.ts#SECURITY_SCAN_INPUTS
@@ -96,13 +102,16 @@ STRICT_OPTIONS: build/index.d.ts#STRICT_OPTIONS
 SUMMARY_GATES: build/index.d.ts#SUMMARY_GATES
 type SecurityCaller: build/index.d.ts#SecurityCaller
 type SummaryJob: build/index.d.ts#SummaryJob
+TEMPLATE_CALLED: build/index.d.ts#TEMPLATE_CALLED
 TRAIN_SCOPES: build/index.d.ts#TRAIN_SCOPES
 type TextBreakOptions: build/index.d.ts#TextBreakOptions
+UNKNOWN_MATRIX_JOBS: build/index.d.ts#UNKNOWN_MATRIX_JOBS
 UNSHIPPED_FILES: build/index.d.ts#UNSHIPPED_FILES
 USAGE: build/index.d.ts#USAGE
 type Workflow: build/index.d.ts#Workflow
 type WorkflowInput: build/index.d.ts#WorkflowInput
 type WorkflowJob: build/index.d.ts#WorkflowJob
+type WorkflowPeak: build/index.d.ts#WorkflowPeak
 type WorkflowPermissions: build/index.d.ts#WorkflowPermissions
 type WorkflowStep: build/index.d.ts#WorkflowStep
 type YamlFault: build/index.d.ts#YamlFault
@@ -111,6 +120,7 @@ annotations: build/index.d.ts#annotations
 apiReportScript: build/index.d.ts#apiReportScript
 authorOf: build/index.d.ts#authorOf
 blockHash: build/index.d.ts#blockHash
+calledJobs: build/index.d.ts#calledJobs
 callsSharedCi: build/index.d.ts#callsSharedCi
 changelogSection: build/index.d.ts#changelogSection
 cleanPath: build/index.d.ts#cleanPath
@@ -122,6 +132,8 @@ createContext: build/index.d.ts#createContext
 cuePreset: build/index.d.ts#cuePreset
 declaredName: build/index.d.ts#declaredName
 defaultOptions: build/index.d.ts#defaultOptions
+evaluateExpression: build/index.d.ts#evaluateExpression
+eventClass: build/index.d.ts#eventClass
 exportsRequire: build/index.d.ts#exportsRequire
 findHomes: build/index.d.ts#findHomes
 firstNameMatch: build/index.d.ts#firstNameMatch
@@ -131,6 +143,7 @@ gateTrigger: build/index.d.ts#gateTrigger
 githubFetch: build/index.d.ts#githubFetch
 globFolders: build/workspace.chunk.d.ts#globFolders
 globToRegExp: build/workspace.chunk.d.ts#globToRegExp
+groupParts: build/index.d.ts#groupParts
 hasFile: build/index.d.ts#hasFile
 hasImportMetaMain: build/index.d.ts#hasImportMetaMain
 hasSummaryJob: build/index.d.ts#hasSummaryJob
@@ -161,6 +174,8 @@ mainCheck: build/index.d.ts#mainCheck
 mapMarkdown: build/index.d.ts#mapMarkdown
 mapText: build/index.d.ts#mapText
 matchesAny: build/index.d.ts#matchesAny
+matrixPeak: build/index.d.ts#matrixPeak
+mayRun: build/index.d.ts#mayRun
 mergeHomes: build/index.d.ts#mergeHomes
 mergePrivateNames: build/index.d.ts#mergePrivateNames
 messageOf: build/index.d.ts#messageOf
@@ -233,6 +248,8 @@ runGit: build/index.d.ts#runGit
 runGitShow: build/index.d.ts#runGitShow
 runPrePushArgs: build/index.d.ts#runPrePushArgs
 runnerBudget: build/index.d.ts#runnerBudget
+runnerPeak: build/index.d.ts#runnerPeak
+runsAtOnce: build/index.d.ts#runsAtOnce
 scheduleMinute: build/index.d.ts#scheduleMinute
 scriptsOf: build/index.d.ts#scriptsOf
 securityCallers: build/index.d.ts#securityCallers
@@ -269,6 +286,7 @@ unreleasedChangeRule: build/index.d.ts#unreleasedChangeRule
 versionTitle: build/index.d.ts#versionTitle
 withOneJob: build/index.d.ts#withOneJob
 workflowParses: build/index.d.ts#workflowParses
+workflowPeaks: build/index.d.ts#workflowPeaks
 workspaceGlobs: build/workspace.chunk.d.ts#workspaceGlobs
 workspaceProtocol: build/index.d.ts#workspaceProtocol
 yamlFaults: build/index.d.ts#yamlFaults
@@ -378,6 +396,16 @@ interface Edit {
   readonly after: string;
 }
 
+### build/index.d.ts#EventClass
+type EventClass = "push" | "pull" | "other";
+
+### build/index.d.ts#ExpressionValue
+interface ExpressionValue {
+  readonly parts: ReadonlySet<RunPart>;
+  readonly truthy: boolean | undefined;
+  readonly text?: string;
+}
+
 ### build/index.d.ts#FixResult
 interface FixResult {
   readonly changed: readonly string[];
@@ -458,6 +486,18 @@ interface HookOptions {
 
 ### build/index.d.ts#IGNORE_AFTER
 export declare const IGNORE_AFTER = 10080;
+
+### build/index.d.ts#JobPeak
+interface JobPeak {
+  readonly id: string;
+  readonly line: number;
+  readonly jobs: number;
+  readonly runs: number;
+  readonly known: boolean;
+}
+
+### build/index.d.ts#KeyLines
+type KeyLines = Readonly<Record<string, number>>;
 
 ### build/index.d.ts#LICENSE_TEXTS
 export declare const LICENSE_TEXTS: Readonly<Record<string, RegExp>>;
@@ -585,6 +625,8 @@ interface ParsedConcurrency {
 ### build/index.d.ts#ParsedJob
 interface ParsedJob {
   readonly id: string;
+  readonly line: number;
+  readonly lines: KeyLines;
   readonly name: string;
   readonly maxParallel: number | null;
   readonly matrixJobs: number | null;
@@ -614,6 +656,7 @@ interface ParsedWorkflow {
   readonly concurrency: ParsedConcurrency | null;
   readonly secrets: readonly string[];
   readonly jobs: readonly ParsedJob[];
+  readonly lines: KeyLines;
   readonly faults: readonly YamlFault[];
 }
 
@@ -622,6 +665,12 @@ interface PathFilter {
   readonly line: number;
   readonly trigger: string;
   readonly key: string;
+}
+
+### build/index.d.ts#PeakOptions
+interface PeakOptions {
+  readonly burst: number;
+  readonly called: Readonly<Record<string, number>>;
 }
 
 ### build/index.d.ts#PrePushArgs
@@ -744,6 +793,9 @@ interface RuleResult {
   readonly noRead?: string;
 }
 
+### build/index.d.ts#RunPart
+type RunPart = "ref" | "commit" | "run" | "input" | "other";
+
 ### build/index.d.ts#SECURITY_FILE
 export declare const SECURITY_FILE: string;
 
@@ -795,6 +847,9 @@ interface SummaryJob {
   readonly commit: string;
 }
 
+### build/index.d.ts#TEMPLATE_CALLED
+export declare const TEMPLATE_CALLED: readonly string[];
+
 ### build/index.d.ts#TRAIN_SCOPES
 export declare const TRAIN_SCOPES: readonly ["@mark1russell7/*", "@procedures/*"];
 
@@ -809,6 +864,9 @@ interface TextBreakOptions {
   readonly path?: string;
   readonly isPath?: boolean;
 }
+
+### build/index.d.ts#UNKNOWN_MATRIX_JOBS
+export declare const UNKNOWN_MATRIX_JOBS = 3;
 
 ### build/index.d.ts#UNSHIPPED_FILES
 export declare const UNSHIPPED_FILES: readonly string[];
@@ -841,6 +899,17 @@ interface WorkflowJob {
   readonly if: string;
   readonly needs: readonly string[];
   readonly steps: readonly WorkflowStep[];
+}
+
+### build/index.d.ts#WorkflowPeak
+interface WorkflowPeak {
+  readonly file: string;
+  readonly peak: number;
+  readonly classes: Readonly<Partial<Record<EventClass, {
+    readonly event: string;
+    readonly peak: number;
+    readonly jobs: readonly JobPeak[];
+  }>>>;
 }
 
 ### build/index.d.ts#WorkflowPermissions
@@ -879,6 +948,9 @@ export declare function authorOf(author: unknown): string | undefined;
 ### build/index.d.ts#blockHash
 export declare const blockHash: (body: readonly string[]) => string;
 
+### build/index.d.ts#calledJobs
+export declare function calledJobs(values: readonly string[]): Record<string, number>;
+
 ### build/index.d.ts#callsSharedCi
 export declare function callsSharedCi(file: string, text: string): boolean;
 
@@ -916,6 +988,12 @@ export declare function declaredName(line: string): string | undefined;
 ### build/index.d.ts#defaultOptions
 export declare function defaultOptions(rule: Rule): Options;
 
+### build/index.d.ts#evaluateExpression
+export declare function evaluateExpression(body: string, event: string): ExpressionValue | undefined;
+
+### build/index.d.ts#eventClass
+export declare function eventClass(event: string): EventClass | undefined;
+
 ### build/index.d.ts#exportsRequire
 export declare const exportsRequire: Rule;
 
@@ -936,6 +1014,9 @@ export declare const gateTrigger: Rule;
 
 ### build/index.d.ts#githubFetch
 export declare const githubFetch: HomeFetch;
+
+### build/index.d.ts#groupParts
+export declare function groupParts(group: string, event: string): ReadonlySet<RunPart>;
 
 ### build/index.d.ts#hasFile
 export declare const hasFile: (dir: string, file: string) => boolean;
@@ -1023,6 +1104,12 @@ export declare function mapText(homes: readonly Home[]): string;
 
 ### build/index.d.ts#matchesAny
 export declare function matchesAny(path: string, globs: readonly string[]): boolean;
+
+### build/index.d.ts#matrixPeak
+export declare function matrixPeak(job: ParsedJob): number;
+
+### build/index.d.ts#mayRun
+export declare function mayRun(condition: string, event: string): boolean;
 
 ### build/index.d.ts#mergeHomes
 export declare function mergeHomes(base: readonly Home[], extra: readonly Home[]): readonly Home[];
@@ -1225,6 +1312,12 @@ export declare function runPrePushArgs(args: PrePushArgs, io: Pick<CliIo, "cwd" 
 ### build/index.d.ts#runnerBudget
 export declare const runnerBudget: Rule;
 
+### build/index.d.ts#runnerPeak
+export declare const runnerPeak: Rule;
+
+### build/index.d.ts#runsAtOnce
+export declare function runsAtOnce(concurrency: ParsedConcurrency | null, event: string, burst: number): number;
+
 ### build/index.d.ts#scheduleMinute
 export declare function scheduleMinute(repository: string, file: string): number;
 
@@ -1333,6 +1426,9 @@ export declare function withOneJob(text: string, commit?: string): {
 
 ### build/index.d.ts#workflowParses
 export declare const workflowParses: Rule;
+
+### build/index.d.ts#workflowPeaks
+export declare function workflowPeaks(workflows: readonly ParsedWorkflow[], options: PeakOptions): WorkflowPeak[];
 
 ### build/index.d.ts#workspaceProtocol
 export declare const workspaceProtocol: Rule;
