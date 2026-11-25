@@ -11,7 +11,7 @@ The workflow `.github/workflows/release.yml` publishes the packages of this repo
 | `tree` | `reusable-release-tree.yml` of the template, with `scripts/workflows/verified-tree.ts` of the same template commit. |
 | `verify` | The `ci.yml` of the repository. It starts only when `tree` gives no yes. |
 | `build` | `reusable-release-build.yml` of the template, with `scripts/release/mode.ts`, `scripts/release/pack.ts` and `scripts/release/tags.ts` of the same template commit. |
-| `version` | A job of `release.yml`. It starts only in the mode `version` ("Changesets"), with the Changesets action and `scripts/release/version-pr.ts`. |
+| `version` | `reusable-release-version.yml` of the template, with `scripts/release/version-pr.ts` of the same template commit. It starts only in the mode `version` ("Changesets"). |
 | `publish` | A job of `release.yml`. Its step is the action `npm-publish` of the template. It does not start in the mode `version`. |
 | `tag` | `reusable-release-tag.yml` of the template. It does not start in the mode `version`. |
 
@@ -143,6 +143,8 @@ The job `version` writes steps 3 and 4 at the top of the text of the version pul
 
 ### The job version
 
+The job `version` of `release.yml` uses `reusable-release-version.yml` of the template. Its steps are in that file.
+
 - It holds `contents: write` and `pull-requests: write`, and no other job of `release.yml` holds `pull-requests: write`. It starts code of the repository, so it gets no OIDC token.
 - It installs with `--ignore-scripts`. `changeset version` needs only the installed CLI.
 - Only the run of the head of `main` changes the pull request (`scripts/release/version-pr.ts`). The run of an older commit gives a notice, because the run of the newer commit makes the update. When no newer run starts, start `release.yml` by hand on `main`.
@@ -153,7 +155,20 @@ A version commit can stay unpublished, for example after a failed run, while a n
 
 ### A repository that starts to use the mode
 
-The mode needs three parts of the `release.yml` of the template. They are the job `version`, the entry `.changeset/*.md` in `paths`, and the mode conditions of `publish` and `tag`. `bump-pins.ts` moves only the pins. Thus in a repository with `.changeset/config.json`, copy the three parts with the pins of the mode. Without the job `version`, a run in the mode `version` opens no pull request. Without the conditions, its job `publish` fails, because the build uploads no tarballs.
+The mode needs three parts of the `release.yml` of the template. They are the caller job `version`, the entry `.changeset/*.md` in `paths`, and the mode conditions of `publish` and `tag`. `bump-pins.ts` moves only the pins. Thus in a repository with `.changeset/config.json`, copy the three parts with the pins of the mode. The caller job has approximately 10 lines:
+
+```yaml
+  version:
+    name: Version pull request
+    needs: build
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.build.outputs.mode == 'version' }}
+    uses: mark1russell7/template/.github/workflows/reusable-release-version.yml@<commit> # main
+    permissions:
+      contents: write
+      pull-requests: write
+```
+
+Without the job `version`, a run in the mode `version` opens no pull request. Without the conditions, its job `publish` fails, because the build uploads no tarballs.
 
 ## Only a commit on main
 

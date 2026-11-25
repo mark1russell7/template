@@ -112,13 +112,12 @@ describe("reusable-release-build.yml in the two modes", () => {
     assert.deepEqual(version.map(keyOf), []);
   });
 
-  it("gives the mode and the commit of the scripts as outputs of the workflow", () => {
+  it("gives the mode as an output of the workflow", () => {
     const outputs = parse(readFileSync(join(root, ".github", "workflows", "reusable-release-build.yml"), "utf8")) as {
       on: { workflow_call: { outputs: Record<string, { value: string }> } };
     };
     const values = outputs.on.workflow_call.outputs;
     assert.equal(values["mode"]?.value, "${{ jobs.pack.outputs.mode }}");
-    assert.equal(values["template-sha"]?.value, "${{ jobs.pack.outputs.template-sha }}");
     assert.deepEqual(job?.permissions, { contents: "read" });
   });
 });
@@ -155,8 +154,27 @@ describe("release.yml in the two modes", () => {
     assert.deepEqual(release.jobs["version"]?.permissions, { contents: "write", "pull-requests": "write" });
   });
 
+  it("calls reusable-release-version.yml for the job version, as the jobs build and tag", () => {
+    assert.equal(release.jobs["version"]?.uses, "./.github/workflows/reusable-release-version.yml");
+    assert.equal(release.jobs["version"]?.steps, undefined, "No steps in release.yml: the shared workflow has them.");
+  });
+
+  it("starts on the files of a version and on the changesets", () => {
+    assert.deepEqual(release.on.push?.paths, ["package.json", "packages/*/package.json", ".changeset/*.md"]);
+  });
+});
+
+describe("reusable-release-version.yml", () => {
+  const shared = workflow("reusable-release-version.yml");
+  const steps = shared.jobs["version"]?.steps ?? [];
+
+  it("has one job, with the permissions that the caller job of release.yml gives, and no OIDC token", () => {
+    assert.deepEqual(Object.keys(shared.jobs), ["version"]);
+    assert.deepEqual(shared.jobs["version"]?.permissions, { contents: "write", "pull-requests": "write" });
+    assert.deepEqual(shared.jobs["version"]?.permissions, workflow("release.yml").jobs["version"]?.permissions);
+  });
+
   it("opens the version pull request only on the head of main, and puts the steps for a person in its text", () => {
-    const steps = release.jobs["version"]?.steps ?? [];
     const head = steps.findIndex((step) => step.id === "head");
     const action = steps.findIndex((step) => step.uses?.startsWith("changesets/action@") === true);
     assert.ok(head >= 0 && action > head, "The head check comes before the Changesets action.");
@@ -164,12 +182,14 @@ describe("release.yml in the two modes", () => {
     assert.equal(steps[action]?.with?.["publish-script"], undefined, "The action publishes nothing.");
     assert.equal(steps[action]?.with?.["pr-title"], "Version the packages");
     assert.match(steps.at(-1)?.run ?? "", /version-pr\.ts" note "\$PR"$/u);
-    for (const step of steps.filter((item) => item.uses?.startsWith("actions/checkout@") === true)) {
-      assert.equal(step.with?.["persist-credentials"], false, "No credentials in .git/config.");
-    }
   });
 
-  it("starts on the files of a version and on the changesets", () => {
-    assert.deepEqual(release.on.push?.paths, ["package.json", "packages/*/package.json", ".changeset/*.md"]);
+  it("gets the release scripts of its own template commit, and keeps no credentials in the checkouts", () => {
+    const scripts = steps.find((step) => step.name === "Get the release scripts");
+    assert.equal(scripts?.with?.["repository"], "${{ job.workflow_repository }}");
+    assert.equal(scripts?.with?.["ref"], "${{ job.workflow_sha }}");
+    const checkouts = steps.filter((item) => item.uses?.startsWith("actions/checkout@") === true);
+    assert.equal(checkouts.length, 2);
+    for (const step of checkouts) assert.equal(step.with?.["persist-credentials"], false);
   });
 });

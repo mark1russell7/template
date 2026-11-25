@@ -17,8 +17,8 @@
 #
 # The mode of the run comes first (scripts/release/mode.ts, RELEASING.md "Changesets"). In a repository with
 # .changeset/config.json and one or more pending changesets, the mode is "version": the job stops before the install,
-# packs nothing and uploads nothing. Then the job "version" of release.yml opens or updates the pull request "Version
-# the packages", and the jobs publish and tag do not start. Else the mode is "publish", and the job does the same steps
+# packs nothing and uploads nothing. Then the job "version" of release.yml (reusable-release-version.yml) opens or updates
+# the pull request "Version the packages", and the jobs publish and tag do not start. Else the mode is "publish", and the job does the same steps
 # as before the mode. Thus a repository with no .changeset/config.json gets the same release
 # (scripts/release/release-mode.test.ts).
 #
@@ -55,14 +55,8 @@ on:
         description: Each name=value that the after-pack command wrote to GITHUB_OUTPUT, as a JSON object. Without the command, "{}".
         value: ${{ jobs.pack.outputs.after-pack }}
       mode:
-        description: '"publish" when the job packed the versions for the publish job. "version" when changesets wait: the job packed nothing, and the job "version" of release.yml opens the version pull request.'
+        description: '"publish" when the job packed the versions for the publish job. "version" when changesets wait: the job packed nothing, and reusable-release-version.yml opens the version pull request.'
         value: ${{ jobs.pack.outputs.mode }}
-      template-repository:
-        description: The repository of this workflow file, for the release scripts of a later job.
-        value: ${{ jobs.pack.outputs.template-repository }}
-      template-sha:
-        description: The commit of this workflow file, for the release scripts of a later job.
-        value: ${{ jobs.pack.outputs.template-sha }}
 
 jobs:
   pack:
@@ -74,8 +68,6 @@ jobs:
     outputs:
       after-pack: ${{ toJSON(steps.after-pack.outputs) }}
       mode: ${{ steps.mode.outputs.mode }}
-      template-repository: ${{ steps.mode.outputs.template-repository }}
-      template-sha: ${{ steps.mode.outputs.template-sha }}
     steps:
       # The first step, before the checkout: a release publishes only a commit on main. The GitHub
       # compare API (main...<commit>) gives "identical" for the head of main and "behind" for an
@@ -117,20 +109,12 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "26"
-      # "publish" or "version" (scripts/release/mode.ts). Each later step starts only in the mode "publish". The commit
-      # of the scripts goes to the outputs, so the job "version" of release.yml starts the same scripts.
+      # "publish" or "version" (scripts/release/mode.ts). Each later step starts only in the mode "publish".
       - name: Release mode
         id: mode
         env:
           RELEASE_REPO: ${{ github.workspace }}
-          TEMPLATE_REPOSITORY: ${{ job.workflow_repository }}
-          TEMPLATE_SHA: ${{ job.workflow_sha }}
-        run: |
-          node "$RUNNER_TEMP/release-template/scripts/release/mode.ts"
-          {
-            echo "template-repository=$TEMPLATE_REPOSITORY"
-            echo "template-sha=$TEMPLATE_SHA"
-          } >> "$GITHUB_OUTPUT"
+        run: node "$RUNNER_TEMP/release-template/scripts/release/mode.ts"
       # The pnpm version comes from "packageManager" in package.json
       - if: steps.mode.outputs.mode == 'publish'
         uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1

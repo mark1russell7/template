@@ -1,0 +1,88 @@
+# The version job of the standard npm release in the mode "version" (RELEASING.md, "Changesets"). The release.yml of
+# a repository with Changesets calls it after the build job, when changesets wait:
+#
+#   version:
+#     needs: build
+#     if: ${{ !cancelled() && needs.build.result == 'success' && needs.build.outputs.mode == 'version' }}
+#     uses: mark1russell7/template/.github/workflows/reusable-release-version.yml@<commit> # main
+#     permissions:
+#       contents: write
+#       pull-requests: write
+#
+# The job opens or updates the pull request "Version the packages" with the Changesets action, and publishes nothing.
+# The merge of that pull request removes the changesets, so the release run of the merge publishes.
+#
+# The job runs code of the repository (the install and `changeset version`), so it gets no OIDC token. It is the only
+# job of the release with "pull-requests: write", for the version pull request. "contents: write" is for its branch
+# changeset-release/main.
+#
+# GitHub starts no workflow for an event of the workflow token: no checks of the version pull request, and no release
+# after a merge with that token. Thus the last step writes the steps for a person at the top of the text of the pull
+# request (scripts/release/version-pr.ts).
+name: Reusable release version
+
+on:
+  workflow_call:
+
+jobs:
+  version:
+    name: Version pull request
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # One version pull request at a time, over all runs of the release of the repository
+    concurrency:
+      group: release-version
+      cancel-in-progress: false
+    permissions:
+      # The branch changeset-release/main and the pull request
+      contents: write
+      pull-requests: write
+    steps:
+      # The release scripts of the same template commit as this file, before the checkout of the repository: a
+      # checkout empties the workspace
+      - name: Get the release scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .release-template
+          sparse-checkout: scripts/release
+          persist-credentials: false
+      - name: Move the release scripts out of the workspace
+        run: mv .release-template "$RUNNER_TEMP/release-template"
+      # No credentials in .git/config: the Changesets action pushes the version commit with the GitHub API and its
+      # github-token input, not with git.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The pnpm version comes from "packageManager" in package.json
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+          package-manager-cache: false
+      # No package scripts: `changeset version` needs only the installed CLI
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      # Only the run of the head of main changes the pull request. The run of an older commit would remove the
+      # changesets of the newer commits from it (scripts/release/version-pr.ts).
+      - name: The commit is the head of main
+        id: head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node "$RUNNER_TEMP/release-template/scripts/release/version-pr.ts" head
+      # Version 2 of the action: with no publish-script, it only opens or updates the version pull request
+      - id: changesets
+        if: steps.head.outputs.head == 'true'
+        uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          version-script: pnpm exec changeset version
+          pr-title: Version the packages
+          commit-message: Version the packages
+          pr-base-branch: main
+      # GitHub starts no checks for a pull request of the workflow token. The text tells a person the steps.
+      - name: The steps for a person
+        if: steps.changesets.outputs.pr-number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.changesets.outputs.pr-number }}
+        run: node "$RUNNER_TEMP/release-template/scripts/release/version-pr.ts" note "$PR"
