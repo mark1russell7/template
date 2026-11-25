@@ -167,8 +167,11 @@ export function runChecks(options: CheckOptions): CheckResult {
       }
     }
     // A new rule warns until its day `failsFrom`. The owners fix the breaks in that time, and the update pull requests merge.
-    const warns = breaks.length > 0 && rule.failsFrom !== undefined && today < rule.failsFrom;
-    const reason = warns ? [ruleConfig.reason, `The rule fails from ${rule.failsFrom ?? ""}.`].filter((text) => text !== undefined).join(" ") : ruleConfig.reason;
+    // A rule with `warnOnly` warns until the repository turns its failure on, for example with an option.
+    const beforeDay = rule.failsFrom !== undefined && today < rule.failsFrom;
+    const optIn = breaks.length > 0 ? rule.warnOnly?.(ruleConfig.options) : undefined;
+    const warns = breaks.length > 0 && (beforeDay || optIn !== undefined);
+    const reason = warns ? [ruleConfig.reason, beforeDay ? `The rule fails from ${rule.failsFrom ?? ""}.` : undefined, optIn].filter((text) => text !== undefined).join(" ") : ruleConfig.reason;
     const note = reason === undefined ? {} : { note: reason };
     let noRead: string | undefined;
     try {

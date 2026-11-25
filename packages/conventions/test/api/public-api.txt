@@ -14,6 +14,7 @@ type Break: build/index.d.ts#Break
 type CheckOptions: build/index.d.ts#CheckOptions
 type CheckResult: build/index.d.ts#CheckResult
 type CliIo: build/index.d.ts#CliIo
+type ConsoleKind: build/index.d.ts#ConsoleKind
 type ConventionsConfig: build/index.d.ts#ConventionsConfig
 DEFAULT_ALLOWED: build/index.d.ts#DEFAULT_ALLOWED
 DEPENDENCY_FIELDS: build/index.d.ts#DEPENDENCY_FIELDS
@@ -45,6 +46,7 @@ MAX_NOTES: build/index.d.ts#MAX_NOTES
 type Manifest: build/index.d.ts#Manifest
 type Minor: build/index.d.ts#Minor
 type ModuleUse: build/index.d.ts#ModuleUse
+NOT_SOURCE: build/index.d.ts#NOT_SOURCE
 NO_READ_LINE: build/index.d.ts#NO_READ_LINE
 NPM_REGISTRY: build/index.d.ts#NPM_REGISTRY
 type NameHit: build/index.d.ts#NameHit
@@ -126,6 +128,8 @@ changelogSection: build/index.d.ts#changelogSection
 cleanPath: build/index.d.ts#cleanPath
 codePackages: build/index.d.ts#codePackages
 configsOfScript: build/index.d.ts#configsOfScript
+consoleBreaks: build/index.d.ts#consoleBreaks
+consoleKind: build/index.d.ts#consoleKind
 convertGate: build/index.d.ts#convertGate
 coverageProvider: build/index.d.ts#coverageProvider
 createContext: build/index.d.ts#createContext
@@ -155,6 +159,7 @@ inFolder: build/index.d.ts#inFolder
 installHook: build/index.d.ts#installHook
 invalidPatternBreaks: build/index.d.ts#invalidPatternBreaks
 isAllowedHit: build/index.d.ts#isAllowedHit
+isCliFile: build/index.d.ts#isCliFile
 isCommonUse: build/index.d.ts#isCommonUse
 isGitSpecifier: build/index.d.ts#isGitSpecifier
 isPinned: build/index.d.ts#isPinned
@@ -187,6 +192,7 @@ modulesOf: build/index.d.ts#modulesOf
 nameMatches: build/index.d.ts#nameMatches
 namedVersions: build/index.d.ts#namedVersions
 noBuildOutput: build/index.d.ts#noBuildOutput
+noConsole: build/index.d.ts#noConsole
 noLocalPaths: build/index.d.ts#noLocalPaths
 npmDrift: build/index.d.ts#npmDrift
 npmLookup: build/index.d.ts#npmLookup
@@ -377,6 +383,9 @@ interface CliIo {
   readonly stdin?: string;
 }
 
+### build/index.d.ts#ConsoleKind
+type ConsoleKind = "output" | "diagnostic";
+
 ### build/index.d.ts#ConventionsConfig
 interface ConventionsConfig {
   readonly packages?: readonly string[];
@@ -528,6 +537,9 @@ interface ModuleUse {
   readonly specifier: string;
   readonly line: number;
 }
+
+### build/index.d.ts#NOT_SOURCE
+export declare const NOT_SOURCE: readonly string[];
 
 ### build/index.d.ts#NO_READ_LINE
 export declare const NO_READ_LINE: string;
@@ -751,6 +763,7 @@ interface Rule {
   readonly changeScoped?: boolean;
   readonly failsFrom?: string;
   check(context: RuleContext, options: Options): RuleOutcome;
+  warnOnly?(options: Options): string | undefined;
   noRead?(context: RuleContext, options: Options): string | undefined;
 }
 
@@ -966,6 +979,12 @@ export declare function codePackages(context: Pick<RuleContext, "rootPackage" | 
 ### build/index.d.ts#configsOfScript
 export declare function configsOfScript(script: string): string[];
 
+### build/index.d.ts#consoleBreaks
+export declare function consoleBreaks(file: string, text: string): Break[];
+
+### build/index.d.ts#consoleKind
+export declare function consoleKind(cli: boolean, method: string): ConsoleKind;
+
 ### build/index.d.ts#convertGate
 export declare function convertGate(text: string, file: string, commit?: string): {
   text: string;
@@ -1050,6 +1069,9 @@ export declare function invalidPatternBreaks(patterns: readonly PrivatePattern[]
 
 ### build/index.d.ts#isAllowedHit
 export declare function isAllowedHit(allow: readonly AllowedHit[], repo: string, path: string, id: string): boolean;
+
+### build/index.d.ts#isCliFile
+export declare function isCliFile(file: string, text: string): boolean;
 
 ### build/index.d.ts#isCommonUse
 export declare function isCommonUse(line: string, index: number, rule: NameRule): boolean;
@@ -1143,6 +1165,9 @@ export declare function namedVersions(title: string): string[];
 
 ### build/index.d.ts#noBuildOutput
 export declare const noBuildOutput: Rule;
+
+### build/index.d.ts#noConsole
+export declare const noConsole: Rule;
 
 ### build/index.d.ts#noLocalPaths
 export declare const noLocalPaths: Rule;

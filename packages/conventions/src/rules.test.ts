@@ -8,7 +8,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { blockHash, sharedDocsRule, type HomeFetch } from "./rules/shared-docs.ts";
 import { lockedVersions, minorOf, publishedMinorRule, reachOf } from "./rules/published-minor.ts";
 import type { RegistryLookup } from "./rules/unreleased-change.ts";
-import { authorOf, convertGate, declaredName, hasTests, HOMES, mitText, modulesOf, moduleUses, pagesCalls, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, reposOf, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, unreleasedChangeRule, type CheckOptions, type Home, type RegistryAnswer, type RuleResult } from "./index.ts";
+import { authorOf, consoleKind, convertGate, declaredName, isCliFile, hasTests, HOMES, mitText, modulesOf, moduleUses, pagesCalls, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, reposOf, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, unreleasedChangeRule, type CheckOptions, type Home, type RegistryAnswer, type RuleResult } from "./index.ts";
 import { API_REPORT_RANGE } from "./rules/api-report-script.ts";
 import { minuteField } from "./rules/runner-budget.ts";
 import { runsOnMain, runsOnOneCommit, startsOnPush } from "./rules/main-runs-finish.ts";
@@ -625,6 +625,55 @@ describe("tests-required", () => {
     expect(rule(root, "tests-required").status).toBe("skipped");
     commitAll(root);
     expect(rule(root, "tests-required").breaks.map((item) => `${item.file}:${String(item.line)}`)).toEqual(["package.json:4", "packages/a/vitest.config.ts:1"]);
+  });
+});
+
+describe("no-console", () => {
+  const files = {
+    "src/cli.ts": '#!/usr/bin/env node\nconsole.log("done");\nconsole.debug("raw args");\n',
+    "src/lib.ts": '// console.log("an example in a comment")\nexport const f = (): void => { console.warn("slow"); console.table([]); };\n',
+    "src/lib.test.ts": "console.log(1);\n",
+    "scripts/build.ts": "console.log(1);\n",
+    "README.md": "console.log(1)\n",
+  };
+  const found = (result: RuleResult): string[] => result.breaks.map((item) => `${item.file}:${String(item.line)} ${item.message.includes("output to a person") ? "output" : "diagnostic"}`);
+
+  it("names the kind of each call in a source file, and warns until the repository sets fail", () => {
+    const root = fixture({ "package.json": { name: "one" }, ...files });
+    expect(rule(root, "no-console").status).toBe("skipped");
+    commitAll(root);
+    const result = rule(root, "no-console", { today: "2027-01-01" });
+    expect(found(result)).toEqual(["src/cli.ts:2 output", "src/cli.ts:3 diagnostic", "src/lib.ts:2 diagnostic", "src/lib.ts:2 output"]);
+    expect(result.status).toBe("warn");
+    expect(result.note).toBe("The rule fails in a repository that sets the option fail: true, when its count is 0.");
+  });
+
+  it("fails a repository that sets fail, from the day failsFrom", () => {
+    const root = fixture({ "package.json": { name: "one", conventions: { rules: { "no-console": { fail: true, reason: "the count is 0" } } } }, ...files });
+    commitAll(root);
+    expect(rule(root, "no-console", { today: "2026-12-01" }).status).toBe("warn");
+    expect(rule(root, "no-console", { today: "2027-01-01" }).status).toBe("break");
+  });
+
+  it("passes a repository with no call in its sources", () => {
+    const root = fixture({ "package.json": { name: "one", conventions: { rules: { "no-console": { fail: true, reason: "the count is 0" } } } }, "src/lib.ts": "export const f = 1;\n", "test/a.test.ts": "console.log(1);\n" });
+    commitAll(root);
+    expect(rule(root, "no-console", { today: "2027-01-01" }).status).toBe("pass");
+  });
+
+  it("tells a CLI file by its first line, its path or process.argv", () => {
+    expect(isCliFile("src/a.ts", "#!/usr/bin/env node\n")).toBe(true);
+    expect(isCliFile("src/cli.ts", "")).toBe(true);
+    expect(isCliFile("packages/x/src/cli/run.ts", "")).toBe(true);
+    expect(isCliFile("src/commands/add.ts", "")).toBe(true);
+    expect(isCliFile("src/main.ts", "")).toBe(true);
+    expect(isCliFile("src/a.ts", "const [, , name] = process.argv;\n")).toBe(true);
+    expect(isCliFile("src/client.ts", "")).toBe(false);
+    expect(isCliFile("src/domain.ts", "")).toBe(false);
+    expect(consoleKind(true, "error")).toBe("output");
+    expect(consoleKind(true, "trace")).toBe("diagnostic");
+    expect(consoleKind(false, "log")).toBe("diagnostic");
+    expect(consoleKind(false, "table")).toBe("output");
   });
 });
 
