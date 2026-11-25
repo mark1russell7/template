@@ -16,19 +16,19 @@ export type BareErrorMode = "fail" | "report";
 export const BARE_ERROR_MODES: readonly BareErrorMode[] = ["fail", "report"];
 
 /** The most texts that one view records. */
-export const MAX_BARE_ERRORS = 20;
+export const MAX_BARE_ERRORS: number = 20;
 
 /**
  * The shape of the text of a thrown value: `Error: x`, `TypeError: x`, `DOMException: x`, and the messages of the browser that a
  * page shows when it puts `error.message` on the screen.
  */
-export const BARE_ERROR_SHAPE = String.raw`(?:^|[\s("'\[:])[A-Z]?[A-Za-z]*(?:Error|Exception): \S|Failed to fetch|NetworkError when attempting to fetch|Cannot read propert(?:y|ies) of (?:undefined|null)|is not a function|\[object Object\]|Unexpected token .{1,20} in JSON`;
+export const BARE_ERROR_SHAPE: string = String.raw`(?:^|[\s("'\[:])[A-Z]?[A-Za-z]*(?:Error|Exception): \S|Failed to fetch|NetworkError when attempting to fetch|Cannot read propert(?:y|ies) of (?:undefined|null)|is not a function|\[object Object\]|Unexpected token .{1,20} in JSON`;
 
 /** The elements whose text is an example, not a message: code, and the text of a form field. */
-export const BARE_ERROR_SKIP = "pre, code, kbd, samp, textarea, script, style, template, noscript, [hidden], [aria-hidden=true]";
+export const BARE_ERROR_SKIP: string = "pre, code, kbd, samp, textarea, script, style, template, noscript, [hidden], [aria-hidden=true]";
 
 /** The error views. A text inside one is not bare. */
-export const ERROR_VIEWS = "otel-error, [data-error-view]";
+export const ERROR_VIEWS: string = "otel-error, [data-error-view]";
 
 const KEY = "site-check.bare-errors";
 
@@ -36,7 +36,7 @@ const KEY = "site-check.bare-errors";
  * A script that each page starts before its own scripts. It records each text with the shape of an error that the page adds or
  * changes outside an error view. It records the element and the text, at most `MAX_BARE_ERRORS` of them.
  */
-export const BARE_ERROR_WATCH = `(() => {
+export const BARE_ERROR_WATCH: string = `(() => {
   const shape = new RegExp(${JSON.stringify(BARE_ERROR_SHAPE)});
   const skip = ${JSON.stringify(BARE_ERROR_SKIP)};
   const views = ${JSON.stringify(ERROR_VIEWS)};
@@ -72,7 +72,7 @@ export const BARE_ERROR_WATCH = `(() => {
 })();`;
 
 /** The expression that gives the texts that `BARE_ERROR_WATCH` found in the page. */
-export const BARE_ERRORS = `[...(globalThis[Symbol.for(${JSON.stringify(KEY)})] ?? [])]`;
+export const BARE_ERRORS: string = `[...(globalThis[Symbol.for(${JSON.stringify(KEY)})] ?? [])]`;
 
 /** The problem of one bare error text. */
 export function bareErrorProblem(entry: string): string {
