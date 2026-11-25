@@ -127,6 +127,11 @@ on:
         description: A JavaScript or TypeScript file of the repository that tests the interactive core of the home (the probe of site-pages check).
         type: string
         default: ""
+      site-check-bare-errors:
+        description: >-
+          What a text with the shape of an error outside an error view does. fail: it fails the view. report: the check reports it only. Empty reads the field sitePages.bareErrors of package.json, and no field gives report.
+        type: string
+        default: ""
       site-check-playwright:
         description: The version of playwright-core whose Chromium the check uses.
         type: string

@@ -119,6 +119,7 @@ runs:
         site-check-pages: ${{ fromJSON(inputs.config)['site-check-pages'] }}
         site-check-widths: ${{ fromJSON(inputs.config)['site-check-widths'] }}
         site-check-probe: ${{ fromJSON(inputs.config)['site-check-probe'] }}
+        site-check-bare-errors: ${{ fromJSON(inputs.config)['site-check-bare-errors'] }}
         site-check-playwright: ${{ fromJSON(inputs.config)['site-check-playwright'] }}
         artifact-name: ${{ inputs.artifact-prefix }}site-check
     - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
