@@ -63,6 +63,13 @@ export interface OptionSpec {
 /** A field of `package.json`, as the rules read it. */
 export type Manifest = Readonly<Record<string, unknown>>;
 
+/** The state that the function `decide` of a rule reads: the breaks after the exceptions, and the day of the check. */
+export interface RuleState {
+  readonly breaks: readonly Break[];
+  /** The day of the check, `YYYY-MM-DD` (UTC). */
+  readonly today: string;
+}
+
 /** A `package.json` file of the repository. */
 export interface PackageInfo {
   /** The folder, relative to the root, with `/`. The root is `""`. */
@@ -147,6 +154,12 @@ export interface Rule {
    * break fails the check after the day `failsFrom`.
    */
   warnOnly?(options: Options): string | undefined;
+  /**
+   * This function decides if the breaks of the rule fail the check. It gives the reason of a warning, or undefined when the
+   * breaks fail. With this function, the rule decides alone: the day `failsFrom` and `warnOnly` do not apply. A ratchet
+   * uses it, because it compares the count of the breaks with a baseline on the day of the check.
+   */
+  decide?(options: Options, state: RuleState): string | undefined;
   /**
    * This function gives the reason when the rule cannot read a part of its cases, for example a private source that CI
    * does not give. It gives undefined when the rule reads each part. The check then shows "no read" and the reason with

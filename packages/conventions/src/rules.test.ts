@@ -8,7 +8,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { blockHash, sharedDocsRule, type HomeFetch } from "./rules/shared-docs.ts";
 import { lockedVersions, minorOf, publishedMinorRule, reachOf } from "./rules/published-minor.ts";
 import type { RegistryLookup } from "./rules/unreleased-change.ts";
-import { authorOf, consoleKind, convertGate, declaredName, isCliFile, hasTests, HOMES, mitText, modulesOf, moduleUses, pagesCalls, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, reposOf, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, unreleasedChangeRule, type CheckOptions, type Home, type RegistryAnswer, type RuleResult } from "./index.ts";
+import { authorOf, consoleGate, consoleKind, convertGate, declaredName, isCliFile, hasTests, HOMES, mitText, modulesOf, moduleUses, pagesCalls, signaturesOf, isGitSpecifier, isPinned, isSourcePath, parseJsonc, prPathFilters, reposOf, repositoryOfRemote, roadmapOfLine, runChecks, runFix, scheduleMinute, summaryName, unreleasedChangeRule, type CheckOptions, type Home, type RegistryAnswer, type RuleResult } from "./index.ts";
 import { API_REPORT_RANGE } from "./rules/api-report-script.ts";
 import { minuteField } from "./rules/runner-budget.ts";
 import { runsOnMain, runsOnOneCommit, startsOnPush } from "./rules/main-runs-finish.ts";
@@ -638,21 +638,49 @@ describe("no-console", () => {
   };
   const found = (result: RuleResult): string[] => result.breaks.map((item) => `${item.file}:${String(item.line)} ${item.message.includes("output to a person") ? "output" : "diagnostic"}`);
 
-  it("names the kind of each call in a source file, and warns until the repository sets fail", () => {
+  const withOptions = (options: Record<string, unknown>): string => {
+    const root = fixture({ "package.json": { name: "one", conventions: { rules: { "no-console": { ...options, reason: "the census of the repository" } } } }, ...files });
+    commitAll(root);
+    return root;
+  };
+
+  it("names the kind of each call in a source file, and warns until the last day with no options", () => {
     const root = fixture({ "package.json": { name: "one" }, ...files });
     expect(rule(root, "no-console").status).toBe("skipped");
     commitAll(root);
     const result = rule(root, "no-console", { today: "2027-01-01" });
     expect(found(result)).toEqual(["src/cli.ts:2 output", "src/cli.ts:3 diagnostic", "src/lib.ts:2 diagnostic", "src/lib.ts:2 output"]);
     expect(result.status).toBe("warn");
-    expect(result.note).toBe("The rule fails in a repository that sets the option fail: true, when its count is 0.");
+    expect(result.note).toBe("Each console call fails from 2027-01-20. Set the option baseline to 4, so the count cannot grow.");
+    expect(rule(root, "no-console", { today: "2027-01-20" }).status).toBe("break");
   });
 
-  it("fails a repository that sets fail, from the day failsFrom", () => {
-    const root = fixture({ "package.json": { name: "one", conventions: { rules: { "no-console": { fail: true, reason: "the count is 0" } } } }, ...files });
-    commitAll(root);
-    expect(rule(root, "no-console", { today: "2026-12-01" }).status).toBe("warn");
-    expect(rule(root, "no-console", { today: "2027-01-01" }).status).toBe("break");
+  it("holds the count at the baseline: a new call fails, and a fix must lower the baseline", () => {
+    const at = withOptions({ baseline: 4 });
+    expect(rule(at, "no-console", { today: "2026-11-25" }).status).toBe("warn");
+    const above = rule(withOptions({ baseline: 3 }), "no-console", { today: "2026-11-25" });
+    expect(above.status).toBe("break");
+    expect(above.breaks[0]).toEqual({ file: "package.json", message: "The sources have 4 console calls, more than the baseline 3 of no-console. Remove the new calls." });
+    const below = rule(withOptions({ baseline: 5 }), "no-console", { today: "2026-11-25" });
+    expect(below.status).toBe("break");
+    expect(below.breaks[0]?.message).toContain("Set the option baseline to 4.");
+  });
+
+  it("fails from the day failFrom of the repository, and refuses a day after the last day", () => {
+    const early = withOptions({ failFrom: "2026-12-09", baseline: 4 });
+    expect(rule(early, "no-console", { today: "2026-12-08" }).status).toBe("warn");
+    expect(rule(early, "no-console", { today: "2026-12-09" }).status).toBe("break");
+    const late = rule(withOptions({ failFrom: "2027-02-01" }), "no-console", { today: "2026-11-25" });
+    expect(late.status).toBe("break");
+    expect(late.breaks[0]?.message).toContain("after the last day 2027-01-20");
+    expect(rule(withOptions({ fail: true }), "no-console", { today: "2026-11-25" }).status).toBe("break");
+  });
+
+  it("decides from the options, the count and the day", () => {
+    expect(consoleGate({}, 0, "2027-02-01")).toEqual({ fails: false, summary: false, why: "" });
+    expect(consoleGate({ baseline: 2 }, 0, "2026-11-25")).toMatchObject({ fails: true, summary: true });
+    expect(consoleGate({ baseline: 2 }, 2, "2026-11-25")).toMatchObject({ fails: false, why: "Each console call fails from 2027-01-20. The count 2 is the baseline." });
+    expect(consoleGate({ failFrom: "2026-12-23" }, 1, "2026-12-23")).toMatchObject({ fails: true, summary: false });
   });
 
   it("passes a repository with no call in its sources", () => {

@@ -42,6 +42,7 @@ export {
   type PackageInfo,
   type Rule,
   type RuleContext,
+  type RuleState,
   type RuleOutcome,
 } from "./rule.ts";
 export {
@@ -138,7 +139,7 @@ export {
   type PrePushOptions,
 } from "./pre-push.ts";
 export { hasImportMetaMain, REAL_COMPARE } from "./rules/main-check.ts";
-export { consoleBreaks, consoleKind, isCliFile, NOT_SOURCE, type ConsoleKind } from "./rules/no-console.ts";
+export { CONSOLE_LAST_DAY, consoleBreaks, consoleGate, consoleKind, isCliFile, NOT_SOURCE, type ConsoleGate, type ConsoleKind } from "./rules/no-console.ts";
 export { roadmapOfLine } from "./rules/roadmap-parses.ts";
 export { scheduleMinute } from "./rules/runner-budget.ts";
 export {

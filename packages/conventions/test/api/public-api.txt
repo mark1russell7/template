@@ -11,9 +11,11 @@ type Advisory: build/index.d.ts#Advisory
 type AllowedHit: build/index.d.ts#AllowedHit
 type AuditSource: build/index.d.ts#AuditSource
 type Break: build/index.d.ts#Break
+CONSOLE_LAST_DAY: build/index.d.ts#CONSOLE_LAST_DAY
 type CheckOptions: build/index.d.ts#CheckOptions
 type CheckResult: build/index.d.ts#CheckResult
 type CliIo: build/index.d.ts#CliIo
+type ConsoleGate: build/index.d.ts#ConsoleGate
 type ConsoleKind: build/index.d.ts#ConsoleKind
 type ConventionsConfig: build/index.d.ts#ConventionsConfig
 DEFAULT_ALLOWED: build/index.d.ts#DEFAULT_ALLOWED
@@ -90,6 +92,7 @@ type RuleConfig: build/index.d.ts#RuleConfig
 type RuleContext: build/index.d.ts#RuleContext
 type RuleOutcome: build/index.d.ts#RuleOutcome
 type RuleResult: build/index.d.ts#RuleResult
+type RuleState: build/index.d.ts#RuleState
 type RunPart: build/index.d.ts#RunPart
 SECURITY_FILE: build/index.d.ts#SECURITY_FILE
 SECURITY_SCAN_COMMIT: build/index.d.ts#SECURITY_SCAN_COMMIT
@@ -129,6 +132,7 @@ cleanPath: build/index.d.ts#cleanPath
 codePackages: build/index.d.ts#codePackages
 configsOfScript: build/index.d.ts#configsOfScript
 consoleBreaks: build/index.d.ts#consoleBreaks
+consoleGate: build/index.d.ts#consoleGate
 consoleKind: build/index.d.ts#consoleKind
 convertGate: build/index.d.ts#convertGate
 coverageProvider: build/index.d.ts#coverageProvider
@@ -358,6 +362,9 @@ interface Break {
   readonly edits?: readonly Edit[];
 }
 
+### build/index.d.ts#CONSOLE_LAST_DAY
+export declare const CONSOLE_LAST_DAY = "2027-01-20";
+
 ### build/index.d.ts#CheckOptions
 interface CheckOptions {
   readonly root: string;
@@ -381,6 +388,13 @@ interface CliIo {
   readonly stdout: (text: string) => void;
   readonly stderr: (text: string) => void;
   readonly stdin?: string;
+}
+
+### build/index.d.ts#ConsoleGate
+interface ConsoleGate {
+  readonly fails: boolean;
+  readonly why: string;
+  readonly summary: boolean;
 }
 
 ### build/index.d.ts#ConsoleKind
@@ -764,6 +778,7 @@ interface Rule {
   readonly failsFrom?: string;
   check(context: RuleContext, options: Options): RuleOutcome;
   warnOnly?(options: Options): string | undefined;
+  decide?(options: Options, state: RuleState): string | undefined;
   noRead?(context: RuleContext, options: Options): string | undefined;
 }
 
@@ -804,6 +819,12 @@ interface RuleResult {
   readonly ignored: number;
   readonly note?: string;
   readonly noRead?: string;
+}
+
+### build/index.d.ts#RuleState
+interface RuleState {
+  readonly breaks: readonly Break[];
+  readonly today: string;
 }
 
 ### build/index.d.ts#RunPart
@@ -981,6 +1002,9 @@ export declare function configsOfScript(script: string): string[];
 
 ### build/index.d.ts#consoleBreaks
 export declare function consoleBreaks(file: string, text: string): Break[];
+
+### build/index.d.ts#consoleGate
+export declare function consoleGate(options: Options, count: number, today: string): ConsoleGate;
 
 ### build/index.d.ts#consoleKind
 export declare function consoleKind(cli: boolean, method: string): ConsoleKind;
