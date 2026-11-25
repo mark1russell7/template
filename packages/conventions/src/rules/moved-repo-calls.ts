@@ -53,6 +53,7 @@ export const movedRepoCalls: Rule = {
   fix: "Write the new owner in the `uses:` line. The ref (a commit) stays the same, because the history of the repository did not change. `conventions fix` writes it.",
   sources: [
     { repo: "ireko", rule: "ci", doc: "ireko #133 (2026-11-24): the CI of main failed before it started (workflow file issue) after vex moved, until the call named metrograph-labs/vex" },
+    { repo: "private", rule: "moved-repo-calls", doc: "a decision of 2026-11-24: a gate holds each call of a moved repository" },
   ],
   options: {
     moves: {

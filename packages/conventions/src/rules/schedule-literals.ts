@@ -70,6 +70,7 @@ export const scheduleLiterals: Rule = {
   fix: "Write the cron of `on.schedule` in the comparison, character for character, or remove the comparison. `conventions fix` writes it when the file has one cron that no comparison names and one cron in quotes that no schedule has.",
   sources: [
     { repo: "systems", rule: "cells", doc: "systems #669 (2026-11-24): cells.yml compared github.event.schedule with crons of the old minutes after the move, in a case and two if: lines" },
+    { repo: "private", rule: "schedule-literals", doc: "a decision of 2026-11-24: a gate holds each cron that a workflow compares with github.event.schedule" },
   ],
   options: {},
   failsFrom: "2026-12-09",
