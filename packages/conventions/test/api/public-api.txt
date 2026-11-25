@@ -36,6 +36,7 @@ IGNORE_AFTER: build/index.d.ts#IGNORE_AFTER
 LICENSE_TEXTS: build/index.d.ts#LICENSE_TEXTS
 type LinePlace: build/index.d.ts#LinePlace
 MAP_RULE: build/index.d.ts#MAP_RULE
+MATRIX_EXPAND_MAX: build/index.d.ts#MATRIX_EXPAND_MAX
 MAX_NOTES: build/index.d.ts#MAX_NOTES
 type Manifest: build/index.d.ts#Manifest
 type Minor: build/index.d.ts#Minor
@@ -60,6 +61,7 @@ PRIVATE_NAME_LIST: build/index.d.ts#PRIVATE_NAME_LIST
 PRIVATE_PATTERNS_VARIABLE: build/index.d.ts#PRIVATE_PATTERNS_VARIABLE
 type PackageInfo: build/index.d.ts#PackageInfo
 type PagesCall: build/index.d.ts#PagesCall
+type ParsedConcurrency: build/index.d.ts#ParsedConcurrency
 type ParsedJob: build/index.d.ts#ParsedJob
 type ParsedStep: build/index.d.ts#ParsedStep
 type ParsedWorkflow: build/index.d.ts#ParsedWorkflow
@@ -469,6 +471,9 @@ interface LinePlace {
 ### build/index.d.ts#MAP_RULE
 export declare const MAP_RULE: string;
 
+### build/index.d.ts#MATRIX_EXPAND_MAX
+export declare const MATRIX_EXPAND_MAX: number;
+
 ### build/index.d.ts#MAX_NOTES
 export declare const MAX_NOTES: number;
 
@@ -571,11 +576,19 @@ interface PagesCall {
   readonly deploys: boolean;
 }
 
+### build/index.d.ts#ParsedConcurrency
+interface ParsedConcurrency {
+  readonly group: string;
+  readonly cancelInProgress: boolean | string;
+}
+
 ### build/index.d.ts#ParsedJob
 interface ParsedJob {
   readonly id: string;
   readonly name: string;
   readonly maxParallel: number | null;
+  readonly matrixJobs: number | null;
+  readonly concurrency: ParsedConcurrency | null;
   readonly if: string;
   readonly needs: readonly string[];
   readonly uses: string;
@@ -598,6 +611,7 @@ interface ParsedWorkflow {
   readonly name: string;
   readonly triggers: readonly string[];
   readonly permissions: WorkflowPermissions;
+  readonly concurrency: ParsedConcurrency | null;
   readonly secrets: readonly string[];
   readonly jobs: readonly ParsedJob[];
   readonly faults: readonly YamlFault[];

@@ -161,9 +161,11 @@ export { NPM_REGISTRY, npmLookup, SHIPPED_FIELDS, UNSHIPPED_FILES, unreleasedCha
 export { namedVersions, setVersions } from "./rules/version-title.ts";
 export { hiddenFailures, parseAdvisory, startsTests, swallowsTests, type Advisory, type HiddenFailure } from "./rules/job-fails.ts";
 export {
+  MATRIX_EXPAND_MAX,
   parseWorkflow,
   readAction,
   readWorkflow,
+  type ParsedConcurrency,
   type ParsedJob,
   type ParsedStep,
   type ParsedWorkflow,
