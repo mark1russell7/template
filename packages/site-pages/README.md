@@ -143,6 +143,22 @@ To hold the size of the built files, give `--budget <glob>=<size>` one time for 
 
 The unit of a size is `B`, `kB` or `MB`, and a number with no unit is in kB. The option needs `--out`. The log, `report.json` and `summary.md` give the size of each budget.
 
+### Error texts with no error view
+
+A page that shows `TypeError: Failed to fetch` gives the user no context, no retry and nothing to copy or report. The check finds each such text that a page shows outside an error view:
+
+- The text has the shape of a thrown value (`Error: x`, `TypeError: x`, `DOMException: x`), or a message of the browser (`Failed to fetch`, `Cannot read properties of undefined`, `is not a function`, `[object Object]`).
+- A script starts in each page before its own scripts and watches each text that the page adds or changes. Thus a text that shows for a short time also counts, and so does a text that an action of the probe shows.
+- A text in an error view does not count: `<otel-error>` of `@mark1russell7/otel-ts/error-view`, or an element with `data-error-view`. A text in `pre`, `code`, `kbd`, `samp`, `textarea` or a hidden element does not count either.
+
+By default, the check only reports each text, and the view does not fail. The log, `summary.md` and `report.json` (the field `bareErrors` of a view) give the texts. To make each text fail its view, set the field `sitePages.bareErrors` to `"fail"` in the `package.json` of the working folder:
+
+```json
+{ "sitePages": { "bareErrors": "fail" } }
+```
+
+The option `--bare-errors fail` or `--bare-errors report` overrides the field. Turn the failure on when the report of the site gives no text.
+
 The folder of `--shots` gets a screenshot of each view, `report.json` and `summary.md`. The exit code is 0 when each view and each budget passes. It is 1 when a view or a budget fails, and 2 for an incorrect command line.
 
 The check finds a browser in this order: `--browser`, `$SITE_CHECK_BROWSER`, the newest Chromium of Playwright, and then Chrome or Edge. The folder `src/check` imports only Node.js. Thus Node.js 22.18 or later can start `src/check/main.ts` with no install. The workflow `reusable-pages.yml` of the template uses it this way.
