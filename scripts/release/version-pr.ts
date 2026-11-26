@@ -119,20 +119,25 @@ const HELD_PATHS = '.workflow_runs[] | select(.conclusion == "action_required") 
 
 /**
  * This function finds the held pull_request runs of the head commit of the pull request, and starts each of their
- * workflows with workflow_dispatch on the branch of the pull request. GitHub makes the runs some seconds after the push,
- * so the function reads them again, up to `tries` reads 5 seconds apart. A workflow that does not start gets a warning,
- * and the other workflows still start.
+ * workflows with workflow_dispatch on the branch of the pull request. GitHub makes the runs one by one in the seconds
+ * after the push, so the function reads them again, 5 seconds apart, until two reads in a row give the same runs that
+ * are not none, or after `tries` reads. (On 2026-11-26 the first read of client#798 gave 2 of its 4 held runs.) A
+ * workflow that does not start gets a warning, and the other workflows still start.
  */
 export function startHeldChecks(repository: string, number: string, run: Gh = gh, wait: Wait = sleep, tries = 12): HeldChecks {
   const head = run(["pr", "view", number, "--repo", repository, "--json", "headRefOid,headRefName", "--jq", '.headRefOid + " " + .headRefName']);
   const [sha = "", branch = ""] = head.trim().split(" ");
   if (!/^[0-9a-f]{40}$/u.test(sha) || branch === "") throw new Error(`Pull request #${number} has no head commit and branch.`);
   let paths: string[] = [];
-  for (let attempt = 1; attempt <= tries && paths.length === 0; attempt += 1) {
+  let previous = "";
+  for (let attempt = 1; attempt <= tries; attempt += 1) {
     if (attempt > 1) wait(5000);
     const text = run(["api", `repos/${repository}/actions/runs?head_sha=${sha}&event=pull_request&per_page=100`, "--jq", HELD_PATHS]);
     const lines = text.split("\n").map((line) => line.trim().replace(/@.*$/u, ""));
     paths = [...new Set(lines.filter((line) => line !== ""))].sort();
+    const key = paths.join("\n");
+    if (key !== "" && key === previous) break;
+    previous = key;
   }
   if (paths.length === 0) {
     return { started: [], lines: [`GitHub holds no run of ${sha.slice(0, 7)}, so the checks of pull request #${number} need no start.`] };
