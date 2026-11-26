@@ -21,7 +21,7 @@ export const MAX_BARE_ERRORS: number = 20;
 /**
  * The shape of the text of a thrown value, for example `Error: x`, `TypeError: x` or `DOMException: x`. It also matches the
  * messages of the browser that a page shows when it puts `error.message` on the screen.
- * The name of a thrown value starts with a capital letter, so a name in code such as `isApiError: x` does not match.
+ * The name of a thrown value starts with a capital letter, so a name in code (for example `isApiError: x`) does not match.
  */
 export const BARE_ERROR_SHAPE: string = String.raw`(?:^|[\s("'\[:])(?:[A-Z][A-Za-z]*)?(?:Error|Exception): \S|Failed to fetch|NetworkError when attempting to fetch|Cannot read propert(?:y|ies) of (?:undefined|null)|is not a function|\[object Object\]|Unexpected token .{1,20} in JSON`;
 
