@@ -53,6 +53,7 @@ export {
   gateTrigger,
   homeModule,
   homePackage,
+  homeShape,
   licenseFile,
   mainCheck,
   noBuildOutput,
@@ -159,6 +160,8 @@ export { evaluateExpression, groupParts, mayRun, type ExpressionValue, type RunP
 export { declaredName, messageOf, repoOf, reposOf, signaturesOf } from "./rules/home-package.ts";
 export { moduleMessage, modulesOf, moduleUses, type HomeModule, type ModuleUse } from "./rules/home-module.ts";
 export { HOME_EXPORTS } from "./home-exports.ts";
+export { containedHome, homeShapesOf, shapeMessage, shapesOfSource, spansOf, type HomeShape } from "./rules/home-shape.ts";
+export { HOME_SHAPES } from "./home-shapes.ts";
 export { authorOf, LICENSE_TEXTS, licenseFileOf, mitText, repositoryIsPublic } from "./rules/license-file.ts";
 export { GITHUB_YAML, yamlFaults, type YamlFault } from "./rules/workflow-parses.ts";
 export { PAGES_WORKFLOWS, pagesCalls, type PagesCall } from "./rules/pages-site.ts";

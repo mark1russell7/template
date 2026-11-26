@@ -58,13 +58,13 @@ export const HOMES: readonly Home[] = [
   {
     area: "statistics",
     title: "Statistics",
-    covers: "quantiles, medians, means, SD, bootstrap intervals, sign and permutation tests, Holm, Wilson, Brier, calibration, correlation, noise floors, fits of laws to values, likelihoods, mixtures",
+    covers: "quantiles, medians, means, SD, bootstrap intervals, sign and permutation tests, Holm, Wilson, Brier, calibration, correlation, noise floors, fits of laws to values, likelihoods, mixtures, information gain and the expected value of an answer (the rank of questions by a loss)",
     packages: ["@mark1russell7/rigor-statistics"],
     repo: "mark1russell7/rigor",
     alsoIn: ["mark1russell7/algebra", "mark1russell7/math"],
     state: "published",
-    words: ["stats", "quantile", "median", "mean", "percentile", "bootstrap", "interval", "confidence", "p-value", "brier", "wilson", "holm", "spearman", "kendall", "noise", "stddev", "variance", "resample", "resampling", "bonferroni", "regression", "histogram", "pvalue", "significance", "welch", "ttest", "mann", "whitney", "pearson", "correlation"],
-    signatures: ["quantiles?", "percentiles?", "median(Of)?", "std[Dd]ev", "standardDeviation", "variance", "bootstrap(?:Median|Mean|Interval|Ci|CI|Quantile|Percentile|Ratio|Diff|Difference|Samples?|Resamples?)?", "wilson[A-Za-z0-9]*", "holm[A-Za-z0-9]*", "brier[A-Za-z0-9]*", "spearman[A-Za-z0-9]*", "kendall[A-Za-z0-9]*", "signTest", "pairedPermutation", "permutationTest", "noiseFloor", "iqr"],
+    words: ["stats", "quantile", "median", "mean", "percentile", "bootstrap", "interval", "confidence", "p-value", "brier", "wilson", "holm", "spearman", "kendall", "noise", "stddev", "variance", "resample", "resampling", "bonferroni", "regression", "histogram", "pvalue", "significance", "welch", "ttest", "mann", "whitney", "pearson", "correlation", "information gain", "expected value of an answer"],
+    signatures: ["quantiles?", "percentiles?", "median(Of)?", "std[Dd]ev", "standardDeviation", "variance", "bootstrap(?:Median|Mean|Interval|Ci|CI|Quantile|Percentile|Ratio|Diff|Difference|Samples?|Resamples?)?", "wilson[A-Za-z0-9]*", "holm[A-Za-z0-9]*", "brier[A-Za-z0-9]*", "spearman[A-Za-z0-9]*", "kendall[A-Za-z0-9]*", "signTest", "pairedPermutation", "permutationTest", "noiseFloor", "iqr", "rankQuestions", "answerValue", "bayesRisk"],
   },
   {
     area: "random",

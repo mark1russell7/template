@@ -181,6 +181,9 @@ importers:
       '@mark1russell7/boundaries':
         specifier: workspace:*
         version: link:packages/boundaries
+      '@mark1russell7/code-shape':
+        specifier: ^0.0.1
+        version: 0.0.1
       '@mark1russell7/conventions':
         specifier: workspace:*
         version: link:packages/conventions
@@ -300,6 +303,9 @@ importers:
 
   packages/conventions:
     dependencies:
+      '@mark1russell7/code-shape':
+        specifier: ^0.0.1
+        version: 0.0.1
       '@mark1russell7/text':
         specifier: ^0.0.20
         version: 0.0.20
@@ -641,6 +647,10 @@ packages:
     peerDependenciesMeta:
       zod:
         optional: true
+
+  '@mark1russell7/code-shape@0.0.1':
+    resolution: {integrity: sha512-qunnV1QThYsI0rXeOFRgaXpZFFw+ZLLnIG0jYioql5WiYrqCPe+eROgLn4l/cRegXU3Y1t4OEnUfW6izovteFA==}
+    engines: {node: '>=22.13'}
 
   '@mark1russell7/collections@0.11.5':
     resolution: {integrity: sha512-ZWAbb/PRwllj+WjY536zytXYcB0ZUeYJcz4hHwVAKquCheIxl5VsfPBG8X2zPPNw9aS5mknM3TzlkL5Xk7bpfg==}
@@ -2119,6 +2129,8 @@ snapshots:
       '@mark1russell7/quantity': 0.4.1(zod@4.6.7)
     optionalDependencies:
       zod: 4.6.7
+
+  '@mark1russell7/code-shape@0.0.1': {}
 
   '@mark1russell7/collections@0.11.5(zod@4.6.7)':
     dependencies:
