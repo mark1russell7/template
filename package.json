@@ -28,6 +28,9 @@
     "check:api": "api-report check",
     "check:conventions": "conventions check"
   },
+  "sitePages": {
+    "bareErrors": "fail"
+  },
   "devDependencies": {
     "@mark1russell7/api-report": "workspace:*",
     "@mark1russell7/boundaries": "workspace:*",
