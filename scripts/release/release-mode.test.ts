@@ -27,7 +27,13 @@ interface Item {
 
 /** The parts of a workflow that the tests read. */
 interface Workflow {
-  readonly on: { readonly push?: { readonly paths?: readonly string[] } };
+  readonly on: {
+    readonly push?: { readonly paths?: readonly string[] };
+    readonly workflow_call?: {
+      readonly inputs?: Readonly<Record<string, { readonly required?: boolean; readonly default?: unknown }>>;
+      readonly secrets?: Readonly<Record<string, { readonly required?: boolean }>>;
+    };
+  };
   readonly jobs: Readonly<Record<string, Item>>;
   readonly outputs?: unknown;
 }
@@ -150,9 +156,9 @@ describe("release.yml in the two modes", () => {
         .filter(([, item]) => item.permissions?.[scope] === level)
         .map(([name]) => name);
     assert.deepEqual(holders("pull-requests", "write"), ["version"]);
-    assert.deepEqual(holders("actions", "write"), ["version"]);
+    assert.deepEqual(holders("actions", "write"), []);
     assert.deepEqual(holders("id-token", "write"), ["publish"]);
-    assert.deepEqual(release.jobs["version"]?.permissions, { contents: "write", "pull-requests": "write", actions: "write" });
+    assert.deepEqual(release.jobs["version"]?.permissions, { contents: "write", "pull-requests": "write" });
   });
 
   it("calls reusable-release-version.yml for the job version, as the jobs build and tag", () => {
@@ -171,15 +177,26 @@ describe("reusable-release-version.yml", () => {
 
   it("has one job, with the permissions that the caller job of release.yml gives, and no OIDC token", () => {
     assert.deepEqual(Object.keys(shared.jobs), ["version"]);
-    assert.deepEqual(shared.jobs["version"]?.permissions, { contents: "write", "pull-requests": "write", actions: "write" });
+    assert.deepEqual(shared.jobs["version"]?.permissions, { contents: "write", "pull-requests": "write" });
     assert.deepEqual(shared.jobs["version"]?.permissions, workflow("release.yml").jobs["version"]?.permissions);
   });
 
-  it("starts the held checks of the version pull request in its last step", () => {
-    const last = steps.at(-1);
-    assert.equal(last?.name, "Start the held checks");
-    assert.equal(bare(last?.if), "steps.changesets.outputs.pr-number != ''");
-    assert.match(last?.run ?? "", /version-pr\.ts" checks "\$PR"$/u);
+  it("takes an optional GitHub App, and gives the Changesets action its token for this repository only", () => {
+    const call = shared.on.workflow_call;
+    assert.equal(call?.inputs?.["app-id"]?.required, false);
+    assert.equal(call?.inputs?.["app-id"]?.default, "", "Empty: a caller with no App keeps the workflow token.");
+    assert.equal(call?.secrets?.["app-key"]?.required, false);
+    const app = steps.findIndex((step) => step.id === "app");
+    const action = steps.findIndex((step) => step.uses?.startsWith("changesets/action@") === true);
+    assert.ok(app >= 0 && action > app, "The token step comes before the Changesets action.");
+    assert.match(steps[app]?.uses ?? "", /^actions\/create-github-app-token@[0-9a-f]{40}$/u);
+    assert.equal(bare(steps[app]?.if), "steps.head.outputs.head == 'true' && inputs.app-id != ''");
+    assert.equal(steps[app]?.with?.["repositories"], "${{ github.event.repository.name }}");
+    assert.equal(steps[action]?.with?.["github-token"], "${{ steps.app.outputs.token || github.token }}");
+  });
+
+  it("does not dispatch the held checks: a workflow_dispatch run does not count for the rules of main", () => {
+    for (const step of steps) assert.doesNotMatch(step.run ?? "", /version-pr\.ts" checks/u);
   });
 
   it("opens the version pull request only on the head of main, and puts the steps for a person in its text", () => {
@@ -189,7 +206,13 @@ describe("reusable-release-version.yml", () => {
     assert.equal(bare(steps[action]?.if), "steps.head.outputs.head == 'true'");
     assert.equal(steps[action]?.with?.["publish-script"], undefined, "The action publishes nothing.");
     assert.equal(steps[action]?.with?.["pr-title"], "Version the packages");
-    assert.match(steps.at(-2)?.run ?? "", /version-pr\.ts" note "\$PR"$/u);
+    const note = steps.at(-1);
+    assert.match(note?.run ?? "", /version-pr\.ts" note "\$PR"$/u);
+    assert.equal(
+      bare(note?.if),
+      "steps.changesets.outputs.pr-number != '' && steps.app.outputs.token == ''",
+      "With the App token the checks run, and no person must act.",
+    );
   });
 
   it("gets the release scripts of its own template commit, and keeps no credentials in the checkouts", () => {
