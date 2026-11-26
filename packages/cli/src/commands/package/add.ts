@@ -206,7 +206,7 @@ export const PRESETS: Readonly<Record<PresetName, Preset>> = {
   electron: {
     label: "electron — desktop app (Electron)",
     tsconfig: "node",
-    install: { dependencies: [], devDependencies: ["electron", "tsdown"] },
+    install: { dependencies: ["@mark1russell7/text"], devDependencies: ["electron", "tsdown"] },
     scripts: { build: "tsdown", start: "tsdown && electron build/main/main.js", smoke: "tsdown && electron build/main/main.js --smoke" },
     files: "electron",
     allowBuilds: { electron: "electron: its install script downloads the Electron binary (the preset electron)." },

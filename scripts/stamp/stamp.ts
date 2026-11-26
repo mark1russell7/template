@@ -122,10 +122,24 @@ function templatePackages(template: string, sha: string, tracked: readonly strin
 }
 
 /**
+ * The conventions of a new repository. It starts with no console call, so the first call fails at once. Output for a
+ * person goes to the printer of @mark1russell7/text/print, and a diagnostic goes to a log record of otel-ts.
+ */
+export const FIRST_CONVENTIONS = {
+  rules: {
+    "no-console": {
+      fail: true,
+      reason: "A new repository starts with no console call. Output for a person goes to the printer of @mark1russell7/text/print, and a diagnostic goes to a log record of @mark1russell7/otel-ts.",
+    },
+  },
+} as const;
+
+/**
  * This function gives the root package.json of a repository from the one of the template. A package of the template
  * gets the range that `range` gives, because the repository does not have the workspace of the template. The field
  * `conventions` goes: it holds the exceptions of the template, and each one names a file of the template. A new
- * repository does not get these files, so the runner reports each such exception as stale.
+ * repository does not get these files, so the runner reports each such exception as stale. In their place, the repository
+ * gets `FIRST_CONVENTIONS`.
  */
 export function stampRoot(template: RootManifest, name: string, packages: ReadonlySet<string> | ReadonlyMap<string, string>, range: (name: string) => string): RootManifest {
   const dev = { ...template.devDependencies, "@mark1russell7/template-cli": "workspace:*" };
@@ -139,6 +153,7 @@ export function stampRoot(template: RootManifest, name: string, packages: Readon
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([dep, given]) => [dep, packages.has(dep) && given === "workspace:*" ? range(dep) : given]),
     ),
+    conventions: FIRST_CONVENTIONS,
   };
 }
 
@@ -165,7 +180,8 @@ export function workflowShape(text: string): string {
 /**
  * This function gives the fields of a root package.json that the stamp would add or change. The name, scripts and
  * devDependencies of the repository may have more entries than the stamp gives; a range from npm matches each caret
- * range. Each other field of the template must be equal.
+ * range. The field `conventions` belongs to the repository after its first stamp. Each other field of the template must be
+ * equal.
  */
 export function rootFieldsBehind(expected: RootManifest, actual: Readonly<Record<string, unknown>>, packages: ReadonlySet<string>, templateDev: Readonly<Record<string, string>>): string[] {
   const behind: string[] = [];
@@ -177,7 +193,7 @@ export function rootFieldsBehind(expected: RootManifest, actual: Readonly<Record
     if (fromNpm ? !LATEST_RANGE.test(dev[dep] ?? "") : dev[dep] !== range) behind.push(`devDependencies.${dep}`);
   }
   for (const [field, value] of Object.entries(expected)) {
-    if (field === "name" || field === "scripts" || field === "devDependencies") continue;
+    if (field === "name" || field === "scripts" || field === "devDependencies" || field === "conventions") continue;
     if (JSON.stringify(actual[field]) !== JSON.stringify(value)) behind.push(field);
   }
   return behind;
