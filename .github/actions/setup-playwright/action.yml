@@ -99,6 +99,31 @@ runs:
           'DPkg::Lock::Timeout "180";' \
           'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/99-setup-playwright > /dev/null
         sudo rm -f /etc/apt/apt.conf.d/docker-clean
+    - name: Check that apt has an Ubuntu archive
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        # On 2026-11-26 an ubuntu-26.04 runner had only packages.microsoft.com in its apt sources, so install-deps
+        # failed at once on each font package (apt exit 100). When no source names an Ubuntu archive, this step adds the
+        # archive of the release. With no Ubuntu keyring, it fails with a clear text.
+        . /etc/os-release
+        if [ "${ID:-}" != ubuntu ]; then exit 0; fi
+        if grep -R -q -E '(archive|ports|security)\.ubuntu\.com' /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null; then
+          exit 0
+        fi
+        keyring=/usr/share/keyrings/ubuntu-archive-keyring.gpg
+        if [ ! -f "$keyring" ]; then
+          echo "::error title=Apt sources::the runner has no Ubuntu apt source and no $keyring"
+          exit 1
+        fi
+        case "$(dpkg --print-architecture)" in
+          amd64|i386) uri=http://archive.ubuntu.com/ubuntu; security=http://security.ubuntu.com/ubuntu ;;
+          *) uri=http://ports.ubuntu.com/ubuntu-ports; security=$uri ;;
+        esac
+        echo "::warning title=Apt sources::the runner has no Ubuntu apt source, so the step adds $uri for $VERSION_CODENAME"
+        printf 'Types: deb\nURIs: %s\nSuites: %s %s-updates\nComponents: main universe restricted multiverse\nSigned-By: %s\n\nTypes: deb\nURIs: %s\nSuites: %s-security\nComponents: main universe restricted multiverse\nSigned-By: %s\n' \
+          "$uri" "$VERSION_CODENAME" "$VERSION_CODENAME" "$keyring" "$security" "$VERSION_CODENAME" "$keyring" \
+          | sudo tee /etc/apt/sources.list.d/setup-playwright-ubuntu.sources > /dev/null
     # The restore and the save are two steps, so that a run with missing system packages saves no cache. A cache with
     # the browsers and no .deb files would stay under its key, and each later run would download the packages again.
     # A stalled download of the cache ends after 3 minutes (the default is 10). Then the step installs the browsers.
