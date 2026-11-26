@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { runChecks, type RuleResult } from "./index.ts";
-import { calledJobs, matrixPeak, runsAtOnce, TEMPLATE_CALLED, workflowPeaks, type PeakOptions } from "./rules/runner-peak.ts";
+import { calledJobs, layeredPeak, matrixPeak, needsPeak, runsAtOnce, TEMPLATE_CALLED, workflowPeaks, type PeakOptions } from "./rules/runner-peak.ts";
 import { evaluateExpression, groupParts, mayRun } from "./workflow-expression.ts";
 import { parseWorkflow } from "./workflow.ts";
 
@@ -112,10 +112,11 @@ describe("the peak jobs of a workflow", () => {
 
   it("counts the matrix to its max-parallel, the jobs of each event, and the runs of a burst", () => {
     const [peak] = workflowPeaks([parse(ci)], OPTIONS);
-    // push: 5 merges, each with 3 matrix jobs and the summary. The review runs only on a pull request.
-    expect(peak?.classes.push?.peak).toBe(5 * (3 + 1));
-    expect(peak?.classes.pull?.peak).toBe(5 * (3 + 1 + 1));
-    expect(peak?.peak).toBe(20 + 25);
+    // push: 5 merges, each with 3 matrix jobs. The summary needs the test, so it does not run at the same time as it.
+    // The review runs only on a pull request, at the same time as the test.
+    expect(peak?.classes.push?.peak).toBe(5 * 3);
+    expect(peak?.classes.pull?.peak).toBe(5 * (3 + 1));
+    expect(peak?.peak).toBe(15 + 20);
     expect(matrixPeak(parse(ci).jobs[0]!)).toBe(3);
   });
 
@@ -155,6 +156,75 @@ describe("the peak jobs of a workflow", () => {
         return `${workflow.file}=${String(Math.max(peak?.classes.push?.peak ?? 0, peak?.classes.pull?.peak ?? 0))}`;
       });
     expect(counts).toEqual([...TEMPLATE_CALLED]);
+  });
+});
+
+describe("the peak of the graph of the needs", () => {
+  const job = (id: string, jobs: number, needs: readonly string[] = [], runs = 1) => ({ id, jobs, needs, runs });
+  /** This function gives a workflow on push with no group, and the jobs as YAML lines. */
+  const workflow = (jobs: readonly string[]) => parse(["on: [push]", "jobs:", ...jobs, ""].join("\n"));
+  const matrix = (id: string, count: number, extra: readonly string[] = []) => [
+    `  ${id}:`,
+    ...extra.map((line) => `    ${line}`),
+    "    strategy:",
+    "      matrix:",
+    `        n: [${Array.from({ length: count }, (_, i) => String(i)).join(", ")}]`,
+  ];
+
+  it("gives the heaviest job of a chain", () => {
+    expect(needsPeak([job("a", 2), job("b", 5, ["a"]), job("c", 1, ["b"])])).toBe(5);
+    const [peak] = workflowPeaks([workflow([...matrix("a", 2), ...matrix("b", 5, ["needs: a"]), ...matrix("c", 1, ["needs: [b]"])])], { burst: 1, called: {} });
+    expect(peak?.classes.push?.peak).toBe(5);
+  });
+
+  it("gives the three jobs of a fan-out after one job", () => {
+    expect(needsPeak([job("build", 1), job("x", 1, ["build"]), job("y", 1, ["build"]), job("z", 1, ["build"])])).toBe(3);
+  });
+
+  it("gives the heavier of the two sides and the ends of a diamond", () => {
+    const diamond = (top: number, left: number, right: number, bottom: number) =>
+      needsPeak([job("top", top), job("left", left, ["top"]), job("right", right, ["top"]), job("bottom", bottom, ["left", "right"])]);
+    expect(diamond(1, 2, 3, 1)).toBe(5);
+    expect(diamond(6, 2, 3, 1)).toBe(6);
+    expect(diamond(1, 2, 3, 7)).toBe(7);
+  });
+
+  it("ignores a name in needs that is not a job that can run on the event", () => {
+    // The job gate runs only on a pull request. On push, the job b needs no job that runs, so a and b run at one time.
+    const text = workflow(["  gate:", "    if: github.event_name == 'pull_request'", "    runs-on: x", "  a:", "    runs-on: x", "  b:", "    needs: [gate, a]", "    runs-on: x"]);
+    expect(workflowPeaks([text], { burst: 1, called: {} })[0]?.classes.push?.peak).toBe(1);
+    const both = workflow(["  gate:", "    if: github.event_name == 'pull_request'", "    runs-on: x", "  a:", "    runs-on: x", "  b:", "    needs: [gate]", "    runs-on: x"]);
+    expect(workflowPeaks([both], { burst: 1, called: {} })[0]?.classes.push?.peak).toBe(2);
+  });
+
+  it("adds the antichain of each layer of runs, as the runs of different stages overlap", () => {
+    // A has 2 jobs and 3 runs at one time. B needs A, with 3 jobs and 1 run at one time. Layer 1 has A and B: the heavier
+    // is B, 3. Layers 2 and 3 have only A: 2 each. The peak is 3 + 2 + 2 = 7: one run at B and two runs at A. The old sum
+    // gave 2 * 3 + 3 * 1 = 9.
+    expect(layeredPeak([job("a", 2, [], 3), job("b", 3, ["a"], 1)])).toBe(7);
+    // With equal runs, the peak is the runs times the antichain.
+    expect(layeredPeak([job("a", 2, [], 4), job("b", 3, ["a"], 4)])).toBe(4 * 3);
+    expect(layeredPeak([])).toBe(0);
+    const text = workflow([
+      ...matrix("a", 2, ["concurrency: a-${{ github.sha }}"]),
+      ...matrix("b", 3, ["needs: a", "concurrency: b"]),
+    ]);
+    const [peak] = workflowPeaks([text], { burst: 3, called: {} });
+    expect(peak?.classes.push?.jobs.map((item) => [item.id, item.jobs, item.runs])).toEqual([
+      ["a", 2, 3],
+      ["b", 3, 1],
+    ]);
+    expect(peak?.classes.push?.peak).toBe(7);
+  });
+
+  it("gives the sum for a cycle of needs, which GitHub refuses", () => {
+    expect(needsPeak([job("a", 2, ["b"]), job("b", 3, ["a"])])).toBe(5);
+  });
+
+  it("counts the antichain of a called local workflow as the jobs of its caller job", () => {
+    const caller = parse(["on: [push]", "concurrency: c", "jobs:", "  call:", "    uses: ./.github/workflows/shared.yml", ""].join("\n"));
+    const shared = parse(["on: workflow_call", "jobs:", ...matrix("a", 2), ...matrix("b", 4, ["needs: a"]), ""].join("\n"), "shared.yml");
+    expect(workflowPeaks([caller, shared], { burst: 5, called: {} })[0]?.classes.push?.jobs.map((item) => item.jobs)).toEqual([4]);
   });
 });
 
