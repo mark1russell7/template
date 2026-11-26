@@ -28,6 +28,7 @@ GITHUB_YAML: build/index.d.ts#GITHUB_YAML
 HOMES: build/index.d.ts#HOMES
 HOME_EXPORTS: build/index.d.ts#HOME_EXPORTS
 HOME_PATTERNS: build/index.d.ts#HOME_PATTERNS
+HOME_SHAPES: build/index.d.ts#HOME_SHAPES
 HOME_TIMEOUT_MS: build/index.d.ts#HOME_TIMEOUT_MS
 HOOK_MARKER: build/index.d.ts#HOOK_MARKER
 type HiddenFailure: build/index.d.ts#HiddenFailure
@@ -35,6 +36,7 @@ type Home: build/index.d.ts#Home
 type HomeAnswer: build/index.d.ts#HomeAnswer
 type HomeFetch: build/index.d.ts#HomeFetch
 type HomeModule: build/index.d.ts#HomeModule
+type HomeShape: build/index.d.ts#HomeShape
 type HomeState: build/index.d.ts#HomeState
 type HookOptions: build/index.d.ts#HookOptions
 IGNORE_AFTER: build/index.d.ts#IGNORE_AFTER
@@ -134,6 +136,7 @@ configsOfScript: build/index.d.ts#configsOfScript
 consoleBreaks: build/index.d.ts#consoleBreaks
 consoleGate: build/index.d.ts#consoleGate
 consoleKind: build/index.d.ts#consoleKind
+containedHome: build/index.d.ts#containedHome
 convertGate: build/index.d.ts#convertGate
 coverageProvider: build/index.d.ts#coverageProvider
 createContext: build/index.d.ts#createContext
@@ -159,6 +162,8 @@ hasTests: build/index.d.ts#hasTests
 hiddenFailures: build/index.d.ts#hiddenFailures
 homeModule: build/index.d.ts#homeModule
 homePackage: build/index.d.ts#homePackage
+homeShape: build/index.d.ts#homeShape
+homeShapesOf: build/index.d.ts#homeShapesOf
 inFolder: build/index.d.ts#inFolder
 installHook: build/index.d.ts#installHook
 invalidPatternBreaks: build/index.d.ts#invalidPatternBreaks
@@ -269,6 +274,8 @@ securityWorkflow: build/index.d.ts#securityWorkflow
 serviceRunMain: build/index.d.ts#serviceRunMain
 setVersions: build/index.d.ts#setVersions
 setupCue: build/index.d.ts#setupCue
+shapeMessage: build/index.d.ts#shapeMessage
+shapesOfSource: build/index.d.ts#shapesOfSource
 sharedCi: build/index.d.ts#sharedCi
 sharedDocsRule: build/index.d.ts#sharedDocsRule
 sharedNames: build/owners.d.ts#sharedNames
@@ -277,6 +284,7 @@ signaturesOf: build/index.d.ts#signaturesOf
 siteCheckInCi: build/index.d.ts#siteCheckInCi
 skippableJobs: build/index.d.ts#skippableJobs
 sourceMain: build/index.d.ts#sourceMain
+spansOf: build/index.d.ts#spansOf
 specifiersOf: build/index.d.ts#specifiersOf
 startsOnPullRequest: build/index.d.ts#startsOnPullRequest
 startsTests: build/index.d.ts#startsTests
@@ -451,6 +459,16 @@ export declare const HOME_EXPORTS: Readonly<Record<string, {
 ### build/index.d.ts#HOME_PATTERNS
 export declare const HOME_PATTERNS: readonly RegExp[];
 
+### build/index.d.ts#HOME_SHAPES
+export declare const HOME_SHAPES: Readonly<Record<string, {
+  readonly version: string;
+  readonly functions: readonly {
+    readonly name: string;
+    readonly from?: string;
+    readonly tokens: readonly string[];
+  }[];
+}>>;
+
 ### build/index.d.ts#HOME_TIMEOUT_MS
 export declare const HOME_TIMEOUT_MS = 3e4;
 
@@ -495,6 +513,14 @@ type HomeFetch = (urls: readonly string[]) => ReadonlyMap<string, HomeAnswer>;
 interface HomeModule {
   readonly home: Home;
   readonly specifier: string;
+}
+
+### build/index.d.ts#HomeShape
+interface HomeShape {
+  readonly name: string;
+  readonly pkg: string;
+  readonly home: Home;
+  readonly tokens: readonly string[];
 }
 
 ### build/index.d.ts#HomeState
@@ -1009,6 +1035,9 @@ export declare function consoleGate(options: Options, count: number, today: stri
 ### build/index.d.ts#consoleKind
 export declare function consoleKind(cli: boolean, method: string): ConsoleKind;
 
+### build/index.d.ts#containedHome
+export declare function containedHome(tokens: readonly string[], shapes: readonly HomeShape[]): HomeShape | undefined;
+
 ### build/index.d.ts#convertGate
 export declare function convertGate(text: string, file: string, commit?: string): {
   text: string;
@@ -1081,6 +1110,12 @@ export declare const homeModule: Rule;
 
 ### build/index.d.ts#homePackage
 export declare const homePackage: Rule;
+
+### build/index.d.ts#homeShape
+export declare const homeShape: Rule;
+
+### build/index.d.ts#homeShapesOf
+export declare function homeShapesOf(homes: readonly Home[], index?: typeof HOME_SHAPES): HomeShape[];
 
 ### build/index.d.ts#inFolder
 export declare const inFolder: (folder: string, file: string) => string;
@@ -1394,6 +1429,12 @@ export declare function setVersions(context: RuleContext, from: string, to: stri
 ### build/index.d.ts#setupCue
 export declare const setupCue: Rule;
 
+### build/index.d.ts#shapeMessage
+export declare function shapeMessage(name: string, file: string, line: number, shape: HomeShape): string;
+
+### build/index.d.ts#shapesOfSource
+export declare function shapesOfSource(file: string, text: string): FunctionShape[];
+
 ### build/index.d.ts#sharedCi
 export declare const sharedCi: Rule;
 
@@ -1414,6 +1455,9 @@ export declare function skippableJobs(needsOf: ReadonlyMap<string, readonly stri
 
 ### build/index.d.ts#sourceMain
 export declare const sourceMain: Rule;
+
+### build/index.d.ts#spansOf
+export declare function spansOf(functions: readonly FunctionShape[], lineCount: number): (readonly [number, number])[];
 
 ### build/index.d.ts#specifiersOf
 export declare function specifiersOf(manifest: Manifest, field: string): [string, string][];
