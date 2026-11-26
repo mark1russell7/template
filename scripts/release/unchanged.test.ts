@@ -3,7 +3,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { gzipSync } from "node:zlib";
-import { caretLine, differenceText, installedManifest, pendingPackages, shippedDifferences, tarballFiles } from "./unchanged.ts";
+import {
+  caretLine,
+  differenceText,
+  fetchListedTarball,
+  installedManifest,
+  pendingPackages,
+  shippedDifferences,
+  TARBALL_WAITS_MS,
+  tarballFiles,
+} from "./unchanged.ts";
 
 // A small ustar writer, enough for the tests: regular files, folders and pax path records.
 function header(name: string, size: number, type: string, mtime: number): Buffer {
@@ -158,4 +167,66 @@ test("RELEASE_PENDING gives the names, separated by spaces, commas or lines", ()
   assert.deepEqual([...pendingPackages("@x/a @x/b,@x/c\n@x/d")], ["@x/a", "@x/b", "@x/c", "@x/d"]);
   assert.deepEqual([...pendingPackages("")], []);
   assert.deepEqual([...pendingPackages(undefined)], []);
+});
+
+test("fetchListedTarball tries a 404 again until the registry serves the tarball", async () => {
+  const statuses = [404, 404, 200];
+  const waits: number[] = [];
+  const bytes = await fetchListedTarball(
+    "https://registry.example/p-0.1.0.tgz",
+    {
+      fetch: async () => new Response(statuses[0] === 200 ? "tgz" : "", { status: statuses.shift() ?? 500 }),
+      sleep: async (ms) => {
+        waits.push(ms);
+      },
+    },
+    [1, 2, 3],
+  );
+  assert.equal(bytes.toString("utf8"), "tgz");
+  assert.deepEqual(waits, [1, 2]);
+});
+
+test("fetchListedTarball fails after the last wait when the 404 stays", async () => {
+  let calls = 0;
+  const waits: number[] = [];
+  await assert.rejects(
+    fetchListedTarball(
+      "https://registry.example/p-0.1.0.tgz",
+      {
+        fetch: async () => {
+          calls += 1;
+          return new Response("", { status: 404 });
+        },
+        sleep: async (ms) => {
+          waits.push(ms);
+        },
+      },
+      [1, 2],
+    ),
+    /HTTP 404 for https:\/\/registry\.example\/p-0\.1\.0\.tgz/u,
+  );
+  assert.equal(calls, 3);
+  assert.deepEqual(waits, [1, 2]);
+});
+
+test("fetchListedTarball fails at once on each other HTTP error", async () => {
+  let calls = 0;
+  await assert.rejects(
+    fetchListedTarball("https://registry.example/p.tgz", {
+      fetch: async () => {
+        calls += 1;
+        return new Response("", { status: 500 });
+      },
+      sleep: async () => {
+        throw new Error("no wait expected");
+      },
+    }),
+    /HTTP 500/u,
+  );
+  assert.equal(calls, 1);
+});
+
+test("the default waits of fetchListedTarball are about 4 min", () => {
+  assert.deepEqual(TARBALL_WAITS_MS, [15_000, 30_000, 30_000, 60_000, 60_000, 60_000]);
+  assert.equal(TARBALL_WAITS_MS.reduce((a, b) => a + b, 0), 255_000);
 });

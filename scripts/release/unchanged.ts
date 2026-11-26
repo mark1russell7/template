@@ -135,3 +135,28 @@ export function shippedDifferences(published: Map<string, Buffer>, packed: Map<s
     return same ? [] : [`${path} (changed)`];
   });
 }
+
+/** The waits between the tries of a tarball that npm lists but does not serve yet: about 4 min in all. */
+export const TARBALL_WAITS_MS: readonly number[] = [15_000, 30_000, 30_000, 60_000, 60_000, 60_000];
+
+/**
+ * The bytes of the npm tarball of a version that npm lists. npm can list a new version before it
+ * serves its tarball: on 2026-11-26 a release got HTTP 404 about 100 s after a publish, and its
+ * second attempt passed with no new publish. So a 404 means "not yet served", and the fetch tries
+ * again after each wait of `waits`. After the last wait a 404 fails with the same error as each
+ * other HTTP error, which fails at once.
+ */
+export async function fetchListedTarball(
+  url: string,
+  io: { readonly fetch: (url: string) => Promise<Response>; readonly sleep: (ms: number) => Promise<void> },
+  waits: readonly number[] = TARBALL_WAITS_MS,
+): Promise<Buffer> {
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await io.fetch(url);
+    if (response.ok) return Buffer.from(await response.arrayBuffer());
+    const wait = waits[attempt];
+    if (response.status !== 404 || wait === undefined) throw new Error(`The registry gave HTTP ${response.status} for ${url}.`);
+    process.stdout.write(`The registry gave HTTP 404 for ${url}, a version that npm lists. Try ${attempt + 2} in ${wait / 1000} s.\n`);
+    await io.sleep(wait);
+  }
+}

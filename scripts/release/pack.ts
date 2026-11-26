@@ -25,7 +25,7 @@ import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { awaitReleased, readRemoteTags } from "./released.ts";
 import { tagName } from "./tags.ts";
-import { differenceText, pendingPackages, shippedDifferences, tarballFiles } from "./unchanged.ts";
+import { differenceText, fetchListedTarball, pendingPackages, shippedDifferences, tarballFiles } from "./unchanged.ts";
 import { publishedPackages, root, unpublishableDependencies, versionProblem, type Packument } from "./workspace.ts";
 
 const out = process.argv[2];
@@ -117,9 +117,9 @@ for (const { dir, manifest } of packages) {
   const published = packuments.get(manifest.name)?.versions?.[manifest.version ?? ""] as { dist?: { tarball?: string } } | undefined;
   const tarball = published?.dist?.tarball;
   if (tarball) {
-    const response = await fetch(tarball);
-    if (!response.ok) throw new Error(`The registry gave HTTP ${response.status} for ${tarball}.`);
-    const differences = shippedDifferences(tarballFiles(Buffer.from(await response.arrayBuffer())), tarballFiles(readFileSync(join(out, file))));
+    const sleep = (ms: number): Promise<void> => new Promise((done) => setTimeout(done, ms));
+    const bytes = await fetchListedTarball(tarball, { fetch, sleep });
+    const differences = shippedDifferences(tarballFiles(bytes), tarballFiles(readFileSync(join(out, file))));
     if (differences.length > 0) {
       (pending.has(manifest.name) ? raisedLater : changed).push(differenceText(`${manifest.name}@${manifest.version}`, differences));
     }
