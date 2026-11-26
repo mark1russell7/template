@@ -10,17 +10,19 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createPrinter } from "@mark1russell7/text/print";
 import { BrowserWindow, MessageChannelMain, app, protocol, session } from "electron";
 import { CONTENT_SECURITY_POLICY, PAGE_SCHEME, PAGE_URL, allowsNavigation, answer, contentType, pageFile, windowOptions } from "./index.ts";
 
 const build = join(dirname(fileURLToPath(import.meta.url)), "..");
 const page = process.env["PAGE_URL"] ?? PAGE_URL;
 const smoke = process.argv.includes("--smoke");
+const printer = createPrinter({ out: process.stdout, err: process.stderr });
 
 /** This function stops the app with an exit code. It tells why on a fault, and in a smoke run. */
 function stop(code: number, why: string): void {
-  if (code !== 0) console.error(`{{name}}: ${why}`);
-  else if (smoke) console.log(`smoke: ${why}`);
+  if (code !== 0) printer.error(why, "{{name}}");
+  else if (smoke) printer.line(`smoke: ${why}`);
   app.exit(code);
 }
 

@@ -6,7 +6,7 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { minuteField, scheduleMinute } from "../../packages/conventions/src/rules/runner-budget.ts";
 import { parseRoadmap } from "../../packages/site-pages/src/index.ts";
-import { checkStamp, firstRoadmap, pinWorkflow, type RootManifest, rootScripts, stamp, stampRoot, workflowShape } from "./stamp.ts";
+import { checkStamp, FIRST_CONVENTIONS, firstRoadmap, pinWorkflow, type RootManifest, rootScripts, stamp, stampRoot, workflowShape } from "./stamp.ts";
 
 const template = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -58,9 +58,9 @@ describe("the stamp", () => {
   it("leaves no range of a package that the repository does not have", async () => {
     const { out } = await stamped();
     for (const path of ["package.json", "packages/site/package.json"]) assert.doesNotMatch(read(out, path), /workspace:/);
-    const root = JSON.parse(read(out, "package.json")) as { name: string; devDependencies: Record<string, string> };
+    const root = JSON.parse(read(out, "package.json")) as { name: string; devDependencies: Record<string, string>; conventions?: unknown };
     assert.equal(root.name, "demo-repo-monorepo");
-    assert.equal(Object.hasOwn(root, "conventions"), false, "The repository gets the exceptions of the template");
+    assert.deepEqual(root.conventions, FIRST_CONVENTIONS, "The repository gets the first conventions, not the exceptions of the template");
     assert.equal(root.devDependencies["@mark1russell7/conventions"], "^9.8.7");
     assert.equal(root.devDependencies["@mark1russell7/template-cli"], "^9.8.7");
   });
@@ -157,11 +157,18 @@ describe("rootScripts", () => {
 });
 
 describe("stampRoot", () => {
+  it("gives a new repository the console rule with fail on, so its first console call fails at once", () => {
+    const source: RootManifest = { name: "template-monorepo", scripts: {}, devDependencies: {} };
+    const rule = (stampRoot(source, "demo-repo", new Set<string>(), () => "^1.0.0")["conventions"] as typeof FIRST_CONVENTIONS).rules["no-console"];
+    assert.equal(rule.fail, true);
+    assert.ok(rule.reason.length > 0);
+  });
+
   it("leaves out the exceptions of the template, because each one names a file that the repository does not get", () => {
     const exceptions = { rules: { "typed-scripts": { generated: ["made-up/bundles/*.mjs"], reason: "A made-up build writes these files." } } };
     const source: RootManifest = { name: "template-monorepo", private: true, scripts: {}, devDependencies: {}, conventions: exceptions };
     const root = stampRoot(source, "demo-repo", new Set<string>(), () => "^1.0.0");
-    assert.equal(Object.hasOwn(root, "conventions"), false);
+    assert.deepEqual(root["conventions"], FIRST_CONVENTIONS);
     assert.equal(root["private"], true);
     assert.deepEqual(source["conventions"], exceptions);
   });

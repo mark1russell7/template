@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -67,7 +67,7 @@ describe("writePackage", () => {
     const root = repo();
     const written = await writePackage(root, "desktop", "electron", cli);
     expect(written).toMatchObject({ name: "@demo/desktop", allowed: ["electron"] });
-    expect(written.install).toEqual(["pnpm add -D --filter=@demo/desktop electron tsdown"]);
+    expect(written.install).toEqual(["pnpm add --filter=@demo/desktop @mark1russell7/text", "pnpm add -D --filter=@demo/desktop electron tsdown"]);
     const manifest = json(join(written.dir, "package.json"));
     expect(manifest["main"]).toBe("./src/index.ts");
     expect(manifest["scripts"]).toMatchObject({ build: "tsdown", smoke: "tsdown && electron build/main/main.js --smoke" });
@@ -106,6 +106,16 @@ describe("writePackage", () => {
     await expect(writePackage(root, "api", "service", { ...cli, devDependencies: withoutService })).rejects.toThrow(/@mark1russell7\/service/);
     expect(existsSync(join(root, "packages", "api"))).toBe(false);
     await expect(writePackage(root, "api", "service", cli)).resolves.toMatchObject({ name: "@demo/api" });
+  });
+});
+
+describe("the files of the presets", () => {
+  it("call no console, because a new repository fails the rule no-console at its first call", () => {
+    const presets = resolve(here, "..", "..", "presets");
+    const files = readdirSync(presets, { recursive: true, encoding: "utf8" }).filter((file) => /\.(ts|tsx|tmpl|html)$/.test(file));
+    expect(files.length).toBeGreaterThan(0);
+    const calls = files.filter((file) => /\bconsole\s*\.\s*\w+\s*\(/.test(readFileSync(join(presets, file), "utf8")));
+    expect(calls).toEqual([]);
   });
 });
 
