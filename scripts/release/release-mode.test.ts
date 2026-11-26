@@ -150,8 +150,9 @@ describe("release.yml in the two modes", () => {
         .filter(([, item]) => item.permissions?.[scope] === level)
         .map(([name]) => name);
     assert.deepEqual(holders("pull-requests", "write"), ["version"]);
+    assert.deepEqual(holders("actions", "write"), ["version"]);
     assert.deepEqual(holders("id-token", "write"), ["publish"]);
-    assert.deepEqual(release.jobs["version"]?.permissions, { contents: "write", "pull-requests": "write" });
+    assert.deepEqual(release.jobs["version"]?.permissions, { contents: "write", "pull-requests": "write", actions: "write" });
   });
 
   it("calls reusable-release-version.yml for the job version, as the jobs build and tag", () => {
@@ -170,8 +171,15 @@ describe("reusable-release-version.yml", () => {
 
   it("has one job, with the permissions that the caller job of release.yml gives, and no OIDC token", () => {
     assert.deepEqual(Object.keys(shared.jobs), ["version"]);
-    assert.deepEqual(shared.jobs["version"]?.permissions, { contents: "write", "pull-requests": "write" });
+    assert.deepEqual(shared.jobs["version"]?.permissions, { contents: "write", "pull-requests": "write", actions: "write" });
     assert.deepEqual(shared.jobs["version"]?.permissions, workflow("release.yml").jobs["version"]?.permissions);
+  });
+
+  it("starts the held checks of the version pull request in its last step", () => {
+    const last = steps.at(-1);
+    assert.equal(last?.name, "Start the held checks");
+    assert.equal(bare(last?.if), "steps.changesets.outputs.pr-number != ''");
+    assert.match(last?.run ?? "", /version-pr\.ts" checks "\$PR"$/u);
   });
 
   it("opens the version pull request only on the head of main, and puts the steps for a person in its text", () => {
@@ -181,7 +189,7 @@ describe("reusable-release-version.yml", () => {
     assert.equal(bare(steps[action]?.if), "steps.head.outputs.head == 'true'");
     assert.equal(steps[action]?.with?.["publish-script"], undefined, "The action publishes nothing.");
     assert.equal(steps[action]?.with?.["pr-title"], "Version the packages");
-    assert.match(steps.at(-1)?.run ?? "", /version-pr\.ts" note "\$PR"$/u);
+    assert.match(steps.at(-2)?.run ?? "", /version-pr\.ts" note "\$PR"$/u);
   });
 
   it("gets the release scripts of its own template commit, and keeps no credentials in the checkouts", () => {
