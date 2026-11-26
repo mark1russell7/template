@@ -71,7 +71,14 @@ export function indexModule(index: Readonly<Record<string, PackageExports>>): st
   return lines.join("\n");
 }
 
-async function exportsOf(name: string, spec: string, temp: string): Promise<PackageExports> {
+/** One version of a package from npm, unpacked: the version, and the folder of its files (the folder `package` of the tarball). */
+export interface UnpackedPackage {
+  readonly version: string;
+  readonly dir: string;
+}
+
+/** This function takes the tarball of a version of a package from npm, and unpacks it in a new folder of `temp`. */
+export async function unpackPackage(name: string, spec: string, temp: string): Promise<UnpackedPackage> {
   const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}/${spec}`);
   if (!response.ok) throw new Error(`${name}@${spec}: npm gives HTTP ${response.status}`);
   const meta = (await response.json()) as { version: string; dist: { tarball: string } };
@@ -82,7 +89,12 @@ async function exportsOf(name: string, spec: string, temp: string): Promise<Pack
   const file = join(dir, "package.tgz");
   writeFileSync(file, Buffer.from(await tarball.arrayBuffer()));
   execFileSync("tar", ["-xzf", "package.tgz"], { cwd: dir, stdio: "ignore" });
-  return { version: meta.version, names: valueNames(packageReport(join(dir, "package"))) };
+  return { version: meta.version, dir: join(dir, "package") };
+}
+
+async function exportsOf(name: string, spec: string, temp: string): Promise<PackageExports> {
+  const unpacked = await unpackPackage(name, spec, temp);
+  return { version: unpacked.version, names: valueNames(packageReport(unpacked.dir)) };
 }
 
 /** This function gives the names of each package of an index module, keyed by the package, with no version. */

@@ -14,6 +14,7 @@ import { sharedCi } from "./shared-ci.ts";
 import { serviceRunMain } from "./service-run-main.ts";
 import { homeModule } from "./home-module.ts";
 import { homePackage } from "./home-package.ts";
+import { homeShape } from "./home-shape.ts";
 import { licenseFile } from "./license-file.ts";
 import { coverageProvider } from "./coverage-provider.ts";
 import { mainCheck } from "./main-check.ts";
@@ -99,6 +100,7 @@ export const RULES: readonly Rule[] = [
   movedRepoNames,
   scheduleLiterals,
   homePackage,
+  homeShape,
   homeModule,
   licenseFile,
   coverageProvider,
@@ -112,4 +114,4 @@ export const RULES: readonly Rule[] = [
 ];
 
 export { publishedMinor };
-export { apiReportScript, changelogVersion, coverageProvider, cuePreset, exportsRequire, gateAfterCancel, gateTrigger, securityGate, securityOneJob, securityOverrides, serviceRunMain, setupCue, sharedCi, summaryJobRule, homeModule, homePackage, jobFails, licenseFile, mainCheck, mainRunsFinish, movedRepoCalls, movedRepoNames, noBuildOutput, noConsole, noLocalPaths, packNoBuildinfo, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, playwrightInstall, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, runnerPeak, scheduleLiterals, sharedDocs, siteCheckInCi, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, versionTitle, workflowParses, workspaceProtocol, publishTextSafe };
+export { apiReportScript, changelogVersion, coverageProvider, cuePreset, exportsRequire, gateAfterCancel, gateTrigger, securityGate, securityOneJob, securityOverrides, serviceRunMain, setupCue, sharedCi, summaryJobRule, homeModule, homePackage, homeShape, jobFails, licenseFile, mainCheck, mainRunsFinish, movedRepoCalls, movedRepoNames, noBuildOutput, noConsole, noLocalPaths, packNoBuildinfo, pagesAfterRelease, pagesSite, pinnedGitDeps, pipeFails, playwrightInstall, pushMainOnly, releaseFiles, requiredScripts, roadmapParses, runnerBudget, runnerPeak, scheduleLiterals, sharedDocs, siteCheckInCi, sourceMain, testsRequired, trustPolicy, tsconfigTest, typedFiles, typedScripts, unreleasedChange, versionTitle, workflowParses, workspaceProtocol, publishTextSafe };

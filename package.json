@@ -34,6 +34,7 @@
   "devDependencies": {
     "@mark1russell7/api-report": "workspace:*",
     "@mark1russell7/boundaries": "workspace:*",
+    "@mark1russell7/code-shape": "^0.0.1",
     "@mark1russell7/conventions": "workspace:*",
     "@mark1russell7/cue": "^2.0.0",
     "@mark1russell7/service": "^0.9.3",
