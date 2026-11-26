@@ -10,8 +10,10 @@
   "rangeStrategy": "update-lockfile",
   "minimumReleaseAge": "3 days",
   "lockFileMaintenance": {
+    "description": "A lock file refresh has no release time, so a minimum release age holds its check renovate/stability-days pending for ever: the PR never merges, and each rebase after a merge to main runs CI again. The age is off for it, as in the presets security:minimumReleaseAge*.",
     "enabled": true,
-    "schedule": ["before 6am on monday"]
+    "schedule": ["before 6am on monday"],
+    "minimumReleaseAge": null
   },
   "labels": ["dependencies"],
   "vulnerabilityAlerts": {
