@@ -114,6 +114,8 @@ jobs:
       # The branch changeset-release/main and the pull request
       contents: write
       pull-requests: write
+      # The start of the held checks of the pull request with workflow_dispatch
+      actions: write
 
   publish:
     name: Publish to npm
