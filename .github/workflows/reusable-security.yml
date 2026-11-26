@@ -273,7 +273,7 @@ jobs:
 
       - name: Upload the results to code scanning
         if: github.event_name != 'pull_request'
-        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         with:
           sarif_file: osv.sarif
           category: osv-scanner
@@ -340,14 +340,14 @@ jobs:
 
       - name: Initialize CodeQL
         if: steps.languages.outputs.languages != ''
-        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        uses: github/codeql-action/init@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         with:
           languages: ${{ steps.languages.outputs.languages }}
           build-mode: ${{ inputs.codeql-build-mode }}
 
       - name: Analyze
         if: steps.languages.outputs.languages != ''
-        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        uses: github/codeql-action/analyze@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         with:
           # A pull request uploads nothing. The step "Fail on new alerts" examines its results.
           upload: ${{ github.event_name == 'pull_request' && 'never' || 'always' }}
