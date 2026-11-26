@@ -1,9 +1,11 @@
 /**
  * The rule `runner-peak`: the workflows of a repository hold at most its share of the runners in a busy minute. The peak
  * of a job is the jobs of one run (a matrix, capped by its `max-parallel`) times the runs that its concurrency group lets
- * run at one time. A burst of merges on `push` and a burst of pull requests give these runs. The peak of a workflow is
- * the sum over its jobs.
+ * run at one time. A burst of merges on `push` and a burst of pull requests give these runs. A job that `needs` a
+ * different job does not run at the same time as it. Thus the peak of one run is the antichain with the largest weight
+ * of the graph of the needs. The peak is exact for that graph.
  */
+import { maxWeightAntichain } from "@mark1russell7/collections/graph";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { byCode } from "../workspace.ts";
@@ -82,17 +84,62 @@ export function matrixPeak(job: ParsedJob): number {
   return Math.max(1, Math.min(job.matrixJobs, limit ?? job.matrixJobs));
 }
 
-/** This function gives the jobs of one run of a workflow on the event: the sum over the jobs that can run on it. */
+/** A job in the graph of the needs: its id, the jobs that it needs, and its weight. */
+interface NeedsNode {
+  readonly id: string;
+  readonly needs: readonly string[];
+  readonly jobs: number;
+}
+
+/**
+ * This function gives the most jobs of one run that run at one time. It is the antichain with the largest weight of the
+ * graph of the needs. The successors of a job are the jobs that list it in `needs`. A name in `needs` that is not a job of the
+ * list is not an edge. GitHub refuses a workflow with a cycle of needs, so a cycle gives the sum of the jobs.
+ */
+export function needsPeak(jobs: readonly NeedsNode[]): number {
+  const dependents = new Map<string, string[]>(jobs.map((job) => [job.id, []]));
+  for (const job of jobs) for (const need of job.needs) dependents.get(need)?.push(job.id);
+  const weight = new Map(jobs.map((job) => [job.id, job.jobs]));
+  try {
+    return maxWeightAntichain(
+      jobs.map((job) => job.id),
+      (id) => dependents.get(id) ?? [],
+      (id) => weight.get(id) ?? 0,
+    ).weight;
+  } catch (error) {
+    if (!(error instanceof RangeError)) throw error;
+    return jobs.reduce((sum, job) => sum + job.jobs, 0);
+  }
+}
+
+/**
+ * This function gives the most jobs at one time of the runs of one class of events. Each job has its own runs at one time.
+ * Different runs can be at different stages, so the jobs of different runs overlap freely. Layer `r` has the jobs with
+ * `r` or more runs, and the peak is the sum of the antichains of the layers. When each job has the same runs, the peak
+ * is the runs times the antichain.
+ */
+export function layeredPeak(jobs: readonly (NeedsNode & { readonly runs: number })[]): number {
+  const levels = [...new Set(jobs.map((job) => job.runs))].filter((runs) => runs > 0).sort((a, b) => a - b);
+  let peak = 0;
+  let below = 0;
+  for (const level of levels) {
+    peak += (level - below) * needsPeak(jobs.filter((job) => job.runs >= level));
+    below = level;
+  }
+  return peak;
+}
+
+/** This function gives the jobs of one run of a workflow on the event. It is the antichain of the needs of the jobs that can run on it. */
 function jobsOfRun(workflow: ParsedWorkflow, event: string, local: ReadonlyMap<string, ParsedWorkflow>, options: PeakOptions, seen: ReadonlySet<string>): { jobs: number; known: boolean } {
-  let jobs = 0;
+  const nodes: NeedsNode[] = [];
   let known = true;
   for (const job of workflow.jobs) {
     if (!mayRun(job.if, event)) continue;
     const one = jobOfRun(job, event, local, options, seen);
-    jobs += one.jobs;
+    nodes.push({ id: job.id, needs: job.needs, jobs: one.jobs });
     known &&= one.known;
   }
-  return { jobs, known };
+  return { jobs: needsPeak(nodes), known };
 }
 
 /** This function gives the jobs of one run of a job: its matrix, or the jobs of the workflow that it calls. */
@@ -108,9 +155,9 @@ function jobOfRun(job: ParsedJob, event: string, local: ReadonlyMap<string, Pars
 
 /**
  * This function gives the peak of each workflow of a repository in a busy minute. In each class of events, it takes the
- * event with the most jobs. The peak of a job is its jobs of one run times the runs of its group (the group at the top of
- * the file, else the group of the job). The sum over the jobs is an upper bound: a job that `needs` another job does not
- * run at the same time as it.
+ * event with the most jobs. Each job has its jobs of one run and the runs of its group (the group at the top of the file,
+ * else the group of the job). A job that `needs` a different job does not run at the same time as it in one run. Thus the
+ * peak is the sum of the antichains of the layers of runs (`layeredPeak`). The peak is exact for the graph of the needs.
  */
 export function workflowPeaks(workflows: readonly ParsedWorkflow[], options: PeakOptions): WorkflowPeak[] {
   const local = new Map(workflows.map((workflow) => [workflow.file, workflow]));
@@ -119,13 +166,12 @@ export function workflowPeaks(workflows: readonly ParsedWorkflow[], options: Pea
     for (const event of workflow.triggers) {
       const kind = eventClass(event);
       if (kind === undefined) continue;
-      const jobs = workflow.jobs
-        .filter((job) => mayRun(job.if, event))
-        .map((job) => {
-          const one = jobOfRun(job, event, local, options, new Set([workflow.file]));
-          return { id: job.id, line: job.line, jobs: one.jobs, runs: runsAtOnce(workflow.concurrency ?? job.concurrency, event, options.burst), known: one.known };
-        });
-      const peak = jobs.reduce((sum, job) => sum + job.jobs * job.runs, 0);
+      const running = workflow.jobs.filter((job) => mayRun(job.if, event));
+      const jobs = running.map((job) => {
+        const one = jobOfRun(job, event, local, options, new Set([workflow.file]));
+        return { id: job.id, line: job.line, jobs: one.jobs, runs: runsAtOnce(workflow.concurrency ?? job.concurrency, event, options.burst), known: one.known };
+      });
+      const peak = layeredPeak(jobs.map((job, at) => ({ ...job, needs: running[at]?.needs ?? [] })));
       if (peak > (classes[kind]?.peak ?? -1)) classes[kind] = { event, peak, jobs };
     }
     const peak = Object.values(classes).reduce((sum, item) => sum + item.peak, 0);
@@ -160,11 +206,11 @@ function peakText(item: WorkflowPeak): string {
 export const TEMPLATE_CALLED: readonly string[] = [
   "reusable-ai-review.yml=1",
   "reusable-ci.yml=7",
-  "reusable-codex-review.yml=2",
+  "reusable-codex-review.yml=1",
   "reusable-lockfile.yml=1",
-  "reusable-mutation.yml=5",
+  "reusable-mutation.yml=3",
   "reusable-pages-check.yml=1",
-  "reusable-pages.yml=4",
+  "reusable-pages.yml=1",
   "reusable-queue.yml=1",
   "reusable-release-build.yml=1",
   "reusable-release-tag.yml=1",
@@ -186,7 +232,7 @@ export const runnerPeak: Rule = {
       type: "number",
       default: 0,
       description:
-        "The most jobs that the workflows of the repository hold at one time in a busy minute. The organization gives each repository its share of the pool. 0 turns the rule off: the CI of the template alone can hold 145 jobs in a busy minute, so no one share fits each repository.",
+        "The most jobs that the workflows of the repository hold at one time in a busy minute. The organization gives each repository its share of the pool. 0 turns the rule off: the CI of the template alone can hold 148 jobs in a busy minute, so no one share fits each repository.",
     },
     burst: { type: "number", default: 5, description: "The runs of push, or of pull requests, that start in a busy minute when each run has its own group." },
     called: {

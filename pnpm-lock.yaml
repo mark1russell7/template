@@ -308,8 +308,8 @@ importers:
         version: 2.9.1
     devDependencies:
       '@mark1russell7/collections':
-        specifier: ^0.11.3
-        version: 0.11.3(zod@4.6.7)
+        specifier: ^0.11.5
+        version: 0.11.5(zod@4.6.7)
       '@mark1russell7/cue':
         specifier: ^2.0.0
         version: 2.1.4
@@ -642,8 +642,8 @@ packages:
       zod:
         optional: true
 
-  '@mark1russell7/collections@0.11.3':
-    resolution: {integrity: sha512-KKAYIACji5XtOpbE3fIX4D3aVd0oddyM9dU+Pk+lXpgYOh6VTVoa/0yzwDTipZ42RKp+6BG+LSkLjCe/FjCHFA==}
+  '@mark1russell7/collections@0.11.5':
+    resolution: {integrity: sha512-ZWAbb/PRwllj+WjY536zytXYcB0ZUeYJcz4hHwVAKquCheIxl5VsfPBG8X2zPPNw9aS5mknM3TzlkL5Xk7bpfg==}
     engines: {node: '>=22.12'}
 
   '@mark1russell7/cue@2.1.4':
@@ -2120,7 +2120,7 @@ snapshots:
     optionalDependencies:
       zod: 4.6.7
 
-  '@mark1russell7/collections@0.11.3(zod@4.6.7)':
+  '@mark1russell7/collections@0.11.5(zod@4.6.7)':
     dependencies:
       '@mark1russell7/algebra': 0.8.10(zod@4.6.7)
       '@mark1russell7/optional': 1.2.0
@@ -2171,7 +2171,7 @@ snapshots:
   '@mark1russell7/service@0.8.20(zod@4.6.7)':
     dependencies:
       '@mark1russell7/algebra': 0.8.10(zod@4.6.7)
-      '@mark1russell7/collections': 0.11.3(zod@4.6.7)
+      '@mark1russell7/collections': 0.11.5(zod@4.6.7)
       '@mark1russell7/quantity': 0.4.1(zod@4.6.7)
       '@mark1russell7/rational': 0.1.2
       '@mark1russell7/rigor-generators': 0.1.15
@@ -2182,7 +2182,7 @@ snapshots:
   '@mark1russell7/service@0.9.3(zod@4.6.7)':
     dependencies:
       '@mark1russell7/algebra': 0.9.6(zod@4.6.7)
-      '@mark1russell7/collections': 0.11.3(zod@4.6.7)
+      '@mark1russell7/collections': 0.11.5(zod@4.6.7)
       '@mark1russell7/files': 0.0.3
       '@mark1russell7/quantity': 0.4.1(zod@4.6.7)
       '@mark1russell7/rational': 0.1.2
