@@ -276,7 +276,7 @@ runs:
     - name: Upload the results to code scanning
       id: osv-scanner_upload
       if: ${{ !cancelled() && steps.osv-scanner_check.outcome == 'success' && steps.choice.outputs.osv-upload == 'true' }}
-      uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
       with:
         sarif_file: osv.sarif
         category: osv-scanner
@@ -356,7 +356,7 @@ runs:
       id: codeql_init
       if: ${{ !cancelled() && steps.codeql_languages.outcome == 'success' && steps.codeql_languages.outputs.languages != '' }}
       continue-on-error: true
-      uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      uses: github/codeql-action/init@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
       with:
         languages: ${{ steps.codeql_languages.outputs.languages }}
         build-mode: ${{ inputs.codeql-build-mode }}
@@ -370,7 +370,7 @@ runs:
     - name: Initialize CodeQL, second start
       id: codeql_init-retry
       if: ${{ !cancelled() && steps.codeql_init.outcome == 'failure' }}
-      uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      uses: github/codeql-action/init@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
       with:
         languages: ${{ steps.codeql_languages.outputs.languages }}
         build-mode: ${{ inputs.codeql-build-mode }}
@@ -388,7 +388,7 @@ runs:
     - name: Analyze
       id: codeql_analyze
       if: ${{ !cancelled() && (steps.codeql_init.outcome == 'success' || steps.codeql_init-retry.outcome == 'success') }}
-      uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      uses: github/codeql-action/analyze@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
       with:
         # A pull request uploads nothing. The step "Fail on new alerts" examines its results.
         upload: ${{ github.event_name == 'pull_request' && 'never' || 'always' }}
