@@ -8,23 +8,40 @@
 #     permissions:
 #       contents: write
 #       pull-requests: write
-#       actions: write
+#     # Optional: a GitHub App with contents and pull requests (write) on the repository. Its push of the version
+#     # pull request starts the pull_request runs with no approval.
+#     with:
+#       app-id: ${{ vars.VERSION_PR_APP_ID }}
+#     secrets:
+#       app-key: ${{ secrets.VERSION_PR_APP_KEY }}
 #
 # The job opens or updates the pull request "Version the packages" with the Changesets action, and publishes nothing.
 # The merge of that pull request removes the changesets, so the release run of the merge publishes.
 #
 # The job runs code of the repository (the install and `changeset version`), so it gets no OIDC token. It is the only
 # job of the release with "pull-requests: write", for the version pull request. "contents: write" is for its branch
-# changeset-release/main. "actions: write" is for the start of the held checks.
+# changeset-release/main.
 #
 # GitHub holds each pull_request run of an event of the workflow token until a person approves it, and a merge with
-# that token starts no release. Thus a step writes the steps for a person at the top of the text of the pull request,
-# and the last step starts the workflows of the held runs again with workflow_dispatch on the branch: a dispatch of the
-# workflow token needs no approval (scripts/release/version-pr.ts).
+# that token starts no release. A dispatch of the held workflows does not help: a workflow_dispatch run is not linked
+# to the pull request, so the rules of main still wait for the held runs (client#798, 2026-11-26). A push of a GitHub
+# App starts the pull_request runs with no approval. Thus with app-id and app-key the Changesets action uses a token of
+# that App, for this repository only. Without them it uses the workflow token, and a step writes the steps for a
+# person at the top of the text of the pull request (scripts/release/version-pr.ts).
 name: Reusable release version
 
 on:
   workflow_call:
+    inputs:
+      app-id:
+        description: The ID of a GitHub App that opens the version pull request. Empty uses the workflow token.
+        type: string
+        required: false
+        default: ""
+    secrets:
+      app-key:
+        description: The private key of the App of app-id
+        required: false
 
 jobs:
   version:
@@ -39,8 +56,6 @@ jobs:
       # The branch changeset-release/main and the pull request
       contents: write
       pull-requests: write
-      # The start of the held checks of the pull request with workflow_dispatch
-      actions: write
     steps:
       # The release scripts of the same template commit as this file, before the checkout of the repository: a
       # checkout empties the workspace
@@ -74,6 +89,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node "$RUNNER_TEMP/release-template/scripts/release/version-pr.ts" head
+      - name: Make the token of the App
+        id: app
+        if: steps.head.outputs.head == 'true' && inputs.app-id != ''
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ inputs.app-id }}
+          private-key: ${{ secrets.app-key }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
       # Version 2 of the action: with no publish-script, it only opens or updates the version pull request
       - id: changesets
         if: steps.head.outputs.head == 'true'
@@ -83,18 +107,12 @@ jobs:
           pr-title: Version the packages
           commit-message: Version the packages
           pr-base-branch: main
-      # A merge with the workflow token starts no release. The text tells a person the steps.
+          github-token: ${{ steps.app.outputs.token || github.token }}
+      # A merge with the workflow token starts no release, and its pull_request runs wait for an approval. The text
+      # tells a person the steps. With the App token the checks run with no approval.
       - name: The steps for a person
-        if: steps.changesets.outputs.pr-number != ''
+        if: steps.changesets.outputs.pr-number != '' && steps.app.outputs.token == ''
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ steps.changesets.outputs.pr-number }}
         run: node "$RUNNER_TEMP/release-template/scripts/release/version-pr.ts" note "$PR"
-      # GitHub holds the pull_request runs of the push of the workflow token. A dispatch of each held workflow on the
-      # branch runs the same checks with no approval.
-      - name: Start the held checks
-        if: steps.changesets.outputs.pr-number != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ steps.changesets.outputs.pr-number }}
-        run: node "$RUNNER_TEMP/release-template/scripts/release/version-pr.ts" checks "$PR"
