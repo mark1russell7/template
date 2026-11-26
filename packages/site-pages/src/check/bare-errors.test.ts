@@ -25,7 +25,7 @@ describe("BARE_ERROR_SHAPE", () => {
   });
 
   it("does not match a sentence about an error", () => {
-    for (const text of ["No error: the save worked.", "The job failed, and the view shows why.", "Errors: 0", "Try again", "MyErrorHandler is ready"]) {
+    for (const text of ["No error: the save worked.", "The job failed, and the view shows why.", "Errors: 0", "Try again", "MyErrorHandler is ready", "isQuotaError and isApiError: tell a quota refusal", "onError: the handler of a failure"]) {
       expect(shape.test(text), text).toBe(false);
     }
   });
