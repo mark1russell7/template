@@ -73,7 +73,8 @@ test("startHeldChecks reads the runs again until GitHub has made them, and stops
     return "";
   };
   assert.deepEqual(startHeldChecks("o/r", "12", late, (ms) => waits.push(ms)).started, ["ci.yml"]);
-  assert.deepEqual(waits, [5000, 5000]);
+  // Reads 1 and 2 give no run, read 3 gives ci.yml, and read 4 gives the same runs.
+  assert.deepEqual(waits, [5000, 5000, 5000]);
 
   const none = fakeGh([
     ["pr view 12", HEAD],
@@ -83,6 +84,25 @@ test("startHeldChecks reads the runs again until GitHub has made them, and stops
   assert.deepEqual(result.started, []);
   assert.match(result.lines[0] ?? "", /holds no run/u);
   assert.equal(none.calls.filter((call) => call[0] === "api").length, 3);
+});
+
+test("startHeldChecks reads until two reads in a row give the same runs (client#798: the first read had 2 of 4)", () => {
+  const reads = [
+    ".github/workflows/ci.yml\n.github/workflows/security.yml\n",
+    ".github/workflows/ci.yml\n.github/workflows/harness.yml\n.github/workflows/security.yml\n",
+    ".github/workflows/ci.yml\n.github/workflows/event-fan-out.yml\n.github/workflows/harness.yml\n.github/workflows/security.yml\n",
+  ];
+  let read = 0;
+  const waits: number[] = [];
+  const growing: Gh = (args) => {
+    if (args[0] === "pr") return HEAD;
+    if (args[0] === "api") return reads[Math.min(read++, reads.length - 1)] ?? "";
+    return "";
+  };
+  const result = startHeldChecks("o/r", "12", growing, (ms) => waits.push(ms));
+  assert.deepEqual(result.started, ["ci.yml", "event-fan-out.yml", "harness.yml", "security.yml"]);
+  assert.equal(read, 4);
+  assert.deepEqual(waits, [5000, 5000, 5000]);
 });
 
 test("startHeldChecks warns for a workflow with no workflow_dispatch trigger, and still starts the others", () => {
