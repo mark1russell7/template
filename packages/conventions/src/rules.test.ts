@@ -1167,6 +1167,10 @@ describe("home-package", () => {
     expect(signatures.some((item) => item.pattern.test("parseArgs")), "parseArgs").toBe(false);
     // geography is on npm since @mark1russell7/geo 0.1.0, so its signatures break, in one home only
     expect(signatures.filter((item) => item.pattern.test("greatCircleKm")).map((item) => item.home.area)).toEqual(["geography"]);
+    // The copies of the tenets audit of 2026-11-26: system-stack#172 (recordOf, numberOf, textOf), headroom#295 (inRequestSpan), room-view#86 (signedArea, ringDistance)
+    for (const [name, area] of [["recordOf", "optional"], ["numberOf", "optional"], ["textOf", "optional"], ["isRecord", "optional"], ["inRequestSpan", "browser-monitoring"], ["signedArea", "geometry"], ["ringDistance", "geometry"]] as const)
+      expect(signatures.filter((item) => item.pattern.test(name)).map((item) => item.home.area), name).toEqual([area]);
+    for (const name of ["recordsOf", "textOfLine", "isRecordKind"]) expect(signatures.some((item) => item.pattern.test(name)), name).toBe(false);
   });
 });
 

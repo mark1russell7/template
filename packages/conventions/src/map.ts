@@ -252,6 +252,7 @@ export const HOMES: readonly Home[] = [
     repo: "mark1russell7/optional",
     state: "published",
     words: ["option", "maybe", "some", "none", "monad", "functor", "result", "either", "error", "guard", "isRecord", "isObject", "field", "decode", "unknown", "narrow"],
+    signatures: ["isRecord", "isPlainObject", "isPlainRecord", "isObjectRecord", "recordOf", "readRecord", "decodeRecord", "numberOf", "textOf", "booleanOf", "fieldOf"],
     note: "@mark1russell7/render-optional is a second copy. It moves to @mark1russell7/optional. About 18 repositories have their own isRecord or isObject: they move to the entry /read.",
   },
   {
@@ -262,7 +263,7 @@ export const HOMES: readonly Home[] = [
     repo: "mark1russell7/layout-contract",
     state: "published",
     words: ["point", "rect", "box", "segment", "polygon", "tolerance", "overlap", "intersection", "bounds", "curve", "space-filling", "hilbert", "moore", "morton", "z-order"],
-    signatures: ["segmentsIntersect", "segmentsCross", "segmentIntersection", "segmentsIntersection", "boxesOverlap", "rectsOverlap", "rectsIntersect", "pointInPolygon", "distanceToSegment", "pointSegmentDistance", "hilbertRank", "hilbertIndex", "hilbertCell", "d2xy", "xy2d", "mortonIndex", "mortonCode"],
+    signatures: ["segmentsIntersect", "segmentsCross", "segmentIntersection", "segmentsIntersection", "boxesOverlap", "rectsOverlap", "rectsIntersect", "pointInPolygon", "distanceToSegment", "pointSegmentDistance", "hilbertRank", "hilbertIndex", "hilbertCell", "d2xy", "xy2d", "mortonIndex", "mortonCode", "pointInRings?", "signedArea", "ringArea", "polygonArea", "ringDistance", "distanceToRing", "ringCentroid", "clipRing"],
     note: "Exact predicates go to algebra. @mark1russell7/vex-domains has 2D vectors for Vex formulas only.",
   },
   {
@@ -481,6 +482,7 @@ export const HOMES: readonly Home[] = [
     repo: "mark1russell7/otel-ts",
     state: "published",
     words: ["telemetry", "web vitals", "inp", "long task", "visibility", "opentelemetry", "async context", "observability", "baggage", "traceparent", "tracing", "span", "asynclocalstorage", "context manager", "metric reader", "pull reader", "metric readings", "collect metrics"],
+    signatures: ["runInIncomingSpan", "inRequestSpan", "inIncomingSpan", "withIncomingSpan", "runInRemoteTrace", "outgoingTraceparent", "parseTraceparent", "formatTraceparent"],
   },
   {
     area: "repo-structure",
