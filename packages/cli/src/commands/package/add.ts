@@ -6,9 +6,9 @@ import * as p from "@clack/prompts";
 import { cliManifest, presetDir, repoRoot, type Manifest } from "../../paths.ts";
 
 /**
- * This function gives the scope of the new packages from the name of the root package: `demo` for
- * `demo-monorepo`, and `demo` for a root that is a published package with a scope, for example `@demo/tool`.
- * Another name is the scope.
+ * This function gives the scope of the new packages from the name of the root package. The scope of
+ * `demo-monorepo` is `demo`. The scope of a root package with a scope, for example `@demo/tool`, is also
+ * `demo`. Another name is the scope.
  */
 export function scopeOf(rootName: string): string {
   const scoped = /^@([a-z0-9][a-z0-9._-]*)\//.exec(rootName);
