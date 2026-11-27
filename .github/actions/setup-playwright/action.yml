@@ -124,6 +124,24 @@ runs:
         printf 'Types: deb\nURIs: %s\nSuites: %s %s-updates\nComponents: main universe restricted multiverse\nSigned-By: %s\n\nTypes: deb\nURIs: %s\nSuites: %s-security\nComponents: main universe restricted multiverse\nSigned-By: %s\n' \
           "$uri" "$VERSION_CODENAME" "$VERSION_CODENAME" "$keyring" "$security" "$VERSION_CODENAME" "$keyring" \
           | sudo tee /etc/apt/sources.list.d/setup-playwright-ubuntu.sources > /dev/null
+    - name: Set aside the apt sources that the browsers do not need
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        # The system packages of the browsers come only from the Ubuntu archive. On 2026-11-27 packages.microsoft.com
+        # gave 403 for its ubuntu/26.04 list ("is no longer signed"), so apt update and install-deps failed (exit 100).
+        # This step moves each source file that names no Ubuntu archive to a folder of its own. A later step puts them back.
+        . /etc/os-release
+        if [ "${ID:-}" != ubuntu ] || [ ! -d /etc/apt/sources.list.d ]; then exit 0; fi
+        aside=/etc/apt/setup-playwright-aside
+        sudo mkdir -p "$aside"
+        for file in /etc/apt/sources.list.d/*; do
+          [ -f "$file" ] || continue
+          if ! grep -q -E '(archive|ports|security)\.ubuntu\.com' "$file"; then
+            echo "apt source set aside for the install: $file"
+            sudo mv "$file" "$aside/"
+          fi
+        done
     # The restore and the save are two steps, so that a run with missing system packages saves no cache. A cache with
     # the browsers and no .deb files would stay under its key, and each later run would download the packages again.
     # A stalled download of the cache ends after 3 minutes (the default is 10). Then the step installs the browsers.
@@ -151,6 +169,16 @@ runs:
         BEST_EFFORT_MINUTES: ${{ inputs.best-effort-minutes }}
         SCRIPT: ${{ github.action_path }}/install.ts
       run: node "$SCRIPT" install
+    - name: Put back the apt sources that were set aside
+      if: always() && runner.os == 'Linux'
+      shell: bash
+      run: |
+        aside=/etc/apt/setup-playwright-aside
+        if [ ! -d "$aside" ]; then exit 0; fi
+        for file in "$aside"/*; do
+          if [ -f "$file" ]; then sudo mv "$file" /etc/apt/sources.list.d/; fi
+        done
+        sudo rmdir "$aside"
     - name: Save the browsers and the system packages in the cache
       if: steps.cache.outputs.cache-hit != 'true' && steps.install.outputs.packages == 'installed'
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
