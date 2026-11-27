@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { CLI_NAME } from "../../paths.ts";
-import { PRESETS, SERVICE_TELEMETRY, withAllowBuilds, writePackage } from "./add.ts";
+import { PRESETS, SERVICE_TELEMETRY, scopeOf, withAllowBuilds, withPackagesGlob, writePackage } from "./add.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -199,5 +199,36 @@ describe("the presets in CI", () => {
     const workflow = readFileSync(resolve(here, "..", "..", "..", "..", "..", ".github", "workflows", "ci.yml"), "utf8");
     const matrix = /^\s*preset:\s*\[([^\]]*)\]/m.exec(workflow)?.[1];
     expect(matrix?.split(",").map((name) => name.trim())).toEqual(Object.keys(PRESETS));
+  });
+});
+
+describe("the scope and the workspace of a repository that is not a template monorepo", () => {
+  it("takes the scope of a root package with a scope, and of a root named <scope>-monorepo", () => {
+    expect(scopeOf("demo-monorepo")).toBe("demo");
+    expect(scopeOf("@demo/tool")).toBe("demo");
+    expect(scopeOf("@mark1russell7/otel-ts")).toBe("mark1russell7");
+    expect(scopeOf("demo")).toBe("demo");
+    expect(scopeOf("")).toBe("");
+  });
+
+  it("names a package of a root with a scope @<scope>/<name>, not @@<scope>/<root>/<name>", async () => {
+    const root = repo();
+    writeFileSync(join(root, "package.json"), JSON.stringify({ name: "@demo/tool" }));
+    const written = await writePackage(root, "sink", "node", cli);
+    expect(written.name).toBe("@demo/sink");
+    expect(json(join(written.dir, "package.json"))["name"]).toBe("@demo/sink");
+  });
+
+  it("adds packages/* to the list packages of the workspace when the list does not have it", async () => {
+    expect(withPackagesGlob('packages:\n  - "packages/*"\n')).toBeUndefined();
+    expect(withPackagesGlob("packages:\n  - packages/*\n  - site\n")).toBeUndefined();
+    expect(withPackagesGlob('# a comment\npackages:\n  - "site"\n\nminimumReleaseAgeExclude:\n  - "@demo/*"\n')).toBe(
+      '# a comment\npackages:\n  - "site"\n  - "packages/*"\n\nminimumReleaseAgeExclude:\n  - "@demo/*"\n',
+    );
+    expect(withPackagesGlob("allowBuilds:\n  esbuild: true\n")).toBe('packages:\n  - "packages/*"\n\nallowBuilds:\n  esbuild: true\n');
+    const root = repo();
+    writeFileSync(join(root, "pnpm-workspace.yaml"), 'packages:\n  - "site"\n');
+    await writePackage(root, "sink", "node", cli);
+    expect(readFileSync(join(root, "pnpm-workspace.yaml"), "utf8")).toBe('packages:\n  - "site"\n  - "packages/*"\n');
   });
 });

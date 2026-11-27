@@ -24,7 +24,8 @@ pnpm package add <name> --preset=<node|node-cjs|ts|vite|react|service|site|elect
 ```
 
 - The command makes `packages/<name>` with `package.json`, `tsconfig.json`, `tsconfig.test.json`, `src/index.ts` and `vitest.config.ts`.
-- The name of the package is `@<scope>/<name>`. The scope is the name of the root `package.json` without `-monorepo`.
+- The name of the package is `@<scope>/<name>`. The scope is the name of the root `package.json` without `-monorepo`. For a root package with a scope, for example `@demo/tool`, the scope is `demo`.
+- A repository with one root package can also get packages. When the list `packages` of `pnpm-workspace.yaml` has no `packages/*`, the CLI adds it.
 - The package is a source package. Its `main` is `src/index.ts`, so the other packages import its source.
 - `tsconfig.json` extends the preset of `@mark1russell7/cue`. The `vite` and `react` presets also add their packages with `pnpm add`.
 - Each development dependency gets the range that the repository uses: the root `package.json`, then the packages in name order. A dependency that the repository does not have gets the range of the CLI. Thus `pnpm up -r --latest` keeps the new packages current.
