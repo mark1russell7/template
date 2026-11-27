@@ -5,11 +5,42 @@ import { execSync } from "node:child_process";
 import * as p from "@clack/prompts";
 import { cliManifest, presetDir, repoRoot, type Manifest } from "../../paths.ts";
 
+/**
+ * This function gives the scope of the new packages from the name of the root package: `demo` for
+ * `demo-monorepo`, and `demo` for a root that is a published package with a scope, for example `@demo/tool`.
+ * Another name is the scope.
+ */
+export function scopeOf(rootName: string): string {
+  const scoped = /^@([a-z0-9][a-z0-9._-]*)\//.exec(rootName);
+  if (scoped?.[1] !== undefined) return scoped[1];
+  return rootName.endsWith("-monorepo") ? rootName.slice(0, -"-monorepo".length) : rootName;
+}
+
 async function getScope(root: string): Promise<string> {
   const raw = await readFile(resolve(root, "package.json"), "utf8");
   const pkg = JSON.parse(raw) as { name?: string };
-  const name = pkg.name ?? "";
-  return name.endsWith("-monorepo") ? name.slice(0, -"-monorepo".length) : name;
+  return scopeOf(pkg.name ?? "");
+}
+
+/** The glob of `pnpm-workspace.yaml` that holds each new package */
+const PACKAGES_GLOB = "packages/*";
+
+/**
+ * This function gives the text of `pnpm-workspace.yaml` with the glob `packages/*` in its list `packages`, so that
+ * the install finds the new package. A repository with one root package and a site has no such glob. It gives
+ * `undefined` when the list has the glob.
+ */
+export function withPackagesGlob(workspace: string): string | undefined {
+  const lines = workspace.split("\n");
+  const key = lines.findIndex((line) => /^packages:\s*$/.test(line));
+  const entry = `  - "${PACKAGES_GLOB}"`;
+  if (key < 0) return `packages:\n${entry}\n${workspace.length > 0 && !workspace.startsWith("\n") ? "\n" : ""}${workspace}`;
+  let end = key + 1;
+  while (end < lines.length && /^\s+-\s/.test(lines[end] ?? "")) {
+    if (/^\s+-\s+["']?packages\/\*["']?\s*$/.test(lines[end] ?? "")) return undefined;
+    end++;
+  }
+  return [...lines.slice(0, end), entry, ...lines.slice(end)].join("\n");
 }
 
 const NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
@@ -333,7 +364,7 @@ export async function writePackage(
 ): Promise<WrittenPackage> {
   const scope = await getScope(root);
   if (!scope) {
-    throw new Error("Could not derive package scope from root package.json (expected name to end with -monorepo).");
+    throw new Error("Could not derive package scope from root package.json (expected a name <scope>-monorepo or @<scope>/<name>).");
   }
   if (!NAME_RE.test(name)) {
     throw new Error(`Invalid package name "${name}". Allowed: ^[a-z0-9][a-z0-9-]*$`);
@@ -444,6 +475,10 @@ async function writeFiles({ root, dir, name, scope, packageName, preset, depende
   // pnpm refuses the install script of a package that allowBuilds does not name, so the CLI names it before the install
   let allowed: readonly string[] = [];
   const workspace = resolve(root, "pnpm-workspace.yaml");
+  if (existsSync(workspace)) {
+    const withGlob = withPackagesGlob(await readFile(workspace, "utf8"));
+    if (withGlob !== undefined) await writeFile(workspace, withGlob);
+  }
   if (preset.allowBuilds && existsSync(workspace)) {
     const result = withAllowBuilds(await readFile(workspace, "utf8"), preset.allowBuilds);
     if (result.added.length > 0) await writeFile(workspace, result.text);
@@ -456,7 +491,7 @@ export async function addPackage(args: string[]): Promise<void> {
   const root = repoRoot();
   const scope = await getScope(root);
   if (!scope) {
-    throw new Error("Could not derive package scope from root package.json (expected name to end with -monorepo).");
+    throw new Error("Could not derive package scope from root package.json (expected a name <scope>-monorepo or @<scope>/<name>).");
   }
   const parsed = parseArgs(args);
   let name = parsed.name;
