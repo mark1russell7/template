@@ -72,6 +72,31 @@ export const SERVICE_TELEMETRY = [
   "@opentelemetry/semantic-conventions",
 ] as const;
 
+/**
+ * The packages of the telemetry of a page: otel-ts, its own OpenTelemetry API, and each package that the root entry
+ * of otel-ts loads. The entries `/error` and `/error-view` load no other package. One copy of the API serves otel-ts
+ * and the SDK. A test holds this list against the table of the peers of each entry in the README of otel-ts.
+ */
+export const BROWSER_TELEMETRY = [
+  "@mark1russell7/otel-ts",
+  "@grafana/faro-web-sdk",
+  "@opentelemetry/api",
+  "@opentelemetry/auto-instrumentations-web",
+  "@opentelemetry/core",
+  "@opentelemetry/exporter-logs-otlp-http",
+  "@opentelemetry/exporter-metrics-otlp-http",
+  "@opentelemetry/exporter-trace-otlp-http",
+  "@opentelemetry/instrumentation",
+  "@opentelemetry/instrumentation-long-task",
+  "@opentelemetry/resources",
+  "@opentelemetry/sdk-logs",
+  "@opentelemetry/sdk-metrics",
+  "@opentelemetry/sdk-trace",
+  "@opentelemetry/semantic-conventions",
+  "async-browser-context",
+  "page-lifecycle-tracker",
+] as const;
+
 /** Each dependency that releases with the same versions as its partner. */
 const LOCKSTEP: Readonly<Record<string, string>> = { "@vitest/coverage-v8": "vitest" };
 
@@ -233,11 +258,20 @@ export const PRESETS: Readonly<Record<PresetName, Preset>> = {
   node: { label: "node — Node.js library/CLI (ESM, NodeNext)", tsconfig: "node" },
   "node-cjs": { label: "node-cjs — Node.js library (CJS)", tsconfig: "node-cjs" },
   ts: { label: "ts — generic TS library (ESM)", tsconfig: "ts" },
-  // The vite and react presets reference types (vite/client, react-jsx) that only these packages provide.
-  vite: { label: "vite — browser/bundler (Vite)", tsconfig: "vite", install: { dependencies: [], devDependencies: ["vite"] } },
+  // The vite and react presets reference types (vite/client, react-jsx) that only these packages provide. A page starts
+  // with the telemetry of otel-ts: the context of each call, a logger and the record of each error.
+  vite: {
+    label: "vite — browser/bundler (Vite)",
+    tsconfig: "vite",
+    dependencies: BROWSER_TELEMETRY,
+    install: { dependencies: [], devDependencies: ["vite"] },
+    files: "browser",
+  },
   react: {
     label: "react — React + Vite",
     tsconfig: "react",
+    dependencies: BROWSER_TELEMETRY,
+    files: "browser",
     install: { dependencies: ["react", "react-dom"], devDependencies: ["vite", "@vitejs/plugin-react", "@types/react", "@types/react-dom"] },
   },
   // A server on the one service runner: a component, a declaration, and an entry that alone uses run(). The run starts

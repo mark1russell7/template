@@ -1,0 +1,19 @@
+import { init, type OtelTsInstance } from "@mark1russell7/otel-ts";
+import { reportError, type ErrorRecord } from "@mark1russell7/otel-ts/error";
+
+/**
+ * This function starts the telemetry of the page: traces, metrics and logs, sent to `endpoint` with OTLP over HTTP.
+ * Each span, log record and error record gets the context of its call. Call it one time, before the first work of
+ * the page. Get a logger with `getLogger(name)` of the result.
+ */
+export function startTelemetry(endpoint: string = "http://localhost:4318"): OtelTsInstance {
+  return init({ serviceName: "{{name}}", endpoint });
+}
+
+/**
+ * This function makes the record of a failed procedure, with the ids of the active context. It writes one ERROR log
+ * record, and it marks the active span as failed. Show the record with `errorView` of `@mark1russell7/otel-ts/error-view`.
+ */
+export function reportFailure(error: unknown, procedure: string): ErrorRecord {
+  return reportError(error, { procedure: { name: procedure } });
+}

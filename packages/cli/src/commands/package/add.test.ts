@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { CLI_NAME } from "../../paths.ts";
-import { PRESETS, SERVICE_TELEMETRY, scopeOf, withAllowBuilds, withPackagesGlob, writePackage } from "./add.ts";
+import { BROWSER_TELEMETRY, PRESETS, SERVICE_TELEMETRY, scopeOf, withAllowBuilds, withPackagesGlob, writePackage } from "./add.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -14,7 +14,7 @@ const cli = {
   devDependencies: {
     "@mark1russell7/cue": "github:mark1russell7/cue",
     "@mark1russell7/service": "^0.5.8",
-    ...Object.fromEntries(SERVICE_TELEMETRY.map((name) => [name, "^1.0.0"])),
+    ...Object.fromEntries([...SERVICE_TELEMETRY, ...BROWSER_TELEMETRY].map((name) => [name, "^1.0.0"])),
     "@types/node": "^26.0.0",
     typescript: "^7.0.0",
     vitest: "^5.0.0",
@@ -86,6 +86,18 @@ describe("writePackage", () => {
     expect(readFileSync(join(root, "pnpm-workspace.yaml"), "utf8")).toBe(workspace);
   });
 
+  it("writes the telemetry entry of the presets vite and react, on the ranges of the telemetry of the CLI", async () => {
+    for (const preset of ["vite", "react"] as const) {
+      const written = await writePackage(repo(), "web", preset, cli);
+      const manifest = json(join(written.dir, "package.json"));
+      expect(manifest["dependencies"], preset).toEqual(Object.fromEntries(BROWSER_TELEMETRY.map((name) => [name, "^1.0.0"])));
+      const entry = readFileSync(join(written.dir, "src", "index.ts"), "utf8");
+      expect(entry, preset).toContain('serviceName: "web"');
+      expect(entry, preset).not.toContain("{{");
+      expect(readFileSync(join(written.dir, "src", "index.test.ts"), "utf8"), preset).toContain("reportFailure");
+    }
+  });
+
   it("gives the pnpm add commands of a preset that installs its packages", async () => {
     const written = await writePackage(repo(), "web", "react", cli);
     expect(written.install).toEqual([
@@ -144,6 +156,25 @@ describe("the telemetry of the preset service", () => {
   it("gives each package the range of otel-ts, so a new service installs with no peer warning", () => {
     const own = manifestOf(readFileSync(join(cliDir, "package.json"), "utf8")).devDependencies ?? {};
     for (const name of SERVICE_TELEMETRY) {
+      if (name === "@mark1russell7/otel-ts") continue;
+      expect(own[name], name).toBe(otel.peerDependencies?.[name] ?? otel.dependencies?.[name]);
+    }
+  });
+});
+
+describe("the telemetry of the presets vite and react", () => {
+  const otel = manifestOf(installed("@mark1russell7/otel-ts"));
+
+  it("names otel-ts, its OpenTelemetry API, and each package of its root entry", () => {
+    const readme = installed("@mark1russell7/otel-ts", "README.md");
+    const api = Object.keys(otel.dependencies ?? {}).filter((name) => name.startsWith("@opentelemetry/"));
+    const expected = new Set(["@mark1russell7/otel-ts", ...api, ...entryPeers(readme, "."), ...entryPeers(readme, "./error"), ...entryPeers(readme, "./error-view")]);
+    expect([...BROWSER_TELEMETRY].sort()).toEqual([...expected].sort());
+  });
+
+  it("gives each package the range of otel-ts, so a new page installs with no peer warning", () => {
+    const own = manifestOf(readFileSync(join(cliDir, "package.json"), "utf8")).devDependencies ?? {};
+    for (const name of BROWSER_TELEMETRY) {
       if (name === "@mark1russell7/otel-ts") continue;
       expect(own[name], name).toBe(otel.peerDependencies?.[name] ?? otel.dependencies?.[name]);
     }
