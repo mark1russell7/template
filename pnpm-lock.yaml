@@ -204,11 +204,11 @@ importers:
         specifier: ^0.9.3
         version: 0.9.4(@opentelemetry/api@1.10.0)
       '@mark1russell7/ste-lint':
-        specifier: ^0.6.0
-        version: 0.6.0
+        specifier: ^0.7.0
+        version: 0.7.0
       '@mark1russell7/text':
-        specifier: ^0.0.20
-        version: 0.0.20
+        specifier: ^0.0.21
+        version: 0.0.21
       '@swc/core':
         specifier: ^1.15.0
         version: 1.16.22
@@ -362,21 +362,21 @@ importers:
         specifier: ^0.0.1
         version: 0.0.1
       '@mark1russell7/text':
-        specifier: ^0.0.20
-        version: 0.0.20
+        specifier: ^0.0.21
+        version: 0.0.21
       yaml:
         specifier: ^2.9.1
         version: 2.9.1
     devDependencies:
       '@mark1russell7/collections':
-        specifier: ^0.11.5
-        version: 0.11.6
+        specifier: ^0.12.1
+        version: 0.12.1
       '@mark1russell7/cue':
         specifier: ^2.0.0
         version: 2.1.4
       '@mark1russell7/files':
-        specifier: ^0.0.6
-        version: 0.0.6
+        specifier: ^0.0.7
+        version: 0.0.7
       '@mark1russell7/rigor-testkit':
         specifier: ^0.2.0
         version: 0.2.1(@mark1russell7/rigor-generators@0.2.7)(@opentelemetry/api@1.10.0)(@opentelemetry/sdk-logs@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-metrics@3.1.1(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace@3.1.1(@opentelemetry/api@1.10.0))
@@ -698,6 +698,10 @@ packages:
     resolution: {integrity: sha512-7vYnlTkNTuPia5GXimxVildlFreRrbpZBqNEq92sNzd9e4pNRQ1r+BbAAH8x/uLzBLA3nr5oNJNp64tDs5zA8A==}
     engines: {node: '>=22.12'}
 
+  '@mark1russell7/collections@0.12.1':
+    resolution: {integrity: sha512-PlARqGiGhl3710Fz4UIlHcr9TDKBAiQn/3HrWhq++9bLR/jeOkxKYlxFULTyhBUy/7lOSxkYr2s222GRD9D2qg==}
+    engines: {node: '>=22.12'}
+
   '@mark1russell7/collections@0.9.11':
     resolution: {integrity: sha512-3TG8Thm1dAa5yNfsSe3g2z/KI+tzEAuuiIaRTIQs7eH1EZqWCoAqZ5llWFhGUjRl9b6y7Z266qfllAguIJ9eew==}
     engines: {node: '>=22.12'}
@@ -711,8 +715,8 @@ packages:
     resolution: {integrity: sha512-FiiKK/sAbp39ypGv+2XzYRc+s911pdCtu97UQ4LiKmQKHjqPiyocGO48r2YObucxUkQhnm9mCdkiQxW6rFjiAg==}
     engines: {node: '>=22'}
 
-  '@mark1russell7/files@0.0.6':
-    resolution: {integrity: sha512-VLsy9pwIP1LuDEOkzVpUKU/SOTw+/d3F/IYjSp0Fj+Cqfl440Qs/ad5islvClQEKPNmiDp5Zs+VraNO2QQ/MkQ==}
+  '@mark1russell7/files@0.0.7':
+    resolution: {integrity: sha512-Fa848T4nRyQClxX1eAH9rpnJFdxQ2apKsty1wUIg/OYHVIDR2Yw845upYSrafMQbN2DVMS3EFDCTj7C5Ebj2pQ==}
     engines: {node: '>=22'}
 
   '@mark1russell7/layout-contract@0.3.12':
@@ -932,13 +936,17 @@ packages:
       zod:
         optional: true
 
-  '@mark1russell7/ste-lint@0.6.0':
-    resolution: {integrity: sha512-4jt/c/n4hKa3Y32/iqbCrNk4MShb9ECxedm5WG28RYpYm0eCCxkn10wn00hzRKxvFtFe9qKDS0b5XGhfSuvTWQ==}
+  '@mark1russell7/ste-lint@0.7.0':
+    resolution: {integrity: sha512-njk8Py1rEAYdm6QCk2XVcKCfPhOmISyUbmR/oE06ymhAXWifCYT0uPQYZN+aQoLlJ5QFdjo08dsXPwjx8twkQQ==}
     engines: {node: '>=22'}
     hasBin: true
 
   '@mark1russell7/text@0.0.20':
     resolution: {integrity: sha512-HrjBak4BE0fDC+bLzFi/c4NDCHqiUm7VhYR5YhJmkApRSB8mUOao4bFiO9Jy3xwpsCGJCj4echVDCUxXjV+3NA==}
+    engines: {node: '>=22.12'}
+
+  '@mark1russell7/text@0.0.21':
+    resolution: {integrity: sha512-Y0ZNBrHHeIo9LPJc0dWJrhjQUoK+PQHgotitEaJo3J6xppYPIBqJ0AXQBHjzpdoL7xUWYCqriFNe+WA/4S15KQ==}
     engines: {node: '>=22.12'}
 
   '@mark1russell7/text@0.0.6':
@@ -2310,6 +2318,14 @@ snapshots:
     transitivePeerDependencies:
       - zod
 
+  '@mark1russell7/collections@0.12.1':
+    dependencies:
+      '@mark1russell7/algebra': 0.9.12
+      '@mark1russell7/optional': 1.5.1
+      '@mark1russell7/rigor-statistics': 0.2.32
+    transitivePeerDependencies:
+      - zod
+
   '@mark1russell7/collections@0.9.11':
     dependencies:
       '@mark1russell7/optional': 1.5.1
@@ -2318,7 +2334,7 @@ snapshots:
 
   '@mark1russell7/files@0.0.3': {}
 
-  '@mark1russell7/files@0.0.6': {}
+  '@mark1russell7/files@0.0.7': {}
 
   '@mark1russell7/layout-contract@0.3.12':
     dependencies:
@@ -2402,12 +2418,14 @@ snapshots:
     optionalDependencies:
       '@opentelemetry/api': 1.10.0
 
-  '@mark1russell7/ste-lint@0.6.0':
+  '@mark1russell7/ste-lint@0.7.0':
     dependencies:
-      '@mark1russell7/files': 0.0.6
+      '@mark1russell7/files': 0.0.7
       typescript: 6.0.3
 
   '@mark1russell7/text@0.0.20': {}
+
+  '@mark1russell7/text@0.0.21': {}
 
   '@mark1russell7/text@0.0.6': {}
 
