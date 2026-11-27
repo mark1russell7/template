@@ -169,6 +169,16 @@ export const HOMES: readonly Home[] = [
     signatures: ["expandHome", "findUp", "isInside", "globToRegExp", "matchesGlob", "readZipEntries"],
   },
   {
+    area: "media-documents",
+    title: "File uploads and media documents",
+    covers: "uploads as media documents: a small JSON record with a table of its files (`$media`: an id that is the SHA-256 of the bytes, a JSON Pointer into `$data`, the type, the size and a state: pending, partial, complete, embedded or linked), stored at once; then each missing file streams in parallel, in chunks that resume after a cut; a content-addressed blob store; the procedures on @procedures/peer",
+    packages: [],
+    repo: "mark1russell7/client",
+    state: "planned",
+    words: ["upload", "uploads", "file upload", "media", "media document", "attachment", "blob", "blob store", "content addressed", "chunk", "chunked upload", "resumable upload", "multipart", "sha-256 id"],
+    note: "Planned as item MD1. Hashes come from rigor-generators. Do not grow a local upload.",
+  },
+  {
     area: "system-io",
     title: "Files, commands, git, GitHub and npm",
     covers: "atomic file and JSON writes, globs, safe commands with argv and no shell, git, the GitHub CLI and API, npm registry lookups and the use measures of a package (weekly downloads, dependents from deps.dev, jsDelivr hits, each a pure request builder and extractor with the fetch as a parameter), HTTP requests, the frame and CSP rules of a response, JSON, YAML and CSV, environment variables",
@@ -178,6 +188,16 @@ export const HOMES: readonly Home[] = [
     words: ["file", "atomic", "write", "spawn", "exec", "shell", "command", "github", "registry", "fetch", "yaml", "csv", "env"],
     signatures: ["atomicWrite[A-Za-z0-9]*", "writeFileAtomic", "writeJsonAtomic", "writeAtomic"],
     note: "The plain path, glob and walk functions go to the area files (mark1russell7/files). These packages wrap them as procedures.",
+  },
+  {
+    area: "package-id",
+    title: "Package identities and versions",
+    covers: "package URLs (purl): parse, format and normalize for each type of the purl spec (npm, PyPI, Maven, Go, Cargo, NuGet, gem, Debian, RPM, Docker, GitHub and the rest); version ranges as data (vers); the version order of each ecosystem (SemVer, PEP 440, Maven, Debian, RPM, Go); the map between the ecosystem names of OSV, purl and each registry: plain functions with no fetch",
+    packages: ["@mark1russell7/package-id"],
+    repo: "mark1russell7/package-id",
+    state: "published",
+    words: ["purl", "package url", "package id", "package identity", "vers", "version range", "version order", "semver", "pep 440", "maven version", "debian version", "rpm version", "ecosystem", "osv ecosystem"],
+    note: "Registry lookups stay in @procedures/npm. The purl.ts of the alerts source-osv moves to it (AL-200).",
   },
   {
     area: "headless-browser",
