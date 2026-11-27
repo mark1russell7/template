@@ -477,11 +477,12 @@ export const HOMES: readonly Home[] = [
   {
     area: "browser-monitoring",
     title: "Observability and context",
-    covers: "OpenTelemetry for browsers and Node services, and the one context of logs, metrics and traces: trace and baggage in process and across calls (otel-ts, its /context and /node entries); metric readings on demand: a pull reader with no timer and no export, and each series of a collection as a reading with its time and value (entry /pull of otel-ts); main-thread lag, long tasks, Web Vitals, the page lifecycle, async context in browsers",
+    covers: "OpenTelemetry for browsers and Node services, and the one context of logs, metrics and traces: trace and baggage in process and across calls (otel-ts, its /context and /node entries); metric readings on demand: a pull reader with no timer and no export, and each series of a collection as a reading with its time and value (entry /pull of otel-ts); main-thread lag, long tasks, Web Vitals, the page lifecycle, async context in browsers; the receiving side: an always-on OTLP sink that stores logs, metrics and traces in SQLite with retention rules as data and answers by query (planned package @mark1russell7/otel-sink in the otel-ts repository)",
+    note: "@mark1russell7/otel-sink is planned in mark1russell7/otel-ts: its store is @mark1russell7/sqlite, its runner @mark1russell7/service. The full Grafana stack stays for CI, the lag tests and the dashboards.",
     packages: ["@mark1russell7/otel-ts", "async-browser-context", "@mark1russell7/lag", "@mark1russell7/lag-hud", "page-lifecycle-tracker"],
     repo: "mark1russell7/otel-ts",
     state: "published",
-    words: ["telemetry", "web vitals", "inp", "long task", "visibility", "opentelemetry", "async context", "observability", "baggage", "traceparent", "tracing", "span", "asynclocalstorage", "context manager", "metric reader", "pull reader", "metric readings", "collect metrics"],
+    words: ["telemetry", "web vitals", "inp", "long task", "visibility", "opentelemetry", "async context", "observability", "baggage", "traceparent", "tracing", "span", "asynclocalstorage", "context manager", "metric reader", "pull reader", "metric readings", "collect metrics", "otlp sink", "otlp receiver", "span store", "trace store", "telemetry retention"],
     signatures: ["runInIncomingSpan", "inRequestSpan", "inIncomingSpan", "withIncomingSpan", "runInRemoteTrace", "outgoingTraceparent", "parseTraceparent", "formatTraceparent"],
   },
   {
