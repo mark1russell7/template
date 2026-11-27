@@ -52,6 +52,9 @@ The preset `service` makes an HTTP server on the one service runner, [`@mark1rus
 | `src/index.test.ts` | The tests: the declaration passes `describe()` and `lint()`, and the server answers and exits 0. |
 
 - The dependency `@mark1russell7/service` gets the range of the repository, or the range of the CLI.
+- The run starts the context of [`@mark1russell7/otel-ts`](https://www.npmjs.com/package/@mark1russell7/otel-ts). Thus each log and each span of a request has the context of that request.
+- The package gets otel-ts and each package that its entries `/node/context` and `/node/export` load, with the ranges of the repository or of the CLI.
+- With a value in `OTEL_EXPORTER_OTLP_ENDPOINT`, the run exports the spans. Without it, the service exports nothing.
 - `PORT` (8080), `PROBE_PORT` (9090) and `SERVICE_PROFILE` (`local` or `pod`) set the ports and the profile.
 - The profile `pod` is for Kubernetes with a grace of 30 s. Make its grace equal to the grace of the pod.
 ### A desktop app

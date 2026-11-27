@@ -5,6 +5,9 @@
  *
  * The environment gives `PORT` (8080), `PROBE_PORT` (9090) and `SERVICE_PROFILE` (`local`). The
  * value in parentheses is the value without the variable.
+ *
+ * The run starts the context of otel-ts, so each log and each span of a request has its context. With a value in
+ * `OTEL_EXPORTER_OTLP_ENDPOINT`, the run also exports the spans.
  */
 import { PROFILES, declare } from "./index.ts";
 
