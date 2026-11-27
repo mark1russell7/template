@@ -218,6 +218,37 @@ export function releaseBlockers({
 /** This function gives the branch of the pull request for a target commit and a workflow. */
 export const branchName = (target: string, workflow: string = WORKFLOW): string => `ci/template-${stem(workflow)}-pins-${short(target)}`;
 
+/**
+ * This function gives the branch name with no folder, for a repository where a branch blocks the folder of `branchName`.
+ * Git cannot have a branch `ci` and a branch `ci/...` in one repository (2026-11-27: the old branch `ci` of
+ * mark1russell7/Meds gave HTTP 422 for each pin branch).
+ */
+export const flatBranchName = (target: string, workflow: string = WORKFLOW): string => `template-${stem(workflow)}-pins-${short(target)}`;
+
+/** This function gives the folders of a branch name: `a/b/c` gives `a` and `a/b`. */
+export const branchFolders = (name: string): string[] => {
+  const parts = name.split("/");
+  return parts.slice(1).map((_, index) => parts.slice(0, index + 1).join("/"));
+};
+
+/**
+ * This function gives the branch of the pull request in a repository: `branchName`, or `flatBranchName` when a branch
+ * of the repository has the name of a folder of `branchName`. Each read is of one exact ref, and HTTP 404 means no
+ * such branch. Another error stops the function, because a guess can make a second pull request.
+ */
+export function freeBranch(repository: string, target: string, workflow: string, run: Run): string {
+  const name = branchName(target, workflow);
+  for (const folder of branchFolders(name)) {
+    try {
+      run(["api", `repos/${repository}/git/ref/heads/${folder}`, "--jq", ".ref"]);
+      return flatBranchName(target, workflow);
+    } catch (error) {
+      if (!/HTTP 404|Not Found/.test(firstLine(error))) throw error;
+    }
+  }
+  return name;
+}
+
 /** This function gives the title of the pull request for a target commit and a workflow. */
 export const prTitle = (target: string, workflow: string = WORKFLOW): string => `ci: move the template ${stem(workflow)} pins to ${short(target)}`;
 
@@ -382,7 +413,6 @@ export function bumpRepo(
   run: Run = gh,
 ): RepoResult {
   const done = (result: RepoResult["result"], text: string, url?: string): RepoResult => ({ repository, result, text, url });
-  const branch = branchName(target, workflow);
 
   let head: string;
   let file: { content: string; sha: string };
@@ -420,6 +450,13 @@ export function bumpRepo(
     }
     if (compare.status === "behind") return done("refused", `the target ${short(target)} is older than the pin ${short(sha)}`);
     for (const commit of compare.commits) commits.set(commit.sha, commit);
+  }
+
+  let branch: string;
+  try {
+    branch = freeBranch(repository, target, workflow, run);
+  } catch (error) {
+    return done("error", `GitHub did not give the branches of the pin branch name: ${firstLine(error)}`);
   }
 
   let check: { pulls: Pull[]; blockers: string[] };

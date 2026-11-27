@@ -3,11 +3,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  branchFolders,
   branchName,
   bumpRepo,
   changesVersion,
   commitSubject,
   findPins,
+  flatBranchName,
   parseArgs,
   prTitle,
   releaseBlockers,
@@ -30,6 +32,8 @@ interface GhState {
   readonly compare?: string;
   readonly commits?: readonly Commit[];
   readonly fail?: Readonly<Record<string, string>>;
+  /** The branches of the repository other than main. */
+  readonly branches?: readonly string[];
 }
 
 /** The JSON input of a write call of gh: a branch, a commit of the file or a pull request. */
@@ -87,6 +91,7 @@ function github(state: GhState = {}) {
     compare = "ahead",
     commits = [{ sha: TARGET, message: 'release: an optional "latest" entry (s3) (#40)\n\nbody' }],
     fail = {},
+    branches = [],
   } = state;
   const calls: GhCall[] = [];
   const run = (args: readonly string[], input?: string): string => {
@@ -98,6 +103,11 @@ function github(state: GhState = {}) {
     const key = `${method} ${path}`;
     for (const [pattern, error] of Object.entries(fail)) if (key.includes(pattern)) throw new Error(error);
     if (key === `GET repos/${REPO}/git/ref/heads/main`) return `${HEAD}\n`;
+    const refMatch = /^GET repos\/owner\/repo\/git\/ref\/heads\/(.+)$/.exec(key);
+    if (refMatch) {
+      if (branches.includes(refMatch[1] ?? "")) return `refs/heads/${refMatch[1]}\n`;
+      throw new Error("gh: Not Found (HTTP 404)");
+    }
     if (key === `GET repos/${REPO}/contents/${file}?ref=${HEAD}`) {
       return JSON.stringify({ sha: BLOB, encoding: "base64", content: Buffer.from(text).toString("base64").replace(/(.{60})/g, "$1\n") });
     }
@@ -372,4 +382,38 @@ test("bumpRepo() counts no release run in a repository without release.yml, and 
   assert.equal(result.result, "refused");
   assert.match(result.text, /version branch changeset-release\/main/);
   assert.deepEqual(gh.writes(), []);
+});
+
+test("branchFolders() gives each folder of a branch name, and none for a name with no folder", () => {
+  assert.deepEqual(branchFolders("ci/template-pages-pins-40b0fbd"), ["ci"]);
+  assert.deepEqual(branchFolders("a/b/c"), ["a", "a/b"]);
+  assert.deepEqual(branchFolders("template-pages-pins-40b0fbd"), []);
+});
+
+// 2026-11-27: the old branch `ci` of mark1russell7/Meds gave HTTP 422 for each branch `ci/...`, because git cannot have both.
+test("bumpRepo() uses the flat branch name when a branch has the name of a folder of the pin branch", () => {
+  const gh = github({ branches: ["ci"] });
+  const result = bumpRepo(REPO, { target: TARGET }, gh.run);
+  assert.equal(result.result, "opened");
+  assert.equal(flatBranchName(TARGET), `template-release-pins-${TARGET.slice(0, 7)}`);
+  assert.deepEqual(gh.sent(0), { ref: `refs/heads/${flatBranchName(TARGET)}`, sha: HEAD });
+  assert.equal(gh.sent(2).head, flatBranchName(TARGET));
+});
+
+test("bumpRepo() keeps branchName when no branch blocks its folder, and finds its own open pull request on the flat name", () => {
+  const plain = github({ branches: ["cid", "other/ci"] });
+  bumpRepo(REPO, { target: TARGET }, plain.run);
+  assert.deepEqual(plain.sent(0), { ref: `refs/heads/${branchName(TARGET)}`, sha: HEAD });
+  const own = github({ branches: ["ci"], pulls: [{ number: 9, head: flatBranchName(TARGET), url: "https://github.com/owner/repo/pull/9" } as Pull] });
+  const result = bumpRepo(REPO, { target: TARGET }, own.run);
+  assert.equal(result.result, "skipped");
+  assert.equal(own.writes().length, 0);
+});
+
+test("bumpRepo() stops with an error, and changes nothing, when GitHub does not answer the read of a branch", () => {
+  const gh = github({ fail: { "git/ref/heads/ci": "gh: Server Error (HTTP 502)" } });
+  const result = bumpRepo(REPO, { target: TARGET }, gh.run);
+  assert.equal(result.result, "error");
+  assert.match(result.text, /HTTP 502/);
+  assert.equal(gh.writes().length, 0);
 });
