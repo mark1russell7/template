@@ -17,6 +17,30 @@ const NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
 // @vitest/coverage-v8: the coverage of the shared CI (action coverage) needs it in each package with Vitest.
 const DEV_DEPENDENCIES = ["@mark1russell7/cue", "@types/node", "@vitest/coverage-v8", "typescript", "vitest"] as const;
 
+/**
+ * The packages of the telemetry of a service: otel-ts, and each package that the entries `/node/context` and
+ * `/node/export` of otel-ts load. The run of `@mark1russell7/service` starts the context of otel-ts when it finds
+ * otel-ts, and it exports the spans when `OTEL_EXPORTER_OTLP_ENDPOINT` has a value. A test holds this list against
+ * the table of the peers of each entry in the README of otel-ts.
+ */
+export const SERVICE_TELEMETRY = [
+  "@mark1russell7/otel-ts",
+  "@opentelemetry/api",
+  "@opentelemetry/context-async-hooks",
+  "@opentelemetry/core",
+  "@opentelemetry/exporter-logs-otlp-http",
+  "@opentelemetry/exporter-logs-otlp-proto",
+  "@opentelemetry/exporter-metrics-otlp-http",
+  "@opentelemetry/exporter-metrics-otlp-proto",
+  "@opentelemetry/exporter-trace-otlp-http",
+  "@opentelemetry/exporter-trace-otlp-proto",
+  "@opentelemetry/resources",
+  "@opentelemetry/sdk-logs",
+  "@opentelemetry/sdk-metrics",
+  "@opentelemetry/sdk-trace",
+  "@opentelemetry/semantic-conventions",
+] as const;
+
 /** Each dependency that releases with the same versions as its partner. */
 const LOCKSTEP: Readonly<Record<string, string>> = { "@vitest/coverage-v8": "vitest" };
 
@@ -185,11 +209,12 @@ export const PRESETS: Readonly<Record<PresetName, Preset>> = {
     tsconfig: "react",
     install: { dependencies: ["react", "react-dom"], devDependencies: ["vite", "@vitejs/plugin-react", "@types/react", "@types/react-dom"] },
   },
-  // A server on the one service runner: a component, a declaration, and an entry that alone uses run().
+  // A server on the one service runner: a component, a declaration, and an entry that alone uses run(). The run starts
+  // the context of otel-ts, so each log and span of the service has the context of its request.
   service: {
     label: "service — HTTP server on @mark1russell7/service",
     tsconfig: "node",
-    dependencies: ["@mark1russell7/service"],
+    dependencies: ["@mark1russell7/service", ...SERVICE_TELEMETRY],
     scripts: { start: "node src/main.ts" },
     files: "service",
   },

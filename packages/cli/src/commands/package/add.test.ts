@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { CLI_NAME } from "../../paths.ts";
-import { PRESETS, withAllowBuilds, writePackage } from "./add.ts";
+import { PRESETS, SERVICE_TELEMETRY, withAllowBuilds, writePackage } from "./add.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -14,6 +14,7 @@ const cli = {
   devDependencies: {
     "@mark1russell7/cue": "github:mark1russell7/cue",
     "@mark1russell7/service": "^0.5.8",
+    ...Object.fromEntries(SERVICE_TELEMETRY.map((name) => [name, "^1.0.0"])),
     "@types/node": "^26.0.0",
     typescript: "^7.0.0",
     vitest: "^5.0.0",
@@ -45,12 +46,12 @@ describe("writePackage", () => {
     expect(json(join(written.dir, "tsconfig.json"))["extends"]).toBe("@mark1russell7/cue/ts/config/node.json");
   });
 
-  it("writes the server entry of the preset service, on the range of @mark1russell7/service of the CLI", async () => {
+  it("writes the server entry of the preset service, on the ranges of @mark1russell7/service and of the telemetry of the CLI", async () => {
     const root = repo();
     const written = await writePackage(root, "api", "service", cli);
     expect(written).toMatchObject({ name: "@demo/api", install: [] });
     const manifest = json(join(written.dir, "package.json"));
-    expect(manifest["dependencies"]).toEqual({ "@mark1russell7/service": "^0.5.8" });
+    expect(manifest["dependencies"]).toEqual({ "@mark1russell7/service": "^0.5.8", ...Object.fromEntries(SERVICE_TELEMETRY.map((name) => [name, "^1.0.0"])) });
     expect(manifest["scripts"]).toMatchObject({ start: "node src/main.ts", test: "vitest run" });
     expect(json(join(written.dir, "tsconfig.json"))["extends"]).toBe("@mark1russell7/cue/ts/config/node.json");
     for (const file of ["api.ts", "index.ts", "index.test.ts", "main.ts"]) {
@@ -106,6 +107,46 @@ describe("writePackage", () => {
     await expect(writePackage(root, "api", "service", { ...cli, devDependencies: withoutService })).rejects.toThrow(/@mark1russell7\/service/);
     expect(existsSync(join(root, "packages", "api"))).toBe(false);
     await expect(writePackage(root, "api", "service", cli)).resolves.toMatchObject({ name: "@demo/api" });
+  });
+});
+
+/** The folder of the CLI, and the files of each package that the workspace installed for it. */
+const cliDir = resolve(here, "..", "..", "..");
+const installed = (name: string, file = "package.json"): string => readFileSync(join(cliDir, "node_modules", name, file), "utf8");
+interface FullManifest {
+  readonly dependencies?: Record<string, string>;
+  readonly devDependencies?: Record<string, string>;
+  readonly peerDependencies?: Record<string, string>;
+}
+const manifestOf = (text: string): FullManifest => JSON.parse(text) as FullManifest;
+
+/** The packages of one row of the table between the marks `entry-peers` of the README of otel-ts. */
+function entryPeers(readme: string, entry: string): string[] {
+  const table = readme.split("<!-- entry-peers:start -->")[1]?.split("<!-- entry-peers:end -->")[0] ?? "";
+  const row = table.split(/\r?\n/).find((line) => line.startsWith(`| \`${entry}\` |`));
+  if (row === undefined) throw new Error(`The README of otel-ts has no row for ${entry}.`);
+  return [...(row.split("|")[2] ?? "").matchAll(/`([^`]+)`/g)].map((match) => match[1] ?? "");
+}
+
+describe("the telemetry of the preset service", () => {
+  const otel = manifestOf(installed("@mark1russell7/otel-ts"));
+  const service = manifestOf(installed("@mark1russell7/service"));
+
+  it("names otel-ts, each package of the entries /node/context and /node/export, and the OpenTelemetry peers of service", () => {
+    const readme = installed("@mark1russell7/otel-ts", "README.md");
+    const servicePeers = Object.keys(service.peerDependencies ?? {}).filter((name) => name.startsWith("@opentelemetry/"));
+    const expected = new Set(["@mark1russell7/otel-ts", ...entryPeers(readme, "./node/context"), ...entryPeers(readme, "./node/export"), ...servicePeers]);
+    expect([...SERVICE_TELEMETRY].sort()).toEqual([...expected].sort());
+    // the run of service finds otel-ts as its peer
+    expect(service.peerDependencies?.["@mark1russell7/otel-ts"]).toBeDefined();
+  });
+
+  it("gives each package the range of otel-ts, so a new service installs with no peer warning", () => {
+    const own = manifestOf(readFileSync(join(cliDir, "package.json"), "utf8")).devDependencies ?? {};
+    for (const name of SERVICE_TELEMETRY) {
+      if (name === "@mark1russell7/otel-ts") continue;
+      expect(own[name], name).toBe(otel.peerDependencies?.[name] ?? otel.dependencies?.[name]);
+    }
   });
 });
 
