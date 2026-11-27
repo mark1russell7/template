@@ -40,7 +40,7 @@ The presets `vite` and `react` start with the telemetry of [`@mark1russell7/otel
 | `src/index.ts` | `startTelemetry()` starts traces, metrics and logs with the context of each call. `reportFailure()` makes the record of a failed procedure. |
 | `src/index.test.ts` | The tests: the entry loads, and a failure gives a record with its procedure. |
 
-- The package gets otel-ts, its OpenTelemetry API and each package that the root entry of otel-ts loads, with the ranges of the repository or of the CLI.
+- The package gets otel-ts, its OpenTelemetry API and each package that the root entry of otel-ts loads. Each gets the range of the repository or of the CLI.
 - Show a record with `errorView` of the entry `/error-view`. The entries `/error` and `/error-view` need no other package.
 - `startTelemetry()` sends to `http://localhost:4318` when you give no endpoint.
 
