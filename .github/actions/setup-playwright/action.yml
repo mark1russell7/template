@@ -102,13 +102,17 @@ runs:
     - name: Check that apt has an Ubuntu archive
       if: runner.os == 'Linux'
       shell: bash
+      env:
+        # An Ubuntu source names an Ubuntu archive, the mirror list of the runner (mirror+file:) or the Ubuntu keyring.
+        UBUNTU_SOURCE: '(archive|ports|security)\.ubuntu\.com|mirror\+file:|ubuntu-archive-keyring'
       run: |
         # On 2026-11-26 an ubuntu-26.04 runner had only packages.microsoft.com in its apt sources, so install-deps
         # failed at once on each font package (apt exit 100). When no source names an Ubuntu archive, this step adds the
-        # archive of the release. With no Ubuntu keyring, it fails with a clear text.
+        # archive of the release. With no Ubuntu keyring, it fails with a clear text. The GitHub runners name their
+        # Ubuntu mirrors through mirror+file:/etc/apt/apt-mirrors.txt, so that form is an Ubuntu source too (2026-11-27).
         . /etc/os-release
         if [ "${ID:-}" != ubuntu ]; then exit 0; fi
-        if grep -R -q -E '(archive|ports|security)\.ubuntu\.com' /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null; then
+        if grep -R -q -E "$UBUNTU_SOURCE" /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null; then
           exit 0
         fi
         keyring=/usr/share/keyrings/ubuntu-archive-keyring.gpg
@@ -127,6 +131,8 @@ runs:
     - name: Set aside the apt sources that the browsers do not need
       if: runner.os == 'Linux'
       shell: bash
+      env:
+        UBUNTU_SOURCE: '(archive|ports|security)\.ubuntu\.com|mirror\+file:|ubuntu-archive-keyring'
       run: |
         # The system packages of the browsers come only from the Ubuntu archive. On 2026-11-27 packages.microsoft.com
         # gave 403 for its ubuntu/26.04 list ("is no longer signed"), so apt update and install-deps failed (exit 100).
@@ -137,7 +143,7 @@ runs:
         sudo mkdir -p "$aside"
         for file in /etc/apt/sources.list.d/*; do
           [ -f "$file" ] || continue
-          if ! grep -q -E '(archive|ports|security)\.ubuntu\.com' "$file"; then
+          if ! grep -q -E "$UBUNTU_SOURCE" "$file"; then
             echo "apt source set aside for the install: $file"
             sudo mv "$file" "$aside/"
           fi
