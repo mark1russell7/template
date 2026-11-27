@@ -19,10 +19,15 @@
 // npm shows a publish some minutes after it. A version that has its release tag and that npm does
 // not show is not new: the script reads npm again, up to RELEASE_NPM_WAIT_SECONDS (300), and stops
 // at the limit (released.ts).
+//
+// After each pack, the script reads the packed package.json and stops when an entry point (main,
+// types, bin, each target of exports) names a file that the tarball does not hold, for example
+// when the build of the package did not run (entries.ts).
 
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
+import { missingEntryPoints } from "./entries.ts";
 import { awaitReleased, readRemoteTags } from "./released.ts";
 import { tagName } from "./tags.ts";
 import { differenceText, fetchListedTarball, pendingPackages, shippedDifferences, tarballFiles } from "./unchanged.ts";
@@ -105,6 +110,7 @@ const pending = pendingPackages(process.env["RELEASE_PENDING"]);
 const lines: string[] = [];
 const changed: string[] = [];
 const raisedLater: string[] = [];
+const unbuilt: string[] = [];
 for (const { dir, manifest } of packages) {
   // The new file in the folder is the tarball. The output of pnpm is not used: it also holds the
   // output of the package scripts that pnpm pack starts (prepare, prepack).
@@ -114,17 +120,27 @@ for (const { dir, manifest } of packages) {
   if (added.length !== 1) throw new Error(`pnpm pack of ${manifest.name} made ${added.length} tarballs: ${added.join(", ")}`);
   const file = basename(added[0] ?? "");
   lines.push(`${manifest.name} ${manifest.version} ${file}`);
+  const packed = tarballFiles(readFileSync(join(out, file)));
+  const packedManifest = packed.get("package.json");
+  const missing = packedManifest ? missingEntryPoints(JSON.parse(packedManifest.toString("utf8")) as Record<string, unknown>, packed.keys()) : [];
+  if (missing.length > 0) unbuilt.push(`${manifest.name}@${manifest.version}: ${missing.map(({ field, path }) => `${field} -> ${path}`).join(", ")}`);
   const published = packuments.get(manifest.name)?.versions?.[manifest.version ?? ""] as { dist?: { tarball?: string } } | undefined;
   const tarball = published?.dist?.tarball;
   if (tarball) {
     const sleep = (ms: number): Promise<void> => new Promise((done) => setTimeout(done, ms));
     const bytes = await fetchListedTarball(tarball, { fetch, sleep });
-    const differences = shippedDifferences(tarballFiles(bytes), tarballFiles(readFileSync(join(out, file))));
+    const differences = shippedDifferences(tarballFiles(bytes), packed);
     if (differences.length > 0) {
       (pending.has(manifest.name) ? raisedLater : changed).push(differenceText(`${manifest.name}@${manifest.version}`, differences));
     }
   }
   process.stdout.write(`${manifest.name}@${manifest.version}: ${file}\n`);
+}
+if (unbuilt.length > 0) {
+  process.stderr.write(
+    `These entry points name files that the tarball does not hold. Build each package before the pack (does the root build script start the build of each package?):\n  ${unbuilt.join("\n  ")}\n`,
+  );
+  process.exit(1);
 }
 if (raisedLater.length > 0) {
   process.stdout.write(
