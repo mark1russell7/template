@@ -1,0 +1,13 @@
+import { describe, expect, it } from "vitest";
+import { reportFailure, startTelemetry } from "./index.ts";
+
+describe("the telemetry of the page", () => {
+  it("gives the function that starts it", () => {
+    expect(startTelemetry).toBeTypeOf("function");
+  });
+
+  it("makes the record of a failed procedure, also before the start", () => {
+    const record = reportFailure(new Error("The save failed."), "items.save");
+    expect(record).toMatchObject({ message: "The save failed.", procedure: { name: "items.save" } });
+  });
+});

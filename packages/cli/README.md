@@ -31,6 +31,19 @@ pnpm package add <name> --preset=<node|node-cjs|ts|vite|react|service|site|elect
 - Each development dependency gets the range that the repository uses: the root `package.json`, then the packages in name order. A dependency that the repository does not have gets the range of the CLI. Thus `pnpm up -r --latest` keeps the new packages current.
 - Without a name or a preset, the command asks for them.
 
+### A page with telemetry
+
+The presets `vite` and `react` start with the telemetry of [`@mark1russell7/otel-ts`](https://www.npmjs.com/package/@mark1russell7/otel-ts).
+
+| File | What it does |
+| --- | --- |
+| `src/index.ts` | `startTelemetry()` starts traces, metrics and logs with the context of each call. `reportFailure()` makes the record of a failed procedure. |
+| `src/index.test.ts` | The tests: the entry loads, and a failure gives a record with its procedure. |
+
+- The package gets otel-ts, its OpenTelemetry API and each package that the root entry of otel-ts loads. Each gets the range of the repository or of the CLI.
+- Show a record with `errorView` of the entry `/error-view`. The entries `/error` and `/error-view` need no other package.
+- `startTelemetry()` sends to `http://localhost:4318` when you give no endpoint.
+
 ### A server package
 
 The preset `site` makes a first site: the name, one line, a command, and the links to the Releases page and the Status page.
